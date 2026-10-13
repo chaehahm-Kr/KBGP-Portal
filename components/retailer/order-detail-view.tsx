@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { RetailerOrderDetail } from "@/lib/retailer/orders";
+import { PackagesPopover } from "@/components/admin/orders/packages-popover";
 
 interface OrderDetailViewProps {
   order: RetailerOrderDetail;
@@ -29,16 +30,28 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
             Processing in Warehouse
           </span>
         );
+      case "partially_shipped":
+        return (
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20">
+            Partially Shipped
+          </span>
+        );
       case "shipped":
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-purple-500/15 text-purple-700 dark:text-purple-400 border border-purple-500/20">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
             Shipped
           </span>
         );
       case "delivered":
         return (
           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-            Delivered
+            Delivered (Legacy)
+          </span>
+        );
+      case "partially_cancelled":
+        return (
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20">
+            Partially Cancelled
           </span>
         );
       case "cancelled":
@@ -155,6 +168,71 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
         </div>
       </div>
 
+      {/* Visual Lifecycle Progress Tracker */}
+      <div className="p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-3">
+        <div className="flex items-center justify-between text-xs font-bold text-zinc-500">
+          <span>Order Lifecycle Progress</span>
+          <span className="text-indigo-600 dark:text-indigo-400">
+            {order.totalOrderedUnits > 0
+              ? `${Math.round(((order.totalShippedUnits || 0) / order.totalOrderedUnits) * 100)}% Fulfilled`
+              : "In Progress"}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+          <div className="p-2.5 rounded-xl border bg-blue-50/60 dark:bg-blue-950/40 border-blue-200 text-blue-700 dark:text-blue-400 font-bold">
+            1. Order Placed ✓
+          </div>
+          <div className={`p-2.5 rounded-xl border ${["processing", "partially_shipped", "shipped"].includes(order.orderStatus.toLowerCase()) ? "bg-amber-50/60 dark:bg-amber-950/40 border-amber-200 text-amber-700 dark:text-amber-400 font-bold" : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-800 text-zinc-400"}`}>
+            2. Warehouse Packing
+          </div>
+          <div className={`p-2.5 rounded-xl border ${["partially_shipped", "shipped"].includes(order.orderStatus.toLowerCase()) ? "bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-200 text-indigo-700 dark:text-indigo-400 font-bold" : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-800 text-zinc-400"}`}>
+            3. In Transit (Carrier)
+          </div>
+          <div className={`p-2.5 rounded-xl border ${order.orderStatus.toLowerCase() === "shipped" || order.orderStatus.toLowerCase() === "delivered" ? "bg-emerald-50/60 dark:bg-emerald-950/40 border-emerald-200 text-emerald-700 dark:text-emerald-400 font-bold" : order.orderStatus.toLowerCase() === "cancelled" ? "bg-rose-50 border-rose-200 text-rose-600 font-bold" : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-800 text-zinc-400"}`}>
+            {order.orderStatus.toLowerCase() === "cancelled" ? "Voided / Cancelled" : "4. Delivered"}
+          </div>
+        </div>
+      </div>
+
+      {/* 4-Way Units Reconciliation Summary Card */}
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 sm:p-5 shadow-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800">
+            <span className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Total Ordered</span>
+            <span className="text-xl font-black text-zinc-900 dark:text-white">
+              {order.totalOrderedUnits || order.totalItemsCount}
+            </span>
+            <span className="text-[10px] text-zinc-500 block">units across {order.totalSkusCount} SKUs</span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900">
+            <span className="text-[10px] uppercase font-bold text-indigo-500 block mb-1">Dispatched / Shipped</span>
+            <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">
+              {order.totalShippedUnits || 0}
+            </span>
+            <span className="text-[10px] text-indigo-400 block">
+              units {order.boxCount > 0 ? `in ${order.boxCount} boxes` : ""}
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-orange-50/60 dark:bg-orange-950/40 border border-orange-100 dark:border-orange-900">
+            <span className="text-[10px] uppercase font-bold text-orange-500 block mb-1">Cancelled / Shorted</span>
+            <span className="text-xl font-black text-orange-600 dark:text-orange-400">
+              {order.totalCancelledUnits || 0}
+            </span>
+            <span className="text-[10px] text-orange-400 block">units voided</span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-amber-50/60 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900">
+            <span className="text-[10px] uppercase font-bold text-amber-500 block mb-1">Remaining to Ship</span>
+            <span className="text-xl font-black text-amber-600 dark:text-amber-400">
+              {order.totalRemainingUnits !== undefined ? order.totalRemainingUnits : Math.max(0, (order.totalOrderedUnits || order.totalItemsCount) - (order.totalShippedUnits || 0))}
+            </span>
+            <span className="text-[10px] text-amber-400 block">units pending</span>
+          </div>
+        </div>
+      </div>
+
       {/* Details Grid: Left Info + Right Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column: Destination, Terms, Payments & Items (7 cols) */}
@@ -268,7 +346,7 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
                             f.status === "delivered"
                               ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
                               : f.status === "shipped"
-                              ? "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400 border border-purple-200 dark:border-purple-800"
+                              ? "bg-purple-100 text-purple-700 dark:text-purple-400 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800"
                               : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
                           }`}
                         >
@@ -276,17 +354,25 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
                         </span>
                       </div>
 
-                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                        {f.shippedAt && (
-                          <span>
-                            Shipped: {new Date(f.shippedAt).toLocaleDateString()}{" "}
-                          </span>
+                      <div className="flex items-center gap-2">
+                        {order.packages && order.packages.some((p: any) => p.fulfillmentId === f.id) && (
+                          <PackagesPopover
+                            packages={order.packages.filter((p: any) => p.fulfillmentId === f.id) as any}
+                            orderNumber={order.orderNumber}
+                          />
                         )}
-                        {f.deliveredAt && (
-                          <span className="font-bold text-emerald-600 dark:text-emerald-400 ml-2">
-                            • Delivered: {new Date(f.deliveredAt).toLocaleDateString()}
-                          </span>
-                        )}
+                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          {f.shippedAt && (
+                            <span>
+                              Shipped: {new Date(f.shippedAt).toLocaleDateString()}{" "}
+                            </span>
+                          )}
+                          {f.deliveredAt && (
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400 ml-2">
+                              • Delivered: {new Date(f.deliveredAt).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -420,13 +506,29 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
                         Ordered: <strong>{item.quantity}</strong>
                       </span>
                       <span className="text-zinc-400">•</span>
-                      <span className={(item.quantityShipped || 0) > 0 ? "text-purple-600 dark:text-purple-400 font-medium" : "text-zinc-400"}>
+                      <span className={(item.quantityShipped || 0) > 0 ? "text-indigo-600 dark:text-indigo-400 font-bold" : "text-zinc-400"}>
                         Shipped: <strong>{item.quantityShipped || 0}</strong>
                       </span>
                       <span className="text-zinc-400">•</span>
-                      <span className={(item.quantityDelivered || 0) > 0 ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-zinc-400"}>
-                        Delivered: <strong>{item.quantityDelivered || 0}</strong>
+                      <span className={(item.quantityRemaining ?? (item.quantity - (item.quantityShipped || 0))) > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-zinc-400"}>
+                        Remaining: <strong>{item.quantityRemaining ?? Math.max(0, item.quantity - (item.quantityShipped || 0))}</strong>
                       </span>
+                      {(item.quantityCancelled || 0) > 0 && (
+                        <>
+                          <span className="text-zinc-400">•</span>
+                          <span className="text-orange-600 dark:text-orange-400 font-bold">
+                            Cancelled: <strong>{item.quantityCancelled}</strong>
+                          </span>
+                        </>
+                      )}
+                      {(item.quantityDelivered || 0) > 0 && (
+                        <>
+                          <span className="text-zinc-400">•</span>
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                            ✓ Delivered: <strong>{item.quantityDelivered}</strong>
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -446,6 +548,68 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
 
         {/* Right Column: Financial Breakdown (5 cols) */}
         <div className="lg:col-span-5 space-y-4 sticky top-20">
+          {/* Related Invoices / Bills Card */}
+          {order.invoices && order.invoices.length > 0 && (
+            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs space-y-3 text-xs">
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                <h3 className="font-bold text-zinc-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <span>🧾</span>
+                  <span>Related Invoices & Bills</span>
+                </h3>
+                <Link href="/bills" className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+                  All Bills ↗
+                </Link>
+              </div>
+
+              <div className="space-y-2">
+                {order.invoices.map((inv) => (
+                  <div
+                    key={inv.id}
+                    className="p-3 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-800/40 flex items-center justify-between"
+                  >
+                    <div>
+                      <span className="font-mono font-bold text-zinc-900 dark:text-white block">
+                        {inv.invoiceNumber}
+                      </span>
+                      <span className="text-[10px] text-zinc-500">
+                        Due Date: {new Date(inv.dueDate).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-zinc-900 dark:text-white">
+                        ${inv.balanceDue.toFixed(2)}
+                      </span>
+                      <span className="text-[10px] uppercase font-bold block text-indigo-600 dark:text-indigo-400">
+                        {inv.invoiceStatus}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Cancellation & Refund Alert (if applicable) */}
+          {(Boolean(order.cancellationRequested) || ((order.refundAmount || 0) > 0)) && (
+            <div className="rounded-2xl border border-orange-200 dark:border-orange-900/60 bg-orange-50/60 dark:bg-orange-950/30 p-4 space-y-2 text-xs">
+              <div className="flex items-center gap-2 text-orange-800 dark:text-orange-300 font-bold">
+                <span>⚠️</span>
+                <span>Order Cancellation / Refund Notice</span>
+              </div>
+              {(order.refundAmount || 0) > 0 && (
+                <div className="flex items-center justify-between font-bold text-orange-900 dark:text-orange-200">
+                  <span>Refunded / Reversal Amount:</span>
+                  <span className="text-sm font-black">${(order.refundAmount || 0).toFixed(2)}</span>
+                </div>
+              )}
+              {order.cancellationRequested && (
+                <p className="text-[11px] text-orange-700 dark:text-orange-400">
+                  Cancellation request submitted. Customer support will review remainder allocations.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950 p-6 shadow-xs space-y-5">
             <h2 className="text-base font-bold text-zinc-900 dark:text-white border-b border-zinc-200 dark:border-zinc-800 pb-3">
               Order Financial Summary

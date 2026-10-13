@@ -8,6 +8,7 @@ import {
   getRetailerOrdersAction,
 } from "@/lib/retailer/orders";
 import { useTranslation } from "@/lib/i18n";
+import { PackagesPopover } from "@/components/admin/orders/packages-popover";
 
 interface OrdersListProps {
   orders?: RetailerOrderSummary[];
@@ -86,37 +87,49 @@ export function RetailerOrdersList({
       case "submitted":
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/20">
-            {t.status.submitted}
+            {t.status.submitted || "Submitted"}
           </span>
         );
       case "confirmed":
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20">
-            {t.status.confirmed}
+            {t.status.confirmed || "Confirmed"}
           </span>
         );
       case "processing":
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20">
-            {t.status.processing}
+            {t.status.processing || "Processing"}
+          </span>
+        );
+      case "partially_shipped":
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20">
+            Partially Shipped
           </span>
         );
       case "shipped":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-700 dark:text-purple-400 border border-purple-500/20">
-            {t.status.shipped}
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+            {t.status.shipped || "Shipped"}
           </span>
         );
       case "delivered":
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-            {t.status.delivered}
+            {t.status.delivered || "Delivered"}
+          </span>
+        );
+      case "partially_cancelled":
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20">
+            Partially Cancelled
           </span>
         );
       case "cancelled":
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/20">
-            {t.status.cancelled}
+            {t.status.cancelled || "Cancelled"}
           </span>
         );
       default:
@@ -278,10 +291,10 @@ export function RetailerOrdersList({
               >
                 <option value="all">All Statuses</option>
                 <option value="submitted">Submitted</option>
-                <option value="confirmed">Confirmed</option>
                 <option value="processing">Processing</option>
+                <option value="partially_shipped">Partially Shipped</option>
                 <option value="shipped">Shipped</option>
-                <option value="delivered">Delivered</option>
+                <option value="partially_cancelled">Partially Cancelled</option>
                 <option value="cancelled">Cancelled</option>
               </select>
             </div>
@@ -386,8 +399,9 @@ export function RetailerOrdersList({
                   <th className="py-3.5 px-4">Destination</th>
                   <th className="py-3.5 px-4 text-center">SKUs</th>
                   <th className="py-3.5 px-4 text-center">Units</th>
-                  <th className="py-3.5 px-4">Fulfillment</th>
-                  <th className="py-3.5 px-4">Payment</th>
+                  <th className="py-3.5 px-4">Shipping Summary</th>
+                  <th className="py-3.5 px-4">Unified Status</th>
+                  <th className="py-3.5 px-4">Invoice / Payment</th>
                   <th className="py-3.5 px-4 text-right">Total Amount</th>
                   <th className="py-3.5 px-4 text-right">{t.common.actions}</th>
                 </tr>
@@ -418,7 +432,7 @@ export function RetailerOrdersList({
                       {formatDate(order.createdAt)}
                     </td>
 
-                    {/* Destination (Renamed from Store) */}
+                    {/* Destination */}
                     <td className="py-3.5 px-4">
                       <div className="flex flex-col gap-0.5">
                         <span className="font-semibold text-zinc-900 dark:text-white">
@@ -444,12 +458,54 @@ export function RetailerOrdersList({
                       </span>
                     </td>
 
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      {getStatusBadge(order.orderStatus)}
+                    {/* Shipping Summary with Clickable Box Count */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
+                          {order.totalShippedUnits || 0} / {order.totalOrderedUnits || order.totalItemsCount} Shipped
+                        </span>
+                        {order.packages && order.packages.length > 0 ? (
+                          <PackagesPopover packages={order.packages as any} orderNumber={order.orderNumber} />
+                        ) : order.totalShippedUnits > 0 ? (
+                          <span className="text-[10px] text-zinc-400">📦 Dispatched</span>
+                        ) : (
+                          <span className="text-[10px] text-zinc-400">⏳ Packing in Whs</span>
+                        )}
+                      </div>
                     </td>
 
+                    {/* Unified Order Status Column */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
-                      {getPaymentBadge(order.paymentStatus)}
+                      {getStatusBadge(order.orderStatus)}
+                      {order.totalCancelledUnits > 0 && (
+                        <div className="text-[9px] text-orange-600 font-bold mt-0.5">
+                          {order.totalCancelledUnits} units voided
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Invoice & Payment Column */}
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      {order.invoices && order.invoices.length > 0 ? (
+                        <div>
+                          <Link
+                            href="/bills"
+                            className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline block"
+                          >
+                            {order.invoices[0].invoiceNumber}
+                          </Link>
+                          <span className="text-[10px] text-zinc-500">
+                            {order.invoices[0].invoiceStatus.toUpperCase()} • Due {new Date(order.invoices[0].dueDate).toLocaleDateString()}
+                          </span>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 block">
+                            {order.paymentTerms || "PREPAID"}
+                          </span>
+                          {getPaymentBadge(order.paymentStatus)}
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4 text-right font-extrabold text-zinc-900 dark:text-white text-sm whitespace-nowrap">
@@ -515,6 +571,15 @@ export function RetailerOrdersList({
                     </span>
                     {getPaymentBadge(order.paymentStatus)}
                   </div>
+                </div>
+
+                {/* Shipping Summary in Mobile Card */}
+                <div className="flex items-center justify-between pt-1 text-[11px]">
+                  <span className="text-zinc-500">Dispatch Progress:</span>
+                  <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                    {order.totalShippedUnits || 0} / {order.totalOrderedUnits || order.totalItemsCount} units
+                    {order.boxCount > 0 && ` (📦 ${order.boxCount} boxes)`}
+                  </span>
                 </div>
               </div>
 

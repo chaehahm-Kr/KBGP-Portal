@@ -24,6 +24,7 @@ import {
 import { getRetailerARStatus } from "@/lib/finance/invoice-actions";
 import type { RetailerARStatus } from "@/lib/finance/invoice-types";
 import type { RetailerShippingAddress } from "./shipping-address-types";
+import { computeAuthoritativeOrderStatus } from "@/lib/orders/order-status-utils";
 
 export interface NeedsAttentionItem {
   id: string;
@@ -859,12 +860,21 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
       };
     });
 
+    const totalOrderedUnits = items.reduce((s: number, i: any) => s + i.quantity, 0);
+    const totalShippedUnits = items.reduce((s: number, i: any) => s + i.quantityShipped, 0);
+    const authoritativeStatus = computeAuthoritativeOrderStatus(
+      o.order_status,
+      totalOrderedUnits,
+      totalShippedUnits,
+      0
+    );
+
     return {
       id: o.id,
       orderNumber: o.order_number,
       storeId: o.store_id,
       storeName: o.stores?.name || "Store",
-      orderStatus: o.order_status,
+      orderStatus: authoritativeStatus,
       paymentStatus: o.payment_status,
       paymentMethod: o.payment_method,
       paymentTerms: o.payment_terms || "PREPAID",

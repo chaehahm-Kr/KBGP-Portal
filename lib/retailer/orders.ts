@@ -22,6 +22,8 @@ import { resolveEffectivePaymentPolicy } from "@/lib/retailer/payment-policy-ser
 import { getOrderFulfillments } from "@/lib/retailer/fulfillment-actions";
 import { getRetailerAccountPurchaseAllowance } from "@/lib/retailer/purchase-limits";
 import { evaluatePromotionsForCart } from "@/lib/retailer/promotions";
+import { resolveCarrierTrackingUrl } from "@/lib/orders/carrier-resolver";
+import { computeAuthoritativeOrderStatus } from "@/lib/orders/order-status-utils";
 
 function parsePaymentNotesSnapshot(notes?: string | null): {
   payment_snapshot?: any;
@@ -55,6 +57,30 @@ export interface RetailerOrderSummary {
   paymentSnapshot?: PaymentMethodSnapshot | null;
   totalItemsCount: number;
   totalSkusCount: number;
+  totalOrderedUnits: number;
+  totalShippedUnits: number;
+  totalCancelledUnits: number;
+  totalRemainingUnits: number;
+  boxCount: number;
+  packages?: Array<{
+    id: string;
+    boxNumber: number;
+    boxTotal: number;
+    carrier: string;
+    trackingNumber: string;
+    trackingUrl: string | null;
+  }>;
+  invoices?: Array<{
+    id: string;
+    invoiceNumber: string;
+    invoiceStatus: string;
+    paymentStatus: string;
+    balanceDue: number;
+    dueDate: string;
+  }>;
+  cancellationRequested?: boolean;
+  refundAmount?: number;
+  refundStatus?: string;
   createdAt: string;
   storeId: string | null;
   storeName: string;
@@ -82,6 +108,8 @@ export interface RetailerOrderItemDetail {
   unitMsrp: number | null;
   quantity: number;
   quantityShipped?: number;
+  quantityCancelled?: number;
+  quantityRemaining?: number;
   quantityDelivered?: number;
   casePackQty: number;
   lineTotal: number;
@@ -1160,6 +1188,55 @@ export async function getRetailerOrders(
 
     if (!orders) return [];
 
+    const orderIds = orders.map((o) => o.id);
+    const itemsMap = new Map<string, any[]>();
+    const packagesMap = new Map<string, any[]>();
+    const invoicesMap = new Map<string, any[]>();
+
+    if (orderIds.length > 0) {
+      const [itemsRes, pkgsRes, invsRes] = await Promise.all([
+        adminClient.from("retailer_order_items").select("order_id, quantity, quantity_shipped, quantity_cancelled").in("order_id", orderIds),
+        adminClient.from("retailer_order_packages").select("*").in("order_id", orderIds).order("box_number", { ascending: true }),
+        adminClient.from("retailer_invoices").select("id, order_id, invoice_number, invoice_status, payment_status, balance_due, due_date").in("order_id", orderIds),
+      ]);
+
+      if (itemsRes.data) {
+        itemsRes.data.forEach((it: any) => {
+          const arr = itemsMap.get(it.order_id) || [];
+          arr.push(it);
+          itemsMap.set(it.order_id, arr);
+        });
+      }
+      if (pkgsRes.data) {
+        pkgsRes.data.forEach((p: any) => {
+          const arr = packagesMap.get(p.order_id) || [];
+          arr.push({
+            id: p.id,
+            boxNumber: p.box_number,
+            boxTotal: p.box_total,
+            carrier: p.carrier,
+            trackingNumber: p.tracking_number,
+            trackingUrl: resolveCarrierTrackingUrl(p.carrier, p.tracking_number, p.tracking_url),
+          });
+          packagesMap.set(p.order_id, arr);
+        });
+      }
+      if (invsRes.data) {
+        invsRes.data.forEach((inv: any) => {
+          const arr = invoicesMap.get(inv.order_id) || [];
+          arr.push({
+            id: inv.id,
+            invoiceNumber: inv.invoice_number,
+            invoiceStatus: inv.invoice_status,
+            paymentStatus: inv.payment_status,
+            balanceDue: Number(inv.balance_due || 0),
+            dueDate: inv.due_date,
+          });
+          invoicesMap.set(inv.order_id, arr);
+        });
+      }
+    }
+
     return orders.map((o: any) => {
       const parsed = parsePaymentNotesSnapshot(o.payment_notes);
       const snap = o.shipping_snapshot || parsed?.shipping_snapshot;
@@ -1182,10 +1259,32 @@ export async function getRetailerOrders(
         destinationLabel = o.recipient_name;
       }
 
+      const oItems = itemsMap.get(o.id) || [];
+      const totalOrderedUnits = oItems.length > 0 
+        ? oItems.reduce((acc, it) => acc + Number(it.quantity || 0), 0)
+        : Number(o.total_ordered_units || o.total_items_count || 0);
+      const totalShippedUnits = oItems.length > 0
+        ? oItems.reduce((acc, it) => acc + Number(it.quantity_shipped || 0), 0)
+        : Number(o.total_shipped_units || (['shipped', 'delivered'].includes(o.order_status) ? totalOrderedUnits : 0));
+      const totalCancelledUnits = oItems.length > 0
+        ? oItems.reduce((acc, it) => acc + Number(it.quantity_cancelled || 0), 0)
+        : Number(o.total_cancelled_units || (o.order_status === 'cancelled' ? totalOrderedUnits : 0));
+      const totalRemainingUnits = Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits);
+      const pkgs = packagesMap.get(o.id) || [];
+      const boxCount = pkgs.length > 0 ? pkgs.length : (totalShippedUnits > 0 ? 1 : 0);
+      const invs = invoicesMap.get(o.id) || [];
+
+      const authoritativeStatus = computeAuthoritativeOrderStatus(
+        o.order_status,
+        totalOrderedUnits,
+        totalShippedUnits,
+        totalCancelledUnits
+      );
+
       return {
         id: o.id,
         orderNumber: o.order_number,
-        orderStatus: o.order_status,
+        orderStatus: authoritativeStatus,
         paymentStatus: o.payment_status,
         paymentMethod: (o.payment_method as RetailerPaymentMethod) || null,
         paymentTerms: o.payment_terms || "PREPAID",
@@ -1199,6 +1298,16 @@ export async function getRetailerOrders(
         paymentSnapshot: o.payment_snapshot || parsed?.payment_snapshot || null,
         totalItemsCount: Number(o.total_items_count || 0),
         totalSkusCount: Number(o.total_skus_count || 0),
+        totalOrderedUnits,
+        totalShippedUnits,
+        totalCancelledUnits,
+        totalRemainingUnits,
+        boxCount,
+        packages: pkgs,
+        invoices: invs,
+        cancellationRequested: Boolean(o.cancellation_requested),
+        refundAmount: Number(o.refund_amount || 0),
+        refundStatus: o.refund_status || "none",
         createdAt: o.created_at,
         storeId: o.store_id,
         storeName: (o.stores as any)?.name || "Main Store",
@@ -1399,11 +1508,31 @@ export async function getRetailerOrderDetail(
       }
     }
 
-    // Fetch payments history
-    const payments = await getOrderPayments(order.id);
+    // Fetch payments, fulfillments, packages, and invoices
+    const [payments, fulfillments, rawPackagesRes, rawInvoicesRes] = await Promise.all([
+      getOrderPayments(order.id),
+      getOrderFulfillments(order.id),
+      adminClient.from("retailer_order_packages").select("*").eq("order_id", order.id).order("box_number", { ascending: true }),
+      adminClient.from("retailer_invoices").select("id, invoice_number, invoice_status, payment_status, balance_due, due_date").eq("order_id", order.id),
+    ]);
 
-    // Fetch fulfillments history
-    const fulfillments = await getOrderFulfillments(order.id);
+    const packages = (rawPackagesRes.data || []).map((p: any) => ({
+      id: p.id,
+      boxNumber: p.box_number,
+      boxTotal: p.box_total,
+      carrier: p.carrier,
+      trackingNumber: p.tracking_number,
+      trackingUrl: resolveCarrierTrackingUrl(p.carrier, p.tracking_number, p.tracking_url),
+    }));
+
+    const invoices = (rawInvoicesRes.data || []).map((inv: any) => ({
+      id: inv.id,
+      invoiceNumber: inv.invoice_number,
+      invoiceStatus: inv.invoice_status,
+      paymentStatus: inv.payment_status,
+      balanceDue: Number(inv.balance_due || 0),
+      dueDate: inv.due_date,
+    }));
 
     // Calculate line-item cumulative shipped and delivered quantities
     const lineShippedMap = new Map<string, number>();
@@ -1422,28 +1551,50 @@ export async function getRetailerOrderDetail(
       });
 
     const rawItems = (order.retailer_order_items as any[]) || [];
-    const items: RetailerOrderItemDetail[] = rawItems.map((item) => ({
-      id: item.id,
-      productId: item.product_id,
-      sku: item.sku,
-      productName: item.product_name,
-      brandName: item.brand_name,
-      unitWholesalePrice: Number(item.unit_wholesale_price),
-      unitMsrp: item.unit_msrp ? Number(item.unit_msrp) : null,
-      quantity: item.quantity,
-      quantityShipped: lineShippedMap.get(item.id) || 0,
-      quantityDelivered: lineDeliveredMap.get(item.id) || 0,
-      casePackQty: item.case_pack_qty,
-      line_total: Number(item.line_total),
-      lineTotal: Number(item.line_total),
-      discountAmount: Number(item.discount_amount || 0),
-      isBogoFree: Boolean(item.is_bogo_free),
-    }));
+    const items: RetailerOrderItemDetail[] = rawItems.map((item) => {
+      const qOrdered = Number(item.quantity || 0);
+      const qShipped = lineShippedMap.get(item.id) || Number(item.quantity_shipped || 0);
+      const qCancelled = Number(item.quantity_cancelled || 0);
+      const qRemaining = Math.max(0, qOrdered - qShipped - qCancelled);
+
+      return {
+        id: item.id,
+        productId: item.product_id,
+        sku: item.sku,
+        productName: item.product_name,
+        brandName: item.brand_name,
+        unitWholesalePrice: Number(item.unit_wholesale_price),
+        unitMsrp: item.unit_msrp ? Number(item.unit_msrp) : null,
+        quantity: qOrdered,
+        quantityShipped: qShipped,
+        quantityCancelled: qCancelled,
+        quantityRemaining: qRemaining,
+        quantityDelivered: lineDeliveredMap.get(item.id) || 0,
+        casePackQty: item.case_pack_qty,
+        line_total: Number(item.line_total),
+        lineTotal: Number(item.line_total),
+        discountAmount: Number(item.discount_amount || 0),
+        isBogoFree: Boolean(item.is_bogo_free),
+      };
+    });
+
+    const totalOrderedUnits = items.reduce((acc, it) => acc + it.quantity, 0);
+    const totalShippedUnits = items.reduce((acc, it) => acc + (it.quantityShipped || 0), 0);
+    const totalCancelledUnits = items.reduce((acc, it) => acc + (it.quantityCancelled || 0), 0);
+    const totalRemainingUnits = Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits);
+    const boxCount = packages.length > 0 ? packages.length : (totalShippedUnits > 0 ? 1 : 0);
+
+    const authoritativeStatus = computeAuthoritativeOrderStatus(
+      order.order_status,
+      totalOrderedUnits,
+      totalShippedUnits,
+      totalCancelledUnits
+    );
 
     return {
       id: order.id,
       orderNumber: order.order_number,
-      orderStatus: order.order_status,
+      orderStatus: authoritativeStatus,
       paymentStatus: order.payment_status,
       paymentMethod: (order.payment_method as RetailerPaymentMethod) || null,
       paymentTerms: order.payment_terms || "PREPAID",
@@ -1466,6 +1617,16 @@ export async function getRetailerOrderDetail(
       shippingAmount: Number(order.shipping_amount || 0),
       totalItemsCount: order.total_items_count,
       totalSkusCount: order.total_skus_count,
+      totalOrderedUnits,
+      totalShippedUnits,
+      totalCancelledUnits,
+      totalRemainingUnits,
+      boxCount,
+      packages,
+      invoices,
+      cancellationRequested: Boolean(order.cancellation_requested),
+      refundAmount: Number(order.refund_amount || 0),
+      refundStatus: order.refund_status || "none",
       shippingAddress: order.shipping_address,
       shippingCity: order.shipping_city,
       shippingState: order.shipping_state,

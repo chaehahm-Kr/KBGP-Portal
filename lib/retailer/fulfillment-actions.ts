@@ -263,17 +263,12 @@ export async function adminCreateOrderFulfillmentAction(params: {
       return { success: false, error: "Failed to create fulfillment line items." };
     }
 
-    // 7. Update Retailer Order Status appropriately (processing or shipped)
-    let nextOrderStatus = isShipped ? "shipped" : "processing";
+    // 7. Update Retailer Order Status appropriately to 'processing'
+    // Phase B1: Creating a shipment package puts order into processing; dispatching marks it as shipped/partially_shipped
     if (order.order_status === "submitted" || order.order_status === "confirmed") {
       await adminClient
         .from("retailer_orders")
-        .update({ order_status: nextOrderStatus, updated_at: new Date().toISOString() })
-        .eq("id", params.orderId);
-    } else if (isShipped && order.order_status === "processing") {
-      await adminClient
-        .from("retailer_orders")
-        .update({ order_status: "shipped", updated_at: new Date().toISOString() })
+        .update({ order_status: "processing", updated_at: new Date().toISOString() })
         .eq("id", params.orderId);
     }
 
@@ -338,10 +333,37 @@ export async function adminMarkFulfillmentShippedAction(params: {
       return { success: false, error: "Failed to update shipment status to shipped." };
     }
 
-    // Update Order Status to shipped
+    // Phase B1: Calculate Partially Shipped using actual shipped units vs ordered units
+    const { data: orderData } = await adminClient
+      .from("retailer_orders")
+      .select("id, total_items_count, order_status, retailer_order_items(id, quantity)")
+      .eq("id", fulfillment.order_id)
+      .maybeSingle();
+
+    const totalOrdered = (orderData?.retailer_order_items as any[])?.reduce(
+      (sum, it) => sum + Number(it.quantity || 0),
+      0
+    ) || Number(orderData?.total_items_count || 0);
+
+    const allFulfillments = await getOrderFulfillments(fulfillment.order_id);
+    const totalShipped = allFulfillments
+      .filter((f) => f.id === fulfillment.id || f.status === "shipped" || f.status === "delivered")
+      .reduce(
+        (sum, f) =>
+          sum + f.items.reduce((iSum, it) => iSum + Number(it.quantityShipped || 0), 0),
+        0
+      );
+
+    const nextOrderStatus =
+      totalShipped >= totalOrdered && totalOrdered > 0
+        ? "shipped"
+        : totalShipped > 0
+        ? "partially_shipped"
+        : "processing";
+
     await adminClient
       .from("retailer_orders")
-      .update({ order_status: "shipped", updated_at: new Date().toISOString() })
+      .update({ order_status: nextOrderStatus, updated_at: new Date().toISOString() })
       .eq("id", fulfillment.order_id);
 
     revalidatePath(`/admin/retailers/${fulfillment.company_id}`);
@@ -471,12 +493,26 @@ export async function adminConfirmFulfillmentDeliveryAction(params: {
         0
       );
 
-    const isFullyDelivered = totalDeliveredAcrossOrder >= totalOrdered && totalOrdered > 0;
+    // Phase B1: Deliveries establish confirmed delivered quantities, but operational order status remains Shipped or Partially Shipped
+    const totalShippedAcrossOrder = allFulfillments
+      .filter((f) => f.status === "shipped" || f.status === "delivered")
+      .reduce(
+        (sum, f) =>
+          sum + f.items.reduce((iSum, it) => iSum + Number(it.quantityShipped || 0), 0),
+        0
+      );
+
+    const nextOrderStatus =
+      totalShippedAcrossOrder >= totalOrdered && totalOrdered > 0
+        ? "shipped"
+        : totalShippedAcrossOrder > 0
+        ? "partially_shipped"
+        : "processing";
 
     await adminClient
       .from("retailer_orders")
       .update({
-        order_status: isFullyDelivered ? "delivered" : "shipped",
+        order_status: nextOrderStatus,
         updated_at: new Date().toISOString(),
       })
       .eq("id", fulfillment.order_id);

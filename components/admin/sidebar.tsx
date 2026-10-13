@@ -262,6 +262,7 @@ export default function Sidebar({
       icon: SalesIcon,
       subItems: [
         { name: "Overview", href: "/admin/sales" },
+        { name: "Retailer Orders", href: "/admin/sales/orders" },
         { name: "SKU Performance", href: "/admin/sales?tab=sku" },
         { name: "Promotions & Coupons", href: "/admin/sales/promotions" },
       ],
