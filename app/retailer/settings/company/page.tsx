@@ -146,10 +146,14 @@ export default async function RetailerCompanySettingsPage() {
     state: companyCore.state,
     zip: companyCore.zipCode,
     status: retailerProfile?.status || companyCore.status || "active",
-    paymentTerms: retailerProfile?.payment_terms || "PREPAID_CARD",
+    paymentTerms: retailerProfile?.approved_terms || retailerProfile?.payment_terms || "prepaid",
     creditLimit: retailerProfile?.credit_limit ?? 0,
     termsEnabled: retailerProfile?.terms_enabled ?? false,
     approvedTerms: retailerProfile?.approved_terms || null,
+    termsStatus: retailerProfile?.terms_status || "pending",
+    taxExemptStatus: retailerProfile?.tax_exempt_status ?? false,
+    cardEnabled: retailerProfile?.payment_method_card_enabled ?? true,
+    achEnabled: retailerProfile?.payment_method_ach_enabled ?? true,
     resaleCertificateNumber: retailerProfile?.resale_certificate_number || null,
   };
 

@@ -13,6 +13,14 @@ import {
   ReorderConfidence,
   TARGET_WEEKS_OF_SUPPLY,
 } from "./performance";
+import {
+  normalizeApprovedTerms,
+  formatApprovedTermsDisplay,
+  normalizeTermsStatus,
+  formatTermsStatusDisplay,
+  normalizeRetailerAccountStatus,
+  formatRetailerAccountStatusDisplay,
+} from "./commercial-types";
 
 export interface NeedsAttentionItem {
   id: string;
@@ -323,6 +331,17 @@ export interface Retailer360Data {
     pdf_error?: string | null;
     signedPdfUrl?: string | null;
   }>;
+  documents?: Array<{
+    id: string;
+    documentType: string;
+    title: string;
+    filename: string;
+    storagePath: string;
+    mimeType: string;
+    fileSizeBytes?: number | null;
+    createdAt: string;
+    signedUrl?: string | null;
+  }>;
   orders: Retailer360OrderItem[];
   performance: Retailer360PerformanceSummary;
   training: {
@@ -389,18 +408,32 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     return null;
   }
 
-  const profile = Array.isArray(company.retailer_profiles)
+  const rawProfile = Array.isArray(company.retailer_profiles)
     ? company.retailer_profiles[0]
-    : company.retailer_profiles || {
-        status: company.status || "active",
-        payment_terms: "PREPAID_CARD",
-        credit_limit: 0,
-        payment_method_card_enabled: true,
-        payment_method_ach_enabled: true,
-        terms_enabled: false,
-        approved_terms: "PREPAID",
-        terms_status: "not_applied",
-      };
+    : company.retailer_profiles;
+
+  const profile = {
+    status: normalizeRetailerAccountStatus(rawProfile?.status || company.status),
+    payment_terms: rawProfile?.payment_terms || "PREPAID_CARD",
+    payment_terms_custom: rawProfile?.payment_terms_custom || null,
+    credit_limit: Number(rawProfile?.credit_limit || 0),
+    payment_method_card_enabled: rawProfile?.payment_method_card_enabled ?? true,
+    payment_method_ach_enabled: rawProfile?.payment_method_ach_enabled ?? true,
+    terms_enabled: rawProfile?.terms_enabled ?? false,
+    approved_terms: rawProfile?.approved_terms || normalizeApprovedTerms(rawProfile?.payment_terms),
+    terms_status: normalizeTermsStatus(rawProfile?.terms_status),
+    terms_approved_by_admin: rawProfile?.terms_approved_by_admin ?? false,
+    resale_certificate_number: rawProfile?.resale_certificate_number || null,
+    tax_exempt_status: rawProfile?.tax_exempt_status ?? false,
+    billing_contact_name: rawProfile?.billing_contact_name || null,
+    billing_contact_email: rawProfile?.billing_contact_email || null,
+    billing_contact_phone: rawProfile?.billing_contact_phone || null,
+    billing_address: rawProfile?.billing_address || null,
+    billing_city: rawProfile?.billing_city || null,
+    billing_state: rawProfile?.billing_state || null,
+    billing_zip: rawProfile?.billing_zip || null,
+    internal_note: rawProfile?.internal_note || null,
+  };
 
   // 2. Fetch Stores
   const { data: storesData } = await adminClient
@@ -529,8 +562,8 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     ).length;
   });
 
-  // 4. Fetch Invitations & Authoritative Company Agreements
-  const [invitationsRes, companyAgreementsRes, rawAcceptancesRes] = await Promise.all([
+  // 4. Fetch Invitations & Authoritative Company Agreements & Documents
+  const [invitationsRes, companyAgreementsRes, rawAcceptancesRes, rawDocsRes] = await Promise.all([
     adminClient
       .from("retailer_invitations")
       .select("*")
@@ -546,6 +579,11 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
       .select("*")
       .eq("company_id", companyId)
       .order("accepted_at", { ascending: false }),
+    adminClient
+      .from("retailer_documents")
+      .select("*")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false }),
   ]);
 
   const invitations: Retailer360InvitationItem[] = invitationsRes.data || [];
@@ -612,6 +650,29 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
         signedPdfUrl,
       });
     }
+  }
+
+  const documents: NonNullable<Retailer360Data["documents"]> = [];
+  for (const doc of rawDocsRes.data || []) {
+    let signedUrl: string | null = null;
+    if (doc.file_path) {
+      const { data: signedData } = await adminClient.storage
+        .from("company-uploads")
+        .createSignedUrl(doc.file_path, 3600);
+      signedUrl = signedData?.signedUrl || null;
+    }
+
+    documents.push({
+      id: doc.id,
+      documentType: doc.document_type || "OTHER",
+      title: doc.title || doc.file_name,
+      filename: doc.file_name,
+      storagePath: doc.file_path,
+      mimeType: doc.mime_type || "application/pdf",
+      fileSizeBytes: doc.file_size_bytes,
+      createdAt: doc.created_at,
+      signedUrl,
+    });
   }
 
   // 5. Fetch Retailer Orders & Fulfillments
@@ -1216,7 +1277,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
   }
 
   // E. Pending Commercial Terms
-  if (profile.terms_status === "pending_review" || (profile.terms_enabled && !profile.terms_approved_by_admin)) {
+  if (profile.terms_status === "pending" || (profile.terms_enabled && !profile.terms_approved_by_admin)) {
     needsAttention.push({
       id: "terms-pending-review",
       type: "terms_review",
@@ -1312,7 +1373,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
   });
 
   const metrics: Retailer360OverviewMetrics = {
-    retailerStatus: profile.status || company.status || "active",
+    retailerStatus: normalizeRetailerAccountStatus(profile.status),
     totalStoresCount: stores.length,
     activeUsersCount: members.filter((m) => (m.status || "active").toLowerCase() === "active").length,
     pendingInvitesCount: invitations.filter((i) => i.status === "pending").length,
@@ -1334,8 +1395,8 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
       failedAmount: Math.round(paymentBreakdown.failedAmount * 100) / 100,
     },
     testOrdersCount: testOrders.length,
-    termsStatus: profile.terms_status || (profile.terms_enabled ? "active" : "prepaid"),
-    approvedTerms: profile.approved_terms || profile.payment_terms || "PREPAID_CARD",
+    termsStatus: formatTermsStatusDisplay(profile.terms_status),
+    approvedTerms: formatApprovedTermsDisplay(profile.approved_terms || profile.payment_terms),
     creditLimit: Number(profile.credit_limit || 0),
     reportingCoveragePercent: coveragePercent,
     productsNeedingReorderCount,
@@ -1375,6 +1436,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     members,
     invitations,
     agreements,
+    documents,
     orders,
     performance: performanceSummary,
     training: {

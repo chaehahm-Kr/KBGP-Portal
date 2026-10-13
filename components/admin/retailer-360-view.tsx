@@ -33,6 +33,14 @@ import { formatCanonicalCountryName } from "@/lib/constants/countries";
 import { RetailerRole } from "@/lib/retailer/onboarding-types";
 import { Retailer360MemberItem } from "@/lib/retailer/admin-retailer-360";
 import { StartImpersonationModal } from "@/components/admin/start-impersonation-modal";
+import {
+  normalizeApprovedTerms,
+  formatApprovedTermsDisplay,
+  normalizeTermsStatus,
+  formatTermsStatusDisplay,
+  normalizeRetailerAccountStatus,
+  formatRetailerAccountStatusDisplay,
+} from "@/lib/retailer/commercial-types";
 
 interface Retailer360ViewProps {
   data: Retailer360Data;
@@ -56,7 +64,9 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
   const [impersonateMember, setImpersonateMember] = useState<Retailer360MemberItem | null>(null);
 
   // Commercial Terms Editing State
-  const [status, setStatus] = useState(data.profile?.status || "active");
+  const [status, setStatus] = useState(
+    normalizeRetailerAccountStatus(data.profile?.status)
+  );
   const [cardEnabled, setCardEnabled] = useState(
     data.profile?.payment_method_card_enabled ?? true
   );
@@ -67,16 +77,19 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
     data.profile?.terms_enabled ?? false
   );
   const [approvedTerms, setApprovedTerms] = useState(
-    data.profile?.approved_terms || "PREPAID_CARD"
+    normalizeApprovedTerms(data.profile?.approved_terms || data.profile?.payment_terms)
   );
   const [termsStatus, setTermsStatus] = useState(
-    data.profile?.terms_status || "not_applied"
+    normalizeTermsStatus(data.profile?.terms_status)
   );
   const [creditLimit, setCreditLimit] = useState(
     data.profile?.credit_limit ?? 0
   );
   const [resaleCert, setResaleCert] = useState(
     data.profile?.resale_certificate_number || ""
+  );
+  const [taxExempt, setTaxExempt] = useState(
+    Boolean(data.profile?.tax_exempt_status)
   );
   const [internalNote, setInternalNote] = useState(
     data.profile?.internal_note || ""
@@ -223,20 +236,20 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
     startTransition(async () => {
       const res = await updateRetailerTermsAction(data.company.id, {
         status,
-        paymentTerms: approvedTerms,
-        creditLimit: Number(creditLimit) || 0,
+        creditLimit: Math.max(0, Number(creditLimit) || 0),
         paymentMethodCardEnabled: cardEnabled,
         paymentMethodAchEnabled: achEnabled,
         termsEnabled,
         approvedTerms,
         termsStatus,
-        resaleCertificateNumber: resaleCert,
-        internalNote,
+        resaleCertificateNumber: resaleCert.trim() || undefined,
+        taxExemptStatus: taxExempt,
+        internalNote: internalNote.trim() || undefined,
       });
 
       if (res.success) {
         setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        setTimeout(() => setSaveSuccess(false), 4000);
       } else {
         setSaveError(res.error || "Failed to update commercial terms.");
       }
@@ -458,19 +471,29 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
     startTransition(async () => {
       const res = await createRetailerStoreAction(data.company.id, {
         name: newStoreName.trim(),
+        storeCode: newStoreCode.trim() || undefined,
+        address: newStoreAddress.trim() || undefined,
         city: newStoreCity.trim() || undefined,
         state: newStoreState.trim() || undefined,
-        address: newStoreAddress.trim() || undefined,
+        zip: newStoreZip.trim() || undefined,
         phone: newStorePhone.trim() || undefined,
+        email: newStoreEmail.trim() || undefined,
+        managerName: newStoreManagerName.trim() || undefined,
+        managerPhone: newStoreManagerPhone.trim() || undefined,
       });
 
       if (res.success) {
         setShowAddStoreModal(false);
         setNewStoreName("");
+        setNewStoreCode("");
+        setNewStoreAddress("");
         setNewStoreCity("");
         setNewStoreState("");
-        setNewStoreAddress("");
+        setNewStoreZip("");
         setNewStorePhone("");
+        setNewStoreEmail("");
+        setNewStoreManagerName("");
+        setNewStoreManagerPhone("");
         window.location.reload();
       } else {
         setStoreError(res.error || "Failed to create store.");
@@ -879,7 +902,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
             </div>
 
             <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Active Stores</span>
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Store Locations</span>
               <p className="text-xl font-black text-zinc-900 dark:text-white mt-1">
                 {data.metrics.totalStoresCount}
               </p>
@@ -931,7 +954,13 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Approved Terms:</span>
                     <span className="font-bold text-zinc-900 dark:text-white">
-                      {data.profile.approved_terms || "PREPAID_CARD"}
+                      {formatApprovedTermsDisplay(data.profile.approved_terms || data.profile.payment_terms)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Terms Status:</span>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                      {formatTermsStatusDisplay(data.profile.terms_status)}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -1140,7 +1169,10 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                         {store.storeCode || "-"}
                       </td>
                       <td className="py-3 px-4 text-zinc-600 dark:text-zinc-400">
-                        {store.city ? `${store.city}, ${store.state || ""}` : store.address || "-"}
+                        {store.address && <div className="font-medium text-zinc-900 dark:text-white">{store.address}</div>}
+                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          {store.city ? `${store.city}, ${store.state || ""}${store.zip ? ` ${store.zip}` : ""}` : (store.address ? "" : "-")}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-zinc-600 dark:text-zinc-400 text-[11px]">
                         <div>{store.phone || "-"}</div>
@@ -1599,19 +1631,31 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
             </div>
           </div>
 
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
-            <div>
-              <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                Commercial Payment Terms & Credit Limits
-              </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Configure Net Terms eligibility, payment methods, credit line, and resale certificate information.
-              </p>
+          {/* COMMERCIAL & COMPLIANCE PROFILE (5 CANONICAL SECTIONS) */}
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span>🏛️</span> Retailer Commercial, Compliance & Credit Profile
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Authoritative retail trading policy, state resale compliance, payment channels, and underwritten credit terms.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                  Account: {formatRetailerAccountStatusDisplay(status)}
+                </span>
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                  {formatApprovedTermsDisplay(approvedTerms)} ({formatTermsStatusDisplay(termsStatus)})
+                </span>
+              </div>
             </div>
 
             {saveSuccess && (
-              <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300">
-                ✓ Commercial terms updated successfully!
+              <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300 flex items-center justify-between">
+                <span>✓ Commercial & compliance settings updated successfully!</span>
+                <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">Canonical Source: retailer_profiles</span>
               </div>
             )}
 
@@ -1621,125 +1665,329 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs">
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+            {/* SECTION A — Retailer Account */}
+            <div className="p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-3">
+              <div className="flex items-center justify-between border-b border-zinc-200/60 dark:border-zinc-800 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 flex items-center justify-center text-[10px] font-black">A</span>
                   Retailer Account Status
-                </label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                >
-                  <option value="active">Active (Normal)</option>
-                  <option value="pilot">Pilot / Trial</option>
-                  <option value="suspended">Suspended (Blocked from Ordering)</option>
-                </select>
+                </h4>
+                <span className="text-[11px] text-zinc-400">Controls order placement authorization</span>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Approved Payment Terms
-                </label>
-                <select
-                  value={approvedTerms}
-                  onChange={(e) => setApprovedTerms(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                >
-                  <option value="PREPAID_CARD">Prepaid (Credit Card / ACH)</option>
-                  <option value="NET_15">Net 15 Days</option>
-                  <option value="NET_30">Net 30 Days</option>
-                  <option value="NET_60">Net 60 Days</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Approved Credit Limit (USD)
-                </label>
-                <input
-                  type="number"
-                  value={creditLimit}
-                  onChange={(e) => setCreditLimit(Number(e.target.value))}
-                  placeholder="e.g. 5000"
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Resale Certificate / Tax ID
-                </label>
-                <input
-                  type="text"
-                  value={resaleCert}
-                  onChange={(e) => setResaleCert(e.target.value)}
-                  placeholder="e.g. CA-RESALE-998811"
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Account Status
+                  </label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(normalizeRetailerAccountStatus(e.target.value))}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  >
+                    <option value="active">Active (Full Purchasing Authorized)</option>
+                    <option value="pending_approval">Pending Approval / Trial</option>
+                    <option value="suspended">Suspended (Blocked from Ordering)</option>
+                    <option value="inactive">Inactive (Terminated / Offboarded)</option>
+                  </select>
+                </div>
+                <div className="text-[11px] text-zinc-500 dark:text-zinc-400 flex items-center">
+                  <p>
+                    <strong className="text-zinc-700 dark:text-zinc-300">Operational Note:</strong> This status applies strictly to the Retailer Trading Account. Company legal entity status is managed independently in Company Core.
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Payment Method Toggles */}
-            <div className="space-y-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
-              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block">
-                Allowed Payment Channels
-              </span>
-              <div className="flex flex-wrap gap-4 text-xs">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
+            {/* SECTION B — Commercial Compliance */}
+            <div className="p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-4">
+              <div className="flex items-center justify-between border-b border-zinc-200/60 dark:border-zinc-800 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 flex items-center justify-center text-[10px] font-black">B</span>
+                  Commercial Compliance & State Resale
+                </h4>
+                <span className="text-[11px] text-zinc-400">Sales tax & state certificate authority</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                {/* Company Tax ID (Read-only reference) */}
+                <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Company Tax ID / EIN</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                      Master Core
+                    </span>
+                  </div>
+                  <p className="font-mono font-bold text-zinc-900 dark:text-white text-sm">
+                    {data.company.businessRegistrationNumber || "Not Registered"}
+                  </p>
+                  <p className="text-[10px] text-zinc-400">
+                    Corporate entity registration (Read-only master)
+                  </p>
+                </div>
+
+                {/* Resale Certificate Number (Editable) */}
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Resale Certificate Number
+                  </label>
+                  <input
+                    type="text"
+                    value={resaleCert}
+                    onChange={(e) => setResaleCert(e.target.value)}
+                    placeholder="e.g. CA-RESALE-998811"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-mono font-bold outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                  <p className="text-[10px] text-zinc-400 mt-1">
+                    State resale license for wholesale sales tax exemption
+                  </p>
+                </div>
+
+                {/* Tax Exempt Status (Admin-controlled) */}
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Tax Exempt Status (Admin Verified)
+                  </label>
+                  <select
+                    value={taxExempt ? "yes" : "no"}
+                    onChange={(e) => setTaxExempt(e.target.value === "yes")}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  >
+                    <option value="no">Standard Taxable (Sales Tax Applied)</option>
+                    <option value="yes">Verified Exempt (Zero Sales Tax)</option>
+                  </select>
+                  <p className="text-[10px] text-zinc-400 mt-1">
+                    Requires manual admin audit of state certificate
+                  </p>
+                </div>
+              </div>
+
+              {/* Agreement & Compliance Evidence Summary */}
+              <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                  Operating Agreement & Compliance Status
+                </span>
+                <div className="flex flex-wrap items-center gap-3">
+                  {data.agreements && data.agreements.length > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                      <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                        Retailer Agreement Accepted: v{data.agreements[0].agreement_version} ({formatDate(data.agreements[0].accepted_at)})
+                      </span>
+                      {data.agreements[0].signedPdfUrl && (
+                        <a
+                          href={data.agreements[0].signedPdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] font-bold text-indigo-600 hover:underline"
+                        >
+                          View Signed PDF ↗
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                      <span className="font-medium">No Operating Agreement signed yet</span>
+                    </div>
+                  )}
+
+                  {data.documents && data.documents.length > 0 && (
+                    <span className="text-zinc-400">· {data.documents.length} verified document(s) on file</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION C — Allowed Payment Methods */}
+            <div className="p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-3">
+              <div className="flex items-center justify-between border-b border-zinc-200/60 dark:border-zinc-800 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 flex items-center justify-center text-[10px] font-black">C</span>
+                  Allowed Payment Methods (Channels)
+                </h4>
+                <span className="text-[11px] text-zinc-400">Controls options presented during retailer checkout</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <label className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer select-none transition-colors ${
+                  cardEnabled ? "border-emerald-300 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20" : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 opacity-60"
+                }`}>
                   <input
                     type="checkbox"
                     checked={cardEnabled}
                     onChange={(e) => setCardEnabled(e.target.checked)}
-                    className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                    className="mt-0.5 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
                   />
-                  <span>Credit / Debit Card (Stripe ready)</span>
+                  <div>
+                    <span className="font-bold text-zinc-900 dark:text-white block">Credit / Debit Card</span>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block mt-0.5">
+                      Card gateway payment (prepaid at checkout)
+                    </span>
+                  </div>
                 </label>
 
-                <label className="flex items-center gap-2 cursor-pointer select-none">
+                <label className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer select-none transition-colors ${
+                  achEnabled ? "border-emerald-300 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20" : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 opacity-60"
+                }`}>
                   <input
                     type="checkbox"
                     checked={achEnabled}
                     onChange={(e) => setAchEnabled(e.target.checked)}
-                    className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                    className="mt-0.5 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
                   />
-                  <span>ACH Bank Transfer</span>
+                  <div>
+                    <span className="font-bold text-zinc-900 dark:text-white block">ACH Direct Transfer</span>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block mt-0.5">
+                      Bank direct debit (prepaid settlement)
+                    </span>
+                  </div>
                 </label>
 
-                <label className="flex items-center gap-2 cursor-pointer select-none">
+                <label className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer select-none transition-colors ${
+                  termsEnabled ? "border-purple-300 bg-purple-50/40 dark:border-purple-900 dark:bg-purple-950/20" : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 opacity-60"
+                }`}>
                   <input
                     type="checkbox"
                     checked={termsEnabled}
                     onChange={(e) => setTermsEnabled(e.target.checked)}
-                    className="rounded border-zinc-300 text-purple-600 focus:ring-purple-500"
+                    className="mt-0.5 rounded border-zinc-300 text-purple-600 focus:ring-purple-500"
                   />
-                  <span className="font-bold text-purple-700 dark:text-purple-300">Enable Net Terms Invoicing</span>
+                  <div>
+                    <span className="font-bold text-purple-900 dark:text-purple-300 block">Net Terms / Invoicing</span>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block mt-0.5">
+                      Post-dispatch trade credit (requires Approved status)
+                    </span>
+                  </div>
                 </label>
               </div>
             </div>
 
-            {/* Internal Admin Notes */}
-            <div>
-              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                Internal Admin Operational Notes (Confidential)
-              </label>
+            {/* SECTION D — Terms & Credit */}
+            <div className="p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-4">
+              <div className="flex items-center justify-between border-b border-zinc-200/60 dark:border-zinc-800 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 flex items-center justify-center text-[10px] font-black">D</span>
+                  Payment Terms & Underwritten Credit Line
+                </h4>
+                <span className="text-[11px] text-zinc-400">Wholesale credit limits & maturity terms</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Terms Approval Status
+                  </label>
+                  <select
+                    value={termsStatus}
+                    onChange={(e) => setTermsStatus(normalizeTermsStatus(e.target.value))}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  >
+                    <option value="pending">Pending Review / Underwriting</option>
+                    <option value="approved">Approved (Active Credit Terms)</option>
+                    <option value="suspended">Suspended (Terms Temporarily Blocked)</option>
+                    <option value="rejected">Rejected (Prepaid Only)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Approved Payment Terms
+                  </label>
+                  <select
+                    value={approvedTerms}
+                    onChange={(e) => setApprovedTerms(normalizeApprovedTerms(e.target.value))}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  >
+                    <option value="prepaid">Prepaid (Credit Card / ACH)</option>
+                    <option value="net15">Net 15 Days</option>
+                    <option value="net30">Net 30 Days</option>
+                    <option value="net45">Net 45 Days</option>
+                    <option value="net60">Net 60 Days</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Approved Credit Limit (USD)
+                  </label>
+                  <input
+                    type="number"
+                    value={creditLimit}
+                    min={0}
+                    step={100}
+                    onChange={(e) => setCreditLimit(Math.max(0, Number(e.target.value) || 0))}
+                    placeholder="0"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* AR Balance & Drawdown Summary Placeholders */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
+                <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Current Open Balance</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                      Pending A/R Ledger Engine
+                    </span>
+                  </div>
+                  <p className="font-mono font-bold text-zinc-900 dark:text-white text-base">
+                    $0.00
+                  </p>
+                  <p className="text-[10px] text-zinc-400">
+                    Accounts receivable aging and open invoice ledger integration pending
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Available Credit</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                      Rule Gated
+                    </span>
+                  </div>
+                  <p className="font-mono font-bold text-zinc-900 dark:text-white text-base">
+                    {formatCurrency(creditLimit)}
+                  </p>
+                  <p className="text-[10px] text-zinc-400">
+                    Subject to live order drawdowns. Net terms option in checkout is only visible when Net Terms is Enabled AND Status is Approved.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION E — Internal Admin Notes */}
+            <div className="p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-2">
+              <div className="flex items-center justify-between border-b border-zinc-200/60 dark:border-zinc-800 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 flex items-center justify-center text-[10px] font-black">E</span>
+                  Internal Admin Operational Notes
+                </h4>
+                <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  Confidential — Never Visible to Retailer
+                </span>
+              </div>
               <textarea
                 value={internalNote}
                 onChange={(e) => setInternalNote(e.target.value)}
                 rows={3}
-                placeholder="Internal underwriting notes, special wholesale agreements, or credit history..."
+                placeholder="Internal underwriting notes, credit verification history, special commercial arrangements..."
                 className="w-full rounded-xl border border-zinc-200 bg-white p-3 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white resize-none"
               />
             </div>
 
-            <div className="flex justify-end pt-3 border-t border-zinc-100 dark:border-zinc-800">
+            {/* Save CTA */}
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              <span className="text-[11px] text-zinc-400">
+                Updates are saved to authoritative <code>retailer_profiles</code> record.
+              </span>
               <button
                 type="button"
                 onClick={handleSaveTerms}
                 disabled={isPending}
                 className="rounded-xl bg-zinc-900 px-6 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-900 transition-colors shadow-2xs cursor-pointer"
               >
-                {isPending ? "Saving..." : "Save Commercial Settings"}
+                {isPending ? "Saving Settings..." : "Save Commercial & Compliance Settings"}
               </button>
             </div>
           </div>
@@ -2244,11 +2492,16 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
       {/* MODAL: ADD STORE */}
       {showAddStoreModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
-              <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                Add Store Location
-              </h3>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  Add Store Location
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Add physical storefront location, manager contact, or store code
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowAddStoreModal(false)}
@@ -2265,20 +2518,60 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 </div>
               )}
 
-              <div>
-                <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Store Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={newStoreName}
-                  onChange={(e) => setNewStoreName(e.target.value)}
-                  placeholder="e.g. Irvine Spectrum Flagship"
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                />
-              </div>
-
               <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Store Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newStoreName}
+                    onChange={(e) => setNewStoreName(e.target.value)}
+                    placeholder="e.g. Irvine Spectrum Flagship"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Store Code
+                  </label>
+                  <input
+                    type="text"
+                    value={newStoreCode}
+                    onChange={(e) => setNewStoreCode(e.target.value)}
+                    placeholder="e.g. STR-001"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Store Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={newStorePhone}
+                    onChange={(e) => setNewStorePhone(e.target.value)}
+                    placeholder="(949) 555-0199"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Physical Address
+                  </label>
+                  <input
+                    type="text"
+                    value={newStoreAddress}
+                    onChange={(e) => setNewStoreAddress(e.target.value)}
+                    placeholder="123 Retailer Way"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
                 <div>
                   <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
                     City
@@ -2291,6 +2584,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
                   />
                 </div>
+
                 <div>
                   <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
                     State
@@ -2303,19 +2597,58 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Phone
-                </label>
-                <input
-                  type="text"
-                  value={newStorePhone}
-                  onChange={(e) => setNewStorePhone(e.target.value)}
-                  placeholder="(949) 555-0199"
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                />
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Postal / ZIP Code
+                  </label>
+                  <input
+                    type="text"
+                    value={newStoreZip}
+                    onChange={(e) => setNewStoreZip(e.target.value)}
+                    placeholder="92618"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Store Email
+                  </label>
+                  <input
+                    type="email"
+                    value={newStoreEmail}
+                    onChange={(e) => setNewStoreEmail(e.target.value)}
+                    placeholder="store@retailer.com"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Manager Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newStoreManagerName}
+                    onChange={(e) => setNewStoreManagerName(e.target.value)}
+                    placeholder="Store Manager"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Manager Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={newStoreManagerPhone}
+                    onChange={(e) => setNewStoreManagerPhone(e.target.value)}
+                    placeholder="(949) 555-0199"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">

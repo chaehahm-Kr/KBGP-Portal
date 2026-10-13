@@ -17,6 +17,10 @@ import type {
   EffectiveRetailerBillingInfo,
 } from "@/lib/retailer/organization-mapping";
 import { CountrySelect } from "@/components/shared/country-select";
+import {
+  formatApprovedTermsDisplay,
+  formatTermsStatusDisplay,
+} from "@/lib/retailer/commercial-types";
 
 interface RetailerCompanySettingsViewProps {
   profile: PersonalProfileItem;
@@ -67,6 +71,7 @@ export function RetailerCompanySettingsView({
   const [billingContactName, setBillingContactName] = useState(billing?.customBillingContactName || "");
   const [billingContactPhone, setBillingContactPhone] = useState(billing?.customBillingContactPhone || "");
   const [billingContactEmail, setBillingContactEmail] = useState(billing?.billingContactEmail || company.contactEmail || "");
+  const [compResaleCert, setCompResaleCert] = useState(company.resaleCertificateNumber || "");
 
   const [companyError, setCompanyError] = useState("");
 
@@ -112,6 +117,7 @@ export function RetailerCompanySettingsView({
     setBillingContactName(billing?.customBillingContactName || "");
     setBillingContactPhone(billing?.customBillingContactPhone || "");
     setBillingContactEmail(billing?.billingContactEmail || company.contactEmail || "");
+    setCompResaleCert(company.resaleCertificateNumber || "");
 
     setCompanyError("");
     setIsCompanyModalOpen(true);
@@ -150,6 +156,8 @@ export function RetailerCompanySettingsView({
         billingContactName: billingContactSameAsPrimary ? undefined : billingContactName.trim() || undefined,
         billingContactPhone: billingContactSameAsPrimary ? undefined : billingContactPhone.trim() || undefined,
         billingContactEmail: billingContactEmail.trim() || undefined,
+
+        resaleCertificateNumber: compResaleCert.trim() || undefined,
       });
 
       if (res.success) {
@@ -435,7 +443,7 @@ export function RetailerCompanySettingsView({
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs pt-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs pt-1">
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
@@ -478,26 +486,82 @@ export function RetailerCompanySettingsView({
 
               <div>
                 <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
-                  {locale === "ko" ? "재판매 면허 번호 (Resale Certificate)" : "Resale Certificate / Tax ID"}
+                  {locale === "ko" ? "재판매 면허 번호 (Resale Certificate)" : "Resale Certificate Number"}
                 </span>
                 <span className="font-mono font-semibold text-zinc-900 dark:text-white block mt-1">
                   {company.resaleCertificateNumber || (locale === "ko" ? "미등록 (과세 대상)" : "Not recorded")}
                 </span>
+                <span className="text-[10px] text-zinc-400 block mt-0.5">
+                  {locale === "ko" ? "법인 Tax ID와 구분된 리세일 면허" : "Separate from Federal EIN / Tax ID"}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
+                  {locale === "ko" ? "도매 면세 자격 (Tax Exemption)" : "Tax Exempt Status"}
+                </span>
+                <span className="inline-flex items-center gap-1.5 mt-1">
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                    company.taxExemptStatus
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                      : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                  }`}>
+                    {company.taxExemptStatus
+                      ? (locale === "ko" ? "면세 승인 (Exempt)" : "Verified Exempt")
+                      : (locale === "ko" ? "일반 과세 (Standard Taxable)" : "Standard Taxable")}
+                  </span>
+                </span>
+                <span className="text-[10px] text-zinc-400 block mt-0.5">
+                  {locale === "ko" ? "본사 관리자 검증 완료 여부" : "Underwritten by Admin"}
+                </span>
               </div>
 
               <div className="col-span-full p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-1">
-                <div>
-                  <span className="text-zinc-400 block text-[10px] font-medium">
-                    {locale === "ko" ? "도매 결제 및 거래 조건" : "Payment & Commercial Terms"}
-                  </span>
-                  <span className="font-bold text-zinc-900 dark:text-white">
-                    {company.approvedTerms || company.paymentTerms || "Prepaid Card"}
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-400 block text-[10px] font-medium">
+                      {locale === "ko" ? "도매 결제 및 거래 조건" : "Wholesale Payment & Commercial Terms"}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      company.termsStatus === "approved"
+                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                        : company.termsStatus === "suspended"
+                        ? "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
+                        : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                    }`}>
+                      {formatTermsStatusDisplay(company.termsStatus)}
+                    </span>
+                  </div>
+                  <div className="font-bold text-zinc-900 dark:text-white text-sm">
+                    {formatApprovedTermsDisplay(company.approvedTerms || company.paymentTerms)}
                     {company.creditLimit ? ` · ${locale === "ko" ? "여신 한도" : "Credit Limit"}: $${company.creditLimit.toLocaleString()}` : ""}
-                  </span>
+                  </div>
                 </div>
-                <span className="px-2.5 py-1 rounded text-[10px] font-semibold bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 shrink-0">
-                  {locale === "ko" ? "본사 심사 승인" : "Admin Underwritten"}
-                </span>
+
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  <span className="text-[10px] text-zinc-400 font-medium mr-0.5">
+                    {locale === "ko" ? "허용 결제:" : "Allowed Channels:"}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                    company.cardEnabled ?? true
+                      ? "bg-zinc-100 text-zinc-800 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700"
+                      : "bg-zinc-50 text-zinc-400 border-zinc-200 line-through dark:bg-zinc-900 dark:text-zinc-600"
+                  }`}>
+                    💳 Card
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                    company.achEnabled ?? true
+                      ? "bg-zinc-100 text-zinc-800 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700"
+                      : "bg-zinc-50 text-zinc-400 border-zinc-200 line-through dark:bg-zinc-900 dark:text-zinc-600"
+                  }`}>
+                    🏦 ACH
+                  </span>
+                  {company.termsEnabled && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold border bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800">
+                      📄 Net Terms
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1025,6 +1089,25 @@ export function RetailerCompanySettingsView({
                       {locale === "ko"
                         ? "도매 발주서 영수증, 결제 내역서 및 정산 안내가 발송되는 이메일입니다."
                         : "Commercial invoice statements, order receipts, and billing notifications are routed here."}
+                    </span>
+                  </div>
+
+                  {/* Resale Certificate Number */}
+                  <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/30">
+                    <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      {locale === "ko" ? "재판매 면허 번호 (Resale Certificate Number)" : "Resale Certificate Number"}
+                    </label>
+                    <input
+                      type="text"
+                      value={compResaleCert}
+                      onChange={(e) => setCompResaleCert(e.target.value)}
+                      placeholder="e.g. ST-12345678"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
+                    />
+                    <span className="text-[10px] text-zinc-400 mt-1 block">
+                      {locale === "ko"
+                        ? "도매 구매 시 주정부 면세 자격 심사를 위한 공식 리세일 면허 번호입니다. 법인 식별 번호(Tax ID/EIN)와 별도로 관리됩니다."
+                        : "State-issued resale certificate number for wholesale sales tax exemption verification. Managed separately from Federal Tax ID."}
                     </span>
                   </div>
                 </div>

@@ -150,6 +150,7 @@ export async function updateRetailerCompanyInfoAction(payload: {
   billingContactPhone?: string;
   billingContactEmail?: string;
   contactEmail?: string; // legacy alias
+  resaleCertificateNumber?: string;
 }) {
   try {
     const session = await verifyRetailerSession();
@@ -266,6 +267,10 @@ export async function updateRetailerCompanyInfoAction(payload: {
     const billingEmailVal = payload.billingContactEmail ?? payload.contactEmail;
     if (billingEmailVal !== undefined) {
       profUpdates.billing_contact_email = billingEmailVal.trim() || null;
+    }
+
+    if (payload.resaleCertificateNumber !== undefined) {
+      profUpdates.resale_certificate_number = payload.resaleCertificateNumber.trim() || null;
     }
 
     if (Object.keys(profUpdates).length > 1) {
@@ -387,7 +392,11 @@ export async function addRetailerStoreByOwnerAction(payload: {
     revalidatePath("/account");
     revalidatePath("/retailer/account");
     revalidatePath("/retailer/stores");
+    revalidatePath("/stores");
+    revalidatePath("/retailer/settings/company");
+    revalidatePath("/settings/company");
     revalidatePath(`/admin/retailers/${targetCompanyId}`);
+    revalidatePath("/admin/retailers");
     revalidatePath("/admin/stores");
 
     return { success: true, store: newStore };
@@ -474,7 +483,11 @@ export async function updateRetailerStoreByOwnerAction(payload: {
     revalidatePath("/account");
     revalidatePath("/retailer/account");
     revalidatePath("/retailer/stores");
+    revalidatePath("/stores");
+    revalidatePath("/retailer/settings/company");
+    revalidatePath("/settings/company");
     revalidatePath(`/admin/retailers/${caller.companyId}`);
+    revalidatePath("/admin/retailers");
     revalidatePath("/admin/stores");
 
     return { success: true };
@@ -539,8 +552,14 @@ export async function setRetailerStoreStatusByOwnerAction(payload: {
     revalidatePath("/account");
     revalidatePath("/retailer/account");
     revalidatePath("/retailer/stores");
+    revalidatePath("/stores");
+    revalidatePath("/retailer/settings/company");
+    revalidatePath("/settings/company");
     revalidatePath(`/admin/retailers/${caller.companyId}`);
+    revalidatePath("/admin/retailers");
     revalidatePath("/admin/stores");
+    revalidatePath("/retailer/checkout");
+    revalidatePath("/checkout");
 
     return { success: true };
   } catch (err: any) {

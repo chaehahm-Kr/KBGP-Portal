@@ -6,6 +6,12 @@ import { createRetailerInvitation } from "@/lib/retailer/onboarding-actions";
 import { RetailerRole } from "@/lib/retailer/onboarding-types";
 import { revalidatePath } from "next/cache";
 import { formatCanonicalCountryName } from "@/lib/constants/countries";
+import {
+  normalizeApprovedTerms,
+  formatApprovedTermsDisplay,
+  normalizeTermsStatus,
+  normalizeRetailerAccountStatus,
+} from "@/lib/retailer/commercial-types";
 
 export interface CreateRetailerPayload {
   companyName: string;
@@ -40,6 +46,11 @@ export async function getAdminRetailersList() {
       retailer_profiles (
         status,
         payment_terms,
+        approved_terms,
+        terms_status,
+        terms_enabled,
+        tax_exempt_status,
+        resale_certificate_number,
         credit_limit,
         internal_note,
         updated_at
@@ -104,8 +115,13 @@ export async function getAdminRetailersList() {
       name: comp.name,
       businessRegistrationNumber: comp.business_registration_number,
       country: formatCanonicalCountryName(comp.country) || "United States",
-      status: profile?.status || comp.status || "active",
-      paymentTerms: profile?.payment_terms || "PREPAID_CARD",
+      status: normalizeRetailerAccountStatus(profile?.status || comp.status),
+      paymentTerms: formatApprovedTermsDisplay(profile?.approved_terms || profile?.payment_terms),
+      approvedTerms: profile?.approved_terms || "prepaid",
+      termsStatus: profile?.terms_status || "pending",
+      termsEnabled: profile?.terms_enabled ?? false,
+      taxExemptStatus: profile?.tax_exempt_status ?? false,
+      resaleCertificateNumber: profile?.resale_certificate_number || null,
       creditLimit: Number(profile?.credit_limit || 0),
       storesCount: stores.length,
       stores: stores,
@@ -424,12 +440,30 @@ export async function getAdminRetailerDetail(companyId: string) {
       country: formatCanonicalCountryName(company.country) || "United States",
       createdAt: company.created_at,
     },
-    profile: profile || {
-      status: "active",
-      payment_terms: "PREPAID_CARD",
-      credit_limit: 0,
-      internal_note: "",
-    },
+    profile: profile
+      ? {
+          ...profile,
+          status: normalizeRetailerAccountStatus(profile.status),
+          approved_terms: profile.approved_terms || normalizeApprovedTerms(profile.payment_terms),
+          terms_status: normalizeTermsStatus(profile.terms_status),
+          terms_enabled: profile.terms_enabled ?? false,
+          tax_exempt_status: profile.tax_exempt_status ?? false,
+          payment_method_card_enabled: profile.payment_method_card_enabled ?? true,
+          payment_method_ach_enabled: profile.payment_method_ach_enabled ?? true,
+          credit_limit: Number(profile.credit_limit || 0),
+        }
+      : {
+          status: "active",
+          approved_terms: "prepaid",
+          terms_status: "pending",
+          terms_enabled: false,
+          tax_exempt_status: false,
+          payment_method_card_enabled: true,
+          payment_method_ach_enabled: true,
+          credit_limit: 0,
+          resale_certificate_number: null,
+          internal_note: "",
+        },
     stores: stores || [],
     members: activeMembers,
     invitations: invitations || [],
@@ -463,14 +497,23 @@ export async function createRetailerWithInitialStoreAndOwnerAction(payload: Crea
     }
 
     // 2. Insert Retailer Profile (Commercial Terms)
+    const initialApprovedTerms = normalizeApprovedTerms(payload.paymentTerms);
+    const hasNetTerms = initialApprovedTerms !== "prepaid";
+
     const { error: profileError } = await adminClient
       .from("retailer_profiles")
       .insert({
         company_id: company.id,
         status: "active",
+        payment_method_card_enabled: true,
+        payment_method_ach_enabled: true,
+        terms_enabled: hasNetTerms,
+        approved_terms: initialApprovedTerms,
+        terms_status: hasNetTerms ? "approved" : "pending",
+        credit_limit: Math.max(0, payload.creditLimit || 0.0),
+        tax_exempt_status: false,
         payment_terms: payload.paymentTerms || "PREPAID_CARD",
-        credit_limit: payload.creditLimit || 0.0,
-        terms_approved_by_admin: true,
+        terms_approved_by_admin: hasNetTerms,
         internal_note: payload.internalNote?.trim() || null,
       });
 
@@ -563,6 +606,7 @@ export async function updateRetailerTermsAction(
     approvedTerms?: string;
     termsStatus?: string;
     resaleCertificateNumber?: string;
+    taxExemptStatus?: boolean;
     internalNote?: string;
   }
 ) {
@@ -573,19 +617,36 @@ export async function updateRetailerTermsAction(
     updated_at: new Date().toISOString(),
   };
 
-  if (payload.status !== undefined) updateData.status = payload.status;
-  if (payload.paymentTerms !== undefined) updateData.payment_terms = payload.paymentTerms;
-  if (payload.creditLimit !== undefined) updateData.credit_limit = payload.creditLimit;
-  if (payload.paymentMethodCardEnabled !== undefined)
-    updateData.payment_method_card_enabled = payload.paymentMethodCardEnabled;
-  if (payload.paymentMethodAchEnabled !== undefined)
-    updateData.payment_method_ach_enabled = payload.paymentMethodAchEnabled;
-  if (payload.termsEnabled !== undefined) updateData.terms_enabled = payload.termsEnabled;
-  if (payload.approvedTerms !== undefined) updateData.approved_terms = payload.approvedTerms;
-  if (payload.termsStatus !== undefined) updateData.terms_status = payload.termsStatus;
-  if (payload.resaleCertificateNumber !== undefined)
-    updateData.resale_certificate_number = payload.resaleCertificateNumber;
-  if (payload.internalNote !== undefined) updateData.internal_note = payload.internalNote;
+  if (payload.status !== undefined) {
+    updateData.status = normalizeRetailerAccountStatus(payload.status);
+  }
+  if (payload.creditLimit !== undefined) {
+    updateData.credit_limit = Math.max(0, Number(payload.creditLimit) || 0);
+  }
+  if (payload.paymentMethodCardEnabled !== undefined) {
+    updateData.payment_method_card_enabled = Boolean(payload.paymentMethodCardEnabled);
+  }
+  if (payload.paymentMethodAchEnabled !== undefined) {
+    updateData.payment_method_ach_enabled = Boolean(payload.paymentMethodAchEnabled);
+  }
+  if (payload.termsEnabled !== undefined) {
+    updateData.terms_enabled = Boolean(payload.termsEnabled);
+  }
+  if (payload.approvedTerms !== undefined || payload.paymentTerms !== undefined) {
+    updateData.approved_terms = normalizeApprovedTerms(payload.approvedTerms || payload.paymentTerms);
+  }
+  if (payload.termsStatus !== undefined) {
+    updateData.terms_status = normalizeTermsStatus(payload.termsStatus);
+  }
+  if (payload.resaleCertificateNumber !== undefined) {
+    updateData.resale_certificate_number = payload.resaleCertificateNumber.trim() || null;
+  }
+  if (payload.taxExemptStatus !== undefined) {
+    updateData.tax_exempt_status = Boolean(payload.taxExemptStatus);
+  }
+  if (payload.internalNote !== undefined) {
+    updateData.internal_note = payload.internalNote.trim() || null;
+  }
 
   const { error } = await adminClient
     .from("retailer_profiles")
@@ -601,6 +662,8 @@ export async function updateRetailerTermsAction(
 
   revalidatePath(`/admin/retailers/${companyId}`);
   revalidatePath("/admin/retailers");
+  revalidatePath("/retailer/settings/company");
+  revalidatePath("/retailer/checkout");
   return { success: true };
 }
 
@@ -662,7 +725,12 @@ export async function createRetailerStoreAction(
   }
 
   revalidatePath(`/admin/retailers/${companyId}`);
+  revalidatePath("/admin/retailers");
   revalidatePath("/admin/stores");
+  revalidatePath("/retailer/settings/company");
+  revalidatePath("/settings/company");
+  revalidatePath("/retailer/stores");
+  revalidatePath("/stores");
   revalidatePath("/account");
   revalidatePath("/retailer/account");
   return { success: true, store: data };
@@ -912,7 +980,12 @@ export async function adminUpdateRetailerStoreAction(
   }
 
   revalidatePath(`/admin/retailers/${companyId}`);
+  revalidatePath("/admin/retailers");
   revalidatePath("/admin/stores");
+  revalidatePath("/retailer/settings/company");
+  revalidatePath("/settings/company");
+  revalidatePath("/retailer/stores");
+  revalidatePath("/stores");
   revalidatePath("/account");
   revalidatePath("/retailer/account");
 
@@ -955,7 +1028,14 @@ export async function adminSetRetailerStoreStatusAction(
   }
 
   revalidatePath(`/admin/retailers/${companyId}`);
+  revalidatePath("/admin/retailers");
   revalidatePath("/admin/stores");
+  revalidatePath("/retailer/settings/company");
+  revalidatePath("/settings/company");
+  revalidatePath("/retailer/stores");
+  revalidatePath("/stores");
+  revalidatePath("/retailer/checkout");
+  revalidatePath("/checkout");
   revalidatePath("/account");
   revalidatePath("/retailer/account");
 

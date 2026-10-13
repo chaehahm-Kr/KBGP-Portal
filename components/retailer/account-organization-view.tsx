@@ -21,6 +21,10 @@ import { useTranslation } from "@/lib/i18n";
 import { LanguageToggle } from "@/components/retailer/language-toggle";
 import { CountrySelect } from "@/components/shared/country-select";
 import { formatCanonicalCountryName, getCountryDisplayLabel } from "@/lib/constants/countries";
+import {
+  formatApprovedTermsDisplay,
+  formatTermsStatusDisplay,
+} from "@/lib/retailer/commercial-types";
 
 export interface StoreLocationItem {
   id: string;
@@ -56,6 +60,10 @@ export interface CompanyInfoItem {
   creditLimit?: number | null;
   termsEnabled?: boolean | null;
   approvedTerms?: string | null;
+  termsStatus?: string | null;
+  taxExemptStatus?: boolean | null;
+  cardEnabled?: boolean | null;
+  achEnabled?: boolean | null;
   resaleCertificateNumber?: string | null;
 }
 
