@@ -241,6 +241,7 @@ export default function Sidebar({
       name: "Finance",
       icon: ReportsIcon,
       subItems: [
+        { name: "Invoices & Receivables", href: "/admin/finance/receivables" },
         { name: "Supplier Invoices", href: "/admin/finance/invoices" },
         { name: "Payments", href: "/admin/finance/payments" },
         { name: "Cost Review (Landed Cost)", href: "/admin/finance/landed-cost" },

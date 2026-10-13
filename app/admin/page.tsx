@@ -12,6 +12,7 @@ import {
 } from "@/lib/data/mockData";
 
 import { getPendingPartnerInquiriesCount } from "@/lib/inquiry/actions";
+import { getGlobalARSummary } from "@/lib/finance/invoice-actions";
 
 export const metadata: Metadata = {
   title: "대시보드 | K SELECT NETWORK 어드민",
@@ -21,6 +22,7 @@ export default async function AdminHomePage() {
   const session = await verifyAdminSession();
   const supabase = await createClient();
   const pendingInquiriesCount = await getPendingPartnerInquiriesCount();
+  const arSummary = await getGlobalARSummary();
 
   // DB 실시간 데이터 가져오기
   const { data: dbApps } = await supabase
@@ -105,6 +107,74 @@ export default async function AdminHomePage() {
             </span>
           </div>
         ))}
+      </div>
+
+      {/* Accounts Receivable (AR) Summary Card */}
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+          <div>
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+              <span>외상매출금 현황 (Accounts Receivable)</span>
+              {arSummary.pastDueInvoiceCount > 0 && (
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                  {arSummary.pastDueInvoiceCount}건 연체
+                </span>
+              )}
+            </h2>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+              리테일러 Net Terms 주문 미수금, 연체액 및 7일 이내 도래 예정액 실시간 요약
+            </p>
+          </div>
+          <Link
+            href="/admin/finance/receivables"
+            className="text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 hover:underline flex items-center gap-1 self-start sm:self-auto"
+          >
+            <span>Invoices & Receivables 관리 바로가기</span>
+            <span>→</span>
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Total Open AR</span>
+            <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
+              ${arSummary.totalOpenAR.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <span className="text-[10px] text-zinc-400 mt-0.5 block">{arSummary.openInvoiceCount}건 미수</span>
+          </div>
+
+          <div className="p-3 rounded-lg bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/40">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500">Past Due Amount</span>
+            <div className="text-lg font-black text-rose-600 dark:text-rose-400 mt-1">
+              ${arSummary.totalPastDueAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <span className="text-[10px] text-rose-500/80 mt-0.5 block">{arSummary.pastDueInvoiceCount}건 연체</span>
+          </div>
+
+          <div className="p-3 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Due Soon (7 Days)</span>
+            <div className="text-lg font-black text-amber-600 dark:text-amber-400 mt-1">
+              ${arSummary.totalDueSoonAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <span className="text-[10px] text-amber-600/80 mt-0.5 block">도래 예정</span>
+          </div>
+
+          <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Open Invoices</span>
+            <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
+              {arSummary.openInvoiceCount}
+            </div>
+            <span className="text-[10px] text-zinc-400 mt-0.5 block">진행 중</span>
+          </div>
+
+          <div className="p-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 col-span-2 sm:col-span-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500">Settled Invoices</span>
+            <div className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1">
+              {arSummary.paidInvoiceCount}
+            </div>
+            <span className="text-[10px] text-emerald-600/80 mt-0.5 block">결제 완료</span>
+          </div>
+        </div>
       </div>
 
       {/* Main Analysis Section */}

@@ -69,13 +69,21 @@ async function login(
       };
     }
     
-    // Server / Network / 5xx system failure
-    if ((error.status && error.status >= 500) || error.message?.includes("fetch failed") || error.message?.includes("network")) {
-      console.error("[login] System auth error:", error);
+    // Server / Network / Timeout / 5xx system failure (do NOT count toward password lockout)
+    if (
+      (error.status && error.status >= 500) ||
+      error.message?.includes("fetch failed") ||
+      error.message?.includes("network") ||
+      error.message?.includes("timeout") ||
+      error.message?.includes("ECONNREFUSED") ||
+      error.message?.includes("ETIMEDOUT") ||
+      error.message?.includes("aborted")
+    ) {
+      console.error("[login] System/network auth error:", error);
       return {
         error: area === "retailer"
-          ? "A temporary system error occurred. Please try again in a few moments."
-          : "로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.",
+          ? "A temporary network or server connection issue occurred. Please try again in a few moments."
+          : "네트워크 또는 인증 서버 통신 중 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해주세요.",
       };
     }
 

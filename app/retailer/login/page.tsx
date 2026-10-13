@@ -14,7 +14,10 @@ export default async function RetailerLoginPage({
   searchParams?: Promise<{ reason?: string }>;
 }) {
   const resolvedParams = searchParams ? await searchParams : {};
-  const isIdleLogout = resolvedParams.reason === "idle" || resolvedParams.reason === "session_expired";
+  const reason = resolvedParams.reason;
+  const isIdleLogout = reason === "idle" || reason === "session_expired";
+  const isMembershipInactive = reason === "membership_inactive";
+  const isRoleMismatch = reason === "role_mismatch";
 
   return (
     <div className="w-full max-w-md rounded-2xl border border-zinc-800/80 bg-zinc-900/90 p-8 sm:p-10 shadow-2xl space-y-6 backdrop-blur-xl">
@@ -65,6 +68,52 @@ export default async function RetailerLoginPage({
           <div>
             <p className="font-semibold text-amber-200">Session Ended</p>
             <p className="text-amber-300/80 mt-0.5">Your session has expired. Please sign in again to continue.</p>
+          </div>
+        </div>
+      )}
+
+      {isMembershipInactive && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-300 flex items-start gap-2.5">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4 shrink-0 text-amber-400 mt-0.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <div>
+            <p className="font-semibold text-amber-200">Account Status Notice</p>
+            <p className="text-amber-300/80 mt-0.5">Your retailer organization membership is pending or inactive. Please contact support.</p>
+          </div>
+        </div>
+      )}
+
+      {isRoleMismatch && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-300 flex items-start gap-2.5">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4 shrink-0 text-amber-400 mt-0.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+          <div>
+            <p className="font-semibold text-amber-200">Access Restricted</p>
+            <p className="text-amber-300/80 mt-0.5">This account is not authorized as a Retailer Portal account. Please sign in with retailer credentials.</p>
           </div>
         </div>
       )}

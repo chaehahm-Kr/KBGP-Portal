@@ -75,6 +75,8 @@ export async function createClient() {
               cookieStore.set(mappedName, value, {
                 ...options,
                 path: options?.path || "/",
+                sameSite: options?.sameSite || "lax",
+                secure: process.env.NODE_ENV === "production",
               });
             });
           } catch {

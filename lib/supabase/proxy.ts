@@ -73,19 +73,41 @@ export async function updateSession(request: NextRequest) {
   function createRedirectWithCookies(redirectUrl: URL) {
     const redirectResponse = NextResponse.redirect(redirectUrl);
     supabaseResponse.cookies.getAll().forEach((cookie) => {
-      redirectResponse.cookies.set(cookie);
+      redirectResponse.cookies.set(cookie.name, cookie.value, {
+        path: cookie.path || "/",
+        sameSite: (cookie.sameSite as any) || "lax",
+        secure: cookie.secure ?? process.env.NODE_ENV === "production",
+        httpOnly: cookie.httpOnly ?? true,
+        maxAge: cookie.maxAge,
+        expires: cookie.expires,
+      });
     });
     return redirectResponse;
   }
 
   function createRewriteWithCookies(rewriteUrl: URL) {
+    // Ensure request headers forward synchronized cookies to downstream Server Components
+    const serializedCookies = request.cookies
+      .getAll()
+      .map((c) => `${c.name}=${encodeURIComponent(c.value)}`)
+      .join("; ");
+    if (serializedCookies) {
+      request.headers.set("cookie", serializedCookies);
+    }
     const rewriteResponse = NextResponse.rewrite(rewriteUrl, {
       request: {
         headers: request.headers,
       },
     });
     supabaseResponse.cookies.getAll().forEach((cookie) => {
-      rewriteResponse.cookies.set(cookie);
+      rewriteResponse.cookies.set(cookie.name, cookie.value, {
+        path: cookie.path || "/",
+        sameSite: (cookie.sameSite as any) || "lax",
+        secure: cookie.secure ?? process.env.NODE_ENV === "production",
+        httpOnly: cookie.httpOnly ?? true,
+        maxAge: cookie.maxAge,
+        expires: cookie.expires,
+      });
     });
     return rewriteResponse;
   }
@@ -174,6 +196,13 @@ export async function updateSession(request: NextRequest) {
             const mappedName = prefix && name.startsWith("sb-") ? `${prefix}${name}` : name;
             request.cookies.set(mappedName, value);
           });
+          const serializedCookies = request.cookies
+            .getAll()
+            .map((c) => `${c.name}=${encodeURIComponent(c.value)}`)
+            .join("; ");
+          if (serializedCookies) {
+            request.headers.set("cookie", serializedCookies);
+          }
           supabaseResponse = NextResponse.next({
             request: {
               headers: request.headers,
@@ -184,6 +213,8 @@ export async function updateSession(request: NextRequest) {
             supabaseResponse.cookies.set(mappedName, value, {
               ...options,
               path: options?.path || "/",
+              sameSite: options?.sameSite || "lax",
+              secure: process.env.NODE_ENV === "production",
             });
           });
         },
