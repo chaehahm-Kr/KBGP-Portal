@@ -19,13 +19,13 @@ export default async function RetailerCheckoutPage() {
   // 1. Fetch Company Info
   const { data: companyUser } = await adminClient
     .from("company_users")
-    .select("company_id, companies(id, name)")
+    .select("company_id, companies!company_users_company_id_fkey(id, name)")
     .eq("id", session.userId)
     .maybeSingle();
 
   const company = companyUser?.companies as any;
   const companyName = company?.name || "K SELECT Retailer";
-  const companyId = company?.id || companyUser?.company_id || "7597f742-b9e7-4f67-8fd4-972168eb51ae";
+  const companyId = companyUser?.company_id || company?.id;
 
   // 2. Fetch Authoritative Payment & Terms Eligibility
   const paymentEligibility = await getRetailerPaymentEligibility(companyId);
