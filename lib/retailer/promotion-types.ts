@@ -159,7 +159,7 @@ export function formatPromotionRulePreview(p: Partial<PromotionRecord>): string 
     lines.push(`Total usage limit: ${p.total_usage_limit} uses`);
   }
   if (p.per_retailer_usage_limit && p.per_retailer_usage_limit > 0) {
-    lines.push(`Per-retailer limit: ${p.per_retailer_usage_limit} uses per store`);
+    lines.push(`Per Account limit: ${p.per_retailer_usage_limit} uses per retailer account`);
   }
 
   // 8. Schedule

@@ -19,12 +19,13 @@ import {
   type PromotionAppliesToScope,
   type PromotionRetailerScope,
 } from "@/lib/retailer/promotion-types";
+import { DateTimeField } from "@/components/admin/date-time-field";
 
 interface FormOptions {
   products: Array<{ id: string; name: string; sku: string; brand_name: string }>;
   brands: Array<{ id: string; name: string }>;
   categories: Array<{ code: string; label: string }>;
-  retailers: Array<{ id: string; name: string }>;
+  retailers: Array<{ id: string; name: string; code?: string }>;
 }
 
 interface PromotionsManagerProps {
@@ -78,6 +79,14 @@ export function AdminPromotionsManager({
   const [bogoGetQuantity, setBogoGetQuantity] = useState<string>("1");
   const [bogoDiscountPercent, setBogoDiscountPercent] = useState<string>("100");
 
+  // Search & filter states for modal selectors
+  const [productSearch, setProductSearch] = useState("");
+  const [showSelectedProductsOnly, setShowSelectedProductsOnly] = useState(false);
+  const [brandSearch, setBrandSearch] = useState("");
+  const [categorySearch, setCategorySearch] = useState("");
+  const [retailerSearch, setRetailerSearch] = useState("");
+  const [showSelectedRetailersOnly, setShowSelectedRetailersOnly] = useState(false);
+
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -113,6 +122,48 @@ export function AdminPromotionsManager({
     });
   }, [promotions, activeTab, searchQuery]);
 
+  // Filtered selector lists
+  const filteredProducts = useMemo(() => {
+    return options.products.filter((p) => {
+      if (showSelectedProductsOnly && !selectedProductIds.includes(p.id)) {
+        return false;
+      }
+      if (!productSearch.trim()) return true;
+      const q = productSearch.toLowerCase();
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        (p.brand_name && p.brand_name.toLowerCase().includes(q))
+      );
+    });
+  }, [options.products, productSearch, showSelectedProductsOnly, selectedProductIds]);
+
+  const filteredBrands = useMemo(() => {
+    return options.brands.filter((b) => {
+      if (!brandSearch.trim()) return true;
+      return b.name.toLowerCase().includes(brandSearch.toLowerCase());
+    });
+  }, [options.brands, brandSearch]);
+
+  const filteredCategories = useMemo(() => {
+    return options.categories.filter((c) => {
+      if (!categorySearch.trim()) return true;
+      const q = categorySearch.toLowerCase();
+      return c.label.toLowerCase().includes(q) || c.code.toLowerCase().includes(q);
+    });
+  }, [options.categories, categorySearch]);
+
+  const filteredRetailers = useMemo(() => {
+    return options.retailers.filter((r) => {
+      if (showSelectedRetailersOnly && !selectedRetailerIds.includes(r.id)) {
+        return false;
+      }
+      if (!retailerSearch.trim()) return true;
+      const q = retailerSearch.toLowerCase();
+      return r.name.toLowerCase().includes(q) || (r.code && r.code.toLowerCase().includes(q));
+    });
+  }, [options.retailers, retailerSearch, showSelectedRetailersOnly, selectedRetailerIds]);
+
   const handleOpenCreateForm = () => {
     setEditingPromo(null);
     setName("");
@@ -123,9 +174,15 @@ export function AdminPromotionsManager({
     setDiscountValue("10");
     setMaximumDiscount("");
     setStatus("active");
-    setStartAt("");
-    setEndAt("");
-    setNoExpiration(true);
+
+    const now = new Date();
+    const startIso = `${now.toISOString().split("T")[0]}T${now.getHours().toString().padStart(2, "0")}:00`;
+    const futureDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const endIso = `${futureDate.toISOString().split("T")[0]}T23:59`;
+
+    setStartAt(startIso);
+    setEndAt(endIso);
+    setNoExpiration(false);
     setAppliesToScope("all");
     setSelectedProductIds([]);
     setSelectedBrandIds([]);
@@ -141,6 +198,12 @@ export function AdminPromotionsManager({
     setBogoBuyQuantity("5");
     setBogoGetQuantity("1");
     setBogoDiscountPercent("100");
+    setProductSearch("");
+    setShowSelectedProductsOnly(false);
+    setBrandSearch("");
+    setCategorySearch("");
+    setRetailerSearch("");
+    setShowSelectedRetailersOnly(false);
     setFormError(null);
     setIsFormOpen(true);
   };
@@ -173,6 +236,12 @@ export function AdminPromotionsManager({
     setBogoBuyQuantity(p.bogo_buy_quantity ? p.bogo_buy_quantity.toString() : "5");
     setBogoGetQuantity(p.bogo_get_quantity ? p.bogo_get_quantity.toString() : "1");
     setBogoDiscountPercent(p.bogo_discount_percent !== null ? p.bogo_discount_percent.toString() : "100");
+    setProductSearch("");
+    setShowSelectedProductsOnly(false);
+    setBrandSearch("");
+    setCategorySearch("");
+    setRetailerSearch("");
+    setShowSelectedRetailersOnly(false);
     setFormError(null);
     setIsFormOpen(true);
   };
@@ -186,6 +255,23 @@ export function AdminPromotionsManager({
     if (triggerType === "coupon" && !code.trim()) {
       setFormError("Coupon code is required.");
       return;
+    }
+
+    if (!noExpiration) {
+      if (!startAt || !endAt) {
+        setFormError("Please specify both Start Date and End Date, or check 'No Expiration Date'.");
+        return;
+      }
+      const sTime = new Date(startAt).getTime();
+      const eTime = new Date(endAt).getTime();
+      if (isNaN(sTime) || isNaN(eTime)) {
+        setFormError("Invalid date/time format for schedule.");
+        return;
+      }
+      if (eTime <= sTime) {
+        setFormError("End date and time must be strictly after the start date and time.");
+        return;
+      }
     }
 
     const payload: SavePromotionPayload = {
@@ -642,11 +728,12 @@ export function AdminPromotionsManager({
 
       {/* CREATE / EDIT FORM MODAL */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-3xl w-full p-6 sm:p-8 space-y-6 my-8 border border-zinc-200 dark:border-zinc-800 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-3xl w-full flex flex-col max-h-[92vh] border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden">
+            {/* STICKY HEADER */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0">
               <div>
-                <h2 className="text-xl font-bold text-zinc-900 dark:text-white">
+                <h2 className="text-lg sm:text-xl font-bold text-zinc-900 dark:text-white">
                   {editingPromo ? "Edit Promotion Rule" : "Create New Promotion Rule"}
                 </h2>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
@@ -656,532 +743,638 @@ export function AdminPromotionsManager({
               <button
                 type="button"
                 onClick={() => setIsFormOpen(false)}
-                className="text-zinc-400 hover:text-zinc-600 text-lg p-1 cursor-pointer"
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
               >
                 ✕
               </button>
             </div>
 
-            {formError && (
-              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 font-medium">
-                ⚠️ {formError}
-              </div>
-            )}
-
-            <form onSubmit={handleSavePromotion} className="space-y-6">
-              {/* SECTION A — BASIC */}
-              <div className="space-y-3">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  Section A — Basic Identity & Trigger
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                      Promotion Name *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. KLALAB Fall Launch 10% OFF"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                      Trigger Type
-                    </label>
-                    <select
-                      value={triggerType}
-                      onChange={(e) => setTriggerType(e.target.value as PromotionTriggerType)}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                    >
-                      <option value="coupon">Coupon Code (Retailer enters code)</option>
-                      <option value="automatic">Automatic Promotion (Applied when qualified)</option>
-                    </select>
-                  </div>
+            {/* SCROLLABLE BODY */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+              {formError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 font-medium">
+                  ⚠️ {formError}
                 </div>
+              )}
 
-                {triggerType === "coupon" && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                          Coupon Code *
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setCode(generateRandomPromoCode("KS"))}
-                          className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer"
-                        >
-                          🎲 Generate Random Code
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="e.g. KLALAB10"
-                        value={code}
-                        onChange={(e) => setCode(e.target.value.toUpperCase())}
-                        required={triggerType === "coupon"}
-                        className="w-full px-3 py-2 text-xs font-mono font-bold uppercase rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                      />
-                    </div>
-
+              <form id="promo-form" onSubmit={handleSavePromotion} className="space-y-6">
+                {/* SECTION A — BASIC */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                    Section A — Basic Identity & Trigger
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                        Internal Operational Notes
+                        Promotion Name *
                       </label>
                       <input
                         type="text"
-                        placeholder="Purpose, target campaign, marketing reference"
-                        value={internalDescription}
-                        onChange={(e) => setInternalDescription(e.target.value)}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* SECTION B — DISCOUNT */}
-              <div className="space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  Section B — Discount Formula
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                      Discount Type
-                    </label>
-                    <select
-                      value={discountType}
-                      onChange={(e) => setDiscountType(e.target.value as PromotionDiscountType)}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                    >
-                      <option value="percentage">Percentage Off (%)</option>
-                      <option value="fixed_amount">Fixed Amount Off ($)</option>
-                      <option value="unit_discount">Product Unit Discount ($/ea)</option>
-                      <option value="bogo">Buy X Get Y (BOGO)</option>
-                    </select>
-                  </div>
-
-                  {discountType !== "bogo" ? (
-                    <div>
-                      <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                        Discount Value ({discountType === "percentage" ? "%" : "$"})
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={discountValue}
-                        onChange={(e) => setDiscountValue(e.target.value)}
+                        placeholder="e.g. KLALAB Fall Launch 10% OFF"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
                         required
                         className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
                       />
                     </div>
-                  ) : (
+
                     <div>
                       <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                        Buy Quantity (X)
+                        Trigger Type
                       </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={bogoBuyQuantity}
-                        onChange={(e) => setBogoBuyQuantity(e.target.value)}
+                      <select
+                        value={triggerType}
+                        onChange={(e) => setTriggerType(e.target.value as PromotionTriggerType)}
                         className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                      />
+                      >
+                        <option value="coupon">Coupon Code (Retailer enters code)</option>
+                        <option value="automatic">Automatic Promotion (Applied when qualified)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {triggerType === "coupon" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                            Coupon Code *
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setCode(generateRandomPromoCode("KS"))}
+                            className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                          >
+                            🎲 Generate Random Code
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="e.g. KLALAB10"
+                          value={code}
+                          onChange={(e) => setCode(e.target.value.toUpperCase())}
+                          required={triggerType === "coupon"}
+                          className="w-full px-3 py-2 text-xs font-mono font-bold uppercase rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                          Internal Operational Notes
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Purpose, target campaign, marketing reference"
+                          value={internalDescription}
+                          onChange={(e) => setInternalDescription(e.target.value)}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                        />
+                      </div>
                     </div>
                   )}
+                </div>
 
-                  {discountType === "bogo" ? (
+                {/* SECTION B — DISCOUNT */}
+                <div className="space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                    Section B — Discount Formula
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                        Get Free Quantity (Y)
+                        Discount Type
                       </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={bogoGetQuantity}
-                        onChange={(e) => setBogoGetQuantity(e.target.value)}
+                      <select
+                        value={discountType}
+                        onChange={(e) => setDiscountType(e.target.value as PromotionDiscountType)}
                         className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                      />
+                      >
+                        <option value="percentage">Percentage Off (%)</option>
+                        <option value="fixed_amount">Fixed Amount Off ($)</option>
+                        <option value="unit_discount">Product Unit Discount ($/ea)</option>
+                        <option value="bogo">Buy X Get Y (BOGO)</option>
+                      </select>
                     </div>
-                  ) : (
+
+                    {discountType !== "bogo" ? (
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                          Discount Value ({discountType === "percentage" ? "%" : "$"})
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={discountValue}
+                          onChange={(e) => setDiscountValue(e.target.value)}
+                          required
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                          Buy Quantity (X)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={bogoBuyQuantity}
+                          onChange={(e) => setBogoBuyQuantity(e.target.value)}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                        />
+                      </div>
+                    )}
+
+                    {discountType === "bogo" ? (
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                          Get Free Quantity (Y)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={bogoGetQuantity}
+                          onChange={(e) => setBogoGetQuantity(e.target.value)}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                          Maximum Discount Cap ($)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="Optional cap (e.g. 50.00)"
+                          value={maximumDiscount}
+                          onChange={(e) => setMaximumDiscount(e.target.value)}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* SECTION C — APPLIES TO (SCOPE) */}
+                <div className="space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                      Section C — Product Scope (Applies To)
+                    </h3>
+                    {appliesToScope === "selected_products" && (
+                      <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md">
+                        {selectedProductIds.length} Selected
+                      </span>
+                    )}
+                    {appliesToScope === "selected_brands" && (
+                      <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md">
+                        {selectedBrandIds.length} Selected
+                      </span>
+                    )}
+                    {appliesToScope === "selected_categories" && (
+                      <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md">
+                        {selectedCategoryCodes.length} Selected
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-4 text-xs font-semibold">
+                      {[
+                        { id: "all", label: "All Products" },
+                        { id: "selected_products", label: "Selected Products" },
+                        { id: "selected_brands", label: "Selected Brands" },
+                        { id: "selected_categories", label: "Selected Categories" },
+                      ].map((opt) => (
+                        <label key={opt.id} className="inline-flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="appliesToScope"
+                            checked={appliesToScope === opt.id}
+                            onChange={() => setAppliesToScope(opt.id as PromotionAppliesToScope)}
+                            className="text-indigo-600"
+                          />
+                          <span>{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Sub-selector for Selected Products */}
+                    {appliesToScope === "selected_products" && (
+                      <div className="pt-2 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Search products by name, SKU, brand..."
+                            value={productSearch}
+                            onChange={(e) => setProductSearch(e.target.value)}
+                            className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:border-indigo-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowSelectedProductsOnly(!showSelectedProductsOnly)}
+                            className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-xl border transition-colors cursor-pointer shrink-0 ${
+                              showSelectedProductsOnly
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800"
+                                : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700 hover:bg-zinc-50"
+                            }`}
+                          >
+                            {showSelectedProductsOnly ? "✓ Showing Selected" : `Show Selected (${selectedProductIds.length})`}
+                          </button>
+                        </div>
+
+                        <div className="max-h-44 overflow-y-auto border border-zinc-200 dark:border-zinc-700 rounded-xl p-2 space-y-1 bg-zinc-50 dark:bg-zinc-800/40">
+                          {filteredProducts.length === 0 ? (
+                            <div className="text-center py-4 text-xs text-zinc-400">
+                              No products match your search.
+                            </div>
+                          ) : (
+                            filteredProducts.map((p) => {
+                              const checked = selectedProductIds.includes(p.id);
+                              return (
+                                <label key={p.id} className="flex items-center gap-2 text-xs cursor-pointer p-1.5 rounded-lg hover:bg-white dark:hover:bg-zinc-800/80 transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      setSelectedProductIds((prev) =>
+                                        checked ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                                      );
+                                    }}
+                                    className="rounded text-indigo-600"
+                                  />
+                                  <span className="font-mono text-[11px] text-zinc-400 shrink-0">{p.sku}</span>
+                                  {p.brand_name && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 shrink-0">
+                                      {p.brand_name}
+                                    </span>
+                                  )}
+                                  <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">{p.name}</span>
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sub-selector for Selected Brands */}
+                    {appliesToScope === "selected_brands" && (
+                      <div className="pt-2 space-y-2">
+                        <input
+                          type="text"
+                          placeholder="Search brands..."
+                          value={brandSearch}
+                          onChange={(e) => setBrandSearch(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:border-indigo-500"
+                        />
+                        <div className="max-h-44 overflow-y-auto border border-zinc-200 dark:border-zinc-700 rounded-xl p-2 space-y-1 bg-zinc-50 dark:bg-zinc-800/40">
+                          {filteredBrands.length === 0 ? (
+                            <div className="text-center py-4 text-xs text-zinc-400">
+                              No brands match your search.
+                            </div>
+                          ) : (
+                            filteredBrands.map((b) => {
+                              const checked = selectedBrandIds.includes(b.id);
+                              return (
+                                <label key={b.id} className="flex items-center gap-2 text-xs cursor-pointer p-1.5 rounded-lg hover:bg-white dark:hover:bg-zinc-800/80 transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      setSelectedBrandIds((prev) =>
+                                        checked ? prev.filter((id) => id !== b.id) : [...prev, b.id]
+                                      );
+                                    }}
+                                    className="rounded text-indigo-600"
+                                  />
+                                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">{b.name}</span>
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sub-selector for Selected Categories */}
+                    {appliesToScope === "selected_categories" && (
+                      <div className="pt-2 space-y-2">
+                        <input
+                          type="text"
+                          placeholder="Search categories..."
+                          value={categorySearch}
+                          onChange={(e) => setCategorySearch(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:border-indigo-500"
+                        />
+                        <div className="max-h-44 overflow-y-auto border border-zinc-200 dark:border-zinc-700 rounded-xl p-2 space-y-1 bg-zinc-50 dark:bg-zinc-800/40">
+                          {filteredCategories.length === 0 ? (
+                            <div className="text-center py-4 text-xs text-zinc-400">
+                              No categories match your search.
+                            </div>
+                          ) : (
+                            filteredCategories.map((c) => {
+                              const checked = selectedCategoryCodes.includes(c.code);
+                              return (
+                                <label key={c.code} className="flex items-center gap-2 text-xs cursor-pointer p-1.5 rounded-lg hover:bg-white dark:hover:bg-zinc-800/80 transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      setSelectedCategoryCodes((prev) =>
+                                        checked ? prev.filter((code) => code !== c.code) : [...prev, c.code]
+                                      );
+                                    }}
+                                    className="rounded text-indigo-600"
+                                  />
+                                  <span className="font-medium text-zinc-800 dark:text-zinc-200">{c.label}</span>
+                                  <span className="font-mono text-[10px] text-zinc-400">({c.code})</span>
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* SECTION D — RETAILERS */}
+                <div className="space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                      Section D — Retailer Eligibility Scope
+                    </h3>
+                    {retailerScope === "selected_retailers" && (
+                      <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md">
+                        {selectedRetailerIds.length} Selected
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-4 text-xs font-semibold">
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="retailerScope"
+                          checked={retailerScope === "all"}
+                          onChange={() => setRetailerScope("all")}
+                          className="text-indigo-600"
+                        />
+                        <span>All Retailers</span>
+                      </label>
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="retailerScope"
+                          checked={retailerScope === "selected_retailers"}
+                          onChange={() => setRetailerScope("selected_retailers")}
+                          className="text-indigo-600"
+                        />
+                        <span>Selected Retailers Only</span>
+                      </label>
+                    </div>
+
+                    {retailerScope === "selected_retailers" && (
+                      <div className="pt-2 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Search retailers by company name or code..."
+                            value={retailerSearch}
+                            onChange={(e) => setRetailerSearch(e.target.value)}
+                            className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:border-indigo-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowSelectedRetailersOnly(!showSelectedRetailersOnly)}
+                            className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-xl border transition-colors cursor-pointer shrink-0 ${
+                              showSelectedRetailersOnly
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800"
+                                : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700 hover:bg-zinc-50"
+                            }`}
+                          >
+                            {showSelectedRetailersOnly ? "✓ Showing Selected" : `Show Selected (${selectedRetailerIds.length})`}
+                          </button>
+                        </div>
+
+                        <div className="max-h-44 overflow-y-auto border border-zinc-200 dark:border-zinc-700 rounded-xl p-2 space-y-1 bg-zinc-50 dark:bg-zinc-800/40">
+                          {filteredRetailers.length === 0 ? (
+                            <div className="text-center py-4 text-xs text-zinc-400">
+                              No retailers match your search.
+                            </div>
+                          ) : (
+                            filteredRetailers.map((r) => {
+                              const checked = selectedRetailerIds.includes(r.id);
+                              return (
+                                <label key={r.id} className="flex items-center gap-2 text-xs cursor-pointer p-1.5 rounded-lg hover:bg-white dark:hover:bg-zinc-800/80 transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      setSelectedRetailerIds((prev) =>
+                                        checked ? prev.filter((id) => id !== r.id) : [...prev, r.id]
+                                      );
+                                    }}
+                                    className="rounded text-indigo-600"
+                                  />
+                                  {r.code && (
+                                    <span className="font-mono text-[11px] text-zinc-400 shrink-0">[{r.code}]</span>
+                                  )}
+                                  <span className="font-semibold text-zinc-800 dark:text-zinc-200 truncate">{r.name}</span>
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* SECTION E & F — REQUIREMENTS & LIMITS */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                  {/* Requirements */}
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                      Section E — Order Requirements
+                    </h3>
                     <div>
                       <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                        Maximum Discount Cap ($)
+                        Minimum Order Spend ($)
                       </label>
                       <input
                         type="number"
                         step="0.01"
                         min="0"
-                        placeholder="Optional cap (e.g. 50.00)"
-                        value={maximumDiscount}
-                        onChange={(e) => setMaximumDiscount(e.target.value)}
+                        placeholder="e.g. 200.00"
+                        value={minimumSpend}
+                        onChange={(e) => setMinimumSpend(e.target.value)}
                         className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
                       />
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* SECTION C — APPLIES TO (SCOPE) */}
-              <div className="space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  Section C — Product Scope (Applies To)
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-4 text-xs font-semibold">
-                    {[
-                      { id: "all", label: "All Products" },
-                      { id: "selected_products", label: "Selected Products" },
-                      { id: "selected_brands", label: "Selected Brands" },
-                      { id: "selected_categories", label: "Selected Categories" },
-                    ].map((opt) => (
-                      <label key={opt.id} className="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="appliesToScope"
-                          checked={appliesToScope === opt.id}
-                          onChange={() => setAppliesToScope(opt.id as PromotionAppliesToScope)}
-                          className="text-indigo-600"
-                        />
-                        <span>{opt.label}</span>
-                      </label>
-                    ))}
-                  </div>
-
-                  {/* Sub-selector for Selected Products */}
-                  {appliesToScope === "selected_products" && (
-                    <div className="pt-2">
-                      <div className="text-[11px] text-zinc-500 mb-1">
-                        Choose products ({selectedProductIds.length} selected):
-                      </div>
-                      <div className="max-h-36 overflow-y-auto border border-zinc-200 dark:border-zinc-700 rounded-xl p-2 space-y-1 bg-zinc-50 dark:bg-zinc-800/40">
-                        {options.products.map((p) => {
-                          const checked = selectedProductIds.includes(p.id);
-                          return (
-                            <label key={p.id} className="flex items-center gap-2 text-xs cursor-pointer p-1 rounded hover:bg-white dark:hover:bg-zinc-800">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  setSelectedProductIds((prev) =>
-                                    checked ? prev.filter((id) => id !== p.id) : [...prev, p.id]
-                                  );
-                                }}
-                              />
-                              <span className="font-mono text-[11px] text-zinc-400">{p.sku}</span>
-                              <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">{p.name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Sub-selector for Selected Brands */}
-                  {appliesToScope === "selected_brands" && (
-                    <div className="pt-2">
-                      <div className="text-[11px] text-zinc-500 mb-1">
-                        Choose brands ({selectedBrandIds.length} selected):
-                      </div>
-                      <div className="max-h-36 overflow-y-auto border border-zinc-200 dark:border-zinc-700 rounded-xl p-2 space-y-1 bg-zinc-50 dark:bg-zinc-800/40">
-                        {options.brands.map((b) => {
-                          const checked = selectedBrandIds.includes(b.id);
-                          return (
-                            <label key={b.id} className="flex items-center gap-2 text-xs cursor-pointer p-1 rounded hover:bg-white dark:hover:bg-zinc-800">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  setSelectedBrandIds((prev) =>
-                                    checked ? prev.filter((id) => id !== b.id) : [...prev, b.id]
-                                  );
-                                }}
-                              />
-                              <span className="font-semibold text-zinc-800 dark:text-zinc-200">{b.name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Sub-selector for Selected Categories */}
-                  {appliesToScope === "selected_categories" && (
-                    <div className="pt-2">
-                      <div className="text-[11px] text-zinc-500 mb-1">
-                        Choose categories ({selectedCategoryCodes.length} selected):
-                      </div>
-                      <div className="max-h-36 overflow-y-auto border border-zinc-200 dark:border-zinc-700 rounded-xl p-2 space-y-1 bg-zinc-50 dark:bg-zinc-800/40">
-                        {options.categories.map((c) => {
-                          const checked = selectedCategoryCodes.includes(c.code);
-                          return (
-                            <label key={c.code} className="flex items-center gap-2 text-xs cursor-pointer p-1 rounded hover:bg-white dark:hover:bg-zinc-800">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  setSelectedCategoryCodes((prev) =>
-                                    checked ? prev.filter((code) => code !== c.code) : [...prev, c.code]
-                                  );
-                                }}
-                              />
-                              <span className="font-medium text-zinc-800 dark:text-zinc-200">{c.label}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* SECTION D — RETAILERS */}
-              <div className="space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  Section D — Retailer Eligibility Scope
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-4 text-xs font-semibold">
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="retailerScope"
-                        checked={retailerScope === "all"}
-                        onChange={() => setRetailerScope("all")}
-                        className="text-indigo-600"
-                      />
-                      <span>All Retailers</span>
-                    </label>
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="retailerScope"
-                        checked={retailerScope === "selected_retailers"}
-                        onChange={() => setRetailerScope("selected_retailers")}
-                        className="text-indigo-600"
-                      />
-                      <span>Selected Retailers Only</span>
-                    </label>
-                  </div>
-
-                  {retailerScope === "selected_retailers" && (
-                    <div className="pt-2">
-                      <div className="text-[11px] text-zinc-500 mb-1">
-                        Choose retailers ({selectedRetailerIds.length} selected):
-                      </div>
-                      <div className="max-h-36 overflow-y-auto border border-zinc-200 dark:border-zinc-700 rounded-xl p-2 space-y-1 bg-zinc-50 dark:bg-zinc-800/40">
-                        {options.retailers.map((r) => {
-                          const checked = selectedRetailerIds.includes(r.id);
-                          return (
-                            <label key={r.id} className="flex items-center gap-2 text-xs cursor-pointer p-1 rounded hover:bg-white dark:hover:bg-zinc-800">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  setSelectedRetailerIds((prev) =>
-                                    checked ? prev.filter((id) => id !== r.id) : [...prev, r.id]
-                                  );
-                                }}
-                              />
-                              <span className="font-semibold text-zinc-800 dark:text-zinc-200">{r.name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* SECTION E & F — REQUIREMENTS & LIMITS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                {/* Requirements */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                    Section E — Order Requirements
-                  </h3>
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                      Minimum Order Spend ($)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="e.g. 200.00"
-                      value={minimumSpend}
-                      onChange={(e) => setMinimumSpend(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                      Minimum Eligible Quantity (Units)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="e.g. 24"
-                      value={minimumQuantity}
-                      onChange={(e) => setMinimumQuantity(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                {/* Usage Limits */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                    Section F — Usage Limits
-                  </h3>
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                      Total Usage Limit (All Retailers)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="Leave blank for unlimited"
-                      value={totalUsageLimit}
-                      onChange={(e) => setTotalUsageLimit(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                      Per-Retailer Limit (Per Store)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="e.g. 1 use per retailer"
-                      value={perRetailerUsageLimit}
-                      onChange={(e) => setPerRetailerUsageLimit(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION G & H — SCHEDULE & COMBINATIONS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                {/* Schedule */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                    Section G — Schedule & Validity
-                  </h3>
-                  <label className="inline-flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={noExpiration}
-                      onChange={(e) => setNoExpiration(e.target.checked)}
-                      className="text-indigo-600 rounded"
-                    />
-                    <span>No Expiration Date (Always Valid)</span>
-                  </label>
-
-                  {!noExpiration && (
-                    <div className="space-y-2">
-                      <div>
-                        <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-400 mb-0.5">
-                          Start Date & Time
-                        </label>
-                        <input
-                          type="datetime-local"
-                          value={startAt}
-                          onChange={(e) => setStartAt(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-400 mb-0.5">
-                          End Date & Time
-                        </label>
-                        <input
-                          type="datetime-local"
-                          value={endAt}
-                          onChange={(e) => setEndAt(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Combinations */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                    Section H — Combinations & Stacking
-                  </h3>
-                  <label className="flex items-start gap-2 text-xs cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={combinableWithQuantityTiers}
-                      onChange={(e) => setCombinableWithQuantityTiers(e.target.checked)}
-                      className="text-indigo-600 rounded mt-0.5"
-                    />
                     <div>
-                      <span className="font-bold">Combinable with Quantity Tier Discount</span>
-                      <p className="text-[11px] text-zinc-500">
-                        When OFF, items with case-pack quantity tier benefits cannot receive this promotion.
+                      <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Minimum Eligible Quantity (Units)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="e.g. 24"
+                        value={minimumQuantity}
+                        onChange={(e) => setMinimumQuantity(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Usage Limits */}
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                      Section F — Usage Limits
+                    </h3>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Total Usage Limit (All Retailers)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Leave blank for unlimited"
+                        value={totalUsageLimit}
+                        onChange={(e) => setTotalUsageLimit(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Per Account Usage Limit
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="e.g. 1 use per retailer account"
+                        value={perRetailerUsageLimit}
+                        onChange={(e) => setPerRetailerUsageLimit(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                      />
+                      <p className="text-[11px] text-zinc-500 mt-1">
+                        Limits redemptions per Retailer Account (company), shared across all store locations.
                       </p>
                     </div>
-                  </label>
+                  </div>
+                </div>
 
-                  {triggerType === "coupon" && (
-                    <label className="flex items-start gap-2 text-xs cursor-pointer pt-1">
+                {/* SECTION G & H — SCHEDULE & COMBINATIONS */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                  {/* Schedule */}
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                      Section G — Schedule & Validity
+                    </h3>
+                    <label className="inline-flex items-center gap-2 text-xs font-semibold cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={combinableWithAutomaticPromotions}
-                        onChange={(e) => setCombinableWithAutomaticPromotions(e.target.checked)}
+                        checked={noExpiration}
+                        onChange={(e) => setNoExpiration(e.target.checked)}
+                        className="text-indigo-600 rounded"
+                      />
+                      <span>No Expiration Date (Always Valid)</span>
+                    </label>
+
+                    {!noExpiration && (
+                      <div className="space-y-3 pt-1">
+                        <DateTimeField
+                          label="Start Date & Time"
+                          value={startAt}
+                          onChange={setStartAt}
+                          required={!noExpiration}
+                        />
+                        <DateTimeField
+                          label="End Date & Time"
+                          value={endAt}
+                          onChange={setEndAt}
+                          required={!noExpiration}
+                        />
+                        <p className="text-[11px] text-zinc-500">
+                          Promotions automatically activate and expire at the specified dates & times.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Combinations */}
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                      Section H — Combinations & Stacking
+                    </h3>
+                    <label className="flex items-start gap-2 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={combinableWithQuantityTiers}
+                        onChange={(e) => setCombinableWithQuantityTiers(e.target.checked)}
                         className="text-indigo-600 rounded mt-0.5"
                       />
                       <div>
-                        <span className="font-bold">Combinable with Automatic Promotions</span>
+                        <span className="font-bold">Combinable with Quantity Tier Discount</span>
                         <p className="text-[11px] text-zinc-500">
-                          When ON, qualifying automatic promotions will also apply alongside this coupon.
+                          When OFF, items with case-pack quantity tier benefits cannot receive this promotion.
                         </p>
                       </div>
                     </label>
-                  )}
-                </div>
-              </div>
 
-              {/* LIVE RULE PREVIEW (Requirement 19) */}
-              <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                  ℹ️ Live Rule Preview (Before Saving)
+                    {triggerType === "coupon" && (
+                      <label className="flex items-start gap-2 text-xs cursor-pointer pt-1">
+                        <input
+                          type="checkbox"
+                          checked={combinableWithAutomaticPromotions}
+                          onChange={(e) => setCombinableWithAutomaticPromotions(e.target.checked)}
+                          className="text-indigo-600 rounded mt-0.5"
+                        />
+                        <div>
+                          <span className="font-bold">Combinable with Automatic Promotions</span>
+                          <p className="text-[11px] text-zinc-500">
+                            When ON, qualifying automatic promotions will also apply alongside this coupon.
+                          </p>
+                        </div>
+                      </label>
+                    )}
+                  </div>
                 </div>
-                <div className="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60 text-xs text-indigo-950 dark:text-indigo-200 font-medium leading-relaxed">
-                  {livePreviewString}
-                </div>
-              </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setIsFormOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-6 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
-                >
-                  {isSaving ? "Saving..." : editingPromo ? "Update Promotion" : "Create Promotion"}
-                </button>
-              </div>
-            </form>
+                {/* LIVE RULE PREVIEW (Requirement 19) */}
+                <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                    ℹ️ Live Rule Preview (Before Saving)
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60 text-xs text-indigo-950 dark:text-indigo-200 font-medium leading-relaxed">
+                    {livePreviewString}
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            {/* STICKY FOOTER */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/90 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsFormOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="promo-form"
+                disabled={isSaving}
+                className="px-6 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
+              >
+                {isSaving ? "Saving..." : editingPromo ? "Update Promotion" : "Create Promotion"}
+              </button>
+            </div>
           </div>
         </div>
       )}

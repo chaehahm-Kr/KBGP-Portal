@@ -233,7 +233,7 @@ export async function getAdminPromotionFormOptionsAction(): Promise<{
   products: Array<{ id: string; name: string; sku: string; brand_name: string }>;
   brands: Array<{ id: string; name: string }>;
   categories: Array<{ code: string; label: string }>;
-  retailers: Array<{ id: string; name: string }>;
+  retailers: Array<{ id: string; name: string; code?: string }>;
   error?: string;
 }> {
   try {
@@ -249,7 +249,7 @@ export async function getAdminPromotionFormOptionsAction(): Promise<{
       adminClient.from("categories").select("code, name_ko, name_en").order("code", { ascending: true }),
       adminClient
         .from("companies")
-        .select("id, name")
+        .select("id, name, company_code")
         .eq("company_type", "RETAILER")
         .order("name", { ascending: true }),
     ]);
@@ -274,6 +274,7 @@ export async function getAdminPromotionFormOptionsAction(): Promise<{
     const retailers = (retRes.data || []).map((r: any) => ({
       id: r.id,
       name: r.name,
+      code: r.company_code || "",
     }));
 
     return {
@@ -341,6 +342,21 @@ export async function createAdminPromotionAction(
       return { success: false, error: "Promotion name is required." };
     }
 
+    // Schedule validation
+    if (!payload.no_expiration) {
+      if (!payload.start_at || !payload.end_at) {
+        return { success: false, error: "Start and end dates are required when expiration is enabled." };
+      }
+      const startTime = new Date(payload.start_at).getTime();
+      const endTime = new Date(payload.end_at).getTime();
+      if (isNaN(startTime) || isNaN(endTime)) {
+        return { success: false, error: "Invalid date format for schedule." };
+      }
+      if (endTime <= startTime) {
+        return { success: false, error: "End date and time must be after start date and time." };
+      }
+    }
+
     let code = payload.code?.trim().toUpperCase() || null;
     if (payload.trigger_type === "coupon") {
       if (!code) {
@@ -356,7 +372,7 @@ export async function createAdminPromotionAction(
         .maybeSingle();
 
       if (existing) {
-        return { success: false, error: `Coupon code "${code}" is already in use.` };
+        return { success: false, error: "This coupon code is already in use." };
       }
     } else {
       code = null;
@@ -437,6 +453,21 @@ export async function updateAdminPromotionAction(
     await verifyAdminSession();
     const adminClient = createAdminClient();
 
+    // Schedule validation
+    if (!payload.no_expiration) {
+      if (!payload.start_at || !payload.end_at) {
+        return { success: false, error: "Start and end dates are required when expiration is enabled." };
+      }
+      const startTime = new Date(payload.start_at).getTime();
+      const endTime = new Date(payload.end_at).getTime();
+      if (isNaN(startTime) || isNaN(endTime)) {
+        return { success: false, error: "Invalid date format for schedule." };
+      }
+      if (endTime <= startTime) {
+        return { success: false, error: "End date and time must be after start date and time." };
+      }
+    }
+
     let code = payload.code?.trim().toUpperCase() || null;
     if (payload.trigger_type === "coupon") {
       if (!code) {
@@ -452,7 +483,7 @@ export async function updateAdminPromotionAction(
         .maybeSingle();
 
       if (existing) {
-        return { success: false, error: `Coupon code "${code}" is already in use by another promotion.` };
+        return { success: false, error: "This coupon code is already in use." };
       }
     } else {
       code = null;

@@ -791,9 +791,34 @@ export async function submitRetailerOrder(
       promotion_id: appliedPromoId,
     }));
 
-    const { error: itemsErr } = await adminClient
+    let { error: itemsErr } = await adminClient
       .from("retailer_order_items")
       .insert(lineItemsToInsert);
+
+    if (
+      itemsErr &&
+      (itemsErr.code === "PGRST204" ||
+        itemsErr.message?.includes("column") ||
+        itemsErr.message?.includes("does not exist"))
+    ) {
+      console.warn("Retrying retailer_order_items insertion with baseline columns (schema cache fallback)...");
+      const baselineItems = validatedLines.map((line) => ({
+        order_id: orderRow.id,
+        product_id: line.productId,
+        sku: line.sku,
+        product_name: line.productName,
+        brand_name: line.brandName,
+        unit_wholesale_price: line.unitWholesalePrice,
+        unit_msrp: line.unitMsrp,
+        quantity: line.quantity,
+        case_pack_qty: line.casePackQty,
+        line_total: line.lineTotal,
+      }));
+      const retryResult = await adminClient
+        .from("retailer_order_items")
+        .insert(baselineItems);
+      itemsErr = retryResult.error;
+    }
 
     if (itemsErr) {
       console.error("Order items insertion error:", itemsErr);

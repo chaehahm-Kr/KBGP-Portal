@@ -49,3 +49,8 @@ VALUES (
   NOW()
 )
 ON CONFLICT (key) DO NOTHING;
+
+-- 5. Extend public.retailer_order_items with discount and promotion columns
+ALTER TABLE public.retailer_order_items
+  ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(10, 2) DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS promotion_id UUID DEFAULT NULL;
