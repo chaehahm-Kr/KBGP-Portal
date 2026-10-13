@@ -50,14 +50,26 @@ export function RetailerBillsManager({
     });
   }, [invoices, selectedTab, searchTerm]);
 
-  // Payable invoices currently visible in the filtered view
+  // Payable invoices currently visible in the filtered view (balance_due > 0 and non-void)
   const payableFilteredInvoices = useMemo(() => {
-    return filteredInvoices.filter((inv) => Number(inv.balance_due || 0) > 0 && inv.ar_status !== "PAID");
+    return filteredInvoices.filter(
+      (inv) =>
+        Number(inv.balance_due || 0) > 0 &&
+        inv.invoice_status !== "void" &&
+        inv.invoice_status !== "cancelled" &&
+        inv.ar_status !== "PAID"
+    );
   }, [filteredInvoices]);
 
   // Selected bill objects
   const selectedBills = useMemo(() => {
-    return invoices.filter((inv) => selectedInvoiceIds.has(inv.id) && Number(inv.balance_due || 0) > 0);
+    return invoices.filter(
+      (inv) =>
+        selectedInvoiceIds.has(inv.id) &&
+        Number(inv.balance_due || 0) > 0 &&
+        inv.invoice_status !== "void" &&
+        inv.invoice_status !== "cancelled"
+    );
   }, [invoices, selectedInvoiceIds]);
 
   const selectedTotalBalance = useMemo(() => {
@@ -97,7 +109,14 @@ export function RetailerBillsManager({
     }
   };
 
-  const getStatusBadge = (arStatus: string) => {
+  const getStatusBadge = (arStatus: string, invoiceStatus?: string) => {
+    if (invoiceStatus === "void" || invoiceStatus === "cancelled") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border border-zinc-500/20">
+          Void
+        </span>
+      );
+    }
     switch (arStatus) {
       case "PAST_DUE":
         return (
@@ -410,7 +429,11 @@ export function RetailerBillsManager({
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
                 {filteredInvoices.map((inv) => {
-                  const isPayable = Number(inv.balance_due || 0) > 0 && inv.ar_status !== "PAID";
+                  const isPayable =
+                    Number(inv.balance_due || 0) > 0 &&
+                    inv.invoice_status !== "void" &&
+                    inv.invoice_status !== "cancelled" &&
+                    inv.ar_status !== "PAID";
                   const isSelected = selectedInvoiceIds.has(inv.id);
 
                   return (
@@ -497,7 +520,7 @@ export function RetailerBillsManager({
 
                       {/* Status */}
                       <td className="py-3.5 px-3 text-center">
-                        {getStatusBadge(inv.ar_status)}
+                        {getStatusBadge(inv.ar_status, inv.invoice_status)}
                       </td>
 
                       {/* Action: Only View Bill (Per-row Pay Bill REMOVED per prompt) */}
@@ -520,7 +543,11 @@ export function RetailerBillsManager({
           {/* Mobile Responsive Cards */}
           <div className="md:hidden divide-y divide-zinc-100 dark:divide-zinc-800">
             {filteredInvoices.map((inv) => {
-              const isPayable = Number(inv.balance_due || 0) > 0 && inv.ar_status !== "PAID";
+              const isPayable =
+                Number(inv.balance_due || 0) > 0 &&
+                inv.invoice_status !== "void" &&
+                inv.invoice_status !== "cancelled" &&
+                inv.ar_status !== "PAID";
               const isSelected = selectedInvoiceIds.has(inv.id);
 
               return (
@@ -549,7 +576,7 @@ export function RetailerBillsManager({
                         </p>
                       </div>
                     </div>
-                    {getStatusBadge(inv.ar_status)}
+                    {getStatusBadge(inv.ar_status, inv.invoice_status)}
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 text-xs p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800/60">
