@@ -276,6 +276,8 @@ export interface ProductRegistrationEvaluationInput {
   sales_link_1?: string | null;
   deleted_at?: string | null;
   how_to_use?: string | null;
+  description?: string | null;
+  bullet_points?: string[] | null;
   adminOverrides?: Record<string, any> | null;
   hasImages: boolean;
   categoryCompletion?: {
@@ -330,31 +332,49 @@ export function evaluateProductRegistrationStatus(
 
   const overrides = input.adminOverrides || {};
 
-  const effectiveBrandId = overrides.brand_id !== undefined && overrides.brand_id !== null ? overrides.brand_id : input.brand_id;
-  const effectiveNameEn = safeString(overrides.name_en !== undefined && overrides.name_en !== null ? overrides.name_en : input.name_en);
-  const effectiveManufactureSku = safeString(overrides.manufacture_sku !== undefined && overrides.manufacture_sku !== null ? overrides.manufacture_sku : input.manufacture_sku);
-  const effectiveOrigin = safeString(overrides.origin !== undefined && overrides.origin !== null ? overrides.origin : input.origin);
-  const effectiveHowToUse = safeString(overrides.how_to_use !== undefined && overrides.how_to_use !== null ? overrides.how_to_use : input.how_to_use);
-  const effectivePriceKrw = overrides.price_krw_retail !== undefined && overrides.price_krw_retail !== null ? Number(overrides.price_krw_retail) : Number(input.price_krw_retail || 0);
-  const effectivePriceUsd = overrides.price_usd_fob !== undefined && overrides.price_usd_fob !== null ? Number(overrides.price_usd_fob) : Number(input.price_usd_fob || 0);
-  const effectiveUpc = safeString(overrides.upc !== undefined && overrides.upc !== null ? overrides.upc : input.upc);
-  const effectiveEan = safeString(overrides.ean !== undefined && overrides.ean !== null ? overrides.ean : input.ean);
+  const getEffectiveStr = (ovVal: any, catVal: any): string => {
+    const ovStr = safeString(ovVal);
+    if (ovStr !== "") return ovStr;
+    return safeString(catVal);
+  };
 
-  const itemW = overrides.item_width !== undefined && overrides.item_width !== null ? Number(overrides.item_width) : Number(input.item_width || 0);
-  const itemD = overrides.item_depth !== undefined && overrides.item_depth !== null ? Number(overrides.item_depth) : Number(input.item_depth || 0);
-  const itemH = overrides.item_height !== undefined && overrides.item_height !== null ? Number(overrides.item_height) : Number(input.item_height || 0);
-  const itemWt = overrides.item_weight !== undefined && overrides.item_weight !== null ? Number(overrides.item_weight) : Number(input.item_weight || 0);
+  const getEffectiveNum = (ovVal: any, catVal: any): number => {
+    if (ovVal !== undefined && ovVal !== null && String(ovVal).trim() !== "") {
+      const n = Number(ovVal);
+      if (!isNaN(n)) return n;
+    }
+    if (catVal !== undefined && catVal !== null && String(catVal).trim() !== "") {
+      const n = Number(catVal);
+      if (!isNaN(n)) return n;
+    }
+    return 0;
+  };
 
-  const pkgW = overrides.package_width !== undefined && overrides.package_width !== null ? Number(overrides.package_width) : Number(input.package_width || 0);
-  const pkgD = overrides.package_depth !== undefined && overrides.package_depth !== null ? Number(overrides.package_depth) : Number(input.package_depth || 0);
-  const pkgH = overrides.package_height !== undefined && overrides.package_height !== null ? Number(overrides.package_height) : Number(input.package_height || 0);
-  const pkgWt = overrides.package_weight !== undefined && overrides.package_weight !== null ? Number(overrides.package_weight) : Number(input.package_weight || 0);
+  const effectiveBrandId = getEffectiveStr(overrides.brand_id, input.brand_id);
+  const effectiveNameEn = getEffectiveStr(overrides.name_en, input.name_en);
+  const effectiveManufactureSku = getEffectiveStr(overrides.manufacture_sku, input.manufacture_sku);
+  const effectiveOrigin = getEffectiveStr(overrides.origin, input.origin);
+  const effectiveHowToUse = getEffectiveStr(overrides.how_to_use, input.how_to_use);
+  const effectivePriceKrw = getEffectiveNum(overrides.price_krw_retail, input.price_krw_retail);
+  const effectivePriceUsd = getEffectiveNum(overrides.price_usd_fob, input.price_usd_fob);
+  const effectiveUpc = getEffectiveStr(overrides.upc, input.upc);
+  const effectiveEan = getEffectiveStr(overrides.ean, input.ean);
 
-  const cartonQty = overrides.carton_pack_qty !== undefined && overrides.carton_pack_qty !== null ? Number(overrides.carton_pack_qty) : Number(input.carton_pack_qty || 0);
-  const cartonW = overrides.carton_width !== undefined && overrides.carton_width !== null ? Number(overrides.carton_width) : Number(input.carton_width || 0);
-  const cartonD = overrides.carton_depth !== undefined && overrides.carton_depth !== null ? Number(overrides.carton_depth) : Number(input.carton_depth || 0);
-  const cartonH = overrides.carton_height !== undefined && overrides.carton_height !== null ? Number(overrides.carton_height) : Number(input.carton_height || 0);
-  const cartonWt = overrides.carton_weight !== undefined && overrides.carton_weight !== null ? Number(overrides.carton_weight) : Number(input.carton_weight || 0);
+  const itemW = getEffectiveNum(overrides.item_width, input.item_width);
+  const itemD = getEffectiveNum(overrides.item_depth, input.item_depth);
+  const itemH = getEffectiveNum(overrides.item_height, input.item_height);
+  const itemWt = getEffectiveNum(overrides.item_weight, input.item_weight);
+
+  const pkgW = getEffectiveNum(overrides.package_width, input.package_width);
+  const pkgD = getEffectiveNum(overrides.package_depth, input.package_depth);
+  const pkgH = getEffectiveNum(overrides.package_height, input.package_height);
+  const pkgWt = getEffectiveNum(overrides.package_weight, input.package_weight);
+
+  const cartonQty = getEffectiveNum(overrides.carton_pack_qty, input.carton_pack_qty);
+  const cartonW = getEffectiveNum(overrides.carton_width, input.carton_width);
+  const cartonD = getEffectiveNum(overrides.carton_depth, input.carton_depth);
+  const cartonH = getEffectiveNum(overrides.carton_height, input.carton_height);
+  const cartonWt = getEffectiveNum(overrides.carton_weight, input.carton_weight);
 
   const missingFields: string[] = [];
   const missingFieldItems: MissingFieldItem[] = [];

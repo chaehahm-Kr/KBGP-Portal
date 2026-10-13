@@ -368,6 +368,9 @@ export async function getTradingProductDetailData(productId: string) {
     category_code: product.category_code,
     manufacture_sku: product.manufacture_sku,
     origin: product.origin,
+    description: (product as any).description,
+    how_to_use: (product as any).how_to_use,
+    bullet_points: (product as any).bullet_points,
     price_krw_retail: product.price_krw_retail,
     price_usd_fob: product.price_usd_fob,
     package_width: product.package_width,
@@ -378,6 +381,7 @@ export async function getTradingProductDetailData(productId: string) {
     upc: product.upc,
     ean: product.ean,
     deleted_at: priceAddInfo.deleted_at || (product as any).deleted_at,
+    adminOverrides: priceAddInfo.admin_overrides,
     hasImages: photoUrls.length > 0,
   });
 

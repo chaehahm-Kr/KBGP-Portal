@@ -908,11 +908,15 @@ export function ProductOverrideTabs({
   const hasImages = imageUrls.length > 0 && imageUrls[0] !== null;
 
   // Unified Single Source of Truth Registration Evaluation (with real-time overrides)
+  const cleanedBulletsForEvaluation = ovBullets.map((b) => b.trim()).filter((b) => b !== "");
   const currentOverrides = {
     brand_id: ovBrandId || undefined,
     name_en: ovNameEn.trim() !== "" ? ovNameEn : undefined,
     manufacture_sku: ovManufactureSku.trim() !== "" ? ovManufactureSku : undefined,
     origin: ovOrigin.trim() !== "" ? ovOrigin : undefined,
+    description: ovDescription.trim() !== "" ? ovDescription : undefined,
+    how_to_use: ovHowToUse.trim() !== "" ? ovHowToUse : undefined,
+    bullet_points: cleanedBulletsForEvaluation.length > 0 ? cleanedBulletsForEvaluation : undefined,
     price_krw_retail: ovPriceKrwRetail.trim() !== "" ? ovPriceKrwRetail : undefined,
     price_usd_fob: ovPriceUsdFob.trim() !== "" ? ovPriceUsdFob : undefined,
     upc: ovUpc.trim() !== "" ? ovUpc : undefined,
@@ -940,6 +944,9 @@ export function ProductOverrideTabs({
     category_code: (product as any).category_code,
     manufacture_sku: product.manufacture_sku,
     origin: product.origin,
+    description: product.description,
+    how_to_use: product.how_to_use,
+    bullet_points: product.bullet_points,
     price_krw_retail: product.price_krw_retail,
     price_usd_fob: product.price_usd_fob,
     item_width: product.item_width,
@@ -1010,12 +1017,12 @@ export function ProductOverrideTabs({
   const pkgHeight = ovPackageHeight.trim() !== "" ? parseFloat(ovPackageHeight) : Number(product.package_height || 0);
   const pkgWeight = ovPackageWeight.trim() !== "" ? parseFloat(ovPackageWeight) : Number(product.package_weight || 0);
 
-  // 탭별 실시간 필수 항목 누락 여부 연산
-  const isBasicTabMissing = !effectiveBrandId || !(effectiveNameEn || "").trim() || !(effectiveManufactureSku || "").trim() || !(effectiveOrigin || "").trim() || (!(effectiveUpc || "").trim() && !(effectiveEan || "").trim());
-  const isCategoryTabMissing = !(product as any).category_code || hasMissingRequiredAttributes;
-  const isPriceTabMissing = Number(effectivePriceKrwRetail) <= 0 || Number(effectivePriceUsdFob) <= 0;
-  const isLogisticsTabMissing = pkgWidth <= 0 || pkgDepth <= 0 || pkgHeight <= 0 || pkgWeight <= 0;
-  const isMediaTabMissing = !hasImages;
+  // 탭별 실시간 필수 항목 누락 여부 연산 (단일 진실 공급원 registrationEvaluation.missingFieldItems 기준 동기화)
+  const isBasicTabMissing = missingFieldItems.some((item) => item.tab === "basic");
+  const isCategoryTabMissing = missingFieldItems.some((item) => item.tab === "category_attributes");
+  const isPriceTabMissing = missingFieldItems.some((item) => item.tab === "price");
+  const isLogisticsTabMissing = missingFieldItems.some((item) => item.tab === "logistics");
+  const isMediaTabMissing = missingFieldItems.some((item) => item.tab === "media");
 
   const categoryAttrRef = useRef<CategoryAttributeFormHandle>(null);
   const [isCatAttrDirty, setIsCatAttrDirty] = useState(false);

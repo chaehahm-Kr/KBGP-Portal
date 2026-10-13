@@ -416,9 +416,12 @@ export async function generateFaqAiSuggestions(
     const brandName = brand?.name || "K-Beauty Brand";
     const productName = resolveProductName(p);
     const info = (p.price_additional_info as any) || {};
-    const description = (p.description || "").trim();
-    const howToUse = (p.how_to_use || info.how_to_use || "").trim();
-    const bulletPoints: string[] = Array.isArray(p.bullet_points)
+    const overrides = info.admin_overrides || {};
+    const description = (overrides.description || p.description || "").trim();
+    const howToUse = (overrides.how_to_use || p.how_to_use || info.how_to_use || "").trim();
+    const bulletPoints: string[] = Array.isArray(overrides.bullet_points) && overrides.bullet_points.length > 0
+      ? overrides.bullet_points
+      : Array.isArray(p.bullet_points)
       ? p.bullet_points
       : Array.isArray(info.bullet_points)
       ? info.bullet_points

@@ -25,24 +25,32 @@ export async function getMediaSourceMaterials(
     // 1. Fetch Product Catalog authoritative data
     const { data: product } = await supabase
       .from("products")
-      .select("id, company_id, brand_id, name, description, bullet_points, how_to_use")
+      .select("id, company_id, brand_id, name, description, bullet_points, how_to_use, price_additional_info")
       .eq("id", productId)
       .single();
 
     if (product) {
+      const overrides = (product.price_additional_info as any)?.admin_overrides || {};
+      const effectiveName = overrides.name || product.name;
+      const effectiveDescription = overrides.description || product.description || "Official product catalog details";
+      const effectiveHowToUse = overrides.how_to_use || product.how_to_use;
+      const effectiveBullets = Array.isArray(overrides.bullet_points) && overrides.bullet_points.length > 0
+        ? overrides.bullet_points
+        : product.bullet_points || [];
+
       // Group A: Product Info (Authoritative Catalog)
       sources.push({
         id: `info-cat-${product.id}`,
         product_id: productId,
         group_type: "product_info",
-        title: product.name,
-        description: product.description || "Official product catalog details",
+        title: effectiveName,
+        description: effectiveDescription,
         source_type: "catalog_sync",
         metadata: {
-          name: product.name,
-          description: product.description,
-          bullet_points: product.bullet_points || [],
-          how_to_use: product.how_to_use,
+          name: effectiveName,
+          description: effectiveDescription,
+          bullet_points: effectiveBullets,
+          how_to_use: effectiveHowToUse,
         },
         created_at: new Date().toISOString(),
       });
