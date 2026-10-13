@@ -10,6 +10,8 @@ import {
 } from "@/lib/retailer/payment-types";
 import { evaluateCartPromotionsAction } from "@/lib/retailer/promotion-actions";
 import { type EvaluatePromotionResult } from "@/lib/retailer/promotion-types";
+import { validateRetailerCartItemsAction } from "@/lib/retailer/purchase-limit-actions";
+import { CartItemImage } from "@/components/retailer/cart-item-image";
 
 interface StoreOption {
   id: string;
@@ -34,12 +36,34 @@ export function RetailerCheckoutView({
   paymentEligibility,
   stores,
 }: CheckoutViewProps) {
-  const { items, subtotal, totalUnits, totalSkus, couponCode, clearCart, isLoading } = useCart();
+  const { items, subtotal, totalUnits, totalSkus, couponCode, clearCart, isLoading, syncItemThumbnails } = useCart();
   const [selectedStoreId, setSelectedStoreId] = useState<string>(
     stores.length > 0 ? stores[0].id : ""
   );
 
   const [promoEvaluation, setPromoEvaluation] = useState<EvaluatePromotionResult | null>(null);
+  const [productThumbnails, setProductThumbnails] = useState<Record<string, string | null>>({});
+  const [productGalleries, setProductGalleries] = useState<Record<string, string[]>>({});
+
+  // Sync fresh authoritative image URLs if any items are present
+  useEffect(() => {
+    if (items.length > 0) {
+      const ids = items.map((i) => i.productId);
+      validateRetailerCartItemsAction(ids)
+        .then((res) => {
+          if (res.success) {
+            if (res.thumbnails) {
+              setProductThumbnails(res.thumbnails);
+              syncItemThumbnails(res.thumbnails);
+            }
+            if (res.imageGalleries) {
+              setProductGalleries(res.imageGalleries);
+            }
+          }
+        })
+        .catch((err) => console.error("Checkout image validation failed:", err));
+    }
+  }, [items, syncItemThumbnails]);
 
   useEffect(() => {
     if (items.length > 0) {
@@ -431,19 +455,30 @@ export function RetailerCheckoutView({
 
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {items.map((item) => (
-                <div key={item.productId} className="py-3 flex items-center justify-between gap-4 text-xs">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400">
-                      {item.brandName}
+                <div key={item.productId} className="py-3 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-12 h-12 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 p-1 shrink-0 flex items-center justify-center overflow-hidden border border-zinc-200/60 dark:border-zinc-800">
+                      <CartItemImage
+                        productId={item.productId}
+                        productName={item.productName}
+                        primaryUrl={productThumbnails[item.productId] ?? item.thumbnailUrl}
+                        fallbackUrls={productGalleries[item.productId]}
+                        size="sm"
+                      />
                     </div>
-                    <div className="font-semibold text-zinc-900 dark:text-white truncate">
-                      {item.productName}
-                    </div>
-                    <div className="text-zinc-400 font-mono text-[11px]">
-                      {item.quantity} units @ ${item.wholesalePrice.toFixed(2)}/ea
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400">
+                        {item.brandName}
+                      </div>
+                      <div className="font-semibold text-zinc-900 dark:text-white truncate">
+                        {item.productName}
+                      </div>
+                      <div className="text-zinc-400 font-mono text-[11px]">
+                        {item.quantity} units @ ${item.wholesalePrice.toFixed(2)}/ea
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right font-bold text-zinc-900 dark:text-white text-sm">
+                  <div className="text-right font-bold text-zinc-900 dark:text-white text-sm shrink-0">
                     ${item.lineTotal.toFixed(2)}
                   </div>
                 </div>

@@ -6,12 +6,14 @@ import {
   getRetailerAccountPurchaseAllowances,
   type RetailerPurchaseAllowance,
 } from "@/lib/retailer/purchase-limits";
+import { resolveAuthoritativeProductImages } from "@/lib/retailer/product-images";
 
 export interface ValidateCartResult {
   success: boolean;
   companyId?: string;
   allowances: Record<string, RetailerPurchaseAllowance>;
   thumbnails?: Record<string, string | null>;
+  imageGalleries?: Record<string, string[]>;
   error?: string;
 }
 
@@ -43,53 +45,15 @@ export async function validateRetailerCartItemsAction(
     const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
     const allowances = await getRetailerAccountPurchaseAllowances(companyId, uniqueIds);
 
-    // Fetch authoritative product images for cart items
-    const { data: rawImages } = await adminClient
-      .from("product_images")
-      .select("product_id, storage_path, position, is_representative")
-      .in("product_id", uniqueIds);
-
+    // Fetch authoritative product images for cart items via shared authoritative resolver
+    const imageMap = await resolveAuthoritativeProductImages(adminClient, uniqueIds);
     const thumbnails: Record<string, string | null> = {};
-    const imagesByProd = new Map<string, any[]>();
-    for (const img of rawImages || []) {
-      const list = imagesByProd.get(img.product_id) || [];
-      list.push(img);
-      imagesByProd.set(img.product_id, list);
-    }
+    const imageGalleries: Record<string, string[]> = {};
 
     for (const pid of uniqueIds) {
-      const prodImgs = imagesByProd.get(pid) || [];
-      if (prodImgs.length === 0) {
-        thumbnails[pid] = null;
-        continue;
-      }
-      // Priority 1: Representative Image, Priority 2: Lowest position (Main/Gallery), Priority 3: First valid
-      prodImgs.sort((a, b) => {
-        if (a.is_representative && !b.is_representative) return -1;
-        if (!a.is_representative && b.is_representative) return 1;
-        return (a.position ?? 0) - (b.position ?? 0);
-      });
-
-      let chosenUrl: string | null = null;
-      for (const img of prodImgs) {
-        if (!img.storage_path) continue;
-        if (img.storage_path.startsWith("http://") || img.storage_path.startsWith("https://")) {
-          chosenUrl = img.storage_path;
-          break;
-        }
-        try {
-          const { data: signed } = await adminClient.storage
-            .from("company-uploads")
-            .createSignedUrl(img.storage_path, 86400); // 24hr freshness
-          if (signed?.signedUrl) {
-            chosenUrl = signed.signedUrl;
-            break;
-          }
-        } catch {
-          // ignore
-        }
-      }
-      thumbnails[pid] = chosenUrl;
+      const resolved = imageMap[pid];
+      thumbnails[pid] = resolved?.primaryUrl || null;
+      imageGalleries[pid] = resolved?.galleryUrls || [];
     }
 
     return {
@@ -97,6 +61,7 @@ export async function validateRetailerCartItemsAction(
       companyId,
       allowances,
       thumbnails,
+      imageGalleries,
     };
   } catch (err: any) {
     console.error("[validateRetailerCartItemsAction] Error:", err);

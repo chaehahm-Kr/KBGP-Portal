@@ -7,6 +7,7 @@ import { validateRetailerCartItemsAction } from "@/lib/retailer/purchase-limit-a
 import { type RetailerPurchaseAllowance } from "@/lib/retailer/purchase-limits";
 import { evaluateCartPromotionsAction } from "@/lib/retailer/promotion-actions";
 import { type EvaluatePromotionResult } from "@/lib/retailer/promotion-types";
+import { CartItemImage } from "@/components/retailer/cart-item-image";
 
 export function RetailerCartView() {
   const {
@@ -20,10 +21,12 @@ export function RetailerCartView() {
     removeItem,
     clearCart,
     isLoading,
+    syncItemThumbnails,
   } = useCart();
 
   const [allowances, setAllowances] = useState<Record<string, RetailerPurchaseAllowance>>({});
   const [productThumbnails, setProductThumbnails] = useState<Record<string, string | null>>({});
+  const [productGalleries, setProductGalleries] = useState<Record<string, string[]>>({});
   const [isValidating, setIsValidating] = useState(false);
 
   // Promotion states
@@ -38,6 +41,7 @@ export function RetailerCartView() {
     if (!productIds || productIds.length === 0) {
       setAllowances({});
       setProductThumbnails({});
+      setProductGalleries({});
       return;
     }
 
@@ -46,14 +50,18 @@ export function RetailerCartView() {
       const res = await validateRetailerCartItemsAction(productIds);
       if (res.success) {
         if (res.allowances) setAllowances(res.allowances);
-        if (res.thumbnails) setProductThumbnails(res.thumbnails);
+        if (res.thumbnails) {
+          setProductThumbnails(res.thumbnails);
+          syncItemThumbnails(res.thumbnails);
+        }
+        if (res.imageGalleries) setProductGalleries(res.imageGalleries);
       }
     } catch (err) {
       console.error("[RetailerCartView] Cart validation failed:", err);
     } finally {
       setIsValidating(false);
     }
-  }, []);
+  }, [syncItemThumbnails]);
 
   useEffect(() => {
     if (items.length > 0) {
@@ -242,29 +250,13 @@ export function RetailerCartView() {
                 <div className="flex gap-4">
                   {/* Thumbnail */}
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 p-2 shrink-0 flex items-center justify-center overflow-hidden border border-zinc-200/60 dark:border-zinc-800 relative">
-                    {(() => {
-                      const displayImg = productThumbnails[item.productId] ?? item.thumbnailUrl;
-                      return displayImg ? (
-                        <img
-                          src={displayImg}
-                          alt={item.productName}
-                          className="w-full h-full object-contain"
-                          onError={(e) => {
-                            const target = e.currentTarget;
-                            target.style.display = "none";
-                            const parent = target.parentElement;
-                            if (parent && !parent.querySelector(".no-img-label")) {
-                              const span = document.createElement("span");
-                              span.className = "text-xs text-zinc-400 no-img-label";
-                              span.innerText = "No Image";
-                              parent.appendChild(span);
-                            }
-                          }}
-                        />
-                      ) : (
-                        <span className="text-xs text-zinc-400">No Image</span>
-                      );
-                    })()}
+                    <CartItemImage
+                      productId={item.productId}
+                      productName={item.productName}
+                      primaryUrl={productThumbnails[item.productId] ?? item.thumbnailUrl}
+                      fallbackUrls={productGalleries[item.productId]}
+                      size="md"
+                    />
                   </div>
 
                   {/* Info */}

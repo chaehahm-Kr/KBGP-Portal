@@ -33,6 +33,7 @@ interface CartContextType {
   removeItem: (productId: string) => void;
   clearCart: () => void;
   dismissToast: () => void;
+  syncItemThumbnails: (thumbnails: Record<string, string | null>) => void;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -190,6 +191,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setLastAddedItem(null);
   };
 
+  const syncItemThumbnails = (thumbnails: Record<string, string | null>) => {
+    if (!thumbnails || Object.keys(thumbnails).length === 0) return;
+    setItems((prev) => {
+      let changed = false;
+      const updated = prev.map((item) => {
+        const freshUrl = thumbnails[item.productId];
+        if (freshUrl && freshUrl !== item.thumbnailUrl) {
+          changed = true;
+          return { ...item, thumbnailUrl: freshUrl };
+        }
+        return item;
+      });
+      return changed ? updated : prev;
+    });
+  };
+
   const summary = useMemo(() => computeCartSummary(items), [items]);
 
   return (
@@ -208,6 +225,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         removeItem,
         clearCart,
         dismissToast,
+        syncItemThumbnails,
       }}
     >
       {children}
