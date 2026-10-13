@@ -68,6 +68,14 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: true,
   },
   {
+    key: "bills",
+    name: "Bills & Payments",
+    href: "/bills",
+    icon: "credit-card",
+    roles: ["owner", "buyer", "store_manager", "accounting"],
+    isBottomNav: false,
+  },
+  {
     key: "sales",
     name: "Sales & Reorder",
     href: "/sales",

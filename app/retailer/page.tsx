@@ -7,6 +7,8 @@ import { getCompanyAgreement } from "@/lib/agreement/actions";
 import { RetailerAgreementBanner } from "@/components/retailer/retailer-agreement-banner";
 import { getServerTranslations } from "@/lib/i18n/server";
 import { getCurrentReportingWeek } from "@/lib/retailer/weekly-check";
+import { getRetailerARStatus } from "@/lib/finance/invoice-actions";
+import { DashboardBillsCard } from "@/components/retailer/dashboard-bills-card";
 
 export const dynamic = "force-dynamic";
 
@@ -154,12 +156,34 @@ export default async function RetailerHomePage() {
     }
   }
 
+  // 6.2 Fetch Authoritative AR Summary for Bills & Payments
+  let arSummary = {
+    companyId: companyId || "",
+    openAR: 0,
+    pastDueAmount: 0,
+    dueSoonAmount: 0,
+    openInvoiceCount: 0,
+    pastDueInvoiceCount: 0,
+    hasPastDue: false,
+    creditLimit: 0,
+    availableCredit: 0,
+  };
+
+  if (companyId) {
+    try {
+      arSummary = await getRetailerARStatus(companyId);
+    } catch (e) {
+      console.warn("Failed to load retailer AR status for dashboard:", e);
+    }
+  }
+
   const reorderAlertsCount = performanceSummary?.productsNeedingReorderCount || 0;
   const hasActionRequired =
     weeklyCheckDueCount > 0 ||
     reorderAlertsCount > 0 ||
     ordersAttentionCount > 0 ||
-    supportActionCount > 0;
+    supportActionCount > 0 ||
+    arSummary.pastDueInvoiceCount > 0;
 
   // 7. Check if 30-day activity data exists
   const hasSalesActivity = Boolean(
@@ -336,6 +360,29 @@ export default async function RetailerHomePage() {
                 </div>
               </Link>
             )}
+
+            {/* Action 5: Past Due Bills */}
+            {arSummary.pastDueInvoiceCount > 0 && (
+              <Link
+                href="/bills"
+                className="group flex flex-col justify-between p-3.5 rounded-xl border border-rose-200 dark:border-rose-800/60 bg-rose-50/40 dark:bg-rose-950/20 hover:border-rose-400 dark:hover:border-rose-700 transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-base">💳</span>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white shadow-xs">
+                    {arSummary.pastDueInvoiceCount}
+                  </span>
+                </div>
+                <div className="mt-3">
+                  <p className="text-xs font-bold text-zinc-900 dark:text-white group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+                    Past Due Bills
+                  </p>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-2">
+                    ${arSummary.pastDueAmount.toFixed(2)} overdue balance. View details & settle.
+                  </p>
+                </div>
+              </Link>
+            )}
           </div>
         ) : (
           <div className="flex items-center gap-3 p-4 rounded-xl border border-emerald-200/80 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 text-xs font-semibold">
@@ -344,6 +391,9 @@ export default async function RetailerHomePage() {
           </div>
         )}
       </div>
+
+      {/* 2.5 Authoritative Bills & Payments Summary Card (RTP-PAY-BILL-DASH-001) */}
+      <DashboardBillsCard summary={arSummary} />
 
       {/* 3. 30-Day Demand & Sales Summary */}
       {performanceSummary && (

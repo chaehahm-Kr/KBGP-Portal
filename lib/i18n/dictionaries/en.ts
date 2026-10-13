@@ -58,6 +58,7 @@ export const enDictionary: Dictionary = {
     savedProducts: "Saved Products",
     weeklyCheck: "Weekly Check",
     orders: "Orders",
+    bills: "Bills & Payments",
     sales: "Sales & Reorder",
     tags: "Price Tags",
     stores: "Stores",

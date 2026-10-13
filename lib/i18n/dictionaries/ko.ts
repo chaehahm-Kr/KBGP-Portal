@@ -58,6 +58,7 @@ export const koDictionary: Dictionary = {
     savedProducts: "관심 상품 (Saved)",
     weeklyCheck: "상품 확인",
     orders: "주문",
+    bills: "청구 및 결제",
     sales: "매출 및 재발주",
     tags: "가격표 태그",
     stores: "매장 관리",

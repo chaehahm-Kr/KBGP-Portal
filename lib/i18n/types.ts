@@ -62,6 +62,7 @@ export interface Dictionary {
     savedProducts: string;
     weeklyCheck: string;
     orders: string;
+    bills?: string;
     sales: string;
     tags: string;
     stores: string;
