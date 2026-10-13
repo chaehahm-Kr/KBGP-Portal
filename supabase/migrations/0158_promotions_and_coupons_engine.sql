@@ -1,5 +1,6 @@
 -- 0158_promotions_and_coupons_engine.sql
--- RTP-PROMO-COUPON-001: Promotion & Coupon Engine Schema Architecture
+-- RTP-PROMO-COUPON-001: Promotion & Coupon Engine Schema Architecture (Safe Re-run Version)
+-- Compatible with multi-role company architecture (public.company_roles & public.auth_is_admin())
 
 -- 1. Main promotions table
 CREATE TABLE IF NOT EXISTS public.promotions (
@@ -87,7 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_promotion_usages_order_id ON public.promotion_usa
 -- 4. Extend retailer_orders table with promotion snapshot columns
 ALTER TABLE public.retailer_orders
   ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS promotion_id UUID REFERENCES public.promotions(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS promotion_id UUID,
   ADD COLUMN IF NOT EXISTS coupon_code TEXT,
   ADD COLUMN IF NOT EXISTS promotion_snapshot JSONB;
 
@@ -95,89 +96,214 @@ ALTER TABLE public.retailer_orders
 ALTER TABLE public.retailer_order_items
   ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
   ADD COLUMN IF NOT EXISTS is_bogo_free BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS promotion_id UUID REFERENCES public.promotions(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS promotion_id UUID;
 
--- 6. Enable RLS
+-- 6. Safely add foreign key constraints if not yet present
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'retailer_orders_promotion_id_fkey'
+  ) THEN
+    ALTER TABLE public.retailer_orders
+      ADD CONSTRAINT retailer_orders_promotion_id_fkey
+      FOREIGN KEY (promotion_id) REFERENCES public.promotions(id) ON DELETE SET NULL;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'retailer_order_items_promotion_id_fkey'
+  ) THEN
+    ALTER TABLE public.retailer_order_items
+      ADD CONSTRAINT retailer_order_items_promotion_id_fkey
+      FOREIGN KEY (promotion_id) REFERENCES public.promotions(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+-- 7. Row Level Security Configuration
 ALTER TABLE public.promotions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.promotion_products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.promotion_brands ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.promotion_categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.promotion_retailers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.promotion_usages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.promotions FORCE ROW LEVEL SECURITY;
 
--- Service role & Admin full access
+ALTER TABLE public.promotion_products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.promotion_products FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE public.promotion_brands ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.promotion_brands FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE public.promotion_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.promotion_categories FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE public.promotion_retailers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.promotion_retailers FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE public.promotion_usages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.promotion_usages FORCE ROW LEVEL SECURITY;
+
+-- 8. Admin Full Access Policies (Authoritative public.auth_is_admin())
 DROP POLICY IF EXISTS "Admin full access on promotions" ON public.promotions;
+DROP POLICY IF EXISTS "promotions_admin_all" ON public.promotions;
 CREATE POLICY "Admin full access on promotions" ON public.promotions
   FOR ALL TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.company_users cu
-      JOIN public.companies c ON cu.company_id = c.id
-      WHERE cu.id = auth.uid() AND c.company_type = 'PLATFORM_OPERATOR'
-    )
-  );
+  USING (public.auth_is_admin())
+  WITH CHECK (public.auth_is_admin());
 
 DROP POLICY IF EXISTS "Admin full access on promotion_products" ON public.promotion_products;
+DROP POLICY IF EXISTS "promotion_products_admin_all" ON public.promotion_products;
 CREATE POLICY "Admin full access on promotion_products" ON public.promotion_products
   FOR ALL TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.company_users cu
-      JOIN public.companies c ON cu.company_id = c.id
-      WHERE cu.id = auth.uid() AND c.company_type = 'PLATFORM_OPERATOR'
-    )
-  );
+  USING (public.auth_is_admin())
+  WITH CHECK (public.auth_is_admin());
 
 DROP POLICY IF EXISTS "Admin full access on promotion_brands" ON public.promotion_brands;
+DROP POLICY IF EXISTS "promotion_brands_admin_all" ON public.promotion_brands;
 CREATE POLICY "Admin full access on promotion_brands" ON public.promotion_brands
   FOR ALL TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.company_users cu
-      JOIN public.companies c ON cu.company_id = c.id
-      WHERE cu.id = auth.uid() AND c.company_type = 'PLATFORM_OPERATOR'
-    )
-  );
+  USING (public.auth_is_admin())
+  WITH CHECK (public.auth_is_admin());
 
 DROP POLICY IF EXISTS "Admin full access on promotion_categories" ON public.promotion_categories;
+DROP POLICY IF EXISTS "promotion_categories_admin_all" ON public.promotion_categories;
 CREATE POLICY "Admin full access on promotion_categories" ON public.promotion_categories
   FOR ALL TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.company_users cu
-      JOIN public.companies c ON cu.company_id = c.id
-      WHERE cu.id = auth.uid() AND c.company_type = 'PLATFORM_OPERATOR'
-    )
-  );
+  USING (public.auth_is_admin())
+  WITH CHECK (public.auth_is_admin());
 
 DROP POLICY IF EXISTS "Admin full access on promotion_retailers" ON public.promotion_retailers;
+DROP POLICY IF EXISTS "promotion_retailers_admin_all" ON public.promotion_retailers;
 CREATE POLICY "Admin full access on promotion_retailers" ON public.promotion_retailers
   FOR ALL TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.company_users cu
-      JOIN public.companies c ON cu.company_id = c.id
-      WHERE cu.id = auth.uid() AND c.company_type = 'PLATFORM_OPERATOR'
-    )
-  );
+  USING (public.auth_is_admin())
+  WITH CHECK (public.auth_is_admin());
 
 DROP POLICY IF EXISTS "Admin full access on promotion_usages" ON public.promotion_usages;
+DROP POLICY IF EXISTS "promotion_usages_admin_all" ON public.promotion_usages;
 CREATE POLICY "Admin full access on promotion_usages" ON public.promotion_usages
   FOR ALL TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.company_users cu
-      JOIN public.companies c ON cu.company_id = c.id
-      WHERE cu.id = auth.uid() AND c.company_type = 'PLATFORM_OPERATOR'
-    )
-  );
+  USING (public.auth_is_admin())
+  WITH CHECK (public.auth_is_admin());
 
--- Retailer access: Retailers can read active promotions applicable to them (or via server dal / adminClient)
+-- 9. Retailer Policies (Multi-role company architecture via public.company_roles & public.auth_company_id())
+
+-- A. Promotions: Retailers view eligible active promotions within schedule
 DROP POLICY IF EXISTS "Retailers view active promotions" ON public.promotions;
-CREATE POLICY "Retailers view active promotions" ON public.promotions
+DROP POLICY IF EXISTS "Retailers view eligible promotions" ON public.promotions;
+CREATE POLICY "Retailers view eligible promotions" ON public.promotions
   FOR SELECT TO authenticated
   USING (
     status = 'active'
     AND (start_at IS NULL OR start_at <= now())
     AND (end_at IS NULL OR end_at >= now() OR no_expiration = true)
+    AND (
+      retailer_scope = 'all'
+      OR (
+        retailer_scope = 'selected_retailers'
+        AND EXISTS (
+          SELECT 1 FROM public.promotion_retailers pr
+          WHERE pr.promotion_id = promotions.id
+            AND pr.company_id = public.auth_company_id()
+        )
+      )
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.company_roles cr
+      WHERE cr.company_id = public.auth_company_id()
+        AND cr.role = 'Retailer'
+    )
+  );
+
+-- B. Scope relations: Retailers view product/brand/category associations of active promotions
+DROP POLICY IF EXISTS "Retailers view promotion_products" ON public.promotion_products;
+CREATE POLICY "Retailers view promotion_products" ON public.promotion_products
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.promotions p
+      WHERE p.id = promotion_products.promotion_id
+        AND p.status = 'active'
+        AND (p.start_at IS NULL OR p.start_at <= now())
+        AND (p.end_at IS NULL OR p.end_at >= now() OR p.no_expiration = true)
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.company_roles cr
+      WHERE cr.company_id = public.auth_company_id()
+        AND cr.role = 'Retailer'
+    )
+  );
+
+DROP POLICY IF EXISTS "Retailers view promotion_brands" ON public.promotion_brands;
+CREATE POLICY "Retailers view promotion_brands" ON public.promotion_brands
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.promotions p
+      WHERE p.id = promotion_brands.promotion_id
+        AND p.status = 'active'
+        AND (p.start_at IS NULL OR p.start_at <= now())
+        AND (p.end_at IS NULL OR p.end_at >= now() OR p.no_expiration = true)
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.company_roles cr
+      WHERE cr.company_id = public.auth_company_id()
+        AND cr.role = 'Retailer'
+    )
+  );
+
+DROP POLICY IF EXISTS "Retailers view promotion_categories" ON public.promotion_categories;
+CREATE POLICY "Retailers view promotion_categories" ON public.promotion_categories
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.promotions p
+      WHERE p.id = promotion_categories.promotion_id
+        AND p.status = 'active'
+        AND (p.start_at IS NULL OR p.start_at <= now())
+        AND (p.end_at IS NULL OR p.end_at >= now() OR p.no_expiration = true)
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.company_roles cr
+      WHERE cr.company_id = public.auth_company_id()
+        AND cr.role = 'Retailer'
+    )
+  );
+
+-- C. Retailer Scope: Retailers can ONLY see their own retailer assignment (no cross-company leakage)
+DROP POLICY IF EXISTS "Retailers view own promotion_retailers" ON public.promotion_retailers;
+CREATE POLICY "Retailers view own promotion_retailers" ON public.promotion_retailers
+  FOR SELECT TO authenticated
+  USING (
+    company_id = public.auth_company_id()
+    AND EXISTS (
+      SELECT 1 FROM public.company_roles cr
+      WHERE cr.company_id = public.auth_company_id()
+        AND cr.role = 'Retailer'
+    )
+  );
+
+-- D. Usages: Retailers view only their own usage records
+DROP POLICY IF EXISTS "Retailers view own promotion_usages" ON public.promotion_usages;
+CREATE POLICY "Retailers view own promotion_usages" ON public.promotion_usages
+  FOR SELECT TO authenticated
+  USING (
+    company_id = public.auth_company_id()
+    AND EXISTS (
+      SELECT 1 FROM public.company_roles cr
+      WHERE cr.company_id = public.auth_company_id()
+        AND cr.role = 'Retailer'
+    )
+  );
+
+-- E. Usages: Retailers insert their own usages tied to their own authorized orders
+DROP POLICY IF EXISTS "Retailers insert own promotion_usages" ON public.promotion_usages;
+CREATE POLICY "Retailers insert own promotion_usages" ON public.promotion_usages
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    company_id = public.auth_company_id()
+    AND EXISTS (
+      SELECT 1 FROM public.company_roles cr
+      WHERE cr.company_id = public.auth_company_id()
+        AND cr.role = 'Retailer'
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.retailer_orders ro
+      WHERE ro.id = promotion_usages.order_id
+        AND ro.company_id = public.auth_company_id()
+    )
   );

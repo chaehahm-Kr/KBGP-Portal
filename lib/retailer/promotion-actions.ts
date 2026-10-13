@@ -240,6 +240,14 @@ export async function getAdminPromotionFormOptionsAction(): Promise<{
     await verifyAdminSession();
     const adminClient = createAdminClient();
 
+    // Fetch all companies with Retailer role in authoritative company_roles table
+    const { data: retailerRoles } = await adminClient
+      .from("company_roles")
+      .select("company_id")
+      .eq("role", "Retailer");
+
+    const retailerCompanyIds = (retailerRoles || []).map((r: any) => r.company_id);
+
     const [prodsRes, brandsRes, catsRes, retRes] = await Promise.all([
       adminClient
         .from("products")
@@ -247,11 +255,13 @@ export async function getAdminPromotionFormOptionsAction(): Promise<{
         .order("name", { ascending: true }),
       adminClient.from("brands").select("id, name").order("name", { ascending: true }),
       adminClient.from("categories").select("code, name_ko, name_en").order("code", { ascending: true }),
-      adminClient
-        .from("companies")
-        .select("id, name, company_code")
-        .eq("company_type", "RETAILER")
-        .order("name", { ascending: true }),
+      retailerCompanyIds.length > 0
+        ? adminClient
+            .from("companies")
+            .select("id, name, company_code")
+            .in("id", retailerCompanyIds)
+            .order("name", { ascending: true })
+        : Promise.resolve({ data: [] }),
     ]);
 
     const products = (prodsRes.data || []).map((p: any) => ({

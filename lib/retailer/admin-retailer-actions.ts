@@ -484,8 +484,6 @@ export async function createRetailerWithInitialStoreAndOwnerAction(payload: Crea
         name: payload.companyName.trim(),
         business_registration_number: payload.businessRegistrationNumber?.trim() || null,
         country: formatCanonicalCountryName(payload.country) || "United States",
-        company_type: "retailer",
-        business_type: "retailer",
         status: "active",
       })
       .select("id, name")
@@ -495,6 +493,14 @@ export async function createRetailerWithInitialStoreAndOwnerAction(payload: Crea
       console.error("Error creating retailer company:", companyError);
       return { success: false, error: "Failed to create retailer company record." };
     }
+
+    // 1b. Assign Retailer role in company_roles
+    await adminClient
+      .from("company_roles")
+      .insert({
+        company_id: company.id,
+        role: "Retailer",
+      });
 
     // 2. Insert Retailer Profile (Commercial Terms)
     const initialApprovedTerms = normalizeApprovedTerms(payload.paymentTerms);
