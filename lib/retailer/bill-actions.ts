@@ -42,7 +42,8 @@ export async function getRetailerBillsAction(): Promise<{
           id,
           order_number,
           order_status,
-          total_amount
+          total_amount,
+          total_skus_count
         )
       `)
       .eq("retailer_company_id", companyId)
@@ -62,6 +63,30 @@ export async function getRetailerBillsAction(): Promise<{
       return { success: false, error: invErr.message };
     }
 
+    // In case any historical order record has null/0 total_skus_count, fetch fallback counts in single batch query (avoiding N+1)
+    const missingOrderIds = (invoiceRows || [])
+      .filter((r: any) => !r.retailer_orders?.total_skus_count && r.order_id)
+      .map((r: any) => r.order_id);
+
+    const fallbackSkuCounts: Record<string, number> = {};
+    if (missingOrderIds.length > 0) {
+      const { data: itemRows } = await adminClient
+        .from("retailer_order_items")
+        .select("order_id, sku")
+        .in("order_id", missingOrderIds);
+
+      if (itemRows) {
+        const skuSets: Record<string, Set<string>> = {};
+        for (const it of itemRows) {
+          if (!skuSets[it.order_id]) skuSets[it.order_id] = new Set();
+          if (it.sku) skuSets[it.order_id].add(it.sku);
+        }
+        for (const oid in skuSets) {
+          fallbackSkuCounts[oid] = skuSets[oid].size;
+        }
+      }
+    }
+
     const bills: RetailerBillSummary[] = (invoiceRows || []).map((row: any) => {
       const balanceDue = Number(row.balance_due || 0);
       const invoiceStatus = row.invoice_status || "open";
@@ -70,6 +95,10 @@ export async function getRetailerBillsAction(): Promise<{
         due_date: row.due_date,
         invoice_status: invoiceStatus,
       });
+
+      const totalSkus = Number(
+        row.retailer_orders?.total_skus_count || fallbackSkuCounts[row.order_id] || 1
+      );
 
       return {
         id: row.id,
@@ -88,6 +117,7 @@ export async function getRetailerBillsAction(): Promise<{
         payment_status: row.payment_status || "unpaid",
         ar_status: arStatus,
         issued_at: row.issued_at,
+        total_skus_count: totalSkus,
       };
     });
 
@@ -132,6 +162,7 @@ export async function getRetailerBillDetailAction(invoiceId: string): Promise<{
           order_number,
           order_status,
           total_amount,
+          total_skus_count,
           shipping_address,
           shipping_city,
           shipping_state,
@@ -194,6 +225,7 @@ export async function getRetailerBillDetailAction(invoiceId: string): Promise<{
       due_date: inv.due_date,
       terms_days: inv.terms_days,
       terms_name: inv.terms_name,
+      total_skus_count: (inv.retailer_orders as any)?.total_skus_count ?? (items?.length || 1),
       subtotal: Number(inv.subtotal || 0),
       discount_total: Number(inv.discount_total || 0),
       processing_fee: Number(inv.processing_fee || 0),
@@ -357,5 +389,122 @@ export async function payRetailerBillAction(params: {
     };
   } catch (error: any) {
     return { success: false, error: error?.message || "Payment request failed." };
+  }
+}
+
+export interface PayMultipleRetailerBillsParams {
+  invoiceIds: string[];
+  paymentMethod: "card" | "ach";
+}
+
+/**
+ * Server Action for Multi-Invoice Payment Preview & Processing Guard
+ * Validates selected invoices, enforces tenant isolation, calculates combined principal and fee,
+ * and enforces Provider Pending protection (zero financial mutation).
+ */
+export async function payMultipleRetailerBillsAction(
+  params: PayMultipleRetailerBillsParams
+): Promise<{
+  success: boolean;
+  providerPending?: boolean;
+  error?: string;
+  paymentDetails?: {
+    principalAmount: number;
+    processingFee: number;
+    totalCharged: number;
+    invoiceCount: number;
+    invoiceNumbers: string[];
+    method: "card" | "ach";
+  };
+}> {
+  try {
+    const userContext = await getRetailerUserContext();
+    if (!userContext.companyId) {
+      return { success: false, error: "Access denied." };
+    }
+
+    const companyId = userContext.companyId;
+    const adminClient = createAdminClient();
+
+    if (!params.invoiceIds || params.invoiceIds.length === 0) {
+      return { success: false, error: "No bills selected for payment." };
+    }
+
+    // 1. Fetch invoices and enforce tenant isolation
+    const { data: invoices, error: invErr } = await adminClient
+      .from("retailer_invoices")
+      .select("id, invoice_number, balance_due, invoice_status, retailer_company_id")
+      .in("id", params.invoiceIds);
+
+    if (invErr || !invoices || invoices.length === 0) {
+      return { success: false, error: "Selected invoices could not be found." };
+    }
+
+    // Enforce tenant isolation for every invoice
+    const unauthorized = invoices.some((inv) => inv.retailer_company_id !== companyId);
+    if (unauthorized) {
+      return { success: false, error: "Access denied: One or more selected invoices do not belong to your account." };
+    }
+
+    // Validate all invoices are active & payable
+    const unpayable = invoices.filter(
+      (inv) => inv.invoice_status === "void" || inv.invoice_status === "cancelled" || Number(inv.balance_due || 0) <= 0
+    );
+    if (unpayable.length > 0) {
+      return {
+        success: false,
+        error: `Invoice ${unpayable[0].invoice_number} is not payable (already settled, voided, or cancelled).`,
+      };
+    }
+
+    // 2. Sum principal balance due (100% of outstanding balance, no partial payments in Phase A)
+    const principalTotal = invoices.reduce((sum, inv) => sum + Number(inv.balance_due || 0), 0);
+    const roundedPrincipal = Math.round(principalTotal * 100) / 100;
+
+    // 3. Resolve current effective payment policy (shared policy resolver)
+    const effectivePolicy = await resolveEffectivePaymentPolicy(companyId);
+    const channelPolicy = params.paymentMethod === "card" ? effectivePolicy.card : effectivePolicy.ach;
+
+    if (!channelPolicy.effectiveEnabled) {
+      return {
+        success: false,
+        error: `${params.paymentMethod.toUpperCase()} payments are not enabled for your store account.`,
+      };
+    }
+
+    // 4. Calculate fee preview
+    const feeResult = calculateProcessingFee({
+      paymentMethod: params.paymentMethod,
+      chargeBase: roundedPrincipal,
+      effectivePolicy,
+    });
+
+    // 5. PROVIDER READINESS ENFORCEMENT (Rule 12 & 25)
+    // Live payment provider is not yet integrated.
+    // Absolutely ZERO financial mutation or fake records!
+    if (!channelPolicy.providerReady) {
+      return {
+        success: false,
+        providerPending: true,
+        error:
+          "Online payment processing is currently in setup phase. Automated credit card and direct ACH settlement will be enabled shortly. To settle selected invoices via bank wire or invoice payment, please contact your Letusto account manager.",
+        paymentDetails: {
+          principalAmount: roundedPrincipal,
+          processingFee: feeResult.feeAmount,
+          totalCharged: feeResult.totalWithFee,
+          invoiceCount: invoices.length,
+          invoiceNumbers: invoices.map((i) => i.invoice_number),
+          method: params.paymentMethod,
+        },
+      };
+    }
+
+    return {
+      success: false,
+      providerPending: true,
+      error: "Payment provider integration is pending configuration.",
+    };
+  } catch (error: any) {
+    return { success: false, error: error?.message || "Multi-invoice payment request failed." };
   }
 }

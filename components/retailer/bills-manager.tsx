@@ -5,6 +5,7 @@ import Link from "next/link";
 import { RetailerBillsFeed, RetailerBillSummary, RetailerBillDetail } from "@/lib/retailer/bill-types";
 import { BillDetailModal } from "@/components/retailer/bill-detail-modal";
 import { PayBillModal } from "@/components/retailer/pay-bill-modal";
+import { MultiPayBillModal } from "@/components/retailer/multi-pay-bill-modal";
 import { EffectivePaymentPolicy } from "@/lib/retailer/payment-policy";
 
 interface BillsManagerProps {
@@ -20,6 +21,10 @@ export function RetailerBillsManager({
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [activeDetailId, setActiveDetailId] = useState<string | null>(null);
   const [activePayBill, setActivePayBill] = useState<RetailerBillSummary | RetailerBillDetail | null>(null);
+
+  // Multi-invoice selection state
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
+  const [isMultiPayOpen, setIsMultiPayOpen] = useState<boolean>(false);
 
   const { summary, invoices } = initialFeed;
 
@@ -44,6 +49,53 @@ export function RetailerBillsManager({
       return true;
     });
   }, [invoices, selectedTab, searchTerm]);
+
+  // Payable invoices currently visible in the filtered view
+  const payableFilteredInvoices = useMemo(() => {
+    return filteredInvoices.filter((inv) => Number(inv.balance_due || 0) > 0 && inv.ar_status !== "PAID");
+  }, [filteredInvoices]);
+
+  // Selected bill objects
+  const selectedBills = useMemo(() => {
+    return invoices.filter((inv) => selectedInvoiceIds.has(inv.id) && Number(inv.balance_due || 0) > 0);
+  }, [invoices, selectedInvoiceIds]);
+
+  const selectedTotalBalance = useMemo(() => {
+    return selectedBills.reduce((acc, b) => acc + Number(b.balance_due || 0), 0);
+  }, [selectedBills]);
+
+  // Selection toggle handlers
+  const toggleInvoiceSelection = (id: string) => {
+    setSelectedInvoiceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const isAllPayableSelected =
+    payableFilteredInvoices.length > 0 &&
+    payableFilteredInvoices.every((inv) => selectedInvoiceIds.has(inv.id));
+
+  const toggleSelectAll = () => {
+    if (isAllPayableSelected) {
+      setSelectedInvoiceIds((prev) => {
+        const next = new Set(prev);
+        payableFilteredInvoices.forEach((inv) => next.delete(inv.id));
+        return next;
+      });
+    } else {
+      setSelectedInvoiceIds((prev) => {
+        const next = new Set(prev);
+        payableFilteredInvoices.forEach((inv) => next.add(inv.id));
+        return next;
+      });
+    }
+  };
 
   const getStatusBadge = (arStatus: string) => {
     switch (arStatus) {
@@ -209,7 +261,7 @@ export function RetailerBillsManager({
         </div>
       </div>
 
-      {/* 2. Filter Bar & Search */}
+      {/* 2. Filter Bar, Search & Primary Action */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         {/* Tabs */}
         <div className="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 self-start sm:self-auto overflow-x-auto max-w-full">
@@ -235,20 +287,68 @@ export function RetailerBillsManager({
           ))}
         </div>
 
-        {/* Search */}
-        <div className="relative w-full sm:w-64">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">
-            🔍
-          </span>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search invoice or order #..."
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white"
-          />
+        {/* Right Controls: Search + Pay Selected Bills Button */}
+        <div className="flex items-center gap-2.5">
+          <div className="relative w-full sm:w-56">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">
+              🔍
+            </span>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search invoice or order #..."
+              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white"
+            />
+          </div>
+
+          {/* Primary Action Button: Pay Selected Bills (N) */}
+          <button
+            type="button"
+            disabled={selectedBills.length === 0}
+            onClick={() => setIsMultiPayOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:opacity-90"
+          >
+            <span>💳</span>
+            <span>Pay Selected Bills ({selectedBills.length})</span>
+          </button>
         </div>
       </div>
+
+      {/* Selection Summary Bar (When bills are selected) */}
+      {selectedBills.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 px-4 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 animate-in fade-in duration-150">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold">
+              {selectedBills.length}
+            </span>
+            <div>
+              <p className="text-xs font-bold text-blue-950 dark:text-blue-100">
+                {selectedBills.length} Bill{selectedBills.length === 1 ? "" : "s"} Selected for Payment
+              </p>
+              <p className="text-[11px] text-blue-700 dark:text-blue-300">
+                Total Principal: <span className="font-bold">${selectedTotalBalance.toFixed(2)}</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setSelectedInvoiceIds(new Set())}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+            >
+              Clear Selection
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsMultiPayOpen(true)}
+              className="px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors cursor-pointer"
+            >
+              Pay ${selectedTotalBalance.toFixed(2)} Now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 3. Bills List / Table */}
       {filteredInvoices.length === 0 ? (
@@ -281,164 +381,212 @@ export function RetailerBillsManager({
         <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 overflow-hidden shadow-xs">
           {/* Desktop Table View */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs min-w-[960px]">
               <thead className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-4">Invoice #</th>
-                  <th className="py-3 px-4">Order #</th>
-                  <th className="py-3 px-4">Due Date</th>
-                  <th className="py-3 px-4">Terms</th>
-                  <th className="py-3 px-4 text-right">Total</th>
-                  <th className="py-3 px-4 text-right">Balance Due</th>
-                  <th className="py-3 px-4 text-center">Status</th>
-                  <th className="py-3 px-4 text-right">Action</th>
+                  {/* Multi-selection Checkbox Column */}
+                  <th className="w-10 py-3 px-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={isAllPayableSelected}
+                      onChange={toggleSelectAll}
+                      disabled={payableFilteredInvoices.length === 0}
+                      aria-label="Select all payable bills"
+                      className="w-4 h-4 rounded-sm border-zinc-300 dark:border-zinc-700 text-zinc-900 focus:ring-zinc-900 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                    />
+                  </th>
+                  {/* Distinct Independent Columns per Prompt */}
+                  <th className="py-3 px-3">Invoice #</th>
+                  <th className="py-3 px-3">Issue Date</th>
+                  <th className="py-3 px-3">Order #</th>
+                  <th className="py-3 px-3">Due Date</th>
+                  <th className="py-3 px-3">Terms</th>
+                  <th className="py-3 px-3 text-center"># of SKUs</th>
+                  <th className="py-3 px-3 text-right">Total</th>
+                  <th className="py-3 px-3 text-right">Balance Due</th>
+                  <th className="py-3 px-3 text-center">Status</th>
+                  <th className="py-3 px-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                {filteredInvoices.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40 transition-colors"
-                  >
-                    <td className="py-3.5 px-4 font-bold text-zinc-900 dark:text-white">
-                      {inv.invoice_number}
-                      <p className="text-[10px] text-zinc-400 font-normal">
-                        Issued {new Date(inv.invoice_date).toLocaleDateString()}
-                      </p>
-                    </td>
+                {filteredInvoices.map((inv) => {
+                  const isPayable = Number(inv.balance_due || 0) > 0 && inv.ar_status !== "PAID";
+                  const isSelected = selectedInvoiceIds.has(inv.id);
 
-                    <td className="py-3.5 px-4 text-zinc-600 dark:text-zinc-400 font-medium">
-                      <Link
-                        href={`/orders/${inv.order_id}`}
-                        className="hover:text-zinc-900 dark:hover:text-white hover:underline"
-                      >
-                        {inv.order_number}
-                      </Link>
-                    </td>
+                  return (
+                    <tr
+                      key={inv.id}
+                      className={`transition-colors ${
+                        isSelected
+                          ? "bg-blue-50/50 dark:bg-blue-950/20"
+                          : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40"
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <td className="py-3.5 px-3 text-center">
+                        {isPayable ? (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleInvoiceSelection(inv.id)}
+                            aria-label={`Select invoice ${inv.invoice_number}`}
+                            className="w-4 h-4 rounded-sm border-zinc-300 dark:border-zinc-700 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+                          />
+                        ) : (
+                          <span className="text-zinc-300 dark:text-zinc-700 text-xs">—</span>
+                        )}
+                      </td>
 
-                    <td className="py-3.5 px-4">
-                      <p className="font-semibold text-zinc-900 dark:text-white">
-                        {new Date(inv.due_date).toLocaleDateString()}
-                      </p>
-                      <p
-                        className={`text-[10px] font-medium ${
-                          inv.ar_status === "PAST_DUE"
-                            ? "text-rose-600 dark:text-rose-400"
-                            : inv.ar_status === "DUE_SOON"
-                            ? "text-amber-600 dark:text-amber-400"
-                            : "text-zinc-400"
-                        }`}
-                      >
-                        {formatDueRelative(inv.due_date, inv.ar_status)}
-                      </p>
-                    </td>
+                      {/* Invoice # (NO stacked Issue Date) */}
+                      <td className="py-3.5 px-3 font-bold text-zinc-900 dark:text-white">
+                        {inv.invoice_number}
+                      </td>
 
-                    <td className="py-3.5 px-4 text-zinc-600 dark:text-zinc-400 font-medium">
-                      {inv.terms_name}
-                    </td>
+                      {/* Issue Date (Independent Column) */}
+                      <td className="py-3.5 px-3 text-zinc-600 dark:text-zinc-400 font-medium">
+                        {new Date(inv.invoice_date).toLocaleDateString()}
+                      </td>
 
-                    <td className="py-3.5 px-4 text-right font-medium text-zinc-700 dark:text-zinc-300">
-                      ${inv.total_amount.toFixed(2)}
-                    </td>
+                      {/* Order # */}
+                      <td className="py-3.5 px-3 text-zinc-600 dark:text-zinc-400 font-mono">
+                        <Link
+                          href={`/orders/${inv.order_id}`}
+                          className="hover:text-zinc-900 dark:hover:text-white hover:underline"
+                        >
+                          {inv.order_number}
+                        </Link>
+                      </td>
 
-                    <td className="py-3.5 px-4 text-right font-extrabold text-sm text-zinc-900 dark:text-white">
-                      ${inv.balance_due.toFixed(2)}
-                    </td>
+                      {/* Due Date */}
+                      <td className="py-3.5 px-3">
+                        <p className="font-semibold text-zinc-900 dark:text-white">
+                          {new Date(inv.due_date).toLocaleDateString()}
+                        </p>
+                        <p
+                          className={`text-[10px] font-medium ${
+                            inv.ar_status === "PAST_DUE"
+                              ? "text-rose-600 dark:text-rose-400"
+                              : inv.ar_status === "DUE_SOON"
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-zinc-400"
+                          }`}
+                        >
+                          {formatDueRelative(inv.due_date, inv.ar_status)}
+                        </p>
+                      </td>
 
-                    <td className="py-3.5 px-4 text-center">
-                      {getStatusBadge(inv.ar_status)}
-                    </td>
+                      {/* Terms */}
+                      <td className="py-3.5 px-3 text-zinc-600 dark:text-zinc-400 font-medium">
+                        {inv.terms_name}
+                      </td>
 
-                    <td className="py-3.5 px-4 text-right space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => setActiveDetailId(inv.id)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                      >
-                        View Bill
-                      </button>
-                      {inv.balance_due > 0 && (
+                      {/* # of SKUs (Independent Column) */}
+                      <td className="py-3.5 px-3 text-center font-semibold text-zinc-700 dark:text-zinc-300">
+                        {inv.total_skus_count ?? 1}
+                      </td>
+
+                      {/* Total */}
+                      <td className="py-3.5 px-3 text-right font-medium text-zinc-700 dark:text-zinc-300">
+                        ${inv.total_amount.toFixed(2)}
+                      </td>
+
+                      {/* Balance Due */}
+                      <td className="py-3.5 px-3 text-right font-extrabold text-sm text-zinc-900 dark:text-white">
+                        ${inv.balance_due.toFixed(2)}
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3.5 px-3 text-center">
+                        {getStatusBadge(inv.ar_status)}
+                      </td>
+
+                      {/* Action: Only View Bill (Per-row Pay Bill REMOVED per prompt) */}
+                      <td className="py-3.5 px-3 text-right">
                         <button
                           type="button"
-                          onClick={() => setActivePayBill(inv)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-zinc-900 dark:bg-white dark:text-zinc-950 hover:opacity-90 shadow-xs transition-opacity"
+                          onClick={() => setActiveDetailId(inv.id)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                         >
-                          Pay Bill
+                          View Bill
                         </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
           {/* Mobile Responsive Cards */}
           <div className="md:hidden divide-y divide-zinc-100 dark:divide-zinc-800">
-            {filteredInvoices.map((inv) => (
-              <div key={inv.id} className="p-4 space-y-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="font-bold text-sm text-zinc-900 dark:text-white block">
-                      {inv.invoice_number}
-                    </span>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Order #{inv.order_number} · {inv.terms_name}
-                    </p>
-                  </div>
-                  {getStatusBadge(inv.ar_status)}
-                </div>
+            {filteredInvoices.map((inv) => {
+              const isPayable = Number(inv.balance_due || 0) > 0 && inv.ar_status !== "PAID";
+              const isSelected = selectedInvoiceIds.has(inv.id);
 
-                <div className="grid grid-cols-2 gap-2 text-xs p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800/60">
-                  <div>
-                    <span className="text-[10px] text-zinc-400 uppercase font-bold">Due Date</span>
-                    <p className="font-semibold text-zinc-900 dark:text-white mt-0.5">
-                      {new Date(inv.due_date).toLocaleDateString()}
-                    </p>
-                    <p
-                      className={`text-[10px] ${
-                        inv.ar_status === "PAST_DUE"
-                          ? "text-rose-600 font-bold"
-                          : inv.ar_status === "DUE_SOON"
-                          ? "text-amber-600 font-bold"
-                          : "text-zinc-400"
-                      }`}
-                    >
-                      {formatDueRelative(inv.due_date, inv.ar_status)}
-                    </p>
+              return (
+                <div
+                  key={inv.id}
+                  className={`p-4 space-y-3 transition-colors ${
+                    isSelected ? "bg-blue-50/40 dark:bg-blue-950/20" : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5">
+                      {isPayable && (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleInvoiceSelection(inv.id)}
+                          className="mt-1 w-4 h-4 rounded-sm border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                        />
+                      )}
+                      <div>
+                        <span className="font-bold text-sm text-zinc-900 dark:text-white block">
+                          {inv.invoice_number}
+                        </span>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          Issued {new Date(inv.invoice_date).toLocaleDateString()} · Order #{inv.order_number}
+                        </p>
+                      </div>
+                    </div>
+                    {getStatusBadge(inv.ar_status)}
                   </div>
 
-                  <div className="text-right">
-                    <span className="text-[10px] text-zinc-400 uppercase font-bold">Balance Due</span>
-                    <p className="text-base font-extrabold text-zinc-900 dark:text-white mt-0.5">
-                      ${inv.balance_due.toFixed(2)}
-                    </p>
-                    <p className="text-[10px] text-zinc-400">
-                      of ${inv.total_amount.toFixed(2)} total
-                    </p>
-                  </div>
-                </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800/60">
+                    <div>
+                      <span className="text-[10px] text-zinc-400 uppercase font-bold">Due Date</span>
+                      <p className="font-semibold text-zinc-900 dark:text-white mt-0.5">
+                        {new Date(inv.due_date).toLocaleDateString()}
+                      </p>
+                    </div>
 
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveDetailId(inv.id)}
-                    className="flex-1 py-2 rounded-xl text-xs font-semibold text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 text-center"
-                  >
-                    View Bill
-                  </button>
-                  {inv.balance_due > 0 && (
+                    <div className="text-center">
+                      <span className="text-[10px] text-zinc-400 uppercase font-bold">SKUs</span>
+                      <p className="font-semibold text-zinc-900 dark:text-white mt-0.5">
+                        {inv.total_skus_count ?? 1}
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] text-zinc-400 uppercase font-bold">Balance Due</span>
+                      <p className="text-sm font-extrabold text-zinc-900 dark:text-white mt-0.5">
+                        ${inv.balance_due.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => setActivePayBill(inv)}
-                      className="flex-1 py-2 rounded-xl text-xs font-bold text-white bg-zinc-900 dark:bg-white dark:text-zinc-950 text-center shadow-xs"
+                      onClick={() => setActiveDetailId(inv.id)}
+                      className="w-full py-2 rounded-xl text-xs font-semibold text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 text-center"
                     >
-                      Pay Bill
+                      View Bill
                     </button>
-                  )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -456,13 +604,23 @@ export function RetailerBillsManager({
         />
       )}
 
-      {/* Pay Bill Modal */}
+      {/* Pay Single Bill Modal (Triggered from Bill Detail if desired) */}
       {activePayBill && (
         <PayBillModal
           bill={activePayBill}
           effectivePolicy={effectivePolicy}
           isOpen={Boolean(activePayBill)}
           onClose={() => setActivePayBill(null)}
+        />
+      )}
+
+      {/* Multi-Invoice Payment Modal */}
+      {isMultiPayOpen && (
+        <MultiPayBillModal
+          selectedBills={selectedBills}
+          effectivePolicy={effectivePolicy}
+          isOpen={isMultiPayOpen}
+          onClose={() => setIsMultiPayOpen(false)}
         />
       )}
     </div>

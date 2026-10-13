@@ -13,9 +13,30 @@ export const metadata: Metadata = {
   description: "View and track your store purchase orders and wholesale shipments.",
 };
 
-export default async function RetailerOrdersPage() {
+export default async function RetailerOrdersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   await verifyRetailerSession();
-  const orders = await getRetailerOrders();
+  const resolvedParams = searchParams ? await searchParams : {};
+  const search = typeof resolvedParams.search === "string" ? resolvedParams.search : undefined;
+  const sku = typeof resolvedParams.sku === "string" ? resolvedParams.sku : undefined;
+  const startDate = typeof resolvedParams.startDate === "string" ? resolvedParams.startDate : undefined;
+  const endDate = typeof resolvedParams.endDate === "string" ? resolvedParams.endDate : undefined;
+  const orderStatus = typeof resolvedParams.orderStatus === "string" ? resolvedParams.orderStatus : undefined;
+  const paymentStatus = typeof resolvedParams.paymentStatus === "string" ? resolvedParams.paymentStatus : undefined;
+
+  const initialFilters = {
+    search,
+    sku,
+    startDate,
+    endDate,
+    orderStatus,
+    paymentStatus,
+  };
+
+  const orders = await getRetailerOrders(initialFilters);
   const { t } = await getServerTranslations();
 
   return (
@@ -39,7 +60,10 @@ export default async function RetailerOrdersPage() {
       </div>
 
       {/* Orders List */}
-      <RetailerOrdersList orders={orders} />
+      <RetailerOrdersList
+        initialOrders={orders}
+        initialFilters={initialFilters}
+      />
     </div>
   );
 }

@@ -21,6 +21,7 @@ export interface RetailerBillSummary {
   payment_status: string;
   ar_status: ARStatus;
   issued_at: string;
+  total_skus_count: number;
 }
 
 export interface RetailerBillLineItem {

@@ -27,6 +27,7 @@ function parsePaymentNotesSnapshot(notes?: string | null): {
   payment_snapshot?: any;
   order_total_snapshot?: any;
   promotion_snapshot?: any;
+  shipping_snapshot?: any;
 } | null {
   if (!notes || !notes.includes("[PAYMENT_SNAPSHOT]:")) return null;
   try {
@@ -57,7 +58,18 @@ export interface RetailerOrderSummary {
   createdAt: string;
   storeId: string | null;
   storeName: string;
+  destinationLabel: string;
+  destinationType: string;
   isTest: boolean;
+}
+
+export interface GetRetailerOrdersFilter {
+  search?: string;
+  sku?: string;
+  startDate?: string;
+  endDate?: string;
+  orderStatus?: string;
+  paymentStatus?: string;
 }
 
 export interface RetailerOrderItemDetail {
@@ -979,9 +991,11 @@ export async function submitRetailerOrder(
 }
 
 /**
- * Fetch list of orders for the authenticated retailer
+ * Fetch list of orders for the authenticated retailer with optional server-side filters
  */
-export async function getRetailerOrders(): Promise<RetailerOrderSummary[]> {
+export async function getRetailerOrders(
+  filters?: GetRetailerOrdersFilter
+): Promise<RetailerOrderSummary[]> {
   try {
     const session = await verifyRetailerSession();
     const adminClient = createAdminClient();
@@ -995,8 +1009,32 @@ export async function getRetailerOrders(): Promise<RetailerOrderSummary[]> {
     const companyId = companyUser?.company_id;
     if (!companyId) return [];
 
-    let orders: any[] | null = null;
-    const { data: fullOrders, error: fullErr } = await adminClient
+    // 1. SKU Search: If a dedicated SKU or general search is provided, check matching line items
+    const skuQuery = (filters?.sku || "").trim();
+    const generalSearch = (filters?.search || "").trim();
+    let skuMatchedOrderIds: string[] | null = null;
+
+    if (skuQuery) {
+      const { data: itemRows } = await adminClient
+        .from("retailer_order_items")
+        .select("order_id")
+        .ilike("sku", `%${skuQuery}%`);
+
+      skuMatchedOrderIds = Array.from(new Set((itemRows || []).map((r) => r.order_id)));
+      if (skuMatchedOrderIds.length === 0) {
+        return [];
+      }
+    } else if (generalSearch) {
+      const { data: itemRows } = await adminClient
+        .from("retailer_order_items")
+        .select("order_id")
+        .ilike("sku", `%${generalSearch}%`);
+
+      skuMatchedOrderIds = Array.from(new Set((itemRows || []).map((r) => r.order_id)));
+    }
+
+    // 2. Query retailer_orders strictly scoped to companyId (Tenant Isolation)
+    let query = adminClient
       .from("retailer_orders")
       .select(`
         id,
@@ -1019,18 +1057,55 @@ export async function getRetailerOrders(): Promise<RetailerOrderSummary[]> {
         created_at,
         store_id,
         is_test,
+        shipping_destination_type,
+        shipping_snapshot,
+        shipping_address,
+        recipient_name,
         stores (
           id,
           name
         )
       `)
-      .eq("company_id", companyId)
-      .order("created_at", { ascending: false });
+      .eq("company_id", companyId);
 
-    if (!fullErr && fullOrders) {
-      orders = fullOrders;
-    } else {
-      const { data: baseOrders, error: baseErr } = await adminClient
+    // Filter by SKU or general search
+    if (skuQuery) {
+      if (skuMatchedOrderIds && skuMatchedOrderIds.length > 0) {
+        query = query.in("id", skuMatchedOrderIds);
+      }
+    } else if (generalSearch) {
+      if (skuMatchedOrderIds && skuMatchedOrderIds.length > 0) {
+        query = query.or(`order_number.ilike.%${generalSearch}%,id.in.(${skuMatchedOrderIds.join(",")})`);
+      } else {
+        query = query.ilike("order_number", `%${generalSearch}%`);
+      }
+    }
+
+    // Date range filter
+    if (filters?.startDate) {
+      query = query.gte("created_at", `${filters.startDate}T00:00:00.000Z`);
+    }
+    if (filters?.endDate) {
+      query = query.lte("created_at", `${filters.endDate}T23:59:59.999Z`);
+    }
+
+    // Status filters
+    if (filters?.orderStatus && filters.orderStatus !== "all") {
+      query = query.eq("order_status", filters.orderStatus.toLowerCase());
+    }
+    if (filters?.paymentStatus && filters.paymentStatus !== "all") {
+      query = query.eq("payment_status", filters.paymentStatus.toLowerCase());
+    }
+
+    query = query.order("created_at", { ascending: false });
+
+    let orders: any[] | null = null;
+    const { data: initialOrders, error: fullErr } = await query;
+    orders = initialOrders;
+
+    if (fullErr) {
+      console.warn("Retrying retailer_orders with baseline columns:", fullErr.message);
+      let baseQuery = adminClient
         .from("retailer_orders")
         .select(`
           id,
@@ -1054,18 +1129,59 @@ export async function getRetailerOrders(): Promise<RetailerOrderSummary[]> {
             name
           )
         `)
-        .eq("company_id", companyId)
-        .order("created_at", { ascending: false });
+        .eq("company_id", companyId);
 
-      if (baseErr || !baseOrders) {
-        console.error("Error fetching retailer orders baseline:", baseErr);
-        return [];
+      if (skuQuery && skuMatchedOrderIds) {
+        baseQuery = baseQuery.in("id", skuMatchedOrderIds);
+      } else if (generalSearch) {
+        if (skuMatchedOrderIds && skuMatchedOrderIds.length > 0) {
+          baseQuery = baseQuery.or(`order_number.ilike.%${generalSearch}%,id.in.(${skuMatchedOrderIds.join(",")})`);
+        } else {
+          baseQuery = baseQuery.ilike("order_number", `%${generalSearch}%`);
+        }
       }
-      orders = baseOrders;
+      if (filters?.startDate) {
+        baseQuery = baseQuery.gte("created_at", `${filters.startDate}T00:00:00.000Z`);
+      }
+      if (filters?.endDate) {
+        baseQuery = baseQuery.lte("created_at", `${filters.endDate}T23:59:59.999Z`);
+      }
+      if (filters?.orderStatus && filters.orderStatus !== "all") {
+        baseQuery = baseQuery.eq("order_status", filters.orderStatus.toLowerCase());
+      }
+      if (filters?.paymentStatus && filters.paymentStatus !== "all") {
+        baseQuery = baseQuery.eq("payment_status", filters.paymentStatus.toLowerCase());
+      }
+      baseQuery = baseQuery.order("created_at", { ascending: false });
+
+      const fallbackRes = await baseQuery;
+      orders = fallbackRes.data;
     }
 
-    return orders.map((o) => {
+    if (!orders) return [];
+
+    return orders.map((o: any) => {
       const parsed = parsePaymentNotesSnapshot(o.payment_notes);
+      const snap = o.shipping_snapshot || parsed?.shipping_snapshot;
+
+      let destinationLabel = (o.stores as any)?.name || "Main Store";
+      let destinationType = o.shipping_destination_type || "store";
+
+      if (snap) {
+        if (snap.label) {
+          destinationLabel = snap.label;
+        } else if (snap.store_name) {
+          destinationLabel = snap.store_name;
+        } else if (snap.recipient_name) {
+          destinationLabel = snap.recipient_name;
+        }
+        if (snap.destination_type) {
+          destinationType = snap.destination_type;
+        }
+      } else if (o.recipient_name && o.shipping_destination_type === "custom_address") {
+        destinationLabel = o.recipient_name;
+      }
+
       return {
         id: o.id,
         orderNumber: o.order_number,
@@ -1081,11 +1197,13 @@ export async function getRetailerOrders(): Promise<RetailerOrderSummary[]> {
         processingFee: Number(o.processing_fee || parsed?.payment_snapshot?.fee_amount || 0),
         couponCode: o.coupon_code || parsed?.promotion_snapshot?.coupon_code || null,
         paymentSnapshot: o.payment_snapshot || parsed?.payment_snapshot || null,
-        totalItemsCount: o.total_items_count,
-        totalSkusCount: o.total_skus_count,
+        totalItemsCount: Number(o.total_items_count || 0),
+        totalSkusCount: Number(o.total_skus_count || 0),
         createdAt: o.created_at,
         storeId: o.store_id,
         storeName: (o.stores as any)?.name || "Main Store",
+        destinationLabel,
+        destinationType,
         isTest: Boolean(o.is_test),
       };
     });
@@ -1093,6 +1211,15 @@ export async function getRetailerOrders(): Promise<RetailerOrderSummary[]> {
     console.error("getRetailerOrders exception:", err);
     return [];
   }
+}
+
+/**
+ * Server Action for dynamic live order filtering and search
+ */
+export async function getRetailerOrdersAction(
+  filters?: GetRetailerOrdersFilter
+): Promise<RetailerOrderSummary[]> {
+  return getRetailerOrders(filters);
 }
 
 /**
@@ -1254,6 +1381,23 @@ export async function getRetailerOrderDetail(
     }
 
     const parsedSnapshot = parsePaymentNotesSnapshot(order.payment_notes);
+    const snap = (order as any).shipping_snapshot || (parsedSnapshot as any)?.shipping_snapshot;
+
+    let destinationLabel = (order.stores as any)?.name || "Main Store";
+    let destinationType = (order as any).shipping_destination_type || "store";
+
+    if (snap) {
+      if (snap.label) {
+        destinationLabel = snap.label;
+      } else if (snap.store_name) {
+        destinationLabel = snap.store_name;
+      } else if (snap.recipient_name) {
+        destinationLabel = snap.recipient_name;
+      }
+      if (snap.destination_type) {
+        destinationType = snap.destination_type;
+      }
+    }
 
     // Fetch payments history
     const payments = await getOrderPayments(order.id);
@@ -1333,6 +1477,8 @@ export async function getRetailerOrderDetail(
       createdAt: order.created_at,
       storeId: order.store_id,
       storeName: (order.stores as any)?.name || "Main Store",
+      destinationLabel,
+      destinationType,
       items,
       payments,
       fulfillments,
