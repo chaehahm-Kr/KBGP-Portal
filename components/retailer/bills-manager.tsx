@@ -514,8 +514,19 @@ export function RetailerBillsManager({
                       </td>
 
                       {/* Balance Due */}
-                      <td className="py-3.5 px-3 text-right font-extrabold text-sm text-zinc-900 dark:text-white">
-                        ${inv.balance_due.toFixed(2)}
+                      <td className="py-3.5 px-3 text-right text-sm">
+                        {inv.invoice_status === "void" || inv.invoice_status === "cancelled" ? (
+                          <div className="flex flex-col items-end">
+                            <span className="font-extrabold text-zinc-500 dark:text-zinc-400">$0.00</span>
+                            <span className="line-through text-[10px] text-zinc-400 font-medium">
+                              Orig. ${inv.balance_due.toFixed(2)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="font-extrabold text-zinc-900 dark:text-white">
+                            ${inv.balance_due.toFixed(2)}
+                          </span>
+                        )}
                       </td>
 
                       {/* Status */}
@@ -596,9 +607,16 @@ export function RetailerBillsManager({
 
                     <div className="text-right">
                       <span className="text-[10px] text-zinc-400 uppercase font-bold">Balance Due</span>
-                      <p className="text-sm font-extrabold text-zinc-900 dark:text-white mt-0.5">
-                        ${inv.balance_due.toFixed(2)}
-                      </p>
+                      {inv.invoice_status === "void" || inv.invoice_status === "cancelled" ? (
+                        <p className="mt-0.5">
+                          <span className="text-sm font-extrabold text-zinc-500 dark:text-zinc-400 mr-1">$0.00</span>
+                          <span className="line-through text-[10px] text-zinc-400">Orig. ${inv.balance_due.toFixed(2)}</span>
+                        </p>
+                      ) : (
+                        <p className="text-sm font-extrabold text-zinc-900 dark:text-white mt-0.5">
+                          ${inv.balance_due.toFixed(2)}
+                        </p>
+                      )}
                     </div>
                   </div>
 

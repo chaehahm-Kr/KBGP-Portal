@@ -854,15 +854,32 @@ export function RetailerDetailView({ data }: RetailerDetailViewProps) {
                           </span>
                         </div>
 
-                        {ord.orderStatus !== "delivered" && ord.orderStatus !== "cancelled" && (
-                          <button
-                            type="button"
-                            onClick={() => openCreateShipmentModal(ord)}
-                            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
-                          >
-                            + Create Shipment
-                          </button>
-                        )}
+                        {(() => {
+                          const ordRemainingUnits = (ord.items || []).reduce(
+                            (sum: number, it: any) => sum + Math.max(0, Number(it.quantity || 0) - Number(it.quantityShipped || 0)),
+                            0
+                          );
+                          const isTerminal = ["shipped", "delivered", "cancelled"].includes(
+                            ord.orderStatus.toLowerCase()
+                          );
+                          const canShip = !isTerminal && ordRemainingUnits > 0;
+
+                          return canShip ? (
+                            <button
+                              type="button"
+                              onClick={() => openCreateShipmentModal(ord)}
+                              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
+                            >
+                              + Create Shipment
+                            </button>
+                          ) : (
+                            <span className="rounded-xl bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 border border-zinc-200 dark:border-zinc-700">
+                              {ord.orderStatus.toLowerCase() === "cancelled"
+                                ? "Cancelled"
+                                : "Fully Dispatched"}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
 

@@ -156,7 +156,8 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
         <div className="flex flex-wrap items-center gap-2">
           {getStatusBadge(order.orderStatus)}
 
-          {order.totalRemainingUnits > 0 && order.orderStatus !== "cancelled" && (
+          {order.totalRemainingUnits > 0 &&
+            !["cancelled", "shipped", "delivered"].includes(order.orderStatus.toLowerCase()) && (
             <button
               type="button"
               onClick={() => setShowShipModal(true)}
@@ -478,6 +479,19 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
                 <span className="text-zinc-500">Wholesale Subtotal:</span>
                 <span className="font-bold">${order.subtotalAmount.toFixed(2)}</span>
               </div>
+              {order.discountAmount && order.discountAmount > 0 ? (
+                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span className="flex items-center gap-1.5">
+                    <span>Promotional Discount:</span>
+                    {order.couponCode && (
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                        {order.couponCode}
+                      </span>
+                    )}
+                  </span>
+                  <span className="font-bold">-${order.discountAmount.toFixed(2)}</span>
+                </div>
+              ) : null}
               <div className="flex justify-between">
                 <span className="text-zinc-500">Freight & Shipping:</span>
                 <span className="font-bold">${order.shippingAmount.toFixed(2)}</span>

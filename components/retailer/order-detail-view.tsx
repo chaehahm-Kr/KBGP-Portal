@@ -45,7 +45,7 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
       case "delivered":
         return (
           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-            Delivered (Legacy)
+            Shipped
           </span>
         );
       case "partially_cancelled":
@@ -168,30 +168,72 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
         </div>
       </div>
 
-      {/* Visual Lifecycle Progress Tracker */}
+      {/* Visual Lifecycle Progress Tracker (Strict Order-Level: Submitted -> Processing -> Shipped) */}
       <div className="p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-3">
         <div className="flex items-center justify-between text-xs font-bold text-zinc-500">
           <span>Order Lifecycle Progress</span>
           <span className="text-indigo-600 dark:text-indigo-400">
-            {order.totalOrderedUnits > 0
-              ? `${Math.round(((order.totalShippedUnits || 0) / order.totalOrderedUnits) * 100)}% Fulfilled`
+            {order.orderStatus === "cancelled"
+              ? "Cancelled / Voided"
+              : order.totalOrderedUnits > 0
+              ? `${Math.round(((order.totalShippedUnits || 0) / order.totalOrderedUnits) * 100)}% Shipped`
               : "In Progress"}
           </span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
-          <div className="p-2.5 rounded-xl border bg-blue-50/60 dark:bg-blue-950/40 border-blue-200 text-blue-700 dark:text-blue-400 font-bold">
-            1. Order Placed ✓
+
+        {order.orderStatus === "cancelled" ? (
+          <div className="p-3 rounded-xl border border-rose-200 bg-rose-50/70 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 text-xs font-semibold flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <span>⛔</span>
+              <span>This order has been cancelled and voided. No further shipments will occur.</span>
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-rose-200/60 dark:bg-rose-900/60 px-2 py-0.5 rounded">
+              Order Cancelled
+            </span>
           </div>
-          <div className={`p-2.5 rounded-xl border ${["processing", "partially_shipped", "shipped"].includes(order.orderStatus.toLowerCase()) ? "bg-amber-50/60 dark:bg-amber-950/40 border-amber-200 text-amber-700 dark:text-amber-400 font-bold" : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-800 text-zinc-400"}`}>
-            2. Warehouse Packing
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center text-xs">
+            {/* Stage 1: Order Submitted */}
+            <div className="p-2.5 rounded-xl border bg-blue-50/60 dark:bg-blue-950/40 border-blue-200 text-blue-700 dark:text-blue-400 font-bold">
+              1. Order Submitted ✓
+            </div>
+
+            {/* Stage 2: Warehouse Processing */}
+            <div
+              className={`p-2.5 rounded-xl border ${
+                ["processing", "partially_shipped", "shipped"].includes(order.orderStatus.toLowerCase())
+                  ? "bg-amber-50/60 dark:bg-amber-950/40 border-amber-200 text-amber-700 dark:text-amber-400 font-bold"
+                  : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-800 text-zinc-400"
+              }`}
+            >
+              2. Warehouse Processing
+              {["partially_shipped", "shipped"].includes(order.orderStatus.toLowerCase()) && " ✓"}
+            </div>
+
+            {/* Stage 3: Shipped (Terminal Fulfillment State) */}
+            <div
+              className={`p-2.5 rounded-xl border ${
+                order.orderStatus.toLowerCase() === "shipped"
+                  ? "bg-emerald-50/60 dark:bg-emerald-950/40 border-emerald-200 text-emerald-700 dark:text-emerald-400 font-bold"
+                  : order.orderStatus.toLowerCase() === "partially_shipped"
+                  ? "bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-200 text-indigo-700 dark:text-indigo-400 font-bold"
+                  : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-800 text-zinc-400"
+              }`}
+            >
+              {order.orderStatus.toLowerCase() === "shipped"
+                ? "3. Shipped ✓"
+                : order.orderStatus.toLowerCase() === "partially_shipped"
+                ? `3. Partially Shipped (${order.totalShippedUnits || 0}/${order.totalOrderedUnits || order.totalItemsCount})`
+                : "3. Shipped"}
+            </div>
           </div>
-          <div className={`p-2.5 rounded-xl border ${["partially_shipped", "shipped"].includes(order.orderStatus.toLowerCase()) ? "bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-200 text-indigo-700 dark:text-indigo-400 font-bold" : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-800 text-zinc-400"}`}>
-            3. In Transit (Carrier)
+        )}
+
+        {order.orderStatus === "partially_cancelled" && (
+          <div className="text-[11px] text-orange-600 dark:text-orange-400 font-medium px-1">
+            ⚠️ Partial order cancellation: {order.totalCancelledUnits} unit{order.totalCancelledUnits === 1 ? "" : "s"} cancelled/voided.
           </div>
-          <div className={`p-2.5 rounded-xl border ${order.orderStatus.toLowerCase() === "shipped" || order.orderStatus.toLowerCase() === "delivered" ? "bg-emerald-50/60 dark:bg-emerald-950/40 border-emerald-200 text-emerald-700 dark:text-emerald-400 font-bold" : order.orderStatus.toLowerCase() === "cancelled" ? "bg-rose-50 border-rose-200 text-rose-600 font-bold" : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-800 text-zinc-400"}`}>
-            {order.orderStatus.toLowerCase() === "cancelled" ? "Voided / Cancelled" : "4. Delivered"}
-          </div>
-        </div>
+        )}
       </div>
 
       {/* 4-Way Units Reconciliation Summary Card */}
@@ -211,7 +253,7 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
               {order.totalShippedUnits || 0}
             </span>
             <span className="text-[10px] text-indigo-400 block">
-              units {order.boxCount > 0 ? `in ${order.boxCount} boxes` : ""}
+              units {order.packages && order.packages.length > 0 ? `in ${order.packages.length} boxes` : order.fulfillments && order.fulfillments.length > 0 ? `across ${order.fulfillments.length} dispatch${order.fulfillments.length === 1 ? "" : "es"}` : ""}
             </span>
           </div>
 
@@ -630,6 +672,29 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
                   ${order.subtotalAmount.toFixed(2)}
                 </span>
               </div>
+              {order.discountAmount && order.discountAmount > 0 ? (
+                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span className="flex items-center gap-1.5">
+                    <span>Promotional Discount:</span>
+                    {order.couponCode && (
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                        {order.couponCode}
+                      </span>
+                    )}
+                  </span>
+                  <span className="font-bold">
+                    -${order.discountAmount.toFixed(2)}
+                  </span>
+                </div>
+              ) : null}
+              {order.processingFee && order.processingFee > 0 ? (
+                <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                  <span>Processing Fee:</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">
+                    +${order.processingFee.toFixed(2)}
+                  </span>
+                </div>
+              ) : null}
               <div className="flex justify-between text-zinc-500">
                 <span>Shipping & Freight:</span>
                 <span className="italic text-zinc-400">

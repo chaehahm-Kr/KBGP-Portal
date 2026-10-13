@@ -1572,13 +1572,32 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                           {formatCurrency(order.totalAmount)}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenFulfillmentModal(order)}
-                        className="rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 transition-colors shadow-2xs cursor-pointer"
-                      >
-                        + Create Shipment
-                      </button>
+                      {(() => {
+                        const orderRemainingUnits = (order.items || []).reduce(
+                          (sum, it) => sum + Math.max(0, Number(it.quantity || 0) - Number(it.quantityShipped || 0)),
+                          0
+                        );
+                        const isTerminal = ["shipped", "delivered", "cancelled"].includes(
+                          order.orderStatus.toLowerCase()
+                        );
+                        const canCreateShipment = !isTerminal && orderRemainingUnits > 0;
+
+                        return canCreateShipment ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFulfillmentModal(order)}
+                            className="rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 transition-colors shadow-2xs cursor-pointer"
+                          >
+                            + Create Shipment
+                          </button>
+                        ) : (
+                          <span className="rounded-xl bg-zinc-100 dark:bg-zinc-800/80 px-3 py-1.5 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 border border-zinc-200 dark:border-zinc-700/60">
+                            {order.orderStatus.toLowerCase() === "cancelled"
+                              ? "Cancelled"
+                              : "Fully Dispatched"}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
 

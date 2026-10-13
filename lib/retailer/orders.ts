@@ -70,6 +70,15 @@ export interface RetailerOrderSummary {
     trackingNumber: string;
     trackingUrl: string | null;
   }>;
+  fulfillments?: Array<{
+    id: string;
+    fulfillmentNumber: string;
+    carrier: string | null;
+    trackingNumber: string | null;
+    trackingUrl: string | null;
+    status: string;
+    boxCount?: number;
+  }>;
   invoices?: Array<{
     id: string;
     invoiceNumber: string;
@@ -1192,12 +1201,14 @@ export async function getRetailerOrders(
     const itemsMap = new Map<string, any[]>();
     const packagesMap = new Map<string, any[]>();
     const invoicesMap = new Map<string, any[]>();
+    const fulfillmentsMap = new Map<string, any[]>();
 
     if (orderIds.length > 0) {
-      const [itemsRes, pkgsRes, invsRes] = await Promise.all([
+      const [itemsRes, pkgsRes, invsRes, fulsRes] = await Promise.all([
         adminClient.from("retailer_order_items").select("order_id, quantity, quantity_shipped, quantity_cancelled").in("order_id", orderIds),
         adminClient.from("retailer_order_packages").select("*").in("order_id", orderIds).order("box_number", { ascending: true }),
         adminClient.from("retailer_invoices").select("id, order_id, invoice_number, invoice_status, payment_status, balance_due, due_date").in("order_id", orderIds),
+        adminClient.from("retailer_order_fulfillments").select("id, order_id, fulfillment_number, carrier, tracking_number, tracking_url, status, box_count").in("order_id", orderIds).order("created_at", { ascending: true }),
       ]);
 
       if (itemsRes.data) {
@@ -1233,6 +1244,21 @@ export async function getRetailerOrders(
             dueDate: inv.due_date,
           });
           invoicesMap.set(inv.order_id, arr);
+        });
+      }
+      if (fulsRes.data) {
+        fulsRes.data.forEach((f: any) => {
+          const arr = fulfillmentsMap.get(f.order_id) || [];
+          arr.push({
+            id: f.id,
+            fulfillmentNumber: f.fulfillment_number,
+            carrier: f.carrier,
+            trackingNumber: f.tracking_number,
+            trackingUrl: resolveCarrierTrackingUrl(f.carrier, f.tracking_number, f.tracking_url),
+            status: f.status,
+            boxCount: Number(f.box_count || 0),
+          });
+          fulfillmentsMap.set(f.order_id, arr);
         });
       }
     }
@@ -1271,7 +1297,9 @@ export async function getRetailerOrders(
         : Number(o.total_cancelled_units || (o.order_status === 'cancelled' ? totalOrderedUnits : 0));
       const totalRemainingUnits = Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits);
       const pkgs = packagesMap.get(o.id) || [];
-      const boxCount = pkgs.length > 0 ? pkgs.length : (totalShippedUnits > 0 ? 1 : 0);
+      const fuls = fulfillmentsMap.get(o.id) || [];
+      // Box count comes strictly from package records; do NOT fabricate box counts or assume 1 Dispatch = 1 Box
+      const boxCount = pkgs.length;
       const invs = invoicesMap.get(o.id) || [];
 
       const authoritativeStatus = computeAuthoritativeOrderStatus(
@@ -1304,6 +1332,7 @@ export async function getRetailerOrders(
         totalRemainingUnits,
         boxCount,
         packages: pkgs,
+        fulfillments: fuls,
         invoices: invs,
         cancellationRequested: Boolean(o.cancellation_requested),
         refundAmount: Number(o.refund_amount || 0),
@@ -1582,7 +1611,8 @@ export async function getRetailerOrderDetail(
     const totalShippedUnits = items.reduce((acc, it) => acc + (it.quantityShipped || 0), 0);
     const totalCancelledUnits = items.reduce((acc, it) => acc + (it.quantityCancelled || 0), 0);
     const totalRemainingUnits = Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits);
-    const boxCount = packages.length > 0 ? packages.length : (totalShippedUnits > 0 ? 1 : 0);
+    // Box count comes strictly from package records; do NOT fabricate box counts or assume 1 Dispatch = 1 Box
+    const boxCount = packages.length;
 
     const authoritativeStatus = computeAuthoritativeOrderStatus(
       order.order_status,

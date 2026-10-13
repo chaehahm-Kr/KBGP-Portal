@@ -460,18 +460,67 @@ export function RetailerOrdersList({
 
                     {/* Shipping Summary with Clickable Box Count */}
                     <td className="py-3.5 px-4">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
-                          {order.totalShippedUnits || 0} / {order.totalOrderedUnits || order.totalItemsCount} Shipped
-                        </span>
-                        {order.packages && order.packages.length > 0 ? (
-                          <PackagesPopover packages={order.packages as any} orderNumber={order.orderNumber} />
-                        ) : order.totalShippedUnits > 0 ? (
+                      {order.packages && order.packages.length > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
+                              {order.totalShippedUnits || 0} / {order.totalOrderedUnits || order.totalItemsCount} Shipped
+                            </span>
+                            <span className="text-zinc-300 dark:text-zinc-600 font-bold">|</span>
+                            <PackagesPopover packages={order.packages as any} orderNumber={order.orderNumber} />
+                          </div>
+                        </div>
+                      ) : order.fulfillments && order.fulfillments.length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
+                            {order.totalShippedUnits || 0} / {order.totalOrderedUnits || order.totalItemsCount} Shipped
+                          </span>
+                          <div className="flex items-center gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                            <span>Dispatch:</span>
+                            {order.fulfillments[0].carrier && (
+                              <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                                {order.fulfillments[0].carrier}
+                              </span>
+                            )}
+                            {order.fulfillments[0].trackingNumber ? (
+                              order.fulfillments[0].trackingUrl ? (
+                                <a
+                                  href={order.fulfillments[0].trackingUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="font-mono text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-0.5"
+                                >
+                                  <span>{order.fulfillments[0].trackingNumber}</span>
+                                  <span className="text-[9px]">↗</span>
+                                </a>
+                              ) : (
+                                <span className="font-mono">{order.fulfillments[0].trackingNumber}</span>
+                              )
+                            ) : (
+                              <span className="italic text-zinc-400">No tracking #</span>
+                            )}
+                            {order.fulfillments.length > 1 && (
+                              <span className="text-[9px] text-zinc-400 font-bold">
+                                (+{order.fulfillments.length - 1} more)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ) : order.totalShippedUnits > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
+                            {order.totalShippedUnits || 0} / {order.totalOrderedUnits || order.totalItemsCount} Shipped
+                          </span>
                           <span className="text-[10px] text-zinc-400">📦 Dispatched</span>
-                        ) : (
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                          <span>0 / {order.totalOrderedUnits || order.totalItemsCount} Shipped</span>
+                          <span className="text-zinc-300 dark:text-zinc-600">|</span>
                           <span className="text-[10px] text-zinc-400">⏳ Packing in Whs</span>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </td>
 
                     {/* Unified Order Status Column */}
@@ -487,16 +536,20 @@ export function RetailerOrdersList({
                     {/* Invoice & Payment Column */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       {order.invoices && order.invoices.length > 0 ? (
-                        <div>
-                          <Link
-                            href="/bills"
-                            className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline block"
-                          >
-                            {order.invoices[0].invoiceNumber}
-                          </Link>
-                          <span className="text-[10px] text-zinc-500">
-                            {order.invoices[0].invoiceStatus.toUpperCase()} • Due {new Date(order.invoices[0].dueDate).toLocaleDateString()}
-                          </span>
+                        <div className="space-y-1">
+                          {order.invoices.map((inv) => (
+                            <div key={inv.id}>
+                              <Link
+                                href="/bills"
+                                className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline inline-flex items-center gap-1"
+                              >
+                                <span>{inv.invoiceNumber}</span>
+                              </Link>
+                              <span className="text-[10px] text-zinc-500 block">
+                                {inv.invoiceStatus.toUpperCase()} • Due {new Date(inv.dueDate).toLocaleDateString()}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <div>
@@ -575,10 +628,14 @@ export function RetailerOrdersList({
 
                 {/* Shipping Summary in Mobile Card */}
                 <div className="flex items-center justify-between pt-1 text-[11px]">
-                  <span className="text-zinc-500">Dispatch Progress:</span>
+                  <span className="text-zinc-500">Shipping Summary:</span>
                   <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                    {order.totalShippedUnits || 0} / {order.totalOrderedUnits || order.totalItemsCount} units
-                    {order.boxCount > 0 && ` (📦 ${order.boxCount} boxes)`}
+                    {order.totalShippedUnits || 0} / {order.totalOrderedUnits || order.totalItemsCount} Shipped
+                    {order.packages && order.packages.length > 0
+                      ? ` | 📦 ${order.packages.length} ${order.packages.length === 1 ? "Box" : "Boxes"}`
+                      : order.fulfillments && order.fulfillments.length > 0 && order.fulfillments[0].trackingNumber
+                      ? ` | ${order.fulfillments[0].carrier || "Carrier"}: ${order.fulfillments[0].trackingNumber}`
+                      : ""}
                   </span>
                 </div>
               </div>

@@ -155,6 +155,15 @@ export async function adminCreateOrderFulfillmentAction(params: {
       return { success: false, error: "Retailer order not found." };
     }
 
+    // Guard: Prevent fulfillment on terminal orders (shipped, delivered, cancelled)
+    const orderStatusNorm = (order.order_status || "").toLowerCase();
+    if (["cancelled", "shipped", "delivered"].includes(orderStatusNorm)) {
+      return {
+        success: false,
+        error: `Cannot create fulfillment: Order is already ${order.order_status}.`,
+      };
+    }
+
     if (!order.store_id) {
       return { success: false, error: "Order does not have a destination store assigned." };
     }
@@ -366,9 +375,20 @@ export async function adminMarkFulfillmentShippedAction(params: {
       .update({ order_status: nextOrderStatus, updated_at: new Date().toISOString() })
       .eq("id", fulfillment.order_id);
 
+    // Phase B3: Authoritative Dispatch-Based Invoicing
+    const { createDispatchInvoice } = await import("@/lib/finance/dispatch-invoicing");
+    const invResult = await createDispatchInvoice(adminClient, params.fulfillmentId);
+    if (!invResult.success) {
+      console.warn("Notice: Dispatch invoice creation warning:", invResult.error);
+    }
+
     revalidatePath(`/admin/retailers/${fulfillment.company_id}`);
+    revalidatePath("/admin/sales/orders");
+    revalidatePath(`/admin/sales/orders/${fulfillment.order_id}`);
+    revalidatePath("/admin/finance/receivables");
     revalidatePath("/orders");
     revalidatePath(`/orders/${fulfillment.order_id}`);
+    revalidatePath("/bills");
 
     return { success: true };
   } catch (err: any) {

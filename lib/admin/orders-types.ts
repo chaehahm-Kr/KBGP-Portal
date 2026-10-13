@@ -92,6 +92,9 @@ export interface AdminOrderInvoiceSummary {
   invoiceStatus: "draft" | "open" | "paid" | "void" | "cancelled";
   paymentStatus: "unpaid" | "partial" | "paid" | "failed" | "refunded";
   termsName: string;
+  fulfillmentId?: string | null;
+  fulfillmentNumber?: string | null;
+  prepaymentAllocatedAmount?: number;
 }
 
 export interface AdminRetailerOrderSummary {
@@ -110,6 +113,8 @@ export interface AdminRetailerOrderSummary {
   paymentTerms: string;
   totalAmount: number;
   subtotalAmount: number;
+  discountAmount?: number;
+  couponCode?: string | null;
   totalSkusCount: number;
   totalOrderedUnits: number;
   totalShippedUnits: number;

@@ -244,10 +244,23 @@ export function BillDetailModal({
                 <span>Amount Paid</span>
                 <span>-${bill.amount_paid.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-sm font-extrabold text-blue-600 dark:text-blue-400 pt-1">
-                <span>Balance Due</span>
-                <span>${bill.balance_due.toFixed(2)}</span>
-              </div>
+              {(bill.invoice_status === "void" || bill.invoice_status === "cancelled") ? (
+                <div className="flex justify-between text-sm font-bold text-zinc-500 pt-1">
+                  <span>Balance Due</span>
+                  <div className="text-right">
+                    <span className="line-through text-xs text-zinc-400 mr-1.5 font-normal">
+                      Orig. ${bill.balance_due.toFixed(2)}
+                    </span>
+                    <span className="font-extrabold text-zinc-700 dark:text-zinc-300">$0.00</span>
+                    <span className="block text-[10px] text-zinc-400 font-normal">Voided obligation</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-between text-sm font-extrabold text-blue-600 dark:text-blue-400 pt-1">
+                  <span>Balance Due</span>
+                  <span>${bill.balance_due.toFixed(2)}</span>
+                </div>
+              )}
             </div>
 
             {/* Payment History (Rule 17) */}
@@ -300,7 +313,7 @@ export function BillDetailModal({
               >
                 Close
               </button>
-              {bill.balance_due > 0 && (
+              {bill.balance_due > 0 && bill.invoice_status !== "void" && bill.invoice_status !== "cancelled" && (
                 <button
                   type="button"
                   onClick={() => {

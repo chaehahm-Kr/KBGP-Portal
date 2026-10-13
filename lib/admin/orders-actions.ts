@@ -176,6 +176,9 @@ export async function getAdminRetailerOrdersAction(
       invoiceStatus: inv.invoice_status,
       paymentStatus: inv.payment_status,
       termsName: inv.terms_name || "Net 30",
+      fulfillmentId: inv.fulfillment_id || null,
+      fulfillmentNumber: inv.fulfillment_number || null,
+      prepaymentAllocatedAmount: Number(inv.prepayment_allocated_amount || 0),
     }));
 
     return {
@@ -194,6 +197,8 @@ export async function getAdminRetailerOrdersAction(
       paymentTerms: o.payment_terms || "Net 30",
       totalAmount: Number(o.total_amount || 0),
       subtotalAmount: Number(o.subtotal_amount || 0),
+      discountAmount: Number(o.discount_amount || 0),
+      couponCode: o.coupon_code || null,
       totalSkusCount: Number(o.total_skus_count || items.length || 0),
       totalOrderedUnits,
       totalShippedUnits,
@@ -432,6 +437,9 @@ export async function getAdminRetailerOrderDetailAction(
     invoiceStatus: inv.invoice_status,
     paymentStatus: inv.payment_status,
     termsName: inv.terms_name || "Net 30",
+    fulfillmentId: inv.fulfillment_id || null,
+    fulfillmentNumber: inv.fulfillment_number || null,
+    prepaymentAllocatedAmount: Number(inv.prepayment_allocated_amount || 0),
   }));
 
   return {
@@ -450,6 +458,8 @@ export async function getAdminRetailerOrderDetailAction(
     paymentTerms: o.payment_terms || "Net 30",
     totalAmount: Number(o.total_amount || 0),
     subtotalAmount: Number(o.subtotal_amount || 0),
+    discountAmount: Number(o.discount_amount || 0),
+    couponCode: o.coupon_code || null,
     taxAmount: Number(o.tax_amount || 0),
     shippingAmount: Number(o.shipping_amount || 0),
     totalSkusCount: Number(o.total_skus_count || items.length || 0),
@@ -514,6 +524,50 @@ export async function adminCreateShipmentWithPackagesAction(params: {
       return { success: false, error: "Order not found." };
     }
 
+    // Guard: Prevent shipment creation if order is terminal (shipped, delivered, or cancelled)
+    const orderStatusNorm = (order.order_status || "").toLowerCase();
+    if (["cancelled", "shipped", "delivered"].includes(orderStatusNorm)) {
+      return {
+        success: false,
+        error: `Cannot create shipment: Order is already ${order.order_status}.`,
+      };
+    }
+
+    // Guard: Verify line items exist and calculate remaining shippable units
+    const validItems = (params.items || []).filter((it) => it.quantityShipped > 0);
+    if (validItems.length === 0) {
+      return { success: false, error: "Please specify at least 1 unit to ship." };
+    }
+
+    const { data: dbItems, error: itemsErr } = await adminClient
+      .from("retailer_order_items")
+      .select("id, quantity, quantity_shipped, quantity_cancelled")
+      .eq("order_id", params.orderId);
+
+    if (itemsErr || !dbItems || dbItems.length === 0) {
+      return { success: false, error: "Order line items not found." };
+    }
+
+    const dbItemMap = new Map(dbItems.map((it: any) => [it.id, it]));
+    for (const it of validItems) {
+      const dbItem = dbItemMap.get(it.orderItemId);
+      if (!dbItem) {
+        return { success: false, error: `Invalid line item: ${it.orderItemId}` };
+      }
+      const remainingForLine = Math.max(
+        0,
+        Number(dbItem.quantity || 0) -
+          Number(dbItem.quantity_shipped || 0) -
+          Number(dbItem.quantity_cancelled || 0)
+      );
+      if (it.quantityShipped > remainingForLine) {
+        return {
+          success: false,
+          error: `Cannot ship ${it.quantityShipped} units. Only ${remainingForLine} remaining to ship for line item.`,
+        };
+      }
+    }
+
     const { data: numData } = await adminClient.rpc("generate_retailer_fulfillment_number");
     const fulfillmentNumber = numData || `KSF-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
 
@@ -547,7 +601,6 @@ export async function adminCreateShipmentWithPackagesAction(params: {
     }
 
     // 2. Insert fulfillment line items
-    const validItems = params.items.filter((it) => it.quantityShipped > 0);
     if (validItems.length > 0) {
       await adminClient.from("retailer_order_fulfillment_items").insert(
         validItems.map((it) => ({
@@ -619,6 +672,13 @@ export async function adminCreateShipmentWithPackagesAction(params: {
         .from("retailer_orders")
         .update({ order_status: nextStatus, updated_at: new Date().toISOString() })
         .eq("id", params.orderId);
+
+      // Phase B3: Issue authoritative dispatch invoice upon confirmed dispatch
+      const { createDispatchInvoice } = await import("@/lib/finance/dispatch-invoicing");
+      const invRes = await createDispatchInvoice(adminClient, newFulfillment.id);
+      if (!invRes.success) {
+        console.warn("Notice: Dispatch invoice creation warning:", invRes.error);
+      }
     } else {
       await adminClient
         .from("retailer_orders")
@@ -628,8 +688,10 @@ export async function adminCreateShipmentWithPackagesAction(params: {
 
     revalidatePath("/admin/sales/orders");
     revalidatePath(`/admin/sales/orders/${params.orderId}`);
+    revalidatePath("/admin/finance/receivables");
     revalidatePath("/orders");
     revalidatePath(`/orders/${params.orderId}`);
+    revalidatePath("/bills");
 
     return { success: true, fulfillmentId: newFulfillment.id };
   } catch (err: any) {
