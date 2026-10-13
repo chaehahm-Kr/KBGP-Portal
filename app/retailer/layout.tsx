@@ -49,6 +49,7 @@ import { getRetailerUserContext } from "@/lib/auth/dal";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 import { LanguageProvider } from "@/lib/i18n/context";
 import { getServerLocale } from "@/lib/i18n/server";
+import { RetailerNavigationListener } from "@/components/retailer/retailer-navigation-listener";
 
 export default async function RetailerLayout({
   children,
@@ -68,6 +69,7 @@ export default async function RetailerLayout({
     if (!user) {
       return (
         <LanguageProvider initialLocale={serverLocale}>
+          <RetailerNavigationListener />
           <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 sm:p-6 selection:bg-zinc-800 selection:text-white">
             {children}
           </div>
@@ -81,6 +83,7 @@ export default async function RetailerLayout({
 
   return (
     <LanguageProvider initialLocale={serverLocale}>
+      <RetailerNavigationListener />
       <CartProvider>
         <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans transition-colors">
           {impSession && <ImpersonationBanner session={impSession} />}

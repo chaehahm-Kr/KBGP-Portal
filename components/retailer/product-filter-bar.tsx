@@ -87,9 +87,9 @@ export function RetailerProductFilterBar({
       }
     });
 
-    startTransition(() => {
-      router.push(`${pathname}?${params.toString()}`);
-    });
+    const queryString = params.toString();
+    const targetUrl = queryString ? `${pathname}?${queryString}` : pathname;
+    window.location.assign(targetUrl);
   };
 
   const handleSearchChange = (term: string) => {
@@ -221,9 +221,7 @@ export function RetailerProductFilterBar({
     setCustomMin("");
     setCustomMax("");
     setPriceRangeError(null);
-    startTransition(() => {
-      router.push(pathname);
-    });
+    window.location.assign(pathname);
   };
 
   // Depth 1 items
