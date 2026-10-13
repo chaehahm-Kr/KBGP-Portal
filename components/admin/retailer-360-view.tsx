@@ -610,6 +610,18 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
     });
   };
 
+  const handleConfirmDispatch = (fulfillmentId: string) => {
+    if (!confirm("Confirm dispatch for this shipment package? (Mark as Shipped)")) return;
+    startTransition(async () => {
+      const res = await adminMarkFulfillmentShippedAction({ fulfillmentId });
+      if (res.success) {
+        window.location.reload();
+      } else {
+        alert(res.error || "Failed to dispatch shipment.");
+      }
+    });
+  };
+
   const handleMarkDelivered = (fulfillmentId: string) => {
     if (!confirm("Confirm delivery for this shipment package?")) return;
     startTransition(async () => {
@@ -1524,8 +1536,20 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                         <span className="font-mono text-sm font-black text-zinc-900 dark:text-white">
                           #{order.orderNumber}
                         </span>
-                        <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 uppercase">
-                          {order.orderStatus}
+                        <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          order.orderStatus === "partially_shipped"
+                            ? "bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
+                            : order.orderStatus === "shipped"
+                            ? "bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800"
+                            : order.orderStatus === "processing"
+                            ? "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                            : order.orderStatus === "cancelled"
+                            ? "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                            : order.orderStatus === "partially_cancelled"
+                            ? "bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800"
+                            : "bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                        }`}>
+                          {order.orderStatus.replace("_", " ")}
                         </span>
                         <span className="rounded bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold">
                           {order.paymentStatus}
@@ -1619,15 +1643,31 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                               </p>
                             </div>
 
-                            {ful.status !== "delivered" && (
-                              <button
-                                type="button"
-                                onClick={() => handleMarkDelivered(ful.id)}
-                                className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer"
-                              >
-                                Confirm Delivery
-                              </button>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              {ful.status === "processing" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleConfirmDispatch(ful.id)}
+                                  className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-indigo-700 transition-colors shadow-2xs cursor-pointer"
+                                >
+                                  Confirm Dispatch
+                                </button>
+                              )}
+                              {ful.status === "shipped" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarkDelivered(ful.id)}
+                                  className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer"
+                                >
+                                  Confirm Delivery
+                                </button>
+                              )}
+                              {ful.status === "delivered" && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  ✓ Delivered
+                                </span>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>

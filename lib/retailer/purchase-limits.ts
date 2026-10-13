@@ -25,9 +25,12 @@ export const QUALIFYING_ORDER_STATUSES = [
   "submitted",
   "confirmed",
   "processing",
-  "fulfilled",
+  "partially_shipped",
   "shipped",
+  "partially_cancelled",
+  "fulfilled",
   "completed",
+  "delivered",
 ];
 
 /**
