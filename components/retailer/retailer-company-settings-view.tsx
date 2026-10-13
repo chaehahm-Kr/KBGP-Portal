@@ -12,10 +12,17 @@ import type { CompanyAgreementItem } from "@/lib/agreement/types";
 import type { RetailerDocumentRecord } from "@/lib/retailer/agreement-actions";
 import { useTranslation } from "@/lib/i18n";
 import type { StoreLocationItem, CompanyInfoItem, PersonalProfileItem } from "@/components/retailer/account-organization-view";
+import type {
+  AuthoritativeCompanyCore,
+  EffectiveRetailerBillingInfo,
+} from "@/lib/retailer/organization-mapping";
+import { CountrySelect } from "@/components/shared/country-select";
 
 interface RetailerCompanySettingsViewProps {
   profile: PersonalProfileItem;
   company: CompanyInfoItem;
+  companyCore?: AuthoritativeCompanyCore;
+  billing?: EffectiveRetailerBillingInfo;
   stores: StoreLocationItem[];
   canViewAgreements: boolean;
   companyAgreement?: CompanyAgreementItem | null;
@@ -26,6 +33,8 @@ interface RetailerCompanySettingsViewProps {
 export function RetailerCompanySettingsView({
   profile,
   company,
+  companyCore,
+  billing,
   stores,
   canViewAgreements,
   companyAgreement = null,
@@ -35,18 +44,30 @@ export function RetailerCompanySettingsView({
   const [isPending, startTransition] = useTransition();
   const { t, locale } = useTranslation();
 
-  // 1. Company Info Modal State
+  // 1. Company Info & Billing Modal State
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
-  const [compName, setCompName] = useState(company.name);
-  const [compRegNo, setCompRegNo] = useState(company.businessRegistrationNumber || "");
-  const [compCountry, setCompCountry] = useState(company.country || "US");
-  const [compContactName, setCompContactName] = useState(company.contactName || "");
-  const [compContactPhone, setCompContactPhone] = useState(company.contactPhone || "");
-  const [compContactEmail, setCompContactEmail] = useState(company.contactEmail || "");
-  const [compAddress, setCompAddress] = useState(company.address || "");
-  const [compCity, setCompCity] = useState(company.city || "");
-  const [compState, setCompState] = useState(company.state || "");
-  const [compZip, setCompZip] = useState(company.zip || "");
+  const [compName, setCompName] = useState(companyCore?.name || company.name);
+  const [compRegNo, setCompRegNo] = useState(companyCore?.businessRegistrationNumber || company.businessRegistrationNumber || "");
+  const [compCountry, setCompCountry] = useState(companyCore?.country || company.country || "US");
+  const [compContactName, setCompContactName] = useState(companyCore?.contactName || company.contactName || "");
+  const [compContactPhone, setCompContactPhone] = useState(companyCore?.contactPhone || company.contactPhone || "");
+  const [compAddress1, setCompAddress1] = useState(companyCore?.address1 || company.address || "");
+  const [compAddress2, setCompAddress2] = useState(companyCore?.address2 || "");
+  const [compCity, setCompCity] = useState(companyCore?.city || company.city || "");
+  const [compState, setCompState] = useState(companyCore?.state || company.state || "");
+  const [compZip, setCompZip] = useState(companyCore?.zipCode || company.zip || "");
+
+  const [billingSameAsHq, setBillingSameAsHq] = useState(billing?.billingSameAsHq ?? true);
+  const [billingAddress, setBillingAddress] = useState(billing?.customBillingAddress || "");
+  const [billingCity, setBillingCity] = useState(billing?.customBillingCity || "");
+  const [billingState, setBillingState] = useState(billing?.customBillingState || "");
+  const [billingZip, setBillingZip] = useState(billing?.customBillingZip || "");
+
+  const [billingContactSameAsPrimary, setBillingContactSameAsPrimary] = useState(billing?.billingContactSameAsPrimary ?? true);
+  const [billingContactName, setBillingContactName] = useState(billing?.customBillingContactName || "");
+  const [billingContactPhone, setBillingContactPhone] = useState(billing?.customBillingContactPhone || "");
+  const [billingContactEmail, setBillingContactEmail] = useState(billing?.billingContactEmail || company.contactEmail || "");
+
   const [companyError, setCompanyError] = useState("");
 
   // 2. Store Add/Edit Modal State
@@ -70,16 +91,28 @@ export function RetailerCompanySettingsView({
 
   // Company Handlers
   const handleOpenCompanyModal = () => {
-    setCompName(company.name);
-    setCompRegNo(company.businessRegistrationNumber || "");
-    setCompCountry(company.country || "US");
-    setCompContactName(company.contactName || "");
-    setCompContactPhone(company.contactPhone || "");
-    setCompContactEmail(company.contactEmail || "");
-    setCompAddress(company.address || "");
-    setCompCity(company.city || "");
-    setCompState(company.state || "");
-    setCompZip(company.zip || "");
+    setCompName(companyCore?.name || company.name);
+    setCompRegNo(companyCore?.businessRegistrationNumber || company.businessRegistrationNumber || "");
+    setCompCountry(companyCore?.country || company.country || "US");
+    setCompContactName(companyCore?.contactName || company.contactName || "");
+    setCompContactPhone(companyCore?.contactPhone || company.contactPhone || "");
+    setCompAddress1(companyCore?.address1 || company.address || "");
+    setCompAddress2(companyCore?.address2 || "");
+    setCompCity(companyCore?.city || company.city || "");
+    setCompState(companyCore?.state || company.state || "");
+    setCompZip(companyCore?.zipCode || company.zip || "");
+
+    setBillingSameAsHq(billing?.billingSameAsHq ?? true);
+    setBillingAddress(billing?.customBillingAddress || "");
+    setBillingCity(billing?.customBillingCity || "");
+    setBillingState(billing?.customBillingState || "");
+    setBillingZip(billing?.customBillingZip || "");
+
+    setBillingContactSameAsPrimary(billing?.billingContactSameAsPrimary ?? true);
+    setBillingContactName(billing?.customBillingContactName || "");
+    setBillingContactPhone(billing?.customBillingContactPhone || "");
+    setBillingContactEmail(billing?.billingContactEmail || company.contactEmail || "");
+
     setCompanyError("");
     setIsCompanyModalOpen(true);
   };
@@ -98,13 +131,25 @@ export function RetailerCompanySettingsView({
         companyId: company.id,
         name: compName.trim(),
         businessRegistrationNumber: compRegNo.trim() || undefined,
+        country: compCountry.trim() || "US",
         contactName: compContactName.trim() || undefined,
         contactPhone: compContactPhone.trim() || undefined,
-        contactEmail: compContactEmail.trim() || undefined,
-        address: compAddress.trim() || undefined,
+        address1: compAddress1.trim() || undefined,
+        address2: compAddress2.trim() || undefined,
         city: compCity.trim() || undefined,
         state: compState.trim() || undefined,
-        zip: compZip.trim() || undefined,
+        zipCode: compZip.trim() || undefined,
+
+        billingSameAsHq,
+        billingAddress: billingSameAsHq ? undefined : billingAddress.trim() || undefined,
+        billingCity: billingSameAsHq ? undefined : billingCity.trim() || undefined,
+        billingState: billingSameAsHq ? undefined : billingState.trim() || undefined,
+        billingZip: billingSameAsHq ? undefined : billingZip.trim() || undefined,
+
+        billingContactSameAsPrimary,
+        billingContactName: billingContactSameAsPrimary ? undefined : billingContactName.trim() || undefined,
+        billingContactPhone: billingContactSameAsPrimary ? undefined : billingContactPhone.trim() || undefined,
+        billingContactEmail: billingContactEmail.trim() || undefined,
       });
 
       if (res.success) {
@@ -261,106 +306,200 @@ export function RetailerCompanySettingsView({
       </div>
 
       <div className="space-y-6">
-        {/* SECTION 1: Company Information */}
-        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg">
-                🏢
+        {/* SECTION 1: Company Core & Billing Profile */}
+        <div className="space-y-4">
+          {/* Card 1: Authoritative Company Core */}
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg">
+                  🏢
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <span>{t.account.companyInfo}</span>
+                    <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                      {locale === "ko" ? "법인 기본 정보" : "Company Core"}
+                    </span>
+                  </h2>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    {locale === "ko"
+                      ? "공식 법인 식별 정보, 사업자 등록 번호 및 본사 소재지 주소입니다."
+                      : "Official legal entity identity, tax registration, primary representative, and corporate headquarters address."}
+                  </p>
+                </div>
+              </div>
+
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={handleOpenCompanyModal}
+                  className="px-3.5 py-1.5 text-xs font-bold rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer shrink-0"
+                >
+                  {t.account.editCompany}
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs pt-1">
+              <div>
+                <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
+                  {locale === "ko" ? "법인 회사명" : "Legal Company Name"}
+                </span>
+                <span className="font-bold text-zinc-900 dark:text-white text-sm block mt-0.5">
+                  {companyCore?.name || company.name}
+                </span>
               </div>
               <div>
-                <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                  <span>{t.account.companyInfo}</span>
-                  <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                    {locale === "ko" ? "법인 기업" : "Legal Entity"}
-                  </span>
-                </h2>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  {locale === "ko"
-                    ? "사업자 등록 정보, 본사 주소 및 도매 거래 조건입니다."
-                    : "Corporate legal entity, registration details, headquarters address, and commercial terms."}
-                </p>
+                <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
+                  {locale === "ko" ? "기업 코드" : "Company Code"}
+                </span>
+                <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200 block mt-0.5">
+                  {companyCore?.companyCode || "—"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
+                  {t.account.businessNumber}
+                </span>
+                <span className="font-mono font-semibold text-zinc-900 dark:text-white block mt-0.5">
+                  {companyCore?.businessRegistrationNumber || company.businessRegistrationNumber || (locale === "ko" ? "미등록" : "Not recorded")}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
+                  {locale === "ko" ? "국가" : "Country"}
+                </span>
+                <span className="font-semibold text-zinc-900 dark:text-white block mt-0.5">
+                  🇺🇸 {companyCore?.country || company.country}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
+                  {locale === "ko" ? "대표 담당자" : "Primary Contact Name"}
+                </span>
+                <span className="text-zinc-900 dark:text-white font-medium block mt-0.5">
+                  {companyCore?.contactName || company.contactName || "—"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
+                  {locale === "ko" ? "대표 전화번호" : "Primary Phone"}
+                </span>
+                <span className="text-zinc-800 dark:text-zinc-200 font-mono block mt-0.5">
+                  {companyCore?.contactPhone || company.contactPhone || "—"}
+                </span>
+              </div>
+              <div className="md:col-span-2">
+                <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
+                  {locale === "ko" ? "본사 소재지 주소 (HQ Address)" : "Corporate Headquarters Address"}
+                </span>
+                <span className="text-zinc-800 dark:text-zinc-200 block mt-0.5">
+                  {companyCore?.formattedHqAddress || (locale === "ko" ? "본사 주소가 등록되지 않았습니다." : "No corporate HQ address recorded")}
+                </span>
               </div>
             </div>
-
-            {isOwner && (
-              <button
-                type="button"
-                onClick={handleOpenCompanyModal}
-                className="px-3.5 py-1.5 text-xs font-bold rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer shrink-0"
-              >
-                {t.account.editCompany}
-              </button>
-            )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs pt-1">
-            <div>
-              <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
-                {locale === "ko" ? "법인 회사명" : "Legal Company Name"}
-              </span>
-              <span className="font-bold text-zinc-900 dark:text-white text-sm block mt-0.5">{company.name}</span>
-            </div>
-            <div>
-              <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
-                {t.account.businessNumber}
-              </span>
-              <span className="font-mono font-semibold text-zinc-900 dark:text-white block mt-0.5">
-                {company.businessRegistrationNumber || (locale === "ko" ? "미등록" : "Not recorded")}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
-                {locale === "ko" ? "국가" : "Country"}
-              </span>
-              <span className="font-semibold text-zinc-900 dark:text-white block mt-0.5">🇺🇸 {company.country}</span>
+          {/* Card 2: Retailer Commercial & Billing Profile */}
+          <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-indigo-50/20 dark:bg-indigo-950/10 p-5 sm:p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-200/50 dark:border-indigo-900/40 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100/70 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-lg">
+                  💳
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <span>{locale === "ko" ? "청구지 및 도매 거래 조건" : "Retailer Billing & Commercial Setup"}</span>
+                    <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
+                      {locale === "ko" ? "상거래 프로필" : "Commercial Profile"}
+                    </span>
+                  </h2>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    {locale === "ko"
+                      ? "인보이스 청구지 주소, 회계 담당자, 재판매 면허 번호 및 승인된 결제 조건입니다."
+                      : "Invoicing billing address, accounting contact, resale certificate, and approved wholesale payment terms."}
+                  </p>
+                </div>
+              </div>
+
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={handleOpenCompanyModal}
+                  className="px-3.5 py-1.5 text-xs font-bold rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer shrink-0"
+                >
+                  {locale === "ko" ? "청구 정보 수정" : "Edit Billing Details"}
+                </button>
+              )}
             </div>
 
-            <div>
-              <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
-                {locale === "ko" ? "대표 담당자" : "Primary Contact Name"}
-              </span>
-              <span className="text-zinc-900 dark:text-white font-medium block mt-0.5">{company.contactName || "—"}</span>
-            </div>
-            <div>
-              <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
-                {locale === "ko" ? "대표 전화번호" : "Company Phone"}
-              </span>
-              <span className="text-zinc-800 dark:text-zinc-200 font-mono block mt-0.5">{company.contactPhone || "—"}</span>
-            </div>
-            <div>
-              <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
-                {locale === "ko" ? "대표 이메일" : "Company Email"}
-              </span>
-              <span className="text-zinc-800 dark:text-zinc-200 font-mono block mt-0.5">{company.contactEmail || "—"}</span>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs pt-1">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
+                    {locale === "ko" ? "인보이스 청구지 주소" : "Billing Address"}
+                  </span>
+                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${
+                    billing?.billingSameAsHq
+                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+                  }`}>
+                    {billing?.billingSameAsHq ? (locale === "ko" ? "본사 주소와 동일" : "Same as HQ") : (locale === "ko" ? "별도 청구지" : "Custom Address")}
+                  </span>
+                </div>
+                <span className="text-zinc-900 dark:text-zinc-100 font-medium block mt-1">
+                  {billing?.formattedBillingAddress || (locale === "ko" ? "청구지 주소 미입력" : "No billing address recorded")}
+                </span>
+              </div>
 
-            <div className="md:col-span-2 lg:col-span-3">
-              <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
-                {t.account.address}
-              </span>
-              <span className="text-zinc-800 dark:text-zinc-200 block mt-0.5">
-                {company.address
-                  ? `${company.address}${company.city ? `, ${company.city}` : ""}${company.state ? ` ${company.state}` : ""}${company.zip ? ` ${company.zip}` : ""}`
-                  : (locale === "ko" ? "본사 주소가 등록되지 않았습니다." : "No corporate address recorded")}
-              </span>
-            </div>
-          </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
+                    {locale === "ko" ? "청구 / 회계 담당자" : "Billing Contact"}
+                  </span>
+                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${
+                    billing?.billingContactSameAsPrimary
+                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+                  }`}>
+                    {billing?.billingContactSameAsPrimary ? (locale === "ko" ? "대표 담당자와 동일" : "Same as Primary") : (locale === "ko" ? "별도 담당자" : "Custom Contact")}
+                  </span>
+                </div>
+                <span className="text-zinc-900 dark:text-zinc-100 font-medium block mt-1">
+                  {billing?.effectiveBillingContactName || "—"}
+                  {billing?.effectiveBillingContactPhone ? ` (${billing.effectiveBillingContactPhone})` : ""}
+                </span>
+                <span className="text-[11px] text-zinc-500 font-mono block mt-0.5">
+                  {billing?.billingContactEmail || company.contactEmail || "—"}
+                </span>
+              </div>
 
-          {/* Commercial Terms Summary (Read-Only) */}
-          <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-2">
-            <div>
-              <span className="text-zinc-400 block text-[10px] font-medium">
-                {locale === "ko" ? "도매 결제 및 거래 조건" : "Payment & Commercial Terms"}
-              </span>
-              <span className="font-bold text-zinc-900 dark:text-white">
-                {company.approvedTerms || company.paymentTerms || "Prepaid Card"}
-                {company.creditLimit ? ` · ${locale === "ko" ? "여신 한도" : "Credit Limit"}: $${company.creditLimit.toLocaleString()}` : ""}
-              </span>
+              <div>
+                <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">
+                  {locale === "ko" ? "재판매 면허 번호 (Resale Certificate)" : "Resale Certificate / Tax ID"}
+                </span>
+                <span className="font-mono font-semibold text-zinc-900 dark:text-white block mt-1">
+                  {company.resaleCertificateNumber || (locale === "ko" ? "미등록 (과세 대상)" : "Not recorded")}
+                </span>
+              </div>
+
+              <div className="col-span-full p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-1">
+                <div>
+                  <span className="text-zinc-400 block text-[10px] font-medium">
+                    {locale === "ko" ? "도매 결제 및 거래 조건" : "Payment & Commercial Terms"}
+                  </span>
+                  <span className="font-bold text-zinc-900 dark:text-white">
+                    {company.approvedTerms || company.paymentTerms || "Prepaid Card"}
+                    {company.creditLimit ? ` · ${locale === "ko" ? "여신 한도" : "Credit Limit"}: $${company.creditLimit.toLocaleString()}` : ""}
+                  </span>
+                </div>
+                <span className="px-2.5 py-1 rounded text-[10px] font-semibold bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 shrink-0">
+                  {locale === "ko" ? "본사 심사 승인" : "Admin Underwritten"}
+                </span>
+              </div>
             </div>
-            <span className="px-2.5 py-1 rounded text-[10px] font-semibold bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 shrink-0">
-              {locale === "ko" ? "본사 심사 승인" : "Admin Underwritten"}
-            </span>
           </div>
         </div>
 
@@ -600,128 +739,294 @@ export function RetailerCompanySettingsView({
                 </div>
               )}
 
-              <div>
-                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  {locale === "ko" ? "회사명" : "Company Legal Name"} <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={compName}
-                  onChange={(e) => setCompName(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  required
-                />
+              {/* SECTION 1: Authoritative Company Core */}
+              <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                <div className="flex items-center justify-between border-b border-zinc-200/80 pb-2 dark:border-zinc-800">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                    <span>🏢</span> {locale === "ko" ? "1. 법인 기본 정보 (Company Core)" : "1. Company Information"}
+                  </h4>
+                  <span className="text-[10px] font-medium text-zinc-400">
+                    {locale === "ko" ? "공식 법인 식별 (`companies` 마스터)" : "Authoritative Company Core"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      {locale === "ko" ? "회사명" : "Company Legal Name"} <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={compName}
+                      onChange={(e) => setCompName(e.target.value)}
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      required
+                    />
+                  </div>
+
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      {locale === "ko" ? "기업 코드" : "Company Code"}
+                    </label>
+                    <input
+                      type="text"
+                      disabled
+                      value={companyCore?.companyCode || "Auto-assigned"}
+                      className="w-full rounded-xl border border-zinc-200 bg-zinc-100 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-800 text-zinc-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      {t.account.businessNumber}
+                    </label>
+                    <input
+                      type="text"
+                      value={compRegNo}
+                      onChange={(e) => setCompRegNo(e.target.value)}
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
+                      placeholder="e.g. 12-3456789"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      {locale === "ko" ? "국가" : "Country"}
+                    </label>
+                    <CountrySelect
+                      value={compCountry}
+                      onChange={(val) => setCompCountry(val)}
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white cursor-pointer"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      {locale === "ko" ? "대표 담당자명" : "Primary Contact Name"}
+                    </label>
+                    <input
+                      type="text"
+                      value={compContactName}
+                      onChange={(e) => setCompContactName(e.target.value)}
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      {locale === "ko" ? "대표 전화번호" : "Primary Phone"}
+                    </label>
+                    <input
+                      type="text"
+                      value={compContactPhone}
+                      onChange={(e) => setCompContactPhone(e.target.value)}
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      {locale === "ko" ? "본사 주소 Line 1" : "HQ Street Address Line 1"}
+                    </label>
+                    <input
+                      type="text"
+                      value={compAddress1}
+                      onChange={(e) => setCompAddress1(e.target.value)}
+                      placeholder="e.g. 123 Main St"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      {locale === "ko" ? "본사 주소 Line 2 (선택)" : "HQ Address Line 2 (Optional)"}
+                    </label>
+                    <input
+                      type="text"
+                      value={compAddress2}
+                      onChange={(e) => setCompAddress2(e.target.value)}
+                      placeholder="Suite, Unit, Floor"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      {locale === "ko" ? "도시" : "City"}
+                    </label>
+                    <input
+                      type="text"
+                      value={compCity}
+                      onChange={(e) => setCompCity(e.target.value)}
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        {locale === "ko" ? "주 (State)" : "State"}
+                      </label>
+                      <input
+                        type="text"
+                        value={compState}
+                        onChange={(e) => setCompState(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        {locale === "ko" ? "우편번호" : "ZIP"}
+                      </label>
+                      <input
+                        type="text"
+                        value={compZip}
+                        onChange={(e) => setCompZip(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    {t.account.businessNumber}
-                  </label>
-                  <input
-                    type="text"
-                    value={compRegNo}
-                    onChange={(e) => setCompRegNo(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
-                    placeholder="e.g. 12-3456789"
-                  />
+              {/* SECTION 2: Retailer Commercial & Billing Profile */}
+              <div className="space-y-3 rounded-xl border border-indigo-200/80 bg-indigo-50/30 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/20">
+                <div className="flex items-center justify-between border-b border-indigo-200/60 pb-2 dark:border-indigo-900/50">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                    <span>💳</span> {locale === "ko" ? "2. 청구지 및 인보이스 프로필 (Billing Profile)" : "2. Invoicing & Billing Profile"}
+                  </h4>
+                  <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400">
+                    {locale === "ko" ? "리테일 상거래 정보 (`retailer_profiles`)" : "Retailer Commercial Profile"}
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    {locale === "ko" ? "국가" : "Country"}
-                  </label>
-                  <input
-                    type="text"
-                    value={compCountry}
-                    onChange={(e) => setCompCountry(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    {locale === "ko" ? "담당자명" : "Primary Contact Name"}
-                  </label>
-                  <input
-                    type="text"
-                    value={compContactName}
-                    onChange={(e) => setCompContactName(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    {locale === "ko" ? "담당자 전화번호" : "Primary Contact Phone"}
-                  </label>
-                  <input
-                    type="text"
-                    value={compContactPhone}
-                    onChange={(e) => setCompContactPhone(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
-                  />
-                </div>
-              </div>
+                <div className="space-y-3">
+                  {/* Billing Address Toggle & Fields */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="font-bold text-zinc-800 dark:text-zinc-200 text-xs">
+                        {locale === "ko" ? "인보이스 청구지 주소" : "Billing Address"}
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={billingSameAsHq}
+                          onChange={(e) => setBillingSameAsHq(e.target.checked)}
+                          className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="font-medium text-[11px]">
+                          {locale === "ko" ? "본사 주소와 동일 (Same as HQ)" : "Same as Company HQ Address"}
+                        </span>
+                      </label>
+                    </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  {locale === "ko" ? "담당자 이메일" : "Primary Contact Email"}
-                </label>
-                <input
-                  type="email"
-                  value={compContactEmail}
-                  onChange={(e) => setCompContactEmail(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
-                />
-              </div>
+                    {billingSameAsHq ? (
+                      <div className="p-2.5 rounded-lg bg-white/70 dark:bg-zinc-900/70 border border-zinc-200/70 dark:border-zinc-800 text-[11px] text-zinc-600 dark:text-zinc-400">
+                        <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                          {locale === "ko" ? "본사 주소 적용:" : "Using HQ Address:"}
+                        </span>{" "}
+                        {[compAddress1, compCity, compState, compZip].filter(Boolean).join(", ") || "(HQ address not yet entered)"}
+                      </div>
+                    ) : (
+                      <div className="space-y-2 pt-1">
+                        <input
+                          type="text"
+                          value={billingAddress}
+                          onChange={(e) => setBillingAddress(e.target.value)}
+                          placeholder="Separate Billing Street Address"
+                          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                        />
+                        <div className="grid grid-cols-3 gap-2">
+                          <input
+                            type="text"
+                            value={billingCity}
+                            onChange={(e) => setBillingCity(e.target.value)}
+                            placeholder="Billing City"
+                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                          />
+                          <input
+                            type="text"
+                            value={billingState}
+                            onChange={(e) => setBillingState(e.target.value)}
+                            placeholder="State"
+                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                          />
+                          <input
+                            type="text"
+                            value={billingZip}
+                            onChange={(e) => setBillingZip(e.target.value)}
+                            placeholder="ZIP"
+                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  {locale === "ko" ? "본사 주소" : "Street Address"}
-                </label>
-                <input
-                  type="text"
-                  value={compAddress}
-                  onChange={(e) => setCompAddress(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  placeholder="e.g. 123 Main St"
-                />
-              </div>
+                  {/* Billing Contact Toggle & Fields */}
+                  <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/30">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="font-bold text-zinc-800 dark:text-zinc-200 text-xs">
+                        {locale === "ko" ? "청구 / 회계 담당자" : "Billing Contact"}
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={billingContactSameAsPrimary}
+                          onChange={(e) => setBillingContactSameAsPrimary(e.target.checked)}
+                          className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="font-medium text-[11px]">
+                          {locale === "ko" ? "대표 담당자와 동일 (Same as Primary)" : "Same as Primary Contact"}
+                        </span>
+                      </label>
+                    </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    {locale === "ko" ? "도시" : "City"}
-                  </label>
-                  <input
-                    type="text"
-                    value={compCity}
-                    onChange={(e) => setCompCity(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    {locale === "ko" ? "주 (State)" : "State"}
-                  </label>
-                  <input
-                    type="text"
-                    value={compState}
-                    onChange={(e) => setCompState(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    {locale === "ko" ? "우편번호" : "ZIP"}
-                  </label>
-                  <input
-                    type="text"
-                    value={compZip}
-                    onChange={(e) => setCompZip(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
+                    {billingContactSameAsPrimary ? (
+                      <div className="p-2.5 rounded-lg bg-white/70 dark:bg-zinc-900/70 border border-zinc-200/70 dark:border-zinc-800 text-[11px] text-zinc-600 dark:text-zinc-400">
+                        <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                          {locale === "ko" ? "대표 담당자 정보 적용:" : "Using Primary Contact:"}
+                        </span>{" "}
+                        {compContactName ? `${compContactName} (${compContactPhone || "No phone"})` : "(Primary contact not entered)"}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={billingContactName}
+                          onChange={(e) => setBillingContactName(e.target.value)}
+                          placeholder="Billing Contact Person"
+                          className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                        />
+                        <input
+                          type="text"
+                          value={billingContactPhone}
+                          onChange={(e) => setBillingContactPhone(e.target.value)}
+                          placeholder="Billing Phone"
+                          className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Billing Email Field */}
+                  <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/30">
+                    <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      {locale === "ko" ? "인보이스 및 청구 안내 수신 이메일" : "Billing & Invoicing Email Address"}
+                    </label>
+                    <input
+                      type="email"
+                      value={billingContactEmail}
+                      onChange={(e) => setBillingContactEmail(e.target.value)}
+                      placeholder="ap@retailer.com or accounting@store.com"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
+                    />
+                    <span className="text-[10px] text-zinc-400 mt-1 block">
+                      {locale === "ko"
+                        ? "도매 발주서 영수증, 결제 내역서 및 정산 안내가 발송되는 이메일입니다."
+                        : "Commercial invoice statements, order receipts, and billing notifications are routed here."}
+                    </span>
+                  </div>
                 </div>
               </div>
 

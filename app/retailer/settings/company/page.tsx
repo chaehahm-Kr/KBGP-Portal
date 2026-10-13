@@ -11,6 +11,10 @@ import type {
   CompanyInfoItem,
   PersonalProfileItem,
 } from "@/components/retailer/account-organization-view";
+import {
+  resolveAuthoritativeCompanyCore,
+  resolveEffectiveRetailerBilling,
+} from "@/lib/retailer/organization-mapping";
 
 export const dynamic = "force-dynamic";
 
@@ -126,28 +130,22 @@ export default async function RetailerCompanySettingsPage() {
     role: rawRole,
   };
 
-  const companyAddressStr = [
-    retailerProfile?.billing_address || rawCompany?.address,
-    retailerProfile?.billing_city || rawCompany?.city,
-    retailerProfile?.billing_state || rawCompany?.state,
-    retailerProfile?.billing_zip || rawCompany?.zip,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  const companyCore = resolveAuthoritativeCompanyCore(rawCompany);
+  const billingInfo = resolveEffectiveRetailerBilling(retailerProfile, companyCore);
 
   const companyInfo: CompanyInfoItem = {
     id: companyId || "",
-    name: rawCompany?.name || "K SELECT Retailer Partner",
-    businessRegistrationNumber: rawCompany?.business_registration_number || null,
-    country: rawCompany?.country || "US",
-    contactName: rawCompany?.contact_name || retailerProfile?.billing_contact_name || null,
-    contactPhone: rawCompany?.contact_phone || retailerProfile?.billing_contact_phone || null,
-    contactEmail: retailerProfile?.billing_contact_email || null,
-    address: companyAddressStr || null,
-    city: retailerProfile?.billing_city || null,
-    state: retailerProfile?.billing_state || null,
-    zip: retailerProfile?.billing_zip || null,
-    status: retailerProfile?.status || rawCompany?.status || "active",
+    name: companyCore.name || "K SELECT Retailer Partner",
+    businessRegistrationNumber: companyCore.businessRegistrationNumber,
+    country: companyCore.country,
+    contactName: companyCore.contactName,
+    contactPhone: companyCore.contactPhone,
+    contactEmail: billingInfo.billingContactEmail,
+    address: companyCore.formattedHqAddress || companyCore.address1,
+    city: companyCore.city,
+    state: companyCore.state,
+    zip: companyCore.zipCode,
+    status: retailerProfile?.status || companyCore.status || "active",
     paymentTerms: retailerProfile?.payment_terms || "PREPAID_CARD",
     creditLimit: retailerProfile?.credit_limit ?? 0,
     termsEnabled: retailerProfile?.terms_enabled ?? false,
@@ -159,6 +157,8 @@ export default async function RetailerCompanySettingsPage() {
     <RetailerCompanySettingsView
       profile={personalProfile}
       company={companyInfo}
+      companyCore={companyCore}
+      billing={billingInfo}
       stores={storesList}
       canViewAgreements={canViewAgreements}
       companyAgreement={companyAgreement}

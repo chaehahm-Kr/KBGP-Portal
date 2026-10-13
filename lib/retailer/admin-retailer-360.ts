@@ -261,11 +261,21 @@ export interface Retailer360Data {
   company: {
     id: string;
     name: string;
+    companyCode?: string | null;
     businessRegistrationNumber?: string | null;
     country: string;
     status: string;
     createdAt: string;
+    address1?: string | null;
+    address2?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zipCode?: string | null;
+    formattedHqAddress?: string | null;
+    contactName?: string | null;
+    contactPhone?: string | null;
   };
+  billing: import("@/lib/retailer/organization-mapping").EffectiveRetailerBillingInfo;
   profile: {
     status: string;
     payment_terms: string;
@@ -334,10 +344,18 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     .select(`
       id,
       name,
+      company_code,
       business_registration_number,
       country,
       status,
       created_at,
+      address_1,
+      address_2,
+      city,
+      state,
+      zip_code,
+      contact_name,
+      contact_phone,
       retailer_profiles (
         status,
         payment_terms,
@@ -1327,15 +1345,29 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     openSupportCasesCount: openCases.length,
   };
 
+  const { resolveAuthoritativeCompanyCore, resolveEffectiveRetailerBilling } = await import("@/lib/retailer/organization-mapping");
+  const companyCore = resolveAuthoritativeCompanyCore(company);
+  const billingInfo = resolveEffectiveRetailerBilling(profile, companyCore);
+
   return {
     company: {
-      id: company.id,
-      name: company.name,
-      businessRegistrationNumber: company.business_registration_number,
-      country: formatCanonicalCountryName(company.country) || "United States",
-      status: company.status || "active",
-      createdAt: company.created_at,
+      id: companyCore.id,
+      name: companyCore.name,
+      companyCode: companyCore.companyCode,
+      businessRegistrationNumber: companyCore.businessRegistrationNumber,
+      country: companyCore.country,
+      status: companyCore.status,
+      createdAt: companyCore.createdAt || company.created_at,
+      address1: companyCore.address1,
+      address2: companyCore.address2,
+      city: companyCore.city,
+      state: companyCore.state,
+      zipCode: companyCore.zipCode,
+      formattedHqAddress: companyCore.formattedHqAddress,
+      contactName: companyCore.contactName,
+      contactPhone: companyCore.contactPhone,
     },
+    billing: billingInfo,
     profile,
     needsAttention,
     metrics,

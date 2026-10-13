@@ -84,20 +84,61 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState("");
 
-  // Company Edit State
+  // Company Edit State (Separating Authoritative Company Core vs Retailer Billing & Commercial)
   const [showCompanyModal, setShowCompanyModal] = useState(false);
   const [editCompName, setEditCompName] = useState(data.company.name);
   const [editCompRegNo, setEditCompRegNo] = useState(data.company.businessRegistrationNumber || "");
   const [editCompCountry, setEditCompCountry] = useState(data.company.country || "US");
-  const [editCompContactName, setEditCompContactName] = useState(data.profile?.billing_contact_name || "");
-  const [editCompContactPhone, setEditCompContactPhone] = useState(data.profile?.billing_contact_phone || "");
-  const [editCompContactEmail, setEditCompContactEmail] = useState(data.profile?.billing_contact_email || "");
-  const [editCompAddress, setEditCompAddress] = useState(data.profile?.billing_address || "");
-  const [editCompCity, setEditCompCity] = useState(data.profile?.billing_city || "");
-  const [editCompState, setEditCompState] = useState(data.profile?.billing_state || "");
-  const [editCompZip, setEditCompZip] = useState(data.profile?.billing_zip || "");
-  const [editCompStatus, setEditCompStatus] = useState(data.profile?.status || "active");
+  const [editCompContactName, setEditCompContactName] = useState(data.company.contactName || "");
+  const [editCompContactPhone, setEditCompContactPhone] = useState(data.company.contactPhone || "");
+  const [editHqAddress1, setEditHqAddress1] = useState(data.company.address1 || "");
+  const [editHqAddress2, setEditHqAddress2] = useState(data.company.address2 || "");
+  const [editHqCity, setEditHqCity] = useState(data.company.city || "");
+  const [editHqState, setEditHqState] = useState(data.company.state || "");
+  const [editHqZip, setEditHqZip] = useState(data.company.zipCode || "");
+  const [editCompStatus, setEditCompStatus] = useState(data.company.status || "active");
+
+  const [editBillingSameAsHq, setEditBillingSameAsHq] = useState(data.billing?.billingSameAsHq ?? true);
+  const [editBillingAddress, setEditBillingAddress] = useState(data.billing?.customBillingAddress || data.profile?.billing_address || "");
+  const [editBillingCity, setEditBillingCity] = useState(data.billing?.customBillingCity || data.profile?.billing_city || "");
+  const [editBillingState, setEditBillingState] = useState(data.billing?.customBillingState || data.profile?.billing_state || "");
+  const [editBillingZip, setEditBillingZip] = useState(data.billing?.customBillingZip || data.profile?.billing_zip || "");
+
+  const [editBillingContactSameAsPrimary, setEditBillingContactSameAsPrimary] = useState(data.billing?.billingContactSameAsPrimary ?? true);
+  const [editBillingContactName, setEditBillingContactName] = useState(data.billing?.customBillingContactName || data.profile?.billing_contact_name || "");
+  const [editBillingContactPhone, setEditBillingContactPhone] = useState(data.billing?.customBillingContactPhone || data.profile?.billing_contact_phone || "");
+  const [editBillingContactEmail, setEditBillingContactEmail] = useState(data.billing?.billingContactEmail || data.profile?.billing_contact_email || "");
+  const [editRetailerStatus, setEditRetailerStatus] = useState(data.profile?.status || "active");
   const [compModalError, setCompModalError] = useState("");
+
+  const handleOpenCompanyModal = () => {
+    setEditCompName(data.company.name);
+    setEditCompRegNo(data.company.businessRegistrationNumber || "");
+    setEditCompCountry(data.company.country || "US");
+    setEditCompContactName(data.company.contactName || "");
+    setEditCompContactPhone(data.company.contactPhone || "");
+    setEditHqAddress1(data.company.address1 || "");
+    setEditHqAddress2(data.company.address2 || "");
+    setEditHqCity(data.company.city || "");
+    setEditHqState(data.company.state || "");
+    setEditHqZip(data.company.zipCode || "");
+    setEditCompStatus(data.company.status || "active");
+
+    setEditBillingSameAsHq(data.billing?.billingSameAsHq ?? true);
+    setEditBillingAddress(data.billing?.customBillingAddress || data.profile?.billing_address || "");
+    setEditBillingCity(data.billing?.customBillingCity || data.profile?.billing_city || "");
+    setEditBillingState(data.billing?.customBillingState || data.profile?.billing_state || "");
+    setEditBillingZip(data.billing?.customBillingZip || data.profile?.billing_zip || "");
+
+    setEditBillingContactSameAsPrimary(data.billing?.billingContactSameAsPrimary ?? true);
+    setEditBillingContactName(data.billing?.customBillingContactName || data.profile?.billing_contact_name || "");
+    setEditBillingContactPhone(data.billing?.customBillingContactPhone || data.profile?.billing_contact_phone || "");
+    setEditBillingContactEmail(data.billing?.billingContactEmail || data.profile?.billing_contact_email || "");
+    setEditRetailerStatus(data.profile?.status || "active");
+
+    setCompModalError("");
+    setShowCompanyModal(true);
+  };
 
   // Store Management State
   const [showAddStoreModal, setShowAddStoreModal] = useState(false);
@@ -218,19 +259,31 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
         country: editCompCountry.trim() || "US",
         contactName: editCompContactName.trim() || undefined,
         contactPhone: editCompContactPhone.trim() || undefined,
-        contactEmail: editCompContactEmail.trim() || undefined,
-        address: editCompAddress.trim() || undefined,
-        city: editCompCity.trim() || undefined,
-        state: editCompState.trim() || undefined,
-        zip: editCompZip.trim() || undefined,
-        status: editCompStatus,
+        address1: editHqAddress1.trim() || undefined,
+        address2: editHqAddress2.trim() || undefined,
+        city: editHqCity.trim() || undefined,
+        state: editHqState.trim() || undefined,
+        zipCode: editHqZip.trim() || undefined,
+        companyStatus: editCompStatus,
+
+        billingSameAsHq: editBillingSameAsHq,
+        billingAddress: editBillingSameAsHq ? undefined : editBillingAddress.trim() || undefined,
+        billingCity: editBillingSameAsHq ? undefined : editBillingCity.trim() || undefined,
+        billingState: editBillingSameAsHq ? undefined : editBillingState.trim() || undefined,
+        billingZip: editBillingSameAsHq ? undefined : editBillingZip.trim() || undefined,
+
+        billingContactSameAsPrimary: editBillingContactSameAsPrimary,
+        billingContactName: editBillingContactSameAsPrimary ? undefined : editBillingContactName.trim() || undefined,
+        billingContactPhone: editBillingContactSameAsPrimary ? undefined : editBillingContactPhone.trim() || undefined,
+        billingContactEmail: editBillingContactEmail.trim() || undefined,
+        retailerStatus: editRetailerStatus,
       });
 
       if (res.success) {
         setShowCompanyModal(false);
         window.location.reload();
       } else {
-        setCompModalError(res.error || "Failed to update company.");
+        setCompModalError(res.error || "Failed to update organization.");
       }
     });
   };
@@ -555,7 +608,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowCompanyModal(true)}
+            onClick={handleOpenCompanyModal}
             className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 transition-colors shadow-2xs cursor-pointer"
           >
             ✏️ Edit Organization
@@ -607,7 +660,13 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
               )}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1.5 text-xs text-zinc-600 dark:text-zinc-400 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-6 gap-y-1.5 text-xs text-zinc-600 dark:text-zinc-400 pt-1">
+              <div>
+                <span className="text-zinc-400 block text-[10px]">Company Code</span>
+                <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">
+                  {data.company.companyCode || "Not assigned"}
+                </span>
+              </div>
               <div>
                 <span className="text-zinc-400 block text-[10px]">Business Registration / Tax ID</span>
                 <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">
@@ -615,21 +674,25 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 </span>
               </div>
               <div>
-                <span className="text-zinc-400 block text-[10px]">Primary Owner / Contact</span>
+                <span className="text-zinc-400 block text-[10px]">Company HQ Address</span>
+                <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate block" title={data.company.formattedHqAddress || "Not recorded"}>
+                  {data.company.formattedHqAddress || "Not recorded"}
+                </span>
+              </div>
+              <div>
+                <span className="text-zinc-400 block text-[10px]">Primary Contact</span>
                 <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate block">
-                  {primaryOwner ? `${primaryOwner.displayName || "Owner"} (${primaryOwner.email})` : "No owner active"}
+                  {data.company.contactName
+                    ? `${data.company.contactName}${data.company.contactPhone ? ` (${data.company.contactPhone})` : ""}`
+                    : primaryOwner
+                    ? `${primaryOwner.displayName || "Owner"}`
+                    : "Not recorded"}
                 </span>
               </div>
               <div>
                 <span className="text-zinc-400 block text-[10px]">Country & Region</span>
                 <span className="font-medium text-zinc-800 dark:text-zinc-200">
                   🇺🇸 {data.company.country}
-                </span>
-              </div>
-              <div>
-                <span className="text-zinc-400 block text-[10px]">Onboarded Since</span>
-                <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                  {formatDate(data.company.createdAt)}
                 </span>
               </div>
             </div>
@@ -1465,6 +1528,77 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
       {/* TAB 5: PAYMENTS & TERMS */}
       {activeTab === "payments" && (
         <div className="space-y-6">
+          {/* Commercial Billing Profile & Addresses */}
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span>🏢</span> Retailer Billing Profile & Effective Addresses
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Resolution between Authoritative Company Core HQ and Commercial Retailer Billing Profile.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenCompanyModal}
+                className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 transition-colors shadow-2xs cursor-pointer self-start sm:self-auto"
+              >
+                ✏️ Edit Billing & HQ Info
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              <div className="p-3.5 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/60 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Company HQ Address</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-zinc-200/60 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                    Master Core
+                  </span>
+                </div>
+                <p className="font-medium text-zinc-800 dark:text-zinc-200">
+                  {data.company.formattedHqAddress || "No HQ address recorded"}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/60 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Effective Billing Address</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                    data.billing?.billingSameAsHq
+                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300"
+                  }`}>
+                    {data.billing?.billingSameAsHq ? "Same as HQ" : "Custom Override"}
+                  </span>
+                </div>
+                <p className="font-medium text-zinc-800 dark:text-zinc-200">
+                  {data.billing?.formattedBillingAddress || "No billing address recorded"}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/60 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Billing Contact & Email</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                    data.billing?.billingContactSameAsPrimary
+                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300"
+                  }`}>
+                    {data.billing?.billingContactSameAsPrimary ? "Same as Primary" : "Custom Contact"}
+                  </span>
+                </div>
+                <p className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                  {data.billing?.effectiveBillingContactName || "No contact"}
+                  {data.billing?.effectiveBillingContactPhone ? ` (${data.billing.effectiveBillingContactPhone})` : ""}
+                </p>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono truncate">
+                  {data.billing?.billingContactEmail || "No billing email registered"}
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
             <div>
               <h3 className="text-base font-bold text-zinc-900 dark:text-white">
@@ -2469,144 +2603,319 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Company Legal Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editCompName}
-                    onChange={(e) => setEditCompName(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
+              <div className="space-y-6">
+                {/* SECTION 1: AUTHORITATIVE COMPANY CORE */}
+                <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                  <div className="flex items-center justify-between border-b border-zinc-200/80 pb-2 dark:border-zinc-800">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                      <span>🏢</span> Section 1: Company Core Information
+                    </h4>
+                    <span className="text-[10px] font-medium text-zinc-400">
+                      Authoritative legal identity (`companies` master)
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Company Legal Name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={editCompName}
+                        onChange={(e) => setEditCompName(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Company Code
+                      </label>
+                      <input
+                        type="text"
+                        disabled
+                        value={data.company.companyCode || "Auto-assigned"}
+                        className="w-full rounded-xl border border-zinc-200 bg-zinc-100 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-800 text-zinc-500 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Business / Tax ID
+                      </label>
+                      <input
+                        type="text"
+                        value={editCompRegNo}
+                        onChange={(e) => setEditCompRegNo(e.target.value)}
+                        placeholder="XX-XXXXXXX"
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Country
+                      </label>
+                      <CountrySelect
+                        value={editCompCountry}
+                        onChange={(val) => setEditCompCountry(val)}
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Primary Contact Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editCompContactName}
+                        onChange={(e) => setEditCompContactName(e.target.value)}
+                        placeholder="Owner or primary representative"
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Primary Contact Phone
+                      </label>
+                      <input
+                        type="text"
+                        value={editCompContactPhone}
+                        onChange={(e) => setEditCompContactPhone(e.target.value)}
+                        placeholder="+1 555-0100"
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Company HQ Address Line 1
+                      </label>
+                      <input
+                        type="text"
+                        value={editHqAddress1}
+                        onChange={(e) => setEditHqAddress1(e.target.value)}
+                        placeholder="Street address or P.O. Box"
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Company HQ Address Line 2
+                      </label>
+                      <input
+                        type="text"
+                        value={editHqAddress2}
+                        onChange={(e) => setEditHqAddress2(e.target.value)}
+                        placeholder="Apt, Suite, Unit, Building, Floor"
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        City
+                      </label>
+                      <input
+                        type="text"
+                        value={editHqCity}
+                        onChange={(e) => setEditHqCity(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                          State
+                        </label>
+                        <input
+                          type="text"
+                          value={editHqState}
+                          onChange={(e) => setEditHqState(e.target.value)}
+                          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                          ZIP
+                        </label>
+                        <input
+                          type="text"
+                          value={editHqZip}
+                          onChange={(e) => setEditHqZip(e.target.value)}
+                          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Company Master Status
+                      </label>
+                      <select
+                        value={editCompStatus}
+                        onChange={(e) => setEditCompStatus(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      >
+                        <option value="active">Active</option>
+                        <option value="pilot">Pilot</option>
+                        <option value="suspended">Suspended</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Business / Tax ID
-                  </label>
-                  <input
-                    type="text"
-                    value={editCompRegNo}
-                    onChange={(e) => setEditCompRegNo(e.target.value)}
-                    placeholder="XX-XXXXXXX"
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
-                  />
-                </div>
+                {/* SECTION 2: RETAILER COMMERCIAL & BILLING PROFILE */}
+                <div className="space-y-3 rounded-xl border border-indigo-200/80 bg-indigo-50/30 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/20">
+                  <div className="flex items-center justify-between border-b border-indigo-200/60 pb-2 dark:border-indigo-900/50">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                      <span>💳</span> Section 2: Retailer Commercial & Billing Profile
+                    </h4>
+                    <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400">
+                      Retailer network specific (`retailer_profiles`)
+                    </span>
+                  </div>
 
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Organization Status
-                  </label>
-                  <select
-                    value={editCompStatus}
-                    onChange={(e) => setEditCompStatus(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  >
-                    <option value="active">Active</option>
-                    <option value="pilot">Pilot</option>
-                    <option value="suspended">Suspended</option>
-                    <option value="archived">Archived</option>
-                  </select>
-                </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Retailer Commercial Status
+                      </label>
+                      <select
+                        value={editRetailerStatus}
+                        onChange={(e) => setEditRetailerStatus(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      >
+                        <option value="active">Active (Normal Trading)</option>
+                        <option value="pilot">Pilot / Trial</option>
+                        <option value="suspended">Suspended (Blocked from Ordering)</option>
+                      </select>
+                    </div>
 
-                <div className="col-span-2">
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Billing / HQ Address
-                  </label>
-                  <input
-                    type="text"
-                    value={editCompAddress}
-                    onChange={(e) => setEditCompAddress(e.target.value)}
-                    placeholder="123 Main St, Suite 100"
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
-                </div>
+                    {/* Billing Address Configuration */}
+                    <div className="col-span-2 pt-1 border-t border-indigo-100 dark:border-indigo-900/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="font-bold text-zinc-800 dark:text-zinc-200 text-xs">
+                          Retailer Billing Address
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editBillingSameAsHq}
+                            onChange={(e) => setEditBillingSameAsHq(e.target.checked)}
+                            className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="font-medium text-[11px]">Same as Company HQ Address</span>
+                        </label>
+                      </div>
 
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    City
-                  </label>
-                  <input
-                    type="text"
-                    value={editCompCity}
-                    onChange={(e) => setEditCompCity(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
-                </div>
+                      {editBillingSameAsHq ? (
+                        <div className="p-2.5 rounded-lg bg-white/70 dark:bg-zinc-900/70 border border-zinc-200/70 dark:border-zinc-800 text-[11px] text-zinc-600 dark:text-zinc-400">
+                          <span className="font-semibold text-zinc-700 dark:text-zinc-300">Using Company HQ Address:</span>{" "}
+                          {[editHqAddress1, editHqCity, editHqState, editHqZip].filter(Boolean).join(", ") || "(HQ address not yet entered)"}
+                        </div>
+                      ) : (
+                        <div className="space-y-2 pt-1">
+                          <input
+                            type="text"
+                            value={editBillingAddress}
+                            onChange={(e) => setEditBillingAddress(e.target.value)}
+                            placeholder="Separate Billing Street Address"
+                            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                          />
+                          <div className="grid grid-cols-3 gap-2">
+                            <input
+                              type="text"
+                              value={editBillingCity}
+                              onChange={(e) => setEditBillingCity(e.target.value)}
+                              placeholder="Billing City"
+                              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                            />
+                            <input
+                              type="text"
+                              value={editBillingState}
+                              onChange={(e) => setEditBillingState(e.target.value)}
+                              placeholder="State"
+                              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                            />
+                            <input
+                              type="text"
+                              value={editBillingZip}
+                              onChange={(e) => setEditBillingZip(e.target.value)}
+                              placeholder="ZIP"
+                              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    State / Province
-                  </label>
-                  <input
-                    type="text"
-                    value={editCompState}
-                    onChange={(e) => setEditCompState(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
-                </div>
+                    {/* Billing Contact Configuration */}
+                    <div className="col-span-2 pt-2 border-t border-indigo-100 dark:border-indigo-900/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="font-bold text-zinc-800 dark:text-zinc-200 text-xs">
+                          Retailer Billing Contact
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editBillingContactSameAsPrimary}
+                            onChange={(e) => setEditBillingContactSameAsPrimary(e.target.checked)}
+                            className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="font-medium text-[11px]">Same as Primary Contact</span>
+                        </label>
+                      </div>
 
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Postal / ZIP Code
-                  </label>
-                  <input
-                    type="text"
-                    value={editCompZip}
-                    onChange={(e) => setEditCompZip(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
-                </div>
+                      {editBillingContactSameAsPrimary ? (
+                        <div className="p-2.5 rounded-lg bg-white/70 dark:bg-zinc-900/70 border border-zinc-200/70 dark:border-zinc-800 text-[11px] text-zinc-600 dark:text-zinc-400">
+                          <span className="font-semibold text-zinc-700 dark:text-zinc-300">Using Primary Contact:</span>{" "}
+                          {editCompContactName ? `${editCompContactName} (${editCompContactPhone || "No phone"})` : "(Primary contact not entered)"}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <input
+                            type="text"
+                            value={editBillingContactName}
+                            onChange={(e) => setEditBillingContactName(e.target.value)}
+                            placeholder="Billing Contact Person"
+                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                          />
+                          <input
+                            type="text"
+                            value={editBillingContactPhone}
+                            onChange={(e) => setEditBillingContactPhone(e.target.value)}
+                            placeholder="Billing Phone"
+                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                          />
+                        </div>
+                      )}
+                    </div>
 
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Country
-                  </label>
-                  <CountrySelect
-                    value={editCompCountry}
-                    onChange={(val) => setEditCompCountry(val)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white cursor-pointer"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Primary Contact Name
-                  </label>
-                  <input
-                    type="text"
-                    value={editCompContactName}
-                    onChange={(e) => setEditCompContactName(e.target.value)}
-                    placeholder="Contact person"
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Phone Number
-                  </label>
-                  <input
-                    type="text"
-                    value={editCompContactPhone}
-                    onChange={(e) => setEditCompContactPhone(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Contact Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={editCompContactEmail}
-                    onChange={(e) => setEditCompContactEmail(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  />
+                    <div className="col-span-2">
+                      <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Billing & Invoicing Email Address
+                      </label>
+                      <input
+                        type="email"
+                        value={editBillingContactEmail}
+                        onChange={(e) => setEditBillingContactEmail(e.target.value)}
+                        placeholder="ap@retailer.com or accounting@store.com"
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                      <span className="text-[10px] text-zinc-400 mt-1 block">
+                        Commercial invoice statements, order receipts, and billing notifications are routed here.
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
 

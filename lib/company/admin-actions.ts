@@ -376,7 +376,6 @@ export async function updateCompanyAdminMetadata(
     throw new Error(`회사 역할 정보 초기화 실패: ${delRolesErr.message}`);
   }
 
-  // Insert new roles
   if (payload.types.length > 0) {
     const roleInserts = payload.types.map(role => ({ company_id: companyId, role }));
     const { error: insRolesErr } = await supabase
@@ -388,10 +387,24 @@ export async function updateCompanyAdminMetadata(
     }
   }
 
+  // ADM-ORG-SYNC-001: Sync retailer billing address & contact if retailer profile exists and is set to Same as HQ
+  const { syncRetailerBillingIfSameAsHq } = await import("@/lib/retailer/organization-mapping");
+  await syncRetailerBillingIfSameAsHq(supabase, companyId, {
+    address1: payload.address_1 || payload.address,
+    city: payload.city,
+    state: payload.state,
+    zipCode: payload.zipCode,
+    contactName: primaryContact?.name,
+    contactPhone: phoneToSet || primaryContact?.phone,
+  });
+
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/admin/companies");
   revalidatePath("/portal");
   revalidatePath("/portal/company/info");
+  revalidatePath(`/admin/retailers/${companyId}`);
+  revalidatePath("/admin/retailers");
+  revalidatePath("/retailer/settings/company");
 }
 
 export async function adminUploadCompanyLogo(companyId: string, formData: FormData) {

@@ -129,11 +129,27 @@ export async function updateRetailerCompanyInfoAction(payload: {
   country?: string;
   contactName?: string;
   contactPhone?: string;
-  contactEmail?: string;
-  address?: string;
+  // HQ Address Fields (Authoritative Company Core):
+  address?: string; // HQ address line 1
+  address1?: string;
+  address2?: string;
   city?: string;
   state?: string;
   zip?: string;
+  zipCode?: string;
+
+  // Billing & Commercial Fields (Retailer Commercial Profile):
+  billingSameAsHq?: boolean;
+  billingAddress?: string;
+  billingCity?: string;
+  billingState?: string;
+  billingZip?: string;
+
+  billingContactSameAsPrimary?: boolean;
+  billingContactName?: string;
+  billingContactPhone?: string;
+  billingContactEmail?: string;
+  contactEmail?: string; // legacy alias
 }) {
   try {
     const session = await verifyRetailerSession();
@@ -162,49 +178,111 @@ export async function updateRetailerCompanyInfoAction(payload: {
     // Fetch existing data for audit log
     const { data: existingComp } = await adminClient
       .from("companies")
-      .select("name, business_registration_number, country, contact_name, contact_phone")
+      .select("name, business_registration_number, country, contact_name, contact_phone, address_1, address_2, city, state, zip_code")
       .eq("id", targetCompanyId)
       .single();
 
     const { data: existingProf } = await adminClient
       .from("retailer_profiles")
-      .select("billing_contact_name, billing_contact_email, billing_contact_phone, billing_address, billing_city, billing_state, billing_zip")
+      .select("billing_same_as_hq, billing_contact_same_as_primary, billing_contact_name, billing_contact_email, billing_contact_phone, billing_address, billing_city, billing_state, billing_zip")
       .eq("company_id", targetCompanyId)
       .maybeSingle();
 
-    // Update companies table
+    // 1. Authoritative Company Core Update in `companies`
+    const hqAddress1 = (payload.address1 ?? payload.address)?.trim();
+    const hqAddress2 = payload.address2?.trim();
+    const hqCity = payload.city?.trim();
+    const hqState = payload.state?.trim();
+    const hqZip = (payload.zipCode ?? payload.zip)?.trim();
+
+    const compUpdates: any = {
+      name: cleanName,
+      business_registration_number: payload.businessRegistrationNumber !== undefined ? payload.businessRegistrationNumber.trim() : (existingComp?.business_registration_number || ""),
+      country: formatCanonicalCountryName(payload.country?.trim() || existingComp?.country) || "United States",
+      contact_name: payload.contactName !== undefined ? (payload.contactName.trim() || null) : existingComp?.contact_name,
+      contact_phone: payload.contactPhone !== undefined ? (payload.contactPhone.trim() || null) : existingComp?.contact_phone,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (payload.address !== undefined || payload.address1 !== undefined) compUpdates.address_1 = hqAddress1 || null;
+    if (payload.address2 !== undefined) compUpdates.address_2 = hqAddress2 || null;
+    if (payload.city !== undefined) compUpdates.city = hqCity || null;
+    if (payload.state !== undefined) compUpdates.state = hqState || null;
+    if (payload.zip !== undefined || payload.zipCode !== undefined) compUpdates.zip_code = hqZip || null;
+
     const { error: compError } = await adminClient
       .from("companies")
-      .update({
-        name: cleanName,
-        business_registration_number: payload.businessRegistrationNumber?.trim() || existingComp?.business_registration_number || "",
-        country: formatCanonicalCountryName(payload.country?.trim() || existingComp?.country) || "United States",
-        contact_name: payload.contactName?.trim() || null,
-        contact_phone: payload.contactPhone?.trim() || null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(compUpdates)
       .eq("id", targetCompanyId);
 
     if (compError) {
       return { success: false, error: compError.message };
     }
 
-    // Update retailer_profiles table (billing/contact details only)
+    // 2. Retailer Commercial Profile Update in `retailer_profiles`
     const profUpdates: any = {
       updated_at: new Date().toISOString(),
     };
-    if (payload.contactName !== undefined) profUpdates.billing_contact_name = payload.contactName.trim() || null;
-    if (payload.contactEmail !== undefined) profUpdates.billing_contact_email = payload.contactEmail.trim() || null;
-    if (payload.contactPhone !== undefined) profUpdates.billing_contact_phone = payload.contactPhone.trim() || null;
-    if (payload.address !== undefined) profUpdates.billing_address = payload.address.trim() || null;
-    if (payload.city !== undefined) profUpdates.billing_city = payload.city.trim() || null;
-    if (payload.state !== undefined) profUpdates.billing_state = payload.state.trim() || null;
-    if (payload.zip !== undefined) profUpdates.billing_zip = payload.zip.trim() || null;
 
-    await adminClient
-      .from("retailer_profiles")
-      .update(profUpdates)
-      .eq("company_id", targetCompanyId);
+    // Address override behavior
+    if (payload.billingSameAsHq !== undefined) {
+      profUpdates.billing_same_as_hq = payload.billingSameAsHq;
+      if (payload.billingSameAsHq) {
+        // When set to same as HQ, mirror HQ values for backwards compatibility
+        const effectiveHq1 = compUpdates.address_1 ?? existingComp?.address_1;
+        const effectiveHqCity = compUpdates.city ?? existingComp?.city;
+        const effectiveHqState = compUpdates.state ?? existingComp?.state;
+        const effectiveHqZip = compUpdates.zip_code ?? existingComp?.zip_code;
+        if (effectiveHq1 !== undefined) profUpdates.billing_address = effectiveHq1;
+        if (effectiveHqCity !== undefined) profUpdates.billing_city = effectiveHqCity;
+        if (effectiveHqState !== undefined) profUpdates.billing_state = effectiveHqState;
+        if (effectiveHqZip !== undefined) profUpdates.billing_zip = effectiveHqZip;
+      }
+    }
+
+    if (payload.billingSameAsHq === false) {
+      if (payload.billingAddress !== undefined) profUpdates.billing_address = payload.billingAddress.trim() || null;
+      if (payload.billingCity !== undefined) profUpdates.billing_city = payload.billingCity.trim() || null;
+      if (payload.billingState !== undefined) profUpdates.billing_state = payload.billingState.trim() || null;
+      if (payload.billingZip !== undefined) profUpdates.billing_zip = payload.billingZip.trim() || null;
+    }
+
+    // Contact override behavior
+    if (payload.billingContactSameAsPrimary !== undefined) {
+      profUpdates.billing_contact_same_as_primary = payload.billingContactSameAsPrimary;
+      if (payload.billingContactSameAsPrimary) {
+        const effectiveName = compUpdates.contact_name ?? existingComp?.contact_name;
+        const effectivePhone = compUpdates.contact_phone ?? existingComp?.contact_phone;
+        if (effectiveName !== undefined) profUpdates.billing_contact_name = effectiveName;
+        if (effectivePhone !== undefined) profUpdates.billing_contact_phone = effectivePhone;
+      }
+    }
+
+    if (payload.billingContactSameAsPrimary === false) {
+      if (payload.billingContactName !== undefined) profUpdates.billing_contact_name = payload.billingContactName.trim() || null;
+      if (payload.billingContactPhone !== undefined) profUpdates.billing_contact_phone = payload.billingContactPhone.trim() || null;
+    }
+
+    const billingEmailVal = payload.billingContactEmail ?? payload.contactEmail;
+    if (billingEmailVal !== undefined) {
+      profUpdates.billing_contact_email = billingEmailVal.trim() || null;
+    }
+
+    if (Object.keys(profUpdates).length > 1) {
+      const { error: profError } = await adminClient
+        .from("retailer_profiles")
+        .update(profUpdates)
+        .eq("company_id", targetCompanyId);
+
+      if (profError && profError.message?.includes("does not exist")) {
+        delete profUpdates.billing_same_as_hq;
+        delete profUpdates.billing_contact_same_as_primary;
+        await adminClient
+          .from("retailer_profiles")
+          .update(profUpdates)
+          .eq("company_id", targetCompanyId);
+      }
+    }
 
     // Record audit log
     await recordOrgAuditLog({
@@ -219,8 +297,11 @@ export async function updateRetailerCompanyInfoAction(payload: {
 
     revalidatePath("/account");
     revalidatePath("/retailer/account");
+    revalidatePath("/retailer/settings/company");
     revalidatePath(`/admin/retailers/${targetCompanyId}`);
     revalidatePath("/admin/retailers");
+    revalidatePath(`/admin/companies/${targetCompanyId}`);
+    revalidatePath("/admin/companies");
 
     return { success: true };
   } catch (err: any) {
