@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from "react";
 import { CartItem, computeCartSummary } from "@/lib/retailer/cart";
 
 interface CartContextType {
@@ -191,13 +191,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setLastAddedItem(null);
   };
 
-  const syncItemThumbnails = (thumbnails: Record<string, string | null>) => {
+  const syncItemThumbnails = useCallback((thumbnails: Record<string, string | null>) => {
     if (!thumbnails || Object.keys(thumbnails).length === 0) return;
     setItems((prev) => {
       let changed = false;
       const updated = prev.map((item) => {
         const freshUrl = thumbnails[item.productId];
-        if (freshUrl && freshUrl !== item.thumbnailUrl) {
+        if (!freshUrl) return item;
+        // Only update if item doesn't have a thumbnail yet or if base path genuinely changed
+        const currentBase = item.thumbnailUrl ? item.thumbnailUrl.split("?")[0] : null;
+        const freshBase = freshUrl.split("?")[0];
+        if (!currentBase || currentBase !== freshBase) {
           changed = true;
           return { ...item, thumbnailUrl: freshUrl };
         }
@@ -205,7 +209,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       });
       return changed ? updated : prev;
     });
-  };
+  }, []);
 
   const summary = useMemo(() => computeCartSummary(items), [items]);
 

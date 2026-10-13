@@ -11,14 +11,18 @@ interface CartItemImageProps {
   size?: "sm" | "md" | "lg";
 }
 
+const EMPTY_FALLBACKS: string[] = [];
+
 export function CartItemImage({
   productId,
   productName,
   primaryUrl,
-  fallbackUrls = [],
+  fallbackUrls = EMPTY_FALLBACKS,
   className = "",
   size = "md",
 }: CartItemImageProps) {
+  const fallbackUrlsKey = (fallbackUrls || []).join("|");
+
   // Collect all non-empty candidate image URLs in priority order:
   // 1. primaryUrl (Authoritative Representative Image)
   // 2. fallbackUrls (Gallery images in order: position 1, 2, ...)
@@ -27,22 +31,23 @@ export function CartItemImage({
     if (primaryUrl && typeof primaryUrl === "string" && primaryUrl.trim()) {
       list.push(primaryUrl.trim());
     }
-    for (const url of fallbackUrls) {
+    for (const url of fallbackUrls || []) {
       if (url && typeof url === "string" && url.trim() && !list.includes(url.trim())) {
         list.push(url.trim());
       }
     }
     return list;
-  }, [primaryUrl, fallbackUrls]);
+  }, [primaryUrl, fallbackUrlsKey]);
 
+  const candidateKey = candidateUrls.join("|");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hasError, setHasError] = useState(false);
 
-  // Reset error and index whenever candidates change (e.g. freshly resolved URL arrives)
+  // Reset error and index only when candidate URLs actually change
   useEffect(() => {
     setCurrentIndex(0);
     setHasError(false);
-  }, [candidateUrls]);
+  }, [candidateKey]);
 
   const currentUrl = candidateUrls[currentIndex] || null;
 
@@ -72,7 +77,7 @@ export function CartItemImage({
 
   return (
     <img
-      key={currentUrl}
+      key={productId}
       src={currentUrl}
       alt={productName}
       className={`w-full h-full object-contain object-center transition-opacity duration-200 ${className}`}

@@ -19,6 +19,39 @@ export type AuthoritativeProductImageMap = Record<string, AuthoritativeProductIm
  * 
  * Image URLs are signed with 24 hours (86,400s) validity to prevent stale/broken URLs in cart sessions.
  */
+// In-memory cache for signed storage paths to guarantee stable URLs across requests
+// storagePath -> { signedUrl: string, expiresAt: number }
+const signedUrlCache = new Map<string, { signedUrl: string; expiresAt: number }>();
+
+async function getOrSignStoragePath(client: SupabaseClient, storagePath: string): Promise<string | null> {
+  if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
+    return storagePath;
+  }
+  const now = Date.now();
+  const cached = signedUrlCache.get(storagePath);
+  // If cached and still valid for at least 1 hour (3600 seconds)
+  if (cached && cached.expiresAt - now > 3600 * 1000) {
+    return cached.signedUrl;
+  }
+
+  try {
+    const { data: signed } = await client.storage
+      .from("company-uploads")
+      .createSignedUrl(storagePath, 86400); // 24 hours validity
+
+    if (signed?.signedUrl) {
+      signedUrlCache.set(storagePath, {
+        signedUrl: signed.signedUrl,
+        expiresAt: now + 86400 * 1000,
+      });
+      return signed.signedUrl;
+    }
+  } catch (err) {
+    console.warn(`[resolveAuthoritativeProductImages] Failed to sign image path ${storagePath}:`, err);
+  }
+  return null;
+}
+
 export async function resolveAuthoritativeProductImages(
   client: SupabaseClient,
   productIds: string[]
@@ -82,7 +115,7 @@ export async function resolveAuthoritativeProductImages(
     }
   }
 
-  // 3. Sign storage paths and construct authoritative image map
+  // 3. Sign storage paths and construct authoritative image map using cached signed URLs
   const resultMap: AuthoritativeProductImageMap = {};
 
   for (const pid of uniqueIds) {
@@ -94,19 +127,9 @@ export async function resolveAuthoritativeProductImages(
 
     // Sign product_images items
     for (const img of prodImgs) {
-      if (img.storage_path.startsWith("http://") || img.storage_path.startsWith("https://")) {
-        signedUrls.push(img.storage_path);
-        continue;
-      }
-      try {
-        const { data: signed } = await client.storage
-          .from("company-uploads")
-          .createSignedUrl(img.storage_path, 86400); // 24 hours validity
-        if (signed?.signedUrl) {
-          signedUrls.push(signed.signedUrl);
-        }
-      } catch (err) {
-        console.warn(`[resolveAuthoritativeProductImages] Failed to sign image path ${img.storage_path}:`, err);
+      const url = await getOrSignStoragePath(client, img.storage_path);
+      if (url) {
+        signedUrls.push(url);
       }
     }
 
@@ -114,19 +137,9 @@ export async function resolveAuthoritativeProductImages(
     if (signedUrls.length === 0) {
       const fbPaths = fallbackImagesByProd.get(pid) || [];
       for (const fbPath of fbPaths) {
-        if (fbPath.startsWith("http://") || fbPath.startsWith("https://")) {
-          signedUrls.push(fbPath);
-          continue;
-        }
-        try {
-          const { data: signed } = await client.storage
-            .from("company-uploads")
-            .createSignedUrl(fbPath, 86400);
-          if (signed?.signedUrl) {
-            signedUrls.push(signed.signedUrl);
-          }
-        } catch {
-          // ignore
+        const url = await getOrSignStoragePath(client, fbPath);
+        if (url) {
+          signedUrls.push(url);
         }
       }
     }

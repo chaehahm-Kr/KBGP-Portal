@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useCart } from "@/components/retailer/cart-context";
 import { submitRetailerOrder } from "@/lib/retailer/orders";
@@ -46,10 +46,15 @@ export function RetailerCheckoutView({
   const [productThumbnails, setProductThumbnails] = useState<Record<string, string | null>>({});
   const [productGalleries, setProductGalleries] = useState<Record<string, string[]>>({});
 
-  // Sync fresh authoritative image URLs if any items are present
+  // Track unique product IDs to prevent repetitive image validations
+  const productIdsKey = useMemo(() => {
+    return items.map((i) => i.productId).sort().join(",");
+  }, [items]);
+
+  // Sync fresh authoritative image URLs only when product set changes
   useEffect(() => {
-    if (items.length > 0) {
-      const ids = items.map((i) => i.productId);
+    if (productIdsKey) {
+      const ids = Array.from(new Set(items.map((i) => i.productId)));
       validateRetailerCartItemsAction(ids)
         .then((res) => {
           if (res.success) {
@@ -64,7 +69,11 @@ export function RetailerCheckoutView({
         })
         .catch((err) => console.error("Checkout image validation failed:", err));
     }
-  }, [items, syncItemThumbnails]);
+  }, [productIdsKey, syncItemThumbnails]);
+
+  const checkoutPromoSignature = useMemo(() => {
+    return items.map((i) => `${i.productId}:${i.quantity}:${i.wholesalePrice}:${i.discountPercent || 0}`).join("|");
+  }, [items]);
 
   useEffect(() => {
     if (items.length > 0) {
@@ -81,8 +90,10 @@ export function RetailerCheckoutView({
       )
         .then(setPromoEvaluation)
         .catch((err) => console.error("Checkout promo eval failed:", err));
+    } else {
+      setPromoEvaluation(null);
     }
-  }, [items, couponCode]);
+  }, [checkoutPromoSignature, couponCode]);
 
   const discountAmount = promoEvaluation?.totalDiscount || 0;
   const effectiveTotal = Math.max(0, subtotal - discountAmount);

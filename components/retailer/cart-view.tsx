@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useCart } from "@/components/retailer/cart-context";
 import { validateRetailerCartItemsAction } from "@/lib/retailer/purchase-limit-actions";
@@ -33,8 +33,11 @@ export function RetailerCartView() {
   const [inputCode, setInputCode] = useState("");
   const [promoEvaluation, setPromoEvaluation] = useState<EvaluatePromotionResult | null>(null);
   const [isEvaluatingPromo, setIsEvaluatingPromo] = useState(false);
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
   const [promoFeedbackMessage, setPromoFeedbackMessage] = useState<string | null>(null);
   const [promoFeedbackType, setPromoFeedbackType] = useState<"error" | "success">("error");
+
+  const evalSeqRef = useRef(0);
 
   // Validate live stock, account allowances, and resolve authoritative images
   const validateCartItems = useCallback(async (productIds: string[]) => {
@@ -63,24 +66,38 @@ export function RetailerCartView() {
     }
   }, [syncItemThumbnails]);
 
+  // Track unique product IDs in cart to prevent repetitive image validations on quantity changes
+  const productIdsKey = useMemo(() => {
+    return items.map((i) => i.productId).sort().join(",");
+  }, [items]);
+
   useEffect(() => {
-    if (items.length > 0) {
-      const ids = items.map((i) => i.productId);
+    if (productIdsKey) {
+      const ids = Array.from(new Set(items.map((i) => i.productId)));
       validateCartItems(ids);
     } else {
       setAllowances({});
       setProductThumbnails({});
+      setProductGalleries({});
     }
-  }, [items, validateCartItems]);
+  }, [productIdsKey, validateCartItems]);
+
+  // Serialized signature of cart quantities and wholesale prices for promo evaluation
+  const cartPromoSignature = useMemo(() => {
+    return items
+      .map((i) => `${i.productId}:${i.quantity}:${i.wholesalePrice}:${i.discountPercent || 0}`)
+      .join("|");
+  }, [items]);
 
   // Evaluate promotions whenever items or couponCode change
   useEffect(() => {
     if (items.length === 0) {
       setPromoEvaluation(null);
+      setIsEvaluatingPromo(false);
       return;
     }
 
-    let isCurrent = true;
+    const seq = ++evalSeqRef.current;
     setIsEvaluatingPromo(true);
 
     evaluateCartPromotionsAction(
@@ -95,7 +112,7 @@ export function RetailerCartView() {
       couponCode
     )
       .then((res) => {
-        if (isCurrent) {
+        if (seq === evalSeqRef.current) {
           setPromoEvaluation(res);
           if (couponCode && !res.isValid) {
             setPromoFeedbackType("error");
@@ -109,24 +126,59 @@ export function RetailerCartView() {
         }
       })
       .catch((err) => {
-        if (isCurrent) {
+        if (seq === evalSeqRef.current) {
           console.error("Cart promo evaluation error:", err);
+          if (couponCode) {
+            setPromoFeedbackType("error");
+            setPromoFeedbackMessage("Failed to evaluate promo code.");
+          }
         }
       })
       .finally(() => {
-        if (isCurrent) setIsEvaluatingPromo(false);
+        if (seq === evalSeqRef.current) {
+          setIsEvaluatingPromo(false);
+        }
       });
+  }, [cartPromoSignature, couponCode]);
 
-    return () => {
-      isCurrent = false;
-    };
-  }, [items, couponCode]);
-
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = inputCode.trim().toUpperCase();
-    if (!trimmed) return;
-    setCouponCode(trimmed);
+    if (!trimmed || isApplyingPromo) return;
+
+    setIsApplyingPromo(true);
+    setPromoFeedbackMessage(null);
+
+    try {
+      const res = await evaluateCartPromotionsAction(
+        items.map((i) => ({
+          productId: i.productId,
+          wholesalePrice: i.wholesalePrice,
+          quantity: i.quantity,
+          lineTotal: i.lineTotal,
+          discountPercent: i.discountPercent,
+          appliedReason: i.appliedReason,
+        })),
+        trimmed
+      );
+
+      setPromoEvaluation(res);
+      if (res.isValid && res.appliedCoupon) {
+        setCouponCode(trimmed);
+        setPromoFeedbackType("success");
+        setPromoFeedbackMessage(null);
+        setInputCode("");
+      } else {
+        setPromoFeedbackType("error");
+        setPromoFeedbackMessage(res.errorReason || "Invalid promo code.");
+      }
+    } catch (err: any) {
+      console.error("Failed to apply coupon:", err);
+      setPromoFeedbackType("error");
+      setPromoFeedbackMessage("Failed to validate promo code. Please try again.");
+    } finally {
+      setIsApplyingPromo(false);
+    }
   };
 
   const handleRemoveCoupon = () => {
@@ -454,10 +506,10 @@ export function RetailerCartView() {
                   />
                   <button
                     type="submit"
-                    disabled={!inputCode.trim() || isEvaluatingPromo}
+                    disabled={!inputCode.trim() || isApplyingPromo}
                     className="px-3.5 py-2 text-xs font-bold rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity cursor-pointer shrink-0"
                   >
-                    {isEvaluatingPromo ? "..." : "Apply"}
+                    {isApplyingPromo ? "Applying..." : "Apply"}
                   </button>
                 </form>
               )}
@@ -516,7 +568,7 @@ export function RetailerCartView() {
               {/* Promotion / Coupon Discount Line */}
               {promoEvaluation && promoEvaluation.totalDiscount > 0 && (
                 <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <span>Promotion / Coupon:</span>
+                  <span>Promo Discount:</span>
                   <span className="font-bold">
                     -${promoEvaluation.totalDiscount.toFixed(2)}
                   </span>
