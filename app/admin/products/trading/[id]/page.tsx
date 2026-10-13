@@ -20,10 +20,11 @@ export default async function AdminTradingProductDetailPage({
     notFound();
   }
 
-  // A product is eligible for Trading 360° Management if it is explicitly SELECTED for trading, or its trading_status is active/historical.
+  // A product is eligible for Trading 360° Management if it is explicitly SELECTED for trading, or its trading_status is active/inactive/historical.
   const isTradingEligible =
     data.product.selection_status === "SELECTED" ||
     data.product.trading_status === "active" ||
+    data.product.trading_status === "inactive" ||
     data.product.trading_status === "historical";
 
   if (!isTradingEligible) {

@@ -386,7 +386,9 @@ export async function getTradingProductDetailData(productId: string) {
   });
 
   const tradingStatus =
-    product.trading_status === "active" || product.trading_status === "historical"
+    product.trading_status === "active" ||
+    product.trading_status === "inactive" ||
+    product.trading_status === "historical"
       ? product.trading_status
       : product.selection_status === "SELECTED"
       ? "active"

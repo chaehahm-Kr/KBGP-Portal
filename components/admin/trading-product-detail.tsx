@@ -609,6 +609,12 @@ export function TradingProductDetail({
   const [statusError, setStatusError] = useState("");
   const [isStatusSubmitting, setIsStatusSubmitting] = useState(false);
 
+  // Synchronize state when authoritative server product props update (e.g. on navigation or revalidation)
+  useEffect(() => {
+    setCurrentTradingStatus(product.trading_status || "inactive");
+    setCurrentVisibility(product.retailer_visibility || "hidden");
+  }, [product.trading_status, product.retailer_visibility]);
+
   const handleOpenStatusModal = () => {
     setTargetTradingStatus(currentTradingStatus);
     setTargetVisibility(currentVisibility);
