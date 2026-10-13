@@ -54,7 +54,7 @@ export async function getAdminRetailerOrdersAction(
       stores (
         id,
         name,
-        address_line1,
+        address,
         city,
         state,
         zip
@@ -65,8 +65,6 @@ export async function getAdminRetailerOrdersAction(
         sku,
         product_name,
         quantity,
-        quantity_shipped,
-        quantity_cancelled,
         unit_wholesale_price,
         line_total
       ),
@@ -146,9 +144,15 @@ export async function getAdminRetailerOrdersAction(
 
   const mappedOrders: AdminRetailerOrderSummary[] = rawOrders.map((o: any) => {
     const items = o.retailer_order_items || [];
-    const totalOrderedUnits = items.reduce((sum: number, it: any) => sum + Number(it.quantity || 0), 0);
-    const totalShippedUnits = items.reduce((sum: number, it: any) => sum + Number(it.quantity_shipped || 0), 0);
-    const totalCancelledUnits = items.reduce((sum: number, it: any) => sum + Number(it.quantity_cancelled || 0), 0);
+    const totalOrderedUnits =
+      items.reduce((sum: number, it: any) => sum + Number(it.quantity || 0), 0) ||
+      Number(o.total_ordered_units || o.total_items_count || 0);
+    const totalShippedUnits = ["shipped", "delivered"].includes(o.order_status)
+      ? totalOrderedUnits
+      : items.reduce((sum: number, it: any) => sum + Number(it.quantity_shipped || 0), 0);
+    const totalCancelledUnits = ["cancelled"].includes(o.order_status)
+      ? totalOrderedUnits
+      : items.reduce((sum: number, it: any) => sum + Number(it.quantity_cancelled || 0), 0);
     const totalRemainingUnits = Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits);
 
     const pkgs = packagesMap.get(o.id) || [];
@@ -251,7 +255,7 @@ export async function getAdminRetailerOrderDetailAction(
       stores (
         id,
         name,
-        address_line1,
+        address,
         city,
         state,
         zip,
@@ -267,12 +271,8 @@ export async function getAdminRetailerOrderDetailAction(
         unit_wholesale_price,
         unit_msrp,
         quantity,
-        quantity_shipped,
-        quantity_cancelled,
         case_pack_qty,
-        line_total,
-        cancellation_reason,
-        cancelled_at
+        line_total
       ),
       retailer_invoices (
         id,
@@ -336,8 +336,23 @@ export async function getAdminRetailerOrderDetailAction(
 
   const items: AdminOrderLineItem[] = (o.retailer_order_items || []).map((it: any) => {
     const qtyOrdered = Number(it.quantity || 0);
-    const qtyShipped = Number(it.quantity_shipped || 0);
-    const qtyCancelled = Number(it.quantity_cancelled || 0);
+    const fulfilledShipped = (rawFulfillments || [])
+      .filter((f: any) => f.status === "shipped" || f.status === "delivered")
+      .reduce((sum: number, f: any) => {
+        const fItem = (f.retailer_order_fulfillment_items || []).find((fi: any) => fi.order_item_id === it.id);
+        return sum + Number(fItem?.quantity_shipped || 0);
+      }, 0);
+    const qtyShipped = Number(
+      it.quantity_shipped ||
+        (fulfilledShipped > 0
+          ? fulfilledShipped
+          : ["shipped", "delivered"].includes(o.order_status)
+          ? qtyOrdered
+          : 0)
+    );
+    const qtyCancelled = Number(
+      it.quantity_cancelled || (["cancelled"].includes(o.order_status) ? qtyOrdered : 0)
+    );
     const qtyRemaining = Math.max(0, qtyOrdered - qtyShipped - qtyCancelled);
 
     return {
