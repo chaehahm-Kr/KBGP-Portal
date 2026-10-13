@@ -14,8 +14,10 @@ import { serverEnv } from "@/lib/env/server";
  * 일반적인 데이터 조회·입력에는 절대 사용하지 않는다 — 그런 용도에는 항상
  * lib/supabase/server.ts (RLS가 적용되는 클라이언트)를 사용한다.
  */
+import { PROTECTED_BUSINESS_EMAILS } from "@/lib/auth/password-protection";
+
 export function createAdminClient() {
-  return createSupabaseClient(
+  const client = createSupabaseClient(
     publicEnv.NEXT_PUBLIC_SUPABASE_URL,
     serverEnv.SUPABASE_SECRET_KEY,
     {
@@ -25,4 +27,30 @@ export function createAdminClient() {
       },
     }
   );
+
+  // Permanent Recurrence Prevention Guard:
+  // Prohibit any admin client call from mutating passwords of protected production business accounts.
+  const originalUpdateUserById = client.auth.admin.updateUserById.bind(client.auth.admin);
+  client.auth.admin.updateUserById = (async (uid: string, attributes: any) => {
+    if (attributes && attributes.password) {
+      try {
+        const { data: userRes } = await client.auth.admin.getUserById(uid);
+        const email = userRes?.user?.email?.toLowerCase().trim();
+        if (email && (PROTECTED_BUSINESS_EMAILS as readonly string[]).includes(email)) {
+          throw new Error(
+            `[SECURITY RECURRENCE PREVENTION GUARD] Blocked attempt to mutate password for protected business user: ${email}. ` +
+            `Automated mutations against real business accounts are strictly prohibited.`
+          );
+        }
+      } catch (err: any) {
+        if (err.message?.includes("SECURITY RECURRENCE PREVENTION GUARD")) {
+          throw err;
+        }
+        // If getUserById failed for transient reasons, proceed to original to avoid masking
+      }
+    }
+    return originalUpdateUserById(uid, attributes);
+  }) as typeof client.auth.admin.updateUserById;
+
+  return client;
 }
