@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useCart } from "@/components/retailer/cart-context";
 import { validateRetailerCartItemsAction } from "@/lib/retailer/purchase-limit-actions";
 import { type RetailerPurchaseAllowance } from "@/lib/retailer/purchase-limits";
+import { evaluateCartPromotionsAction } from "@/lib/retailer/promotion-actions";
+import { type EvaluatePromotionResult } from "@/lib/retailer/promotion-types";
 
 export function RetailerCartView() {
   const {
@@ -12,6 +14,8 @@ export function RetailerCartView() {
     subtotal,
     totalUnits,
     totalSkus,
+    couponCode,
+    setCouponCode,
     updateQuantity,
     removeItem,
     clearCart,
@@ -19,20 +23,30 @@ export function RetailerCartView() {
   } = useCart();
 
   const [allowances, setAllowances] = useState<Record<string, RetailerPurchaseAllowance>>({});
+  const [productThumbnails, setProductThumbnails] = useState<Record<string, string | null>>({});
   const [isValidating, setIsValidating] = useState(false);
 
-  // Validate live stock and account allowances
+  // Promotion states
+  const [inputCode, setInputCode] = useState("");
+  const [promoEvaluation, setPromoEvaluation] = useState<EvaluatePromotionResult | null>(null);
+  const [isEvaluatingPromo, setIsEvaluatingPromo] = useState(false);
+  const [promoFeedbackMessage, setPromoFeedbackMessage] = useState<string | null>(null);
+  const [promoFeedbackType, setPromoFeedbackType] = useState<"error" | "success">("error");
+
+  // Validate live stock, account allowances, and resolve authoritative images
   const validateCartItems = useCallback(async (productIds: string[]) => {
     if (!productIds || productIds.length === 0) {
       setAllowances({});
+      setProductThumbnails({});
       return;
     }
 
     setIsValidating(true);
     try {
       const res = await validateRetailerCartItemsAction(productIds);
-      if (res.success && res.allowances) {
-        setAllowances(res.allowances);
+      if (res.success) {
+        if (res.allowances) setAllowances(res.allowances);
+        if (res.thumbnails) setProductThumbnails(res.thumbnails);
       }
     } catch (err) {
       console.error("[RetailerCartView] Cart validation failed:", err);
@@ -47,8 +61,71 @@ export function RetailerCartView() {
       validateCartItems(ids);
     } else {
       setAllowances({});
+      setProductThumbnails({});
     }
   }, [items, validateCartItems]);
+
+  // Evaluate promotions whenever items or couponCode change
+  useEffect(() => {
+    if (items.length === 0) {
+      setPromoEvaluation(null);
+      return;
+    }
+
+    let isCurrent = true;
+    setIsEvaluatingPromo(true);
+
+    evaluateCartPromotionsAction(
+      items.map((i) => ({
+        productId: i.productId,
+        wholesalePrice: i.wholesalePrice,
+        quantity: i.quantity,
+        lineTotal: i.lineTotal,
+        discountPercent: i.discountPercent,
+        appliedReason: i.appliedReason,
+      })),
+      couponCode
+    )
+      .then((res) => {
+        if (isCurrent) {
+          setPromoEvaluation(res);
+          if (couponCode && !res.isValid) {
+            setPromoFeedbackType("error");
+            setPromoFeedbackMessage(res.errorReason || "Invalid promo code.");
+          } else if (couponCode && res.isValid && res.appliedCoupon) {
+            setPromoFeedbackType("success");
+            setPromoFeedbackMessage(null);
+          } else {
+            setPromoFeedbackMessage(null);
+          }
+        }
+      })
+      .catch((err) => {
+        if (isCurrent) {
+          console.error("Cart promo evaluation error:", err);
+        }
+      })
+      .finally(() => {
+        if (isCurrent) setIsEvaluatingPromo(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [items, couponCode]);
+
+  const handleApplyCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = inputCode.trim().toUpperCase();
+    if (!trimmed) return;
+    setCouponCode(trimmed);
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponCode(null);
+    setInputCode("");
+    setPromoFeedbackMessage(null);
+  };
 
   if (isLoading) {
     return (
@@ -164,16 +241,30 @@ export function RetailerCartView() {
               >
                 <div className="flex gap-4">
                   {/* Thumbnail */}
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 p-2 shrink-0 flex items-center justify-center overflow-hidden border border-zinc-200/60 dark:border-zinc-800">
-                    {item.thumbnailUrl ? (
-                      <img
-                        src={item.thumbnailUrl}
-                        alt={item.productName}
-                        className="w-full h-full object-contain"
-                      />
-                    ) : (
-                      <span className="text-xs text-zinc-400">No Image</span>
-                    )}
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 p-2 shrink-0 flex items-center justify-center overflow-hidden border border-zinc-200/60 dark:border-zinc-800 relative">
+                    {(() => {
+                      const displayImg = productThumbnails[item.productId] ?? item.thumbnailUrl;
+                      return displayImg ? (
+                        <img
+                          src={displayImg}
+                          alt={item.productName}
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            target.style.display = "none";
+                            const parent = target.parentElement;
+                            if (parent && !parent.querySelector(".no-img-label")) {
+                              const span = document.createElement("span");
+                              span.className = "text-xs text-zinc-400 no-img-label";
+                              span.innerText = "No Image";
+                              parent.appendChild(span);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span className="text-xs text-zinc-400">No Image</span>
+                      );
+                    })()}
                   </div>
 
                   {/* Info */}
@@ -327,7 +418,94 @@ export function RetailerCartView() {
               Order Summary
             </h2>
 
-            <div className="space-y-3 text-xs">
+            {/* Promo Code Input & Status */}
+            <div className="space-y-2 pb-2">
+              <div className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
+                Promo Code
+              </div>
+
+              {promoEvaluation?.appliedCoupon ? (
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-xs text-emerald-900 dark:text-emerald-200 flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+                      <span className="font-mono">{promoEvaluation.appliedCoupon.coupon_code}</span>
+                      <span className="text-[10px] bg-emerald-200/70 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-200 px-1.5 py-0.5 rounded font-medium">
+                        Applied
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-emerald-700 dark:text-emerald-300 truncate">
+                      {promoEvaluation.appliedCoupon.promotion_name}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                      -${promoEvaluation.appliedCoupon.discount_amount.toFixed(2)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRemoveCoupon}
+                      className="text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 underline font-medium cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleApplyCoupon} className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter promo code"
+                    value={inputCode}
+                    onChange={(e) => setInputCode(e.target.value)}
+                    className="flex-1 px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white uppercase font-mono placeholder:normal-case placeholder:font-sans focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!inputCode.trim() || isEvaluatingPromo}
+                    className="px-3.5 py-2 text-xs font-bold rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity cursor-pointer shrink-0"
+                  >
+                    {isEvaluatingPromo ? "..." : "Apply"}
+                  </button>
+                </form>
+              )}
+
+              {/* Promo Error Feedback */}
+              {promoFeedbackMessage && (
+                <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-[11px] text-rose-700 dark:text-rose-300 font-medium flex items-center justify-between">
+                  <span>{promoFeedbackMessage}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPromoFeedbackMessage(null);
+                      if (couponCode) handleRemoveCoupon();
+                    }}
+                    className="text-rose-500 hover:text-rose-700 ml-2 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Automatic Promotion Badge */}
+              {promoEvaluation?.appliedAutomatic && (
+                <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 text-xs text-indigo-900 dark:text-indigo-200 flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="font-bold flex items-center gap-1 text-[11px]">
+                      <span>⚡ Automatic Promotion</span>
+                    </div>
+                    <div className="text-[11px] text-indigo-700 dark:text-indigo-300 truncate">
+                      {promoEvaluation.appliedAutomatic.promotion_name}
+                    </div>
+                  </div>
+                  <span className="font-bold shrink-0 text-emerald-600 dark:text-emerald-400">
+                    -${promoEvaluation.appliedAutomatic.discount_amount.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3 text-xs pt-3 border-t border-zinc-200 dark:border-zinc-800">
               <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
                 <span>Total SKUs:</span>
                 <span className="font-semibold text-zinc-900 dark:text-white">{totalSkus}</span>
@@ -342,6 +520,17 @@ export function RetailerCartView() {
                   ${subtotal.toFixed(2)}
                 </span>
               </div>
+
+              {/* Promotion / Coupon Discount Line */}
+              {promoEvaluation && promoEvaluation.totalDiscount > 0 && (
+                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <span>Promotion / Coupon:</span>
+                  <span className="font-bold">
+                    -${promoEvaluation.totalDiscount.toFixed(2)}
+                  </span>
+                </div>
+              )}
+
               <div className="flex justify-between text-zinc-500">
                 <span>Estimated Shipping:</span>
                 <span className="italic text-zinc-400">Calculated at dispatch</span>
@@ -358,7 +547,7 @@ export function RetailerCartView() {
                 <div className="text-[10px] text-zinc-400">Excl. shipping & taxes</div>
               </div>
               <div className="text-2xl font-black text-zinc-900 dark:text-white">
-                ${subtotal.toFixed(2)}
+                ${(promoEvaluation ? promoEvaluation.finalSubtotal : subtotal).toFixed(2)}
               </div>
             </div>
 

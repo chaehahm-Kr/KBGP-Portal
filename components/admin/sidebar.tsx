@@ -261,6 +261,7 @@ export default function Sidebar({
       subItems: [
         { name: "Overview", href: "/admin/sales" },
         { name: "SKU Performance", href: "/admin/sales?tab=sku" },
+        { name: "Promotions & Coupons", href: "/admin/sales/promotions" },
       ],
     },
     {

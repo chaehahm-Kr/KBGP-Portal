@@ -10,6 +10,8 @@ interface CartContextType {
   totalSkus: number;
   isLoading: boolean;
   lastAddedItem: CartItem | null;
+  couponCode: string | null;
+  setCouponCode: (code: string | null) => void;
   addItem: (
     product: {
       id: string;
@@ -36,13 +38,15 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | null>(null);
 
 const STORAGE_KEY = "kselect_retailer_cart_v1";
+const COUPON_STORAGE_KEY = "kselect_retailer_coupon_v1";
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [couponCode, setCouponCodeState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastAddedItem, setLastAddedItem] = useState<CartItem | null>(null);
 
-  // Load cart from localStorage on client mount
+  // Load cart and coupon from localStorage on client mount
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -53,12 +57,30 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           setItems(summary.items);
         }
       }
+      const rawCoupon = localStorage.getItem(COUPON_STORAGE_KEY);
+      if (rawCoupon) {
+        setCouponCodeState(rawCoupon.trim().toUpperCase());
+      }
     } catch (err) {
       console.error("Failed to load cart from storage:", err);
     } finally {
       setIsLoading(false);
     }
   }, []);
+
+  const setCouponCode = (code: string | null) => {
+    const normalized = code ? code.trim().toUpperCase() : null;
+    setCouponCodeState(normalized);
+    try {
+      if (normalized) {
+        localStorage.setItem(COUPON_STORAGE_KEY, normalized);
+      } else {
+        localStorage.removeItem(COUPON_STORAGE_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   // Sync cart back to localStorage whenever items change
   useEffect(() => {
@@ -155,8 +177,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = () => {
     setItems([]);
+    setCouponCodeState(null);
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(COUPON_STORAGE_KEY);
     } catch {
       // ignore
     }
@@ -177,6 +201,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         totalSkus: summary.totalSkus,
         isLoading,
         lastAddedItem,
+        couponCode,
+        setCouponCode,
         addItem,
         updateQuantity,
         removeItem,

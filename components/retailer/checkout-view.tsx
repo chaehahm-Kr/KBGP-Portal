@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useCart } from "@/components/retailer/cart-context";
 import { submitRetailerOrder } from "@/lib/retailer/orders";
@@ -8,6 +8,8 @@ import {
   RetailerPaymentEligibility,
   RetailerPaymentMethod,
 } from "@/lib/retailer/payment-types";
+import { evaluateCartPromotionsAction } from "@/lib/retailer/promotion-actions";
+import { type EvaluatePromotionResult } from "@/lib/retailer/promotion-types";
 
 interface StoreOption {
   id: string;
@@ -32,10 +34,33 @@ export function RetailerCheckoutView({
   paymentEligibility,
   stores,
 }: CheckoutViewProps) {
-  const { items, subtotal, totalUnits, totalSkus, clearCart, isLoading } = useCart();
+  const { items, subtotal, totalUnits, totalSkus, couponCode, clearCart, isLoading } = useCart();
   const [selectedStoreId, setSelectedStoreId] = useState<string>(
     stores.length > 0 ? stores[0].id : ""
   );
+
+  const [promoEvaluation, setPromoEvaluation] = useState<EvaluatePromotionResult | null>(null);
+
+  useEffect(() => {
+    if (items.length > 0) {
+      evaluateCartPromotionsAction(
+        items.map((i) => ({
+          productId: i.productId,
+          wholesalePrice: i.wholesalePrice,
+          quantity: i.quantity,
+          lineTotal: i.lineTotal,
+          discountPercent: i.discountPercent,
+          appliedReason: i.appliedReason,
+        })),
+        couponCode
+      )
+        .then(setPromoEvaluation)
+        .catch((err) => console.error("Checkout promo eval failed:", err));
+    }
+  }, [items, couponCode]);
+
+  const discountAmount = promoEvaluation?.totalDiscount || 0;
+  const effectiveTotal = Math.max(0, subtotal - discountAmount);
 
   // Default to first available payment method or 'terms' if approved
   const defaultMethod =
@@ -64,7 +89,7 @@ export function RetailerCheckoutView({
   const isExceedingCreditLimit =
     selectedPaymentMethod === "terms" &&
     paymentEligibility.creditLimit > 0 &&
-    subtotal > paymentEligibility.creditLimit;
+    effectiveTotal > paymentEligibility.creditLimit;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +110,7 @@ export function RetailerCheckoutView({
         storeId: selectedStoreId || undefined,
         paymentMethod: selectedPaymentMethod,
         notes: notes.trim() || undefined,
+        couponCode: couponCode || undefined,
         items: items.map((i) => ({
           productId: i.productId,
           quantity: i.quantity,
@@ -454,6 +480,16 @@ export function RetailerCheckoutView({
                   ${subtotal.toFixed(2)}
                 </span>
               </div>
+
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <span>Promotion / Coupon Discount:</span>
+                  <span className="font-bold">
+                    -${discountAmount.toFixed(2)}
+                  </span>
+                </div>
+              )}
+
               <div className="flex justify-between text-zinc-500">
                 <span>Shipping & Freight:</span>
                 <span className="italic text-zinc-400">Calculated at dispatch</span>
@@ -470,7 +506,7 @@ export function RetailerCheckoutView({
                 <div className="text-[10px] text-zinc-400">Authoritative B2B Total</div>
               </div>
               <div className="text-2xl font-black text-zinc-900 dark:text-white">
-                ${subtotal.toFixed(2)}
+                ${effectiveTotal.toFixed(2)}
               </div>
             </div>
 

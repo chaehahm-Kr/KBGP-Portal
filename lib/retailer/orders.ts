@@ -15,6 +15,7 @@ import { getRetailerPaymentEligibility, getOrderPayments } from "@/lib/retailer/
 import { RetailerPaymentMethod, RetailerPaymentRecord } from "@/lib/retailer/payment-types";
 import { getOrderFulfillments } from "@/lib/retailer/fulfillment-actions";
 import { getRetailerAccountPurchaseAllowance } from "@/lib/retailer/purchase-limits";
+import { evaluatePromotionsForCart } from "@/lib/retailer/promotions";
 
 export interface RetailerOrderSummary {
   id: string;
@@ -27,6 +28,8 @@ export interface RetailerOrderSummary {
   paidAt: string | null;
   totalAmount: number;
   subtotalAmount: number;
+  discountAmount?: number;
+  couponCode?: string | null;
   totalItemsCount: number;
   totalSkusCount: number;
   createdAt: string;
@@ -48,6 +51,8 @@ export interface RetailerOrderItemDetail {
   quantityDelivered?: number;
   casePackQty: number;
   lineTotal: number;
+  discountAmount?: number;
+  isBogoFree?: boolean;
 }
 
 export interface RetailerOrderDetail extends RetailerOrderSummary {
@@ -62,6 +67,7 @@ export interface RetailerOrderDetail extends RetailerOrderSummary {
   notes: string | null;
   paymentProviderRef: string | null;
   paymentNotes: string | null;
+  promotionSnapshot?: any | null;
   items: RetailerOrderItemDetail[];
   payments: RetailerPaymentRecord[];
   fulfillments: import("./fulfillment-types").RetailerFulfillment[];
@@ -71,6 +77,7 @@ export interface SubmitOrderPayload {
   storeId?: string;
   paymentMethod?: RetailerPaymentMethod;
   notes?: string;
+  couponCode?: string;
   items: Array<{
     productId: string;
     quantity: number;
@@ -526,7 +533,49 @@ export async function submitRetailerOrder(
     }
 
     subtotalAmount = Number(subtotalAmount.toFixed(2));
-    const totalAmount = subtotalAmount;
+
+    // 5.1 Authoritative Server-Side Promotion Revalidation
+    let promoDiscountAmount = 0;
+    let appliedPromoId: string | null = null;
+    let appliedCouponCode: string | null = payload.couponCode?.trim().toUpperCase() || null;
+    let appliedPromotionSnapshot: any = null;
+
+    const promoEvalResult = await evaluatePromotionsForCart(
+      validatedLines.map((line) => ({
+        productId: line.productId,
+        productName: line.productName,
+        brandName: line.brandName,
+        wholesalePrice: line.unitWholesalePrice,
+        quantity: line.quantity,
+        lineTotal: line.lineTotal,
+      })),
+      appliedCouponCode,
+      companyId
+    );
+
+    if (appliedCouponCode && !promoEvalResult.isValid) {
+      return {
+        success: false,
+        error:
+          promoEvalResult.errorReason ||
+          "This promotion is no longer available. Your order total has been updated.",
+      };
+    }
+
+    if (promoEvalResult.totalDiscount > 0) {
+      promoDiscountAmount = promoEvalResult.totalDiscount;
+      const primaryPromo = promoEvalResult.appliedCoupon || promoEvalResult.appliedAutomatic;
+      if (primaryPromo) {
+        appliedPromotionSnapshot = {
+          ...primaryPromo,
+          applied_automatic: promoEvalResult.appliedAutomatic || null,
+        };
+        appliedPromoId = primaryPromo.promotion_id;
+        appliedCouponCode = primaryPromo.coupon_code || null;
+      }
+    }
+
+    const totalAmount = Math.max(0, Number((subtotalAmount - promoDiscountAmount).toFixed(2)));
 
     // 6. Generate Concurrency-Safe Order Number
     let orderNumber = `KSR-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
@@ -555,6 +604,10 @@ export async function submitRetailerOrder(
         payment_terms: paymentTerms,
         payment_due_date: paymentDueDate,
         subtotal_amount: subtotalAmount,
+        discount_amount: promoDiscountAmount,
+        promotion_id: appliedPromoId,
+        coupon_code: appliedCouponCode,
+        promotion_snapshot: appliedPromotionSnapshot,
         tax_amount: 0.0,
         shipping_amount: 0.0,
         total_amount: totalAmount,
@@ -577,6 +630,20 @@ export async function submitRetailerOrder(
       return { success: false, error: orderErr?.message || "Failed to create order record." };
     }
 
+    // 7.1 Record Promotion Usage
+    if (appliedPromoId) {
+      try {
+        await adminClient.from("promotion_usages").insert({
+          promotion_id: appliedPromoId,
+          order_id: orderRow.id,
+          company_id: companyId,
+          discount_amount: promoDiscountAmount,
+        });
+      } catch (usageEx) {
+        console.warn("Failed to record promotion usage:", usageEx);
+      }
+    }
+
     // 8. Insert into retailer_order_items
     const lineItemsToInsert = validatedLines.map((line) => ({
       order_id: orderRow.id,
@@ -589,6 +656,8 @@ export async function submitRetailerOrder(
       quantity: line.quantity,
       case_pack_qty: line.casePackQty,
       line_total: line.lineTotal,
+      discount_amount: 0.0,
+      promotion_id: appliedPromoId,
     }));
 
     const { error: itemsErr } = await adminClient
@@ -649,6 +718,8 @@ export async function getRetailerOrders(): Promise<RetailerOrderSummary[]> {
         paid_at,
         total_amount,
         subtotal_amount,
+        discount_amount,
+        coupon_code,
         total_items_count,
         total_skus_count,
         created_at,
@@ -678,6 +749,8 @@ export async function getRetailerOrders(): Promise<RetailerOrderSummary[]> {
       paidAt: o.paid_at,
       totalAmount: Number(o.total_amount),
       subtotalAmount: Number(o.subtotal_amount),
+      discountAmount: Number(o.discount_amount || 0),
+      couponCode: o.coupon_code || null,
       totalItemsCount: o.total_items_count,
       totalSkusCount: o.total_skus_count,
       createdAt: o.created_at,
@@ -726,6 +799,9 @@ export async function getRetailerOrderDetail(
         payment_provider_ref,
         payment_notes,
         subtotal_amount,
+        discount_amount,
+        coupon_code,
+        promotion_snapshot,
         tax_amount,
         shipping_amount,
         total_amount,
@@ -755,7 +831,9 @@ export async function getRetailerOrderDetail(
           unit_msrp,
           quantity,
           case_pack_qty,
-          line_total
+          line_total,
+          discount_amount,
+          is_bogo_free
         )
       `)
       .eq("company_id", companyId);
@@ -814,6 +892,8 @@ export async function getRetailerOrderDetail(
       casePackQty: item.case_pack_qty,
       line_total: Number(item.line_total),
       lineTotal: Number(item.line_total),
+      discountAmount: Number(item.discount_amount || 0),
+      isBogoFree: Boolean(item.is_bogo_free),
     }));
 
     return {
@@ -829,6 +909,9 @@ export async function getRetailerOrderDetail(
       paymentNotes: order.payment_notes,
       totalAmount: Number(order.total_amount),
       subtotalAmount: Number(order.subtotal_amount),
+      discountAmount: Number(order.discount_amount || 0),
+      couponCode: order.coupon_code || null,
+      promotionSnapshot: order.promotion_snapshot || null,
       taxAmount: Number(order.tax_amount || 0),
       shippingAmount: Number(order.shipping_amount || 0),
       totalItemsCount: order.total_items_count,
