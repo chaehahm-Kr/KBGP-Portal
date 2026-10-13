@@ -94,6 +94,26 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
   const [internalNote, setInternalNote] = useState(
     data.profile?.internal_note || ""
   );
+  const [cardFeeMode, setCardFeeMode] = useState<"global" | "custom" | "waived">(
+    data.profile?.card_fee_waived
+      ? "waived"
+      : data.profile?.card_fee_override !== null && data.profile?.card_fee_override !== undefined
+      ? "custom"
+      : "global"
+  );
+  const [cardFeeCustomRate, setCardFeeCustomRate] = useState<number>(
+    data.profile?.card_fee_override ?? 3.5
+  );
+  const [achFeeMode, setAchFeeMode] = useState<"global" | "custom" | "waived">(
+    data.profile?.ach_fee_waived
+      ? "waived"
+      : data.profile?.ach_fee_override !== null && data.profile?.ach_fee_override !== undefined
+      ? "custom"
+      : "global"
+  );
+  const [achFeeCustomAmount, setAchFeeCustomAmount] = useState<number>(
+    data.profile?.ach_fee_override ?? 5.0
+  );
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -245,6 +265,10 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
         resaleCertificateNumber: resaleCert.trim() || undefined,
         taxExemptStatus: taxExempt,
         internalNote: internalNote.trim() || undefined,
+        cardFeeOverride: cardFeeMode === "custom" ? Math.max(0, Number(cardFeeCustomRate) || 0) : null,
+        cardFeeWaived: cardFeeMode === "waived",
+        achFeeOverride: achFeeMode === "custom" ? Math.max(0, Number(achFeeCustomAmount) || 0) : null,
+        achFeeWaived: achFeeMode === "waived",
       });
 
       if (res.success) {
@@ -1862,11 +1886,182 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
               </div>
             </div>
 
-            {/* SECTION D — Terms & Credit */}
+            {/* SECTION D — Payment Fee Policy & Retailer Overrides */}
             <div className="p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-4">
               <div className="flex items-center justify-between border-b border-zinc-200/60 dark:border-zinc-800 pb-2">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 flex items-center justify-center text-[10px] font-black">D</span>
+                  Payment Processing Fee Overrides & Waivers
+                </h4>
+                <span className="text-[11px] text-zinc-400">Custom retailer surcharge supersedes global defaults</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                {/* Card Fee Override */}
+                <div className="p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-zinc-900 dark:text-white">Credit / Debit Card Fee</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                      Global: 3.5%
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCardFeeMode("global")}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer text-center ${
+                        cardFeeMode === "global"
+                          ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900"
+                          : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300"
+                      }`}
+                    >
+                      Use Global
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCardFeeMode("custom")}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer text-center ${
+                        cardFeeMode === "custom"
+                          ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900"
+                          : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300"
+                      }`}
+                    >
+                      Custom %
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCardFeeMode("waived")}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer text-center ${
+                        cardFeeMode === "waived"
+                          ? "border-emerald-600 bg-emerald-600 text-white dark:border-emerald-500 dark:bg-emerald-500"
+                          : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300"
+                      }`}
+                    >
+                      Waived (0%)
+                    </button>
+                  </div>
+
+                  {cardFeeMode === "custom" && (
+                    <div className="pt-1 space-y-1">
+                      <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
+                        Custom Card Fee Rate (%)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="10"
+                          value={cardFeeCustomRate}
+                          onChange={(e) => setCardFeeCustomRate(Math.max(0, Number(e.target.value) || 0))}
+                          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 pr-7 text-xs font-mono font-bold outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                        />
+                        <span className="absolute right-2.5 top-1.5 text-xs font-bold text-zinc-400 pointer-events-none">
+                          %
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                    <span>Effective Card Surcharge:</span>
+                    <strong className="text-zinc-900 dark:text-white font-mono">
+                      {cardFeeMode === "waived"
+                        ? "0.0% (Waived)"
+                        : cardFeeMode === "custom"
+                        ? `${cardFeeCustomRate}% (Custom Override)`
+                        : "3.5% (Global Default)"}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* ACH Fee Override */}
+                <div className="p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-zinc-900 dark:text-white">ACH Direct Transfer Fee</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                      Global: $5.00
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAchFeeMode("global")}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer text-center ${
+                        achFeeMode === "global"
+                          ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900"
+                          : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300"
+                      }`}
+                    >
+                      Use Global
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAchFeeMode("custom")}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer text-center ${
+                        achFeeMode === "custom"
+                          ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900"
+                          : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300"
+                      }`}
+                    >
+                      Custom $
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAchFeeMode("waived")}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer text-center ${
+                        achFeeMode === "waived"
+                          ? "border-emerald-600 bg-emerald-600 text-white dark:border-emerald-500 dark:bg-emerald-500"
+                          : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300"
+                      }`}
+                    >
+                      Waived ($0)
+                    </button>
+                  </div>
+
+                  {achFeeMode === "custom" && (
+                    <div className="pt-1 space-y-1">
+                      <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
+                        Custom ACH Fixed Fee ($)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1.5 text-xs font-bold text-zinc-400 pointer-events-none">
+                          $
+                        </span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="25"
+                          value={achFeeCustomAmount}
+                          onChange={(e) => setAchFeeCustomAmount(Math.max(0, Number(e.target.value) || 0))}
+                          className="w-full rounded-xl border border-zinc-200 bg-white pl-6 pr-3 py-1.5 text-xs font-mono font-bold outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                    <span>Effective ACH Fee:</span>
+                    <strong className="text-zinc-900 dark:text-white font-mono">
+                      {achFeeMode === "waived"
+                        ? "$0.00 (Waived)"
+                        : achFeeMode === "custom"
+                        ? `$${Number(achFeeCustomAmount).toFixed(2)} (Custom Override)`
+                        : "$5.00 (Global Default)"}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION E — Terms & Credit */}
+            <div className="p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-4">
+              <div className="flex items-center justify-between border-b border-zinc-200/60 dark:border-zinc-800 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 flex items-center justify-center text-[10px] font-black">E</span>
                   Payment Terms & Underwritten Credit Line
                 </h4>
                 <span className="text-[11px] text-zinc-400">Wholesale credit limits & maturity terms</span>
@@ -1956,11 +2151,11 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
               </div>
             </div>
 
-            {/* SECTION E — Internal Admin Notes */}
+            {/* SECTION F — Internal Admin Notes */}
             <div className="p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-2">
               <div className="flex items-center justify-between border-b border-zinc-200/60 dark:border-zinc-800 pb-2">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 flex items-center justify-center text-[10px] font-black">E</span>
+                  <span className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 flex items-center justify-center text-[10px] font-black">F</span>
                   Internal Admin Operational Notes
                 </h4>
                 <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">

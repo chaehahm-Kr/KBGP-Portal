@@ -8,6 +8,7 @@ import {
   RetailerPaymentEligibility,
   RetailerPaymentMethod,
 } from "@/lib/retailer/payment-types";
+import { calculateProcessingFee } from "@/lib/retailer/payment-policy";
 import { evaluateCartPromotionsAction } from "@/lib/retailer/promotion-actions";
 import { type EvaluatePromotionResult } from "@/lib/retailer/promotion-types";
 import { validateRetailerCartItemsAction } from "@/lib/retailer/purchase-limit-actions";
@@ -86,9 +87,10 @@ export function RetailerCheckoutView({
   const discountAmount = promoEvaluation?.totalDiscount || 0;
   const effectiveTotal = Math.max(0, subtotal - discountAmount);
 
-  // Default to first available payment method or 'terms' if approved
-  const defaultMethod =
-    paymentEligibility.availableMethods.find((m) => m.id === "terms")?.id ||
+  // Default payment method: Prioritize Card, then ACH, then Terms (Never auto-default to Terms)
+  const defaultMethod: RetailerPaymentMethod =
+    paymentEligibility.availableMethods.find((m) => m.id === "card")?.id ||
+    paymentEligibility.availableMethods.find((m) => m.id === "ach")?.id ||
     paymentEligibility.availableMethods[0]?.id ||
     "card";
 
@@ -102,6 +104,8 @@ export function RetailerCheckoutView({
     orderNumber: string;
     paymentMethod: RetailerPaymentMethod;
     termsLabel?: string;
+    totalAmount: number;
+    feeAmount: number;
   } | null>(null);
 
   const selectedStore = stores.find((s) => s.id === selectedStoreId) || stores[0] || null;
@@ -110,10 +114,20 @@ export function RetailerCheckoutView({
     (m) => m.id === selectedPaymentMethod
   );
 
+  const processingFeeResult = calculateProcessingFee({
+    paymentMethod: selectedPaymentMethod,
+    chargeBase: effectiveTotal,
+    effectivePolicy: paymentEligibility.effectivePolicy,
+  });
+
+  const finalPayableTotal = Number(
+    (effectiveTotal + processingFeeResult.feeAmount).toFixed(2)
+  );
+
   const isExceedingCreditLimit =
     selectedPaymentMethod === "terms" &&
     paymentEligibility.creditLimit > 0 &&
-    effectiveTotal > paymentEligibility.creditLimit;
+    finalPayableTotal > paymentEligibility.creditLimit;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,7 +135,7 @@ export function RetailerCheckoutView({
 
     if (isExceedingCreditLimit) {
       setSubmitError(
-        `Order total ($${subtotal.toFixed(2)}) exceeds your approved credit line ($${paymentEligibility.creditLimit.toLocaleString()}). Please adjust quantity or select Prepaid Card/ACH.`
+        `Your available credit limit ($${paymentEligibility.creditLimit.toLocaleString()}) is not enough for this order total ($${finalPayableTotal.toFixed(2)}). Please choose Card or ACH.`
       );
       return;
     }
@@ -148,6 +162,8 @@ export function RetailerCheckoutView({
           orderNumber: result.orderNumber,
           paymentMethod: selectedPaymentMethod,
           termsLabel: currentMethodObj?.termsLabel,
+          totalAmount: finalPayableTotal,
+          feeAmount: processingFeeResult.feeAmount,
         });
       } else {
         setSubmitError(result.error || "Failed to submit order. Please try again.");
@@ -209,10 +225,18 @@ export function RetailerCheckoutView({
                 Unpaid (Order Recorded — Pending Dispatch & Fulfillment)
               </span>
             </div>
+            {submittedOrder.feeAmount > 0 && (
+              <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                <span className="text-zinc-500">Processing Fee:</span>
+                <span className="font-semibold text-zinc-900 dark:text-white">
+                  +${submittedOrder.feeAmount.toFixed(2)}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between items-baseline pt-1">
               <span className="text-zinc-500 font-medium">Order Total:</span>
               <span className="text-lg font-black text-zinc-900 dark:text-white">
-                ${subtotal.toFixed(2)}
+                ${submittedOrder.totalAmount.toFixed(2)}
               </span>
             </div>
           </div>
@@ -365,6 +389,12 @@ export function RetailerCheckoutView({
               ) : (
                 paymentEligibility.availableMethods.map((method) => {
                   const isSelected = selectedPaymentMethod === method.id;
+                  const estimatedMethodFee = calculateProcessingFee({
+                    paymentMethod: method.id,
+                    chargeBase: effectiveTotal,
+                    effectivePolicy: paymentEligibility.effectivePolicy,
+                  });
+
                   return (
                     <label
                       key={method.id}
@@ -384,23 +414,43 @@ export function RetailerCheckoutView({
                           className="mt-1 h-4 w-4 text-indigo-600 border-zinc-300 focus:ring-indigo-500"
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
                             <span className="font-bold text-xs sm:text-sm text-zinc-900 dark:text-white">
                               {method.label}
                             </span>
-                            {method.badge && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* Fee Disclosure Badge */}
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                  method.isTerms
-                                    ? "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
-                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700"
+                                  estimatedMethodFee.feeAmount === 0
+                                    ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                                    : "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
                                 }`}
                               >
-                                {method.badge}
+                                {estimatedMethodFee.disclosureLabel}
                               </span>
-                            )}
+
+                              {/* Estimated Fee Amount Tag */}
+                              {estimatedMethodFee.feeAmount > 0 && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                                  {estimatedMethodFee.estimatedFeeText}
+                                </span>
+                              )}
+
+                              {method.badge && (
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                    method.isTerms
+                                      ? "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700"
+                                  }`}
+                                >
+                                  {method.badge}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
                             {method.description}
                           </p>
                         </div>
@@ -525,6 +575,25 @@ export function RetailerCheckoutView({
                 </div>
               )}
 
+              {/* Processing Fee */}
+              <div className="flex justify-between text-zinc-600 dark:text-zinc-400 items-center">
+                <div className="flex items-center gap-1.5">
+                  <span>Processing Fee:</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium border border-zinc-200/60 dark:border-zinc-700">
+                    {processingFeeResult.disclosureLabel}
+                  </span>
+                </div>
+                <span className={`font-semibold text-xs ${
+                  processingFeeResult.feeAmount > 0
+                    ? "text-zinc-900 dark:text-white"
+                    : "text-zinc-400 dark:text-zinc-500"
+                }`}>
+                  {processingFeeResult.feeAmount > 0
+                    ? `+$${processingFeeResult.feeAmount.toFixed(2)}`
+                    : "$0.00"}
+                </span>
+              </div>
+
               <div className="flex justify-between text-zinc-500">
                 <span>Shipping & Freight:</span>
                 <span className="italic text-zinc-400">Calculated at dispatch</span>
@@ -541,9 +610,22 @@ export function RetailerCheckoutView({
                 <div className="text-[10px] text-zinc-400">Authoritative B2B Total</div>
               </div>
               <div className="text-2xl font-black text-zinc-900 dark:text-white">
-                ${effectiveTotal.toFixed(2)}
+                ${finalPayableTotal.toFixed(2)}
               </div>
             </div>
+
+            {/* Credit Limit Alert */}
+            {isExceedingCreditLimit && (
+              <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-400 space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <span>⚠️</span>
+                  <span>Approved Credit Line Exceeded</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  Your available credit line (${paymentEligibility.creditLimit.toLocaleString()}) is not enough for this order total (${finalPayableTotal.toFixed(2)}). Please choose Card or ACH.
+                </p>
+              </div>
+            )}
 
             <div className="pt-2 space-y-3">
               <button

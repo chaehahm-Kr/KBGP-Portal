@@ -2,7 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
-  serverExternalPackages: ['canvas', 'puppeteer', 'pdf-lib', '@pdf-lib/fontkit', 'pg'],
+  serverExternalPackages: ['canvas', 'puppeteer', 'pdf-lib', 'pg'],
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "50mb",

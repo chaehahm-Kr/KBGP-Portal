@@ -305,6 +305,10 @@ export interface Retailer360Data {
     billing_state?: string | null;
     billing_zip?: string | null;
     internal_note?: string | null;
+    card_fee_override?: number | null;
+    card_fee_waived?: boolean;
+    ach_fee_override?: number | null;
+    ach_fee_waived?: boolean;
   };
   needsAttention: NeedsAttentionItem[];
   metrics: Retailer360OverviewMetrics;
@@ -412,6 +416,39 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     ? company.retailer_profiles[0]
     : company.retailer_profiles;
 
+  // Safe fetch of fee overrides (resilient if migration 0160 execution is pending)
+  let feeOverrides: {
+    card_fee_override?: number | null;
+    card_fee_waived?: boolean;
+    ach_fee_override?: number | null;
+    ach_fee_waived?: boolean;
+  } = {};
+
+  try {
+    const { data: feeData, error: feeErr } = await adminClient
+      .from("retailer_profiles")
+      .select("card_fee_override, card_fee_waived, ach_fee_override, ach_fee_waived")
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (!feeErr && feeData) {
+      feeOverrides = {
+        card_fee_override:
+          feeData.card_fee_override !== null && feeData.card_fee_override !== undefined
+            ? Number(feeData.card_fee_override)
+            : null,
+        card_fee_waived: Boolean(feeData.card_fee_waived),
+        ach_fee_override:
+          feeData.ach_fee_override !== null && feeData.ach_fee_override !== undefined
+            ? Number(feeData.ach_fee_override)
+            : null,
+        ach_fee_waived: Boolean(feeData.ach_fee_waived),
+      };
+    }
+  } catch {
+    // Graceful fallback
+  }
+
   const profile = {
     status: normalizeRetailerAccountStatus(rawProfile?.status || company.status),
     payment_terms: rawProfile?.payment_terms || "PREPAID_CARD",
@@ -433,6 +470,10 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     billing_state: rawProfile?.billing_state || null,
     billing_zip: rawProfile?.billing_zip || null,
     internal_note: rawProfile?.internal_note || null,
+    card_fee_override: feeOverrides.card_fee_override ?? null,
+    card_fee_waived: feeOverrides.card_fee_waived ?? false,
+    ach_fee_override: feeOverrides.ach_fee_override ?? null,
+    ach_fee_waived: feeOverrides.ach_fee_waived ?? false,
   };
 
   // 2. Fetch Stores

@@ -27,6 +27,7 @@ import {
   AttributeProfilesIcon,
   AttributesOptionsIcon,
   CurationSettingsIcon,
+  PaymentSettingsIcon,
 } from "./icons";
 
 import type { AdminUnreadCounts } from "@/lib/notifications/admin-read-state";
@@ -331,6 +332,7 @@ export default function Sidebar({
         { name: "Attribute Profiles", href: "/admin/settings/attribute-profiles", icon: AttributeProfilesIcon },
         { name: "Attributes & Options", href: "/admin/settings/attributes", icon: AttributesOptionsIcon },
         { name: "Curation Settings", href: "/admin/settings/curation", icon: CurationSettingsIcon },
+        { name: "Payments", href: "/admin/settings/payments", icon: PaymentSettingsIcon },
       ],
     },
   ];

@@ -12,6 +12,12 @@ export type RetailerPaymentStatus =
   | "failed"
   | "refunded";
 
+import type {
+  EffectivePaymentPolicy,
+  PaymentFeeType,
+  PaymentFeeSource,
+} from "./payment-policy";
+
 export interface RetailerPaymentEligibility {
   cardEnabled: boolean;
   achEnabled: boolean;
@@ -21,6 +27,7 @@ export interface RetailerPaymentEligibility {
   creditLimit: number;
   isCardProviderConfigured: boolean;
   isAchProviderConfigured: boolean;
+  effectivePolicy: EffectivePaymentPolicy;
   availableMethods: Array<{
     id: RetailerPaymentMethod;
     label: string;
@@ -29,6 +36,11 @@ export interface RetailerPaymentEligibility {
     isTerms?: boolean;
     termsLabel?: string;
     providerConfigured: boolean;
+    feeType: PaymentFeeType;
+    feeRate: number;
+    feeAmount: number;
+    feeSource: PaymentFeeSource;
+    disclosureLabel: string;
   }>;
 }
 

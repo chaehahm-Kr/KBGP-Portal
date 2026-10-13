@@ -608,6 +608,10 @@ export async function updateRetailerTermsAction(
     resaleCertificateNumber?: string;
     taxExemptStatus?: boolean;
     internalNote?: string;
+    cardFeeOverride?: number | null;
+    cardFeeWaived?: boolean;
+    achFeeOverride?: number | null;
+    achFeeWaived?: boolean;
   }
 ) {
   await verifyAdminSession();
@@ -646,6 +650,18 @@ export async function updateRetailerTermsAction(
   }
   if (payload.internalNote !== undefined) {
     updateData.internal_note = payload.internalNote.trim() || null;
+  }
+  if (payload.cardFeeOverride !== undefined) {
+    updateData.card_fee_override = payload.cardFeeOverride === null ? null : Math.max(0, Number(payload.cardFeeOverride));
+  }
+  if (payload.cardFeeWaived !== undefined) {
+    updateData.card_fee_waived = Boolean(payload.cardFeeWaived);
+  }
+  if (payload.achFeeOverride !== undefined) {
+    updateData.ach_fee_override = payload.achFeeOverride === null ? null : Math.max(0, Number(payload.achFeeOverride));
+  }
+  if (payload.achFeeWaived !== undefined) {
+    updateData.ach_fee_waived = Boolean(payload.achFeeWaived);
   }
 
   const { error } = await adminClient

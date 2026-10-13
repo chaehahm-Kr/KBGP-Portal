@@ -12,98 +12,82 @@ import {
   RetailerPaymentRecord,
 } from "./payment-types";
 
+import { resolveEffectivePaymentPolicy } from "./payment-policy-server";
+
 /**
  * Fetch authoritative payment method eligibility and commercial terms for a retailer company
  */
 export async function getRetailerPaymentEligibility(
   companyId: string
 ): Promise<RetailerPaymentEligibility> {
-  const adminClient = createAdminClient();
-
-  const { data: profile } = await adminClient
-    .from("retailer_profiles")
-    .select(`
-      payment_method_card_enabled,
-      payment_method_ach_enabled,
-      terms_enabled,
-      approved_terms,
-      terms_status,
-      credit_limit,
-      payment_terms
-    `)
-    .eq("company_id", companyId)
-    .maybeSingle();
-
-  const cardEnabled = profile?.payment_method_card_enabled ?? true;
-  const achEnabled = profile?.payment_method_ach_enabled ?? true;
-  const termsEnabled = profile?.terms_enabled ?? false;
-  const approvedTerms = (profile?.approved_terms || "prepaid") as RetailerApprovedTerms;
-  const termsStatus = (profile?.terms_status || "pending") as RetailerTermsStatus;
-  const creditLimit = Number(profile?.credit_limit || 0);
-
-  // In this foundation phase, live PG/Stripe/Plaid integration is not yet connected
-  const isCardProviderConfigured = false;
-  const isAchProviderConfigured = false;
+  const policy = await resolveEffectivePaymentPolicy(companyId);
 
   const availableMethods: RetailerPaymentEligibility["availableMethods"] = [];
 
   // Card Option
-  if (cardEnabled) {
+  if (policy.card.effectiveEnabled) {
     availableMethods.push({
       id: "card",
       label: "Credit / Debit Card",
-      description: isCardProviderConfigured
+      description: policy.card.providerReady
         ? "Pay securely via corporate credit/debit card."
         : "Online card gateway setup pending — order placed as Unpaid for manual invoice / card settlement.",
-      badge: isCardProviderConfigured ? "Prepaid" : "Setup Pending",
-      providerConfigured: isCardProviderConfigured,
+      badge: policy.card.providerReady ? "Prepaid" : "Setup Pending",
+      providerConfigured: policy.card.providerReady,
+      feeType: policy.card.feeType,
+      feeRate: policy.card.feeRate,
+      feeAmount: policy.card.feeAmount,
+      feeSource: policy.card.feeSource,
+      disclosureLabel: policy.card.disclosureLabel,
     });
   }
 
   // ACH Option
-  if (achEnabled) {
+  if (policy.ach.effectiveEnabled) {
     availableMethods.push({
       id: "ach",
-      label: "ACH Direct Bank Transfer",
-      description: isAchProviderConfigured
+      label: "ACH Bank Transfer",
+      description: policy.ach.providerReady
         ? "Direct bank debit / ACH invoice settlement."
         : "Online direct debit setup pending — order placed as Unpaid for bank transfer / invoice settlement.",
-      badge: isAchProviderConfigured ? "Prepaid" : "Setup Pending",
-      providerConfigured: isAchProviderConfigured,
+      badge: policy.ach.providerReady ? "Prepaid" : "Setup Pending",
+      providerConfigured: policy.ach.providerReady,
+      feeType: policy.ach.feeType,
+      feeRate: policy.ach.feeRate,
+      feeAmount: policy.ach.feeAmount,
+      feeSource: policy.ach.feeSource,
+      disclosureLabel: policy.ach.disclosureLabel,
     });
   }
 
   // Net Terms Option (Only shown if authorized & approved by Admin)
-  if (termsEnabled && termsStatus === "approved" && approvedTerms !== "prepaid") {
-    const termsDisplayMap: Record<string, string> = {
-      net15: "Net 15 Days",
-      net30: "Net 30 Days",
-      net45: "Net 45 Days",
-      net60: "Net 60 Days",
-    };
-    const termsLabel = termsDisplayMap[approvedTerms] || approvedTerms.toUpperCase();
-    const days = approvedTerms.replace("net", "");
-
+  if (policy.terms.effectiveEnabled) {
     availableMethods.push({
       id: "terms",
-      label: `${termsLabel} Terms`,
-      description: `Approved B2B credit terms. Estimated due date: Order Date + ${days} Days (Provisional — formal commercial invoice issued upon order dispatch).`,
+      label: policy.terms.termsDisplayLabel,
+      description: `Approved B2B credit terms. Estimated due date: Order Date + ${policy.terms.termDays} Days (Provisional — formal commercial invoice issued upon order dispatch).`,
       badge: "Approved Terms",
       isTerms: true,
-      termsLabel,
+      termsLabel: policy.terms.termsDisplayLabel,
       providerConfigured: true,
+      feeType: "waived",
+      feeRate: 0,
+      feeAmount: 0,
+      feeSource: "waived",
+      disclosureLabel: policy.terms.disclosureLabel,
     });
   }
 
   return {
-    cardEnabled,
-    achEnabled,
-    termsEnabled,
-    approvedTerms,
-    termsStatus,
-    creditLimit,
-    isCardProviderConfigured,
-    isAchProviderConfigured,
+    cardEnabled: policy.card.effectiveEnabled,
+    achEnabled: policy.ach.effectiveEnabled,
+    termsEnabled: policy.terms.effectiveEnabled,
+    approvedTerms: policy.terms.approvedTerms,
+    termsStatus: policy.terms.termsStatus,
+    creditLimit: policy.terms.creditLimit,
+    isCardProviderConfigured: policy.card.providerReady,
+    isAchProviderConfigured: policy.ach.providerReady,
+    effectivePolicy: policy,
     availableMethods,
   };
 }
