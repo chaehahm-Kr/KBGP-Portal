@@ -92,6 +92,7 @@ export interface Retailer360MemberItem {
   hasAllStoresAccess: boolean;
   assignedStores: Array<{ id: string; name: string }>;
   joinedAt: string;
+  isPrimary?: boolean;
 }
 
 export interface Retailer360InvitationItem {
@@ -394,69 +395,120 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
   const storeIds = stores.map((s) => s.id);
 
   // 3. Fetch Members, Roles & Store Access
-  const { data: companyUsers } = await adminClient
+  const { data: companyUsers, error: cuError } = await adminClient
     .from("company_users")
     .select(`
       id,
-      company_role,
-      status,
       name,
+      email,
       phone,
-      created_at,
-      profiles:id (
-        id,
-        email,
-        display_name,
-        created_at
-      )
+      company_role,
+      is_primary,
+      status,
+      created_at
     `)
-    .eq("company_id", companyId);
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: true });
+
+  if (cuError) {
+    console.error("[getAdminRetailer360Data] Error fetching company_users:", cuError);
+  }
 
   const userIds = (companyUsers || []).map((cu: any) => cu.id);
+  let profilesMap: Record<string, any> = {};
   let userRolesMap: Record<string, any> = {};
   let userStoresMap: Record<string, any[]> = {};
   let storeUserCountMap: Record<string, number> = {};
 
   if (userIds.length > 0) {
-    const { data: roles } = await adminClient
+    // 3.1 Fetch profiles for display_name
+    const { data: profilesData, error: profErr } = await adminClient
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", userIds);
+
+    if (profErr) {
+      console.warn("[getAdminRetailer360Data] Warning fetching profiles:", profErr);
+    } else if (profilesData) {
+      profilesData.forEach((p) => {
+        profilesMap[p.id] = p;
+      });
+    }
+
+    // 3.2 Fetch retailer specific roles
+    const { data: roles, error: rolesErr } = await adminClient
       .from("retailer_user_roles")
       .select("user_id, role, has_all_stores_access")
       .in("user_id", userIds)
       .eq("company_id", companyId);
 
-    (roles || []).forEach((r) => {
-      userRolesMap[r.user_id] = r;
-    });
+    if (rolesErr) {
+      console.error("[getAdminRetailer360Data] Error fetching retailer_user_roles:", rolesErr);
+    } else if (roles) {
+      roles.forEach((r) => {
+        userRolesMap[r.user_id] = r;
+      });
+    }
 
-    const { data: storeAccess } = await adminClient
+    // 3.3 Fetch retailer store access assignments
+    const { data: storeAccess, error: saErr } = await adminClient
       .from("retailer_user_store_access")
       .select("user_id, store_id, stores(id, name, city)")
       .in("user_id", userIds)
       .eq("company_id", companyId);
 
-    (storeAccess || []).forEach((sa: any) => {
-      if (!userStoresMap[sa.user_id]) userStoresMap[sa.user_id] = [];
-      if (sa.stores) {
-        userStoresMap[sa.user_id].push(sa.stores);
-        storeUserCountMap[sa.store_id] = (storeUserCountMap[sa.store_id] || 0) + 1;
-      }
-    });
+    if (saErr) {
+      console.error("[getAdminRetailer360Data] Error fetching retailer_user_store_access:", saErr);
+    } else if (storeAccess) {
+      storeAccess.forEach((sa: any) => {
+        if (!userStoresMap[sa.user_id]) userStoresMap[sa.user_id] = [];
+        if (sa.stores) {
+          userStoresMap[sa.user_id].push(sa.stores);
+        }
+      });
+    }
   }
 
+  const validRoles: RetailerRole[] = ["owner", "buyer", "store_manager", "employee", "accounting"];
+
   const members: Retailer360MemberItem[] = (companyUsers || []).map((cu: any) => {
-    const prof = cu.profiles;
+    const prof = profilesMap[cu.id];
     const r = userRolesMap[cu.id];
-    const isOwner = r?.role === "owner" || cu.company_role === "owner";
+
+    // Resolve retailer role strictly from retailer_user_roles, fallback to company_role / default
+    let resolvedRole: RetailerRole = "employee";
+    if (r?.role && validRoles.includes(r.role as RetailerRole)) {
+      resolvedRole = r.role as RetailerRole;
+    } else if (cu.company_role === "owner" || cu.company_role === "company_admin") {
+      resolvedRole = "owner";
+    } else if (cu.company_role && validRoles.includes(cu.company_role as RetailerRole)) {
+      resolvedRole = cu.company_role as RetailerRole;
+    }
+
+    // Evaluate Store Access (has_all_stores_access or role === 'owner')
+    const hasAllStoresAccess = resolvedRole === "owner" || Boolean(r?.has_all_stores_access);
+    const assignedStores = hasAllStoresAccess
+      ? stores.map((s) => ({ id: s.id, name: s.name }))
+      : userStoresMap[cu.id] || [];
+
     return {
       userId: cu.id,
-      email: prof?.email || "Unknown",
-      displayName: prof?.display_name || cu.name || "",
-      role: (r?.role || cu.company_role || "employee") as RetailerRole,
+      email: cu.email || "Unknown",
+      displayName: prof?.display_name || cu.name || cu.email?.split("@")[0] || "Retailer User",
+      role: resolvedRole,
       status: cu.status || "active",
-      hasAllStoresAccess: isOwner || Boolean(r?.has_all_stores_access),
-      assignedStores: isOwner ? stores.map((s) => ({ id: s.id, name: s.name })) : userStoresMap[cu.id] || [],
+      hasAllStoresAccess,
+      assignedStores,
       joinedAt: cu.created_at,
+      isPrimary: Boolean(cu.is_primary),
     };
+  });
+
+  // Calculate store user count accurately from resolved members access
+  stores.forEach((s) => {
+    storeUserCountMap[s.id] = members.filter(
+      (m) => m.hasAllStoresAccess || m.assignedStores.some((as) => as.id === s.id)
+    ).length;
   });
 
   // 4. Fetch Invitations & Authoritative Company Agreements
@@ -1244,7 +1296,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
   const metrics: Retailer360OverviewMetrics = {
     retailerStatus: profile.status || company.status || "active",
     totalStoresCount: stores.length,
-    activeUsersCount: members.length,
+    activeUsersCount: members.filter((m) => (m.status || "active").toLowerCase() === "active").length,
     pendingInvitesCount: invitations.filter((i) => i.status === "pending").length,
     openOrdersCount: orders.filter((o) => o.orderStatus !== "delivered" && o.orderStatus !== "cancelled").length,
     ordersAwaitingFulfillmentCount: pendingOrders.length,

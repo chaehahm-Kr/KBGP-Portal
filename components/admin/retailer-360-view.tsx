@@ -1174,8 +1174,13 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                   return (
                     <tr key={member.userId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20">
                       <td className="py-3 px-4">
-                        <div className="font-bold text-zinc-900 dark:text-white">
-                          {member.displayName || "Retailer User"}
+                        <div className="font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                          <span>{member.displayName || "Retailer User"}</span>
+                          {member.isPrimary && (
+                            <span className="rounded bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-1.5 py-0.2 text-[9px] font-bold">
+                              Primary
+                            </span>
+                          )}
                         </div>
                         <div className="text-[11px] font-mono text-zinc-400">
                           {member.email}

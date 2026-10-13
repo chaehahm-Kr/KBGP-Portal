@@ -76,14 +76,20 @@ export async function getAdminRetailersList() {
       invitationCounts[inv.company_id] = (invitationCounts[inv.company_id] || 0) + 1;
     });
 
-    const { data: companyUsers } = await adminClient
+    const { data: companyUsers, error: cuErr } = await adminClient
       .from("company_users")
-      .select("company_id")
+      .select("company_id, status")
       .in("company_id", companyIds);
 
-    (companyUsers || []).forEach((cu) => {
-      userCounts[cu.company_id] = (userCounts[cu.company_id] || 0) + 1;
-    });
+    if (cuErr) {
+      console.error("[getAdminRetailersList] Error fetching company_users:", cuErr);
+    } else if (companyUsers) {
+      companyUsers.forEach((cu) => {
+        if ((cu.status || "active").toLowerCase() === "active") {
+          userCounts[cu.company_id] = (userCounts[cu.company_id] || 0) + 1;
+        }
+      });
+    }
   }
 
   return (companies || []).map((comp: any) => {
