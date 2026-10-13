@@ -71,27 +71,27 @@ CREATE INDEX IF NOT EXISTS idx_retailer_order_payments_invoice_id
 
 -- 4. Enable Row Level Security
 ALTER TABLE public.retailer_invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.retailer_invoices FORCE ROW LEVEL SECURITY;
 
--- Admin full access policy
+-- Admin full access policy (Authoritative public.auth_is_admin())
 DROP POLICY IF EXISTS "Admin full access on retailer_invoices" ON public.retailer_invoices;
+DROP POLICY IF EXISTS "retailer_invoices_admin_all" ON public.retailer_invoices;
 CREATE POLICY "Admin full access on retailer_invoices" ON public.retailer_invoices
   FOR ALL TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.company_users cu
-      JOIN public.companies c ON cu.company_id = c.id
-      WHERE cu.id = auth.uid() AND c.company_type = 'PLATFORM_OPERATOR'
-    )
-  );
+  USING (public.auth_is_admin())
+  WITH CHECK (public.auth_is_admin());
 
--- Retailer tenant read isolation policy
+-- Retailer tenant read isolation policy (Authoritative public.auth_company_id() & company_roles)
 DROP POLICY IF EXISTS "Retailer read own invoices" ON public.retailer_invoices;
+DROP POLICY IF EXISTS "retailer_invoices_retailer_select" ON public.retailer_invoices;
 CREATE POLICY "Retailer read own invoices" ON public.retailer_invoices
   FOR SELECT TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.company_users cu
-      WHERE cu.id = auth.uid() AND cu.company_id = retailer_invoices.retailer_company_id
+    retailer_company_id = public.auth_company_id()
+    AND EXISTS (
+      SELECT 1 FROM public.company_roles cr
+      WHERE cr.company_id = public.auth_company_id()
+        AND cr.role = 'Retailer'
     )
   );
 
