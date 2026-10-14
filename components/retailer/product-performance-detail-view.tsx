@@ -415,6 +415,10 @@ export function ProductPerformanceDetailView({
         wholesalePrice={product.wholesalePrice}
         selectedStoreId={currentStoreId}
         selectedStoreName={currentStoreObj?.storeName}
+        availableStores={product.storesBreakdown.map((s) => ({
+          id: s.storeId,
+          name: s.storeName,
+        }))}
         onAddToCart={handleAddToCartMain}
       />
 

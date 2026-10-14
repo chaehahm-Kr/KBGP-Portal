@@ -107,12 +107,10 @@ export function StorePerformanceBreakdownView({
 
                 {/* Suggested Order */}
                 <td className="py-3 px-3 text-right font-bold">
-                  {s.signal === "insufficient_data" ? (
-                    <span className="text-zinc-500 font-normal">N/A</span>
-                  ) : s.suggestedReorderQty && s.suggestedReorderQty > 0 ? (
+                  {s.signal === "reorder_needed" && s.suggestedReorderQty && s.suggestedReorderQty > 0 ? (
                     <div className="flex flex-col items-end gap-1">
                       <span className="text-indigo-400">{s.suggestedReorderQty} units</span>
-                      {s.signal === "reorder_needed" && isOrderable && onAddToCartStore && (
+                      {isOrderable && onAddToCartStore && (
                         <button
                           type="button"
                           disabled={addingStoreId === s.storeId}
@@ -128,7 +126,7 @@ export function StorePerformanceBreakdownView({
                               ? "bg-emerald-600 text-white"
                               : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
                           } disabled:opacity-50`}
-                          title={`Add ${s.suggestedReorderQty} units to Cart for ${s.storeName}`}
+                          title={`Add suggested ${s.suggestedReorderQty} units to Cart for ${s.storeName}`}
                         >
                           <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -137,8 +135,38 @@ export function StorePerformanceBreakdownView({
                         </button>
                       )}
                     </div>
+                  ) : isOrderable && onAddToCartStore ? (
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-zinc-500 font-normal">
+                        {s.signal === "insufficient_data" ? "N/A" : "0"}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={addingStoreId === s.storeId}
+                        onClick={() => {
+                          setAddingStoreId(s.storeId);
+                          onAddToCartStore(s.storeId, s.storeName, cartonPackQty);
+                          setAddedStoreId(s.storeId);
+                          setTimeout(() => setAddingStoreId(null), 500);
+                          setTimeout(() => setAddedStoreId(null), 3000);
+                        }}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
+                          addedStoreId === s.storeId
+                            ? "bg-emerald-600 text-white"
+                            : "bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-white border border-zinc-700/80"
+                        } disabled:opacity-50`}
+                        title={`Manual Quick Reorder: Add 1 case (${cartonPackQty} units) to Cart for ${s.storeName}`}
+                      >
+                        <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        <span>{addedStoreId === s.storeId ? "✓ Added" : "+ Reorder"}</span>
+                      </button>
+                    </div>
                   ) : (
-                    <span className="text-emerald-400/80 font-normal">0</span>
+                    <span className="text-zinc-500 font-normal">
+                      {s.signal === "insufficient_data" ? "N/A" : "0"}
+                    </span>
                   )}
                 </td>
               </tr>
@@ -187,13 +215,34 @@ export function StorePerformanceBreakdownView({
                     {s.suggestedReorderQty && s.suggestedReorderQty > 0 ? `${s.suggestedReorderQty} units` : "0 units (Adequate)"}
                   </span>
                 </div>
-                {s.suggestedReorderQty && s.suggestedReorderQty > 0 && s.signal === "reorder_needed" && isOrderable && onAddToCartStore && (
+                {s.suggestedReorderQty && s.suggestedReorderQty > 0 && s.signal === "reorder_needed" ? (
+                  isOrderable && onAddToCartStore && (
+                    <button
+                      type="button"
+                      disabled={addingStoreId === s.storeId}
+                      onClick={() => {
+                        setAddingStoreId(s.storeId);
+                        onAddToCartStore(s.storeId, s.storeName, s.suggestedReorderQty!);
+                        setAddedStoreId(s.storeId);
+                        setTimeout(() => setAddingStoreId(null), 500);
+                        setTimeout(() => setAddedStoreId(null), 3000);
+                      }}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
+                        addedStoreId === s.storeId
+                          ? "bg-emerald-600 text-white"
+                          : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
+                      } disabled:opacity-50`}
+                    >
+                      <span>{addedStoreId === s.storeId ? "✓ Added" : "+ Cart"}</span>
+                    </button>
+                  )
+                ) : isOrderable && onAddToCartStore ? (
                   <button
                     type="button"
                     disabled={addingStoreId === s.storeId}
                     onClick={() => {
                       setAddingStoreId(s.storeId);
-                      onAddToCartStore(s.storeId, s.storeName, s.suggestedReorderQty!);
+                      onAddToCartStore(s.storeId, s.storeName, cartonPackQty);
                       setAddedStoreId(s.storeId);
                       setTimeout(() => setAddingStoreId(null), 500);
                       setTimeout(() => setAddedStoreId(null), 3000);
@@ -201,12 +250,13 @@ export function StorePerformanceBreakdownView({
                     className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
                       addedStoreId === s.storeId
                         ? "bg-emerald-600 text-white"
-                        : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
+                        : "bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-white border border-zinc-700/80"
                     } disabled:opacity-50`}
+                    title={`Manual Quick Reorder: Add 1 case (${cartonPackQty} units) to Cart for ${s.storeName}`}
                   >
-                    <span>{addedStoreId === s.storeId ? "✓ Added" : "+ Cart"}</span>
+                    <span>{addedStoreId === s.storeId ? "✓ Added" : "+ Reorder"}</span>
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
           </div>

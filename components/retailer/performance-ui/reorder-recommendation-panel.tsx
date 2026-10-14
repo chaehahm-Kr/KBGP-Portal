@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ReorderRecommendationPanelProps, ReorderCoverageTarget } from "./types";
 import { DataReliabilityBadge } from "./data-reliability-badge";
@@ -27,6 +27,7 @@ export function ReorderRecommendationPanel({
   wholesalePrice,
   selectedStoreId,
   selectedStoreName,
+  availableStores,
   onAddToCart,
   onAddToCartPlaceholder,
 }: ReorderRecommendationPanelProps) {
@@ -36,27 +37,41 @@ export function ReorderRecommendationPanel({
   const [isAdding, setIsAdding] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
 
-  // Authoritative eligibility check per P4 spec
-  const isEligible = isOrderable && signal === "reorder_needed" && suggestedReorderQty > 0;
+  // P4-R1 Dual-Mode Reorder Architecture:
+  // 1. Suggested Mode: P3 computed replenishment need (reorder_needed & suggestedReorderQty > 0)
+  // 2. Manual Mode: Always available for any orderable SKU independent of performance observations
+  const hasSuggested = isOrderable && signal === "reorder_needed" && suggestedReorderQty > 0;
+  const isManualAvailable = isOrderable && wholesalePrice !== null && wholesalePrice !== undefined;
+  const canOrder = hasSuggested || isManualAvailable;
 
-  let disabledReason = "Reorder not required";
-  if (!isOrderable) {
-    disabledReason = "Product currently unavailable on HUB";
-  } else if (isInsufficient) {
-    disabledReason = "Insufficient sales data to calculate restock";
-  } else if (isNeedsReview) {
-    disabledReason = "Count review required before reordering";
-  } else if (suggestedReorderQty === 0) {
-    disabledReason = `Adequate stock for ${coverageTarget === "30d" ? "30 days" : "60 days"}`;
-  }
+  // Case stepper state: defaults to suggested cases if recommendation exists, or 1 case (MOQ)
+  const initialCases = hasSuggested ? Math.max(1, suggestedCases) : 1;
+  const [orderCases, setOrderCases] = useState<number>(initialCases);
+
+  useEffect(() => {
+    if (hasSuggested) {
+      setOrderCases(Math.max(1, suggestedCases));
+    }
+  }, [hasSuggested, suggestedCases, coverageTarget]);
+
+  // Destination store selection for Company-Wide view
+  const [customStoreId, setCustomStoreId] = useState<string | undefined>(undefined);
+  const activeTargetStoreId =
+    selectedStoreId && selectedStoreId !== "all"
+      ? selectedStoreId
+      : customStoreId || (availableStores && availableStores.length > 0 ? availableStores[0].id : undefined);
+
+  const packMultiple = Math.max(1, cartonPackQty || 1);
+  const orderUnits = orderCases * packMultiple;
+  const isSuggestedMode = hasSuggested && orderCases === suggestedCases;
 
   const handleAddToCart = () => {
-    if (!isEligible || isAdding) return;
+    if (!canOrder || isAdding || orderUnits <= 0) return;
     setIsAdding(true);
     if (onAddToCart) {
-      onAddToCart(productId, suggestedReorderQty, selectedStoreId === "all" ? undefined : selectedStoreId);
+      onAddToCart(productId, orderUnits, activeTargetStoreId);
     } else if (onAddToCartPlaceholder) {
-      onAddToCartPlaceholder(productId, suggestedReorderQty);
+      onAddToCartPlaceholder(productId, orderUnits);
     }
     setJustAdded(true);
     setTimeout(() => setIsAdding(false), 500);
@@ -143,26 +158,98 @@ export function ReorderRecommendationPanel({
           </div>
         </div>
 
-        {/* P4 Active Quick Reorder Box */}
+        {/* P4-R1 Active Quick Reorder Box (Suggested or Manual) */}
         <div className="bg-zinc-800/40 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between space-y-3">
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
                 Quick Reorder
               </span>
-              {selectedStoreName && selectedStoreId !== "all" && (
-                <span className="text-[10px] text-indigo-400 font-medium truncate max-w-[120px]" title={selectedStoreName}>
-                  📍 {selectedStoreName}
-                </span>
-              )}
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                  isSuggestedMode
+                    ? "bg-indigo-950/80 text-indigo-300 border-indigo-800/60"
+                    : canOrder
+                    ? "bg-zinc-800 text-zinc-300 border-zinc-700"
+                    : "bg-rose-950/40 text-rose-300 border-rose-900/60"
+                }`}
+              >
+                {isSuggestedMode ? "Suggested" : canOrder ? "Manual" : "Unavailable"}
+              </span>
             </div>
             <p className="text-[11px] text-zinc-400 leading-relaxed">
-              Dispatch advisory restock quantity directly to your cart.
+              {!isOrderable
+                ? "Product currently unavailable for ordering on HUB."
+                : hasSuggested
+                ? `System recommended replenishment for ${coverageTarget === "30d" ? "30-day" : "60-day"} demand.`
+                : isInsufficient
+                ? "No sales velocity data yet. Manual case pack reorder is active."
+                : isNeedsReview
+                ? "Stock review recommended. Manual case pack reorder is active."
+                : "Stock covers demand. Manual case pack restock is active."}
             </p>
           </div>
 
-          <div className="space-y-2">
-            {isEligible ? (
+          {/* Destination Store Picker if Company-Wide & Multiple Stores */}
+          {selectedStoreId === "all" && availableStores && availableStores.length > 1 && canOrder && (
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Destination Store</span>
+                <span className="text-[10px] text-zinc-500 font-normal">Fulfillment</span>
+              </label>
+              <select
+                value={activeTargetStoreId || ""}
+                onChange={(e) => setCustomStoreId(e.target.value)}
+                className="w-full text-xs bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                {availableStores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    📍 {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Stepper Controls */}
+          {canOrder && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-zinc-400 font-medium">Order Quantity:</span>
+                <span className="text-zinc-400 text-[10px]">{packMultiple} units/case</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={orderCases <= 1}
+                  onClick={() => setOrderCases(Math.max(1, orderCases - 1))}
+                  className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold flex items-center justify-center border border-zinc-700 text-sm transition-colors cursor-pointer"
+                  title="Decrease 1 case"
+                >
+                  −
+                </button>
+                <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg py-1 px-2.5 text-center">
+                  <div className="text-xs font-bold text-white">
+                    {orderUnits.toLocaleString()} <span className="text-[10px] font-normal text-zinc-400">units</span>
+                  </div>
+                  <div className="text-[10px] text-zinc-400">
+                    {orderCases} {orderCases === 1 ? "case" : "cases"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOrderCases(orderCases + 1)}
+                  className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-bold flex items-center justify-center border border-zinc-700 text-sm transition-colors cursor-pointer"
+                  title="Increase 1 case"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2 pt-1">
+            {canOrder ? (
               <button
                 type="button"
                 disabled={isAdding}
@@ -175,7 +262,9 @@ export function ReorderRecommendationPanel({
                 <span>
                   {justAdded
                     ? "✓ Added to Cart!"
-                    : `Add ${suggestedReorderQty.toLocaleString()} Units (${suggestedCases} cs)`}
+                    : isSuggestedMode
+                    ? `Add Suggested ${orderUnits.toLocaleString()} Units (${orderCases} cs)`
+                    : `Add ${orderUnits.toLocaleString()} Units (${orderCases} cs)`}
                 </span>
               </button>
             ) : (
@@ -183,12 +272,12 @@ export function ReorderRecommendationPanel({
                 type="button"
                 disabled
                 className="w-full py-2.5 px-3 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
-                title={disabledReason}
+                title="Product currently unavailable on HUB"
               >
                 <svg className="w-4 h-4 text-zinc-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
-                <span>Add to Cart</span>
+                <span>Unavailable on HUB</span>
               </button>
             )}
 
@@ -199,18 +288,18 @@ export function ReorderRecommendationPanel({
                   View Cart →
                 </Link>
               </div>
-            ) : isEligible ? (
+            ) : canOrder ? (
               <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-0.5">
                 {wholesalePrice ? (
-                  <span>Est. Wholesale: ${(suggestedReorderQty * wholesalePrice).toFixed(2)}</span>
+                  <span>Est. Cost: ${(orderUnits * wholesalePrice).toFixed(2)}</span>
                 ) : (
                   <span>Rounded to MOQ</span>
                 )}
-                <span>{cartonPackQty} units/case</span>
+                <span>MOQ: {packMultiple} u/cs</span>
               </div>
             ) : (
               <p className="text-[10px] text-zinc-500 text-center">
-                {disabledReason}
+                Product currently unavailable on HUB
               </p>
             )}
           </div>

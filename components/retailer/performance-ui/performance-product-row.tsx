@@ -38,9 +38,12 @@ export function PerformanceProductRow({
     suggestedCases,
     reorderSignal,
     isOrderable,
+    wholesalePrice,
   } = product;
 
-  const isEligible = isOrderable && reorderSignal === "reorder_needed" && suggestedReorderQty > 0;
+  // P4-R1 Dual-Mode Reorder Eligibility
+  const hasSuggested = isOrderable && reorderSignal === "reorder_needed" && suggestedReorderQty > 0;
+  const isManualAvailable = isOrderable && wholesalePrice !== null && wholesalePrice !== undefined;
 
   const handleRowClick = () => {
     if (onSelectProduct) {
@@ -48,14 +51,16 @@ export function PerformanceProductRow({
     }
   };
 
-  const handleAddToCartClick = (e: React.MouseEvent) => {
+  const handleAddToCartClick = (e: React.MouseEvent, overrideQty?: number) => {
     e.stopPropagation();
-    if (!isEligible || isAdding) return;
+    if (!isOrderable || isAdding) return;
+    const finalQty = overrideQty || (hasSuggested ? suggestedReorderQty : cartonPackQty);
+    if (!finalQty || finalQty <= 0) return;
     setIsAdding(true);
     if (onAddToCart) {
-      onAddToCart(product);
+      onAddToCart(product, undefined, finalQty);
     } else if (onAddToCartPlaceholder) {
-      onAddToCartPlaceholder(productId, suggestedReorderQty);
+      onAddToCartPlaceholder(productId, finalQty);
     }
     setJustAdded(true);
     setTimeout(() => setIsAdding(false), 500);
@@ -173,9 +178,7 @@ export function PerformanceProductRow({
 
         {/* Reorder Recommendation */}
         <td className="py-3 px-3 text-right">
-          {reorderSignal === "insufficient_data" ? (
-            <span className="text-xs text-zinc-500 italic">Insufficient Data</span>
-          ) : suggestedReorderQty > 0 ? (
+          {hasSuggested ? (
             <div className="flex flex-col items-end gap-1">
               <div>
                 <span className="text-xs font-extrabold text-indigo-400">
@@ -185,27 +188,54 @@ export function PerformanceProductRow({
                   ({suggestedCases} {suggestedCases === 1 ? "case" : "cases"})
                 </span>
               </div>
-              {isEligible && (
-                <button
-                  type="button"
-                  onClick={handleAddToCartClick}
-                  disabled={isAdding}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
-                    justAdded
-                      ? "bg-emerald-600 text-white"
-                      : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
-                  } disabled:opacity-50`}
-                  title={`Add ${suggestedReorderQty} units (${suggestedCases} cases) to Cart`}
-                >
-                  <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  <span>{justAdded ? "✓ Added" : "+ Cart"}</span>
-                </button>
+              <button
+                type="button"
+                onClick={(e) => handleAddToCartClick(e, suggestedReorderQty)}
+                disabled={isAdding}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
+                  justAdded
+                    ? "bg-emerald-600 text-white"
+                    : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
+                } disabled:opacity-50`}
+                title={`Add suggested ${suggestedReorderQty} units (${suggestedCases} cases) to Cart`}
+              >
+                <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span>{justAdded ? "✓ Added" : "+ Cart"}</span>
+              </button>
+            </div>
+          ) : isManualAvailable ? (
+            <div className="flex flex-col items-end gap-1">
+              {reorderSignal === "insufficient_data" ? (
+                <span className="text-xs text-zinc-500 italic">Insufficient Data</span>
+              ) : reorderSignal === "needs_review" ? (
+                <span className="text-xs text-amber-400/90 font-medium">Needs Review</span>
+              ) : (
+                <span className="text-xs text-emerald-400/80 font-medium">Adequate (0)</span>
               )}
+              <button
+                type="button"
+                onClick={(e) => handleAddToCartClick(e, cartonPackQty)}
+                disabled={isAdding}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
+                  justAdded
+                    ? "bg-emerald-600 text-white"
+                    : "bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-white border border-zinc-700/80"
+                } disabled:opacity-50`}
+                title={`Manual Quick Reorder: Add 1 case (${cartonPackQty} units) to Cart`}
+              >
+                <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span>{justAdded ? "✓ Added" : "+ Reorder"}</span>
+              </button>
             </div>
           ) : (
-            <span className="text-xs text-emerald-400/80 font-medium">Adequate (0)</span>
+            <div className="flex flex-col items-end">
+              <span className="text-xs text-zinc-500 italic">Unavailable</span>
+              <span className="text-[10px] text-zinc-600">Off-Catalog</span>
+            </div>
           )}
         </td>
 
@@ -290,28 +320,45 @@ export function PerformanceProductRow({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {suggestedReorderQty > 0 ? (
+                {hasSuggested ? (
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-indigo-400">
                       Order: {suggestedReorderQty.toLocaleString()}
                     </span>
-                    {isEligible && (
-                      <button
-                        type="button"
-                        onClick={handleAddToCartClick}
-                        disabled={isAdding}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
-                          justAdded
-                            ? "bg-emerald-600 text-white"
-                            : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
-                        } disabled:opacity-50`}
-                      >
-                        <span>{justAdded ? "✓ Added" : "+ Cart"}</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => handleAddToCartClick(e, suggestedReorderQty)}
+                      disabled={isAdding}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
+                        justAdded
+                          ? "bg-emerald-600 text-white"
+                          : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
+                      } disabled:opacity-50`}
+                    >
+                      <span>{justAdded ? "✓ Added" : "+ Cart"}</span>
+                    </button>
+                  </div>
+                ) : isManualAvailable ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-zinc-400 font-medium">
+                      {reorderSignal === "insufficient_data" ? "No Data" : reorderSignal === "needs_review" ? "Review" : "Adequate"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleAddToCartClick(e, cartonPackQty)}
+                      disabled={isAdding}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
+                        justAdded
+                          ? "bg-emerald-600 text-white"
+                          : "bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-white border border-zinc-700/80"
+                      } disabled:opacity-50`}
+                      title={`Manual Quick Reorder: Add 1 case (${cartonPackQty} units)`}
+                    >
+                      <span>{justAdded ? "✓ Added" : "+ Reorder"}</span>
+                    </button>
                   </div>
                 ) : (
-                  <span className="text-[11px] text-emerald-400/80 font-medium">Adequate</span>
+                  <span className="text-[11px] text-zinc-500 font-medium">Unavailable</span>
                 )}
               </div>
             </div>

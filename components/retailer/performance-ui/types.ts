@@ -61,6 +61,7 @@ export interface ReorderRecommendationPanelProps {
   wholesalePrice: number | null;
   selectedStoreId?: string | "all";
   selectedStoreName?: string;
+  availableStores?: Array<{ id: string; name: string }>;
   // P4 Add to Cart Action
   onAddToCart?: (productId: string, quantity: number, storeId?: string) => void;
   // P4 Integration Hook Placeholder (Backwards-compatibility)
