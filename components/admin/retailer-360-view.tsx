@@ -18,6 +18,8 @@ import {
   adminUpdateRetailerUserRoleAction,
   adminUpdateRetailerUserStoreAccessAction,
   adminSetRetailerUserStatusAction,
+  getAdminWeeklyCheckSubmissionDetail,
+  type AdminWeeklyCheckDetail,
 } from "@/lib/retailer/admin-retailer-actions";
 import {
   resendTeamInvitationAction,
@@ -297,6 +299,40 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
 
   // Performance Store Filter
   const [perfStoreFilter, setPerfStoreFilter] = useState<string>("all");
+
+  // Weekly Check Inspection Drill-Down State
+  const [inspectCheckId, setInspectCheckId] = useState<string | null>(null);
+  const [inspectCheckData, setInspectCheckData] = useState<AdminWeeklyCheckDetail | null>(null);
+  const [inspectLoading, setInspectLoading] = useState<boolean>(false);
+  const [inspectError, setInspectError] = useState<string | null>(null);
+  const [inspectSearch, setInspectSearch] = useState<string>("");
+
+  const handleOpenCheckDetail = async (checkId: string) => {
+    setInspectCheckId(checkId);
+    setInspectLoading(true);
+    setInspectError(null);
+    setInspectSearch("");
+    try {
+      const detail = await getAdminWeeklyCheckSubmissionDetail(checkId, data.company.id);
+      if (!detail) {
+        setInspectError("Submission record not found or inaccessible.");
+      } else {
+        setInspectCheckData(detail);
+      }
+    } catch (err: any) {
+      console.error("Failed to load weekly check detail:", err);
+      setInspectError(err?.message || "Failed to load submission details.");
+    } finally {
+      setInspectLoading(false);
+    }
+  };
+
+  const handleCloseCheckDetail = () => {
+    setInspectCheckId(null);
+    setInspectCheckData(null);
+    setInspectError(null);
+    setInspectSearch("");
+  };
 
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return "-";
@@ -2843,6 +2879,124 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
             </div>
           </div>
 
+          {/* Current Reporting Week Store-Level Check Status */}
+          <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+                    Current Week Store Check Status
+                  </h4>
+                  <span className="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                    {data.performance.currentWeekCheckSummary?.currentReportingWeek || "Current Week"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Store-level inventory count submission progress for the active reporting week.
+                </p>
+              </div>
+
+              {/* Status breakdown pills */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300">
+                  <span className="text-[10px] uppercase font-bold text-zinc-400">Stores:</span>
+                  <span className="font-bold">{data.performance.currentWeekCheckSummary?.totalEligibleStores ?? data.stores.length}</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span className="text-[10px] uppercase font-bold">Submitted:</span>
+                  <span className="font-bold">{data.performance.currentWeekCheckSummary?.submittedStoresCount ?? 0}</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  <span className="text-[10px] uppercase font-bold">In Progress:</span>
+                  <span className="font-bold">{data.performance.currentWeekCheckSummary?.inProgressStoresCount ?? 0}</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+                  <span className="text-[10px] uppercase font-bold">Not Started:</span>
+                  <span className="font-bold">{data.performance.currentWeekCheckSummary?.notStartedStoresCount ?? 0}</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-zinc-100 text-[10px] font-bold text-zinc-400 uppercase">
+                  <tr>
+                    <th className="py-2.5 px-3">Store</th>
+                    <th className="py-2.5 px-3 text-center">Reporting Week</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
+                    <th className="py-2.5 px-3 text-right">Products Counted</th>
+                    <th className="py-2.5 px-3 text-right">Remaining Units</th>
+                    <th className="py-2.5 px-3 text-center">Submitted At</th>
+                    <th className="py-2.5 px-3 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {(data.performance.currentWeekCheckSummary?.storeStatuses || []).map((st) => (
+                    <tr key={st.storeId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20">
+                      <td className="py-2.5 px-3 font-semibold text-zinc-900 dark:text-white">
+                        🏪 {st.storeName}
+                      </td>
+                      <td className="py-2.5 px-3 text-center font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
+                        {st.reportingWeek}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border capitalize ${
+                            st.status === "submitted"
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                              : st.status === "in_progress"
+                              ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                              : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700"
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
+                          {st.statusLabel}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums">
+                        {st.status !== "not_started" ? (
+                          <span className={st.productsCounted && st.productsCounted > 0 ? "font-bold text-zinc-900 dark:text-white" : "text-zinc-500"}>
+                            {st.productsCounted ?? 0} / {st.totalProductsCount ?? 0}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400 font-normal">—</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums">
+                        {st.status !== "not_started" ? (
+                          <span className="font-bold text-zinc-900 dark:text-white">
+                            {(st.productsRemainingUnits ?? 0).toLocaleString()} units
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400 font-normal">—</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-center text-zinc-500">
+                        {st.submittedAt ? formatDate(st.submittedAt) : "—"}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        {st.checkId ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCheckDetail(st.checkId!)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
+                          >
+                            Inspect Items →
+                          </button>
+                        ) : (
+                          <span className="text-zinc-400 text-xs">No Record</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* Products Reorder Recommendation Table */}
           <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 p-5">
             <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
@@ -2862,38 +3016,46 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                  {data.performance.products.map((prod) => (
-                    <tr key={prod.productId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20">
-                      <td className="py-2.5 px-3 font-semibold text-zinc-900 dark:text-white">
-                        {prod.productName}
-                        <span className="font-mono text-[10px] text-zinc-400 block">{prod.sku}</span>
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-bold">{prod.totalReportedRemaining}</td>
-                      <td className="py-2.5 px-3 text-right font-bold text-indigo-600">{prod.estimatedMovement}</td>
-                      <td className="py-2.5 px-3 text-right font-mono text-zinc-600">{prod.averageWeeklyMovement}</td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold">
-                        {prod.currentWeeksOfSupply !== null ? `${prod.currentWeeksOfSupply} wks` : "-"}
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
-                            prod.reorderSignal === "reorder_needed"
-                              ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
-                              : prod.reorderSignal === "sufficient_stock"
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                              : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-                          }`}
-                        >
-                          {prod.reorderSignal.replace(/_/g, " ")}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-zinc-900 dark:text-white">
-                        {prod.recommendedOrderQtyUnits > 0
-                          ? `${prod.recommendedOrderQtyUnits} units (${prod.recommendedOrderCartons} cs)`
-                          : "-"}
+                  {data.performance.products.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-zinc-400 text-xs">
+                        No store-level assortment, orders, or check records recorded for this retailer.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    data.performance.products.map((prod) => (
+                      <tr key={prod.productId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20">
+                        <td className="py-2.5 px-3 font-semibold text-zinc-900 dark:text-white">
+                          {prod.productName}
+                          <span className="font-mono text-[10px] text-zinc-400 block">{prod.sku}</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-bold">{prod.totalReportedRemaining}</td>
+                        <td className="py-2.5 px-3 text-right font-bold text-indigo-600">{prod.estimatedMovement}</td>
+                        <td className="py-2.5 px-3 text-right font-mono text-zinc-600">{prod.averageWeeklyMovement}</td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold">
+                          {prod.currentWeeksOfSupply !== null ? `${prod.currentWeeksOfSupply} wks` : "-"}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                              prod.reorderSignal === "reorder_needed"
+                                ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                                : prod.reorderSignal === "sufficient_stock"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                            }`}
+                          >
+                            {prod.reorderSignal.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-zinc-900 dark:text-white">
+                          {prod.recommendedOrderQtyUnits > 0
+                            ? `${prod.recommendedOrderQtyUnits} units (${prod.recommendedOrderCartons} cs)`
+                            : "-"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2914,6 +3076,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                     <th className="py-2 px-3 text-right">Items Counted</th>
                     <th className="py-2 px-3 text-right">Calculated Movement</th>
                     <th className="py-2 px-3 text-center">Status</th>
+                    <th className="py-2 px-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -2929,10 +3092,257 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                           {wc.status}
                         </span>
                       </td>
+                      <td className="py-2 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCheckDetail(wc.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
+                        >
+                          View Details →
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Weekly Check Inspection Drill-Down Modal */}
+      {inspectCheckId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-xs">
+          <div className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 flex items-start justify-between gap-4 bg-zinc-50/50 dark:bg-zinc-800/40">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                    Weekly Inventory Check Inspection
+                  </h3>
+                  {inspectCheckData && (
+                    <>
+                      <span className="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
+                        {inspectCheckData.reportingWeek}
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold border capitalize ${
+                          inspectCheckData.status === "submitted"
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                            : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
+                        {inspectCheckData.status === "submitted" ? "Submitted" : "In Progress (Draft)"}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                  Retailer: <strong className="text-zinc-800 dark:text-zinc-200">{data.company.name}</strong> ({data.company.companyCode || "RET"})
+                  {inspectCheckData && (
+                    <>
+                      {" · "}Store: <strong className="text-zinc-800 dark:text-zinc-200">🏪 {inspectCheckData.storeName}</strong>
+                      {" · "}
+                      {inspectCheckData.status === "submitted"
+                        ? `Submitted: ${inspectCheckData.submittedAt ? formatDate(inspectCheckData.submittedAt) : formatDate(inspectCheckData.reportDate)}`
+                        : `Draft Created: ${formatDate(inspectCheckData.createdAt)}`}
+                    </>
+                  )}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCloseCheckDetail}
+                className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 flex-1 overflow-y-auto space-y-4">
+              {inspectLoading ? (
+                <div className="py-20 text-center space-y-3">
+                  <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-xs text-zinc-500 font-medium">Loading weekly check submission details...</p>
+                </div>
+              ) : inspectError ? (
+                <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 text-xs space-y-2">
+                  <p className="font-bold">Error Loading Report</p>
+                  <p>{inspectError}</p>
+                </div>
+              ) : inspectCheckData ? (
+                <>
+                  {/* Summary Bar */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/40">
+                      <span className="text-[10px] text-zinc-400 uppercase font-bold block">Total In Check</span>
+                      <span className="text-lg font-black text-zinc-900 dark:text-white mt-0.5 block">
+                        {inspectCheckData.totalProductsCount} SKUs
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-emerald-50/30 dark:bg-emerald-950/20">
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase font-bold block">Counted</span>
+                      <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block">
+                        {inspectCheckData.totalCountedProducts} SKUs
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-amber-50/30 dark:bg-amber-950/20">
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 uppercase font-bold block">Uncounted / Missing</span>
+                      <span className="text-lg font-black text-amber-600 dark:text-amber-400 mt-0.5 block">
+                        {Math.max(0, inspectCheckData.totalProductsCount - inspectCheckData.totalCountedProducts)} SKUs
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/40">
+                      <span className="text-[10px] text-zinc-400 uppercase font-bold block">Reported Units</span>
+                      <span className="text-lg font-black text-zinc-900 dark:text-white mt-0.5 block">
+                        {inspectCheckData.totalRemainingUnits.toLocaleString()} units
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Search Filter */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search products in check by name, brand, or SKU..."
+                      value={inspectSearch}
+                      onChange={(e) => setInspectSearch(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all"
+                    />
+                    {inspectSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setInspectSearch("")}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-400 hover:text-zinc-600 text-xs"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Items Table */}
+                  <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-2xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-zinc-50 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-800 text-[10px] font-bold text-zinc-400 uppercase">
+                          <tr>
+                            <th className="py-2.5 px-3">Product</th>
+                            <th className="py-2.5 px-3">SKU</th>
+                            <th className="py-2.5 px-3 text-right">Previous Qty</th>
+                            <th className="py-2.5 px-3 text-right">Delivered Since</th>
+                            <th className="py-2.5 px-3 text-right">Reported Remaining</th>
+                            <th className="py-2.5 px-3 text-right">Est. Movement</th>
+                            <th className="py-2.5 px-3 text-center">Count Status</th>
+                            <th className="py-2.5 px-3">Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                          {inspectCheckData.items
+                            .filter((it) => {
+                              if (!inspectSearch) return true;
+                              const q = inspectSearch.toLowerCase();
+                              return (
+                                it.productName.toLowerCase().includes(q) ||
+                                (it.productNameEn && it.productNameEn.toLowerCase().includes(q)) ||
+                                it.sku.toLowerCase().includes(q) ||
+                                it.brandName.toLowerCase().includes(q)
+                              );
+                            })
+                            .map((it) => (
+                              <tr key={it.id || it.productId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20">
+                                <td className="py-2.5 px-3">
+                                  <div className="flex items-center gap-2.5">
+                                    {it.thumbnailUrl ? (
+                                      <img
+                                        src={it.thumbnailUrl}
+                                        alt={it.productName}
+                                        className="w-9 h-9 rounded-lg object-cover border border-zinc-200 dark:border-zinc-700 shrink-0 bg-white"
+                                      />
+                                    ) : (
+                                      <div className="w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 text-zinc-400 text-[10px]">
+                                        📦
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <span className="font-semibold text-zinc-900 dark:text-white block truncate max-w-[200px]" title={it.productName}>
+                                        {it.productName}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-400 block truncate">
+                                        {it.brandName}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-3 font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
+                                  {it.sku}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                                  {it.previousReportedQty !== null ? `${it.previousReportedQty} units` : "N/A"}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                                  {it.deliveredSincePrevious !== null ? `+${it.deliveredSincePrevious} units` : "N/A"}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono tabular-nums">
+                                  {it.isCounted ? (
+                                    <span className="font-bold text-zinc-900 dark:text-white">
+                                      {it.reportedRemainingQty ?? 0} units
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                                      Not Reported
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono tabular-nums">
+                                  {it.estimatedMovement !== null ? (
+                                    <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                                      {it.estimatedMovement} units
+                                    </span>
+                                  ) : (
+                                    <span className="text-zinc-400 font-normal">N/A</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  <span
+                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                      it.isCounted
+                                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                        : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                    }`}
+                                  >
+                                    {it.isCounted ? "Counted" : "Uncounted"}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-zinc-500 text-[11px] max-w-[150px] truncate" title={it.notes || undefined}>
+                                  {it.notes || "—"}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/40 flex items-center justify-between gap-4">
+              <span className="text-[11px] text-zinc-400">
+                Read-only inspection snapshot. Submitted check reports remain immutable.
+              </span>
+              <button
+                type="button"
+                onClick={handleCloseCheckDetail}
+                className="px-4 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors cursor-pointer shadow-2xs"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

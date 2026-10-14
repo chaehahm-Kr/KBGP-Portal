@@ -13,6 +13,9 @@ import {
   normalizeRetailerAccountStatus,
 } from "@/lib/retailer/commercial-types";
 import { getRetailerARStatus } from "@/lib/finance/invoice-actions";
+import { getEasternReportingWeek } from "@/lib/utils/timezone";
+import { resolveAuthoritativeProductImages } from "@/lib/retailer/product-images";
+import { resolveEffectiveSku } from "@/lib/product/types";
 
 export interface CreateRetailerPayload {
   companyName: string;
@@ -61,8 +64,11 @@ export interface AdminRetailerListItem {
   trainingCompletedCount: number | null;
   trainingEligibleCount: number | null;
   trainingStatusText: string;
-  // Group 6: Operations
+  // Group 6: Operations (Strictly scoped to CURRENT REPORTING WEEK)
   reportingStoresCount: number;
+  inProgressStoresCount: number;
+  notStartedStoresCount: number;
+  currentReportingWeek: string;
   eligibleStoresCount: number;
   attentionCount: number;
   internalNote?: string;
@@ -180,7 +186,9 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
   const totalOrderedMap: Record<string, number> = {};
   const arMap: Record<string, { openAR: number; pastDueCount: number; pastDueAmount: number; hasPastDue: boolean }> = {};
   const assortmentMap: Record<string, Set<string>> = {};
-  const weeklyChecksMap: Record<string, Set<string>> = {};
+  const currentReportingWeek = getEasternReportingWeek();
+  const weeklyChecksSubmittedMap: Record<string, Set<string>> = {};
+  const weeklyChecksInProgressMap: Record<string, Set<string>> = {};
 
   if (companyIds.length > 0) {
     const [
@@ -234,8 +242,9 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
         .then((r) => r, (err) => { console.error("Store products query error:", err); return { data: null, error: err }; }),
       adminClient
         .from("retailer_weekly_checks")
-        .select("company_id, store_id, status")
+        .select("company_id, store_id, status, reporting_week")
         .in("company_id", companyIds)
+        .eq("reporting_week", currentReportingWeek)
         .then((r) => r, (err) => { console.error("Weekly checks query error:", err); return { data: null, error: err }; }),
     ]);
 
@@ -313,11 +322,14 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
       assortmentMap[sp.company_id].add(sp.product_id);
     });
 
-    // Map weekly inventory check reporting coverage (submitted checks)
+    // Map weekly inventory check reporting coverage (submitted checks & draft checks for CURRENT REPORTING WEEK)
     (weeklyChecksRes.data || []).forEach((wc: any) => {
       if (wc.status === "submitted") {
-        if (!weeklyChecksMap[wc.company_id]) weeklyChecksMap[wc.company_id] = new Set();
-        weeklyChecksMap[wc.company_id].add(wc.store_id);
+        if (!weeklyChecksSubmittedMap[wc.company_id]) weeklyChecksSubmittedMap[wc.company_id] = new Set();
+        weeklyChecksSubmittedMap[wc.company_id].add(wc.store_id);
+      } else if (wc.status === "draft") {
+        if (!weeklyChecksInProgressMap[wc.company_id]) weeklyChecksInProgressMap[wc.company_id] = new Set();
+        weeklyChecksInProgressMap[wc.company_id].add(wc.store_id);
       }
     });
   }
@@ -331,7 +343,12 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
     const ord = ordersMap[comp.id] || { openCount: 0, readyCount: 0, totalCount: 0 };
     const ar = arMap[comp.id] || { openAR: 0, pastDueCount: 0, pastDueAmount: 0, hasPastDue: false };
     const distinctAssortment = assortmentMap[comp.id]?.size || 0;
-    const reportingStores = weeklyChecksMap[comp.id]?.size || 0;
+    const reportingStores = weeklyChecksSubmittedMap[comp.id]?.size || 0;
+    const inProgressStores = Array.from(weeklyChecksInProgressMap[comp.id] || []).filter(
+      (stId) => !weeklyChecksSubmittedMap[comp.id]?.has(stId)
+    ).length;
+    const eligibleStores = stores.length;
+    const notStartedStores = Math.max(0, eligibleStores - (reportingStores + inProgressStores));
 
     // Calculate verifiable operational attention issues count
     let attentionCount = 0;
@@ -372,9 +389,12 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
       trainingCompletedCount: null,
       trainingEligibleCount: distinctAssortment,
       trainingStatusText: "Training: Not Tracked",
-      // Group 6: Operations
+      // Group 6: Operations (Strictly scoped to CURRENT REPORTING WEEK)
       reportingStoresCount: reportingStores,
-      eligibleStoresCount: stores.length,
+      inProgressStoresCount: inProgressStores,
+      notStartedStoresCount: notStartedStores,
+      currentReportingWeek,
+      eligibleStoresCount: eligibleStores,
       attentionCount,
       internalNote: profile?.internal_note || "",
       createdAt: comp.created_at,
@@ -1531,3 +1551,166 @@ export async function adminSetRetailerUserStatusAction(
 
   return { success: true };
 }
+
+export interface AdminWeeklyCheckDetailItem {
+  id: string;
+  productId: string;
+  productName: string;
+  productNameEn: string | null;
+  brandName: string;
+  sku: string;
+  thumbnailUrl: string | null;
+  previousReportedQty: number | null;
+  deliveredSincePrevious: number | null;
+  reportedRemainingQty: number | null;
+  estimatedMovement: number | null;
+  isCounted: boolean;
+  notes: string | null;
+}
+
+export interface AdminWeeklyCheckDetail {
+  id: string;
+  companyId: string;
+  companyName: string;
+  companyCode: string | null;
+  storeId: string;
+  storeName: string;
+  reportingWeek: string;
+  reportDate: string;
+  status: "draft" | "submitted" | "cancelled";
+  submittedAt: string | null;
+  createdAt: string;
+  totalProductsCount: number;
+  totalCountedProducts: number;
+  totalRemainingUnits: number;
+  notes: string | null;
+  items: AdminWeeklyCheckDetailItem[];
+}
+
+/**
+ * Fetches authoritative weekly check submission items with signed primary product images.
+ * Strictly verifies admin session and enforces tenant company boundaries.
+ */
+export async function getAdminWeeklyCheckSubmissionDetail(
+  checkId: string,
+  companyId: string
+): Promise<AdminWeeklyCheckDetail | null> {
+  await verifyAdminSession();
+  const adminClient = createAdminClient();
+
+  const { data: check, error } = await adminClient
+    .from("retailer_weekly_checks")
+    .select(`
+      id,
+      company_id,
+      store_id,
+      reporting_week,
+      report_date,
+      status,
+      submitted_at,
+      total_products_count,
+      total_counted_products,
+      total_remaining_units,
+      notes,
+      created_at,
+      companies (
+        id,
+        name,
+        company_code
+      ),
+      stores (
+        id,
+        name
+      ),
+      retailer_weekly_check_items (
+        id,
+        product_id,
+        reported_remaining_qty,
+        previous_reported_qty,
+        delivered_since_previous,
+        estimated_movement,
+        is_counted,
+        notes,
+        products (
+          id,
+          name,
+          name_en,
+          letusto_sku,
+          manufacture_sku,
+          price_additional_info,
+          brands (
+            name
+          )
+        )
+      )
+    `)
+    .eq("id", checkId)
+    .single();
+
+  if (error || !check) {
+    console.error("[getAdminWeeklyCheckSubmissionDetail] Error or not found:", error);
+    return null;
+  }
+
+  // Strictly enforce tenant boundary: access denied if check does not belong to company
+  if (check.company_id !== companyId) {
+    console.warn(`[getAdminWeeklyCheckSubmissionDetail] Unauthorized tenant boundary mismatch: check.company_id (${check.company_id}) !== companyId (${companyId})`);
+    throw new Error("Unauthorized: Company boundary access violation.");
+  }
+
+  // Resolve signed product images using authoritative helper
+  const rawItems = (check.retailer_weekly_check_items as any[]) || [];
+  const productIds = rawItems.map((it) => it.product_id).filter(Boolean);
+  const imageMap = await resolveAuthoritativeProductImages(adminClient, productIds);
+
+  const items: AdminWeeklyCheckDetailItem[] = rawItems.map((it) => {
+    const p = it.products || {};
+    const sku = resolveEffectiveSku(p) || p.letusto_sku || p.manufacture_sku || "KS-SKU";
+    const imageInfo = imageMap[it.product_id];
+    const thumbnailUrl = imageInfo?.primaryUrl || null;
+
+    return {
+      id: it.id,
+      productId: it.product_id,
+      productName: p.name || "Product",
+      productNameEn: p.name_en || null,
+      brandName: p.brands?.name || "K SELECT",
+      sku,
+      thumbnailUrl,
+      previousReportedQty: it.previous_reported_qty !== null && it.previous_reported_qty !== undefined
+        ? Number(it.previous_reported_qty)
+        : null,
+      deliveredSincePrevious: it.delivered_since_previous !== null && it.delivered_since_previous !== undefined
+        ? Number(it.delivered_since_previous)
+        : null,
+      reportedRemainingQty: it.is_counted && it.reported_remaining_qty !== null && it.reported_remaining_qty !== undefined
+        ? Number(it.reported_remaining_qty)
+        : null,
+      estimatedMovement: it.estimated_movement !== null && it.estimated_movement !== undefined
+        ? Number(it.estimated_movement)
+        : null,
+      isCounted: Boolean(it.is_counted),
+      notes: it.notes || null,
+    };
+  });
+
+  return {
+    id: check.id,
+    companyId: check.company_id,
+    companyName: (check.companies as any)?.name || "Retailer",
+    companyCode: (check.companies as any)?.company_code || null,
+    storeId: check.store_id,
+    storeName: (check.stores as any)?.name || "Store",
+    reportingWeek: check.reporting_week || "-",
+    reportDate: check.report_date,
+    status: check.status,
+    submittedAt: check.submitted_at || null,
+    createdAt: check.created_at,
+    totalProductsCount: check.total_products_count ?? items.length,
+    totalCountedProducts: check.total_counted_products ?? items.filter((i) => i.isCounted).length,
+    totalRemainingUnits: check.total_remaining_units ?? items.reduce((sum, i) => sum + (i.reportedRemainingQty || 0), 0),
+    notes: check.notes || null,
+    items,
+  };
+}
+

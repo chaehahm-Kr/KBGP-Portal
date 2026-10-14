@@ -26,6 +26,7 @@ import type { RetailerARStatus } from "@/lib/finance/invoice-types";
 import type { RetailerShippingAddress } from "./shipping-address-types";
 import { computeAuthoritativeOrderStatus } from "@/lib/orders/order-status-utils";
 import { resolveCarrierTrackingUrl } from "@/lib/orders/carrier-resolver";
+import { getEasternReportingWeek } from "@/lib/utils/timezone";
 
 export interface NeedsAttentionItem {
   id: string;
@@ -204,6 +205,29 @@ export interface Retailer360PerformanceProduct {
   approxReorderWholesaleCost: number;
 }
 
+export interface Retailer360StoreWeeklyStatus {
+  storeId: string;
+  storeName: string;
+  reportingWeek: string;
+  status: "not_started" | "in_progress" | "submitted";
+  statusLabel: string;
+  productsCounted: number | null;
+  totalProductsCount: number | null;
+  productsRemainingUnits: number | null;
+  submittedAt: string | null;
+  lastUpdatedAt: string | null;
+  checkId: string | null;
+}
+
+export interface Retailer360WeeklyCheckSummary {
+  currentReportingWeek: string;
+  totalEligibleStores: number;
+  submittedStoresCount: number;
+  inProgressStoresCount: number;
+  notStartedStoresCount: number;
+  storeStatuses: Retailer360StoreWeeklyStatus[];
+}
+
 export interface Retailer360PerformanceSummary {
   estimatedMovement: number;
   estimatedRetailSales: number;
@@ -214,6 +238,7 @@ export interface Retailer360PerformanceSummary {
   reportingStores: number;
   productsNeedingReorder: number;
   products: Retailer360PerformanceProduct[];
+  currentWeekCheckSummary: Retailer360WeeklyCheckSummary;
   weeklyCheckHistory: Array<{
     id: string;
     storeId: string;
@@ -222,6 +247,8 @@ export interface Retailer360PerformanceSummary {
     reportDate: string;
     status: string;
     itemsCount: number;
+    totalCountedProducts?: number;
+    totalRemainingUnits?: number;
     totalMovement: number;
     submittedAt: string;
   }>;
@@ -971,6 +998,12 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
       report_date,
       status,
       submitted_at,
+      total_products_count,
+      total_counted_products,
+      total_remaining_units,
+      notes,
+      created_at,
+      updated_at,
       stores (
         id,
         name
@@ -994,38 +1027,118 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
   const submittedChecks = weeklyChecks.filter((c) => c.status === "submitted");
 
   // Map latest check per store
-  let latestCheckByStore: Record<string, any> = {};
+  const latestCheckByStore: Record<string, any> = {};
   weeklyChecks.forEach((wc) => {
     if (!latestCheckByStore[wc.store_id]) {
       latestCheckByStore[wc.store_id] = wc;
     }
   });
 
-  // Compute Performance products metrics using standard formulas
-  const { data: rawProducts } = await adminClient
-    .from("products")
-    .select(`
-      id,
-      name,
-      name_en,
-      category,
-      category_code,
-      brand_id,
-      letusto_sku,
-      manufacture_sku,
-      status,
-      estimated_retail_price,
-      carton_pack_qty,
-      price_additional_info,
-      brands (
-        id,
-        name
-      )
-    `)
-    .eq("status", "selling")
-    .order("name", { ascending: true });
+  // Authoritative Current Reporting Week (evaluated in Eastern Time)
+  const currentReportingWeek = getEasternReportingWeek();
 
-  const productsCatalog = rawProducts || [];
+  // Map Store-level Weekly Status for current reporting week
+  const storeStatuses: Retailer360StoreWeeklyStatus[] = stores.map((st) => {
+    const check = weeklyChecks.find(
+      (c) => c.store_id === st.id && c.reporting_week === currentReportingWeek
+    );
+    if (!check) {
+      return {
+        storeId: st.id,
+        storeName: st.name,
+        reportingWeek: currentReportingWeek,
+        status: "not_started",
+        statusLabel: "Not Started",
+        productsCounted: null,
+        totalProductsCount: null,
+        productsRemainingUnits: null,
+        submittedAt: null,
+        lastUpdatedAt: null,
+        checkId: null,
+      };
+    }
+    const isSubmitted = check.status === "submitted";
+    return {
+      storeId: st.id,
+      storeName: st.name,
+      reportingWeek: currentReportingWeek,
+      status: isSubmitted ? "submitted" : "in_progress",
+      statusLabel: isSubmitted ? "Submitted" : "In Progress",
+      productsCounted: check.total_counted_products ?? null,
+      totalProductsCount: check.total_products_count ?? (check.retailer_weekly_check_items || []).length,
+      productsRemainingUnits: check.total_remaining_units ?? null,
+      submittedAt: check.submitted_at || null,
+      lastUpdatedAt: check.updated_at || check.created_at || null,
+      checkId: check.id,
+    };
+  });
+
+  const submittedStoresCount = storeStatuses.filter((s) => s.status === "submitted").length;
+  const inProgressStoresCount = storeStatuses.filter((s) => s.status === "in_progress").length;
+  const notStartedStoresCount = storeStatuses.filter((s) => s.status === "not_started").length;
+
+  const currentWeekCheckSummary: Retailer360WeeklyCheckSummary = {
+    currentReportingWeek,
+    totalEligibleStores: stores.length,
+    submittedStoresCount,
+    inProgressStoresCount,
+    notStartedStoresCount,
+    storeStatuses,
+  };
+
+  // Scope correction: Collect store-relevant product IDs (active assortment, orders, historical checks)
+  const relevantProductIds = new Set<string>();
+
+  const { data: storeProducts } = await adminClient
+    .from("retailer_store_products")
+    .select("product_id")
+    .eq("company_id", companyId)
+    .eq("is_active", true);
+
+  (storeProducts || []).forEach((sp: any) => {
+    if (sp.product_id) relevantProductIds.add(sp.product_id);
+  });
+
+  (rawOrders || []).forEach((o: any) => {
+    (o.retailer_order_items || []).forEach((it: any) => {
+      if (it.product_id) relevantProductIds.add(it.product_id);
+    });
+  });
+
+  weeklyChecks.forEach((c) => {
+    (c.retailer_weekly_check_items || []).forEach((it: any) => {
+      if (it.product_id) relevantProductIds.add(it.product_id);
+    });
+  });
+
+  let productsCatalog: any[] = [];
+  if (relevantProductIds.size > 0) {
+    const { data: rawProducts } = await adminClient
+      .from("products")
+      .select(`
+        id,
+        name,
+        name_en,
+        category,
+        category_code,
+        brand_id,
+        letusto_sku,
+        manufacture_sku,
+        status,
+        estimated_retail_price,
+        carton_pack_qty,
+        price_additional_info,
+        brands (
+          id,
+          name
+        )
+      `)
+      .in("id", Array.from(relevantProductIds))
+      .eq("status", "selling")
+      .order("name", { ascending: true });
+
+    productsCatalog = rawProducts || [];
+  }
 
   // Group check items by product
   const itemsByProduct: Record<string, any[]> = {};
@@ -1149,8 +1262,8 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     };
   });
 
-  const reportingStoresCount = new Set(submittedChecks.map((c) => c.store_id)).size;
-  const coveragePercent = stores.length > 0 ? Math.round((reportingStoresCount / stores.length) * 100) : 0;
+  const reportingStoresCount = submittedStoresCount;
+  const coveragePercent = stores.length > 0 ? Math.round((submittedStoresCount / stores.length) * 100) : 0;
   const overallGrossMargin = totalEstimatedRetailSales > 0 ? (totalEstimatedGrossProfit / totalEstimatedRetailSales) * 100 : 0;
 
   const performanceSummary: Retailer360PerformanceSummary = {
@@ -1163,6 +1276,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     reportingStores: reportingStoresCount,
     productsNeedingReorder: productsNeedingReorderCount,
     products: performanceProducts,
+    currentWeekCheckSummary,
     weeklyCheckHistory: weeklyChecks.map((wc: any) => {
       let mvtSum = 0;
       (wc.retailer_weekly_check_items || []).forEach((it: any) => {
@@ -1176,6 +1290,8 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
         reportDate: wc.report_date,
         status: wc.status,
         itemsCount: (wc.retailer_weekly_check_items || []).length,
+        totalCountedProducts: wc.total_counted_products ?? 0,
+        totalRemainingUnits: wc.total_remaining_units ?? 0,
         totalMovement: mvtSum,
         submittedAt: wc.submitted_at || wc.report_date,
       };

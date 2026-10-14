@@ -541,10 +541,22 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=performance`}
                           className="text-[11px] hover:underline inline-block font-medium"
-                          title="Weekly Inventory Check Submission Status"
+                          title={
+                            ret.eligibleStoresCount > 0
+                              ? `Current Reporting Week (${ret.currentReportingWeek || "Current"}): ${ret.reportingStoresCount} Submitted, ${ret.inProgressStoresCount ?? 0} In Progress, ${ret.notStartedStoresCount ?? Math.max(0, ret.eligibleStoresCount - ret.reportingStoresCount)} Not Started`
+                              : "No stores registered"
+                          }
                         >
                           {ret.eligibleStoresCount > 0 ? (
-                            <span className={ret.reportingStoresCount === 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-emerald-600 dark:text-emerald-400 font-bold"}>
+                            <span
+                              className={
+                                ret.reportingStoresCount === ret.eligibleStoresCount
+                                  ? "text-emerald-600 dark:text-emerald-400 font-bold"
+                                  : ret.reportingStoresCount > 0 || (ret.inProgressStoresCount ?? 0) > 0
+                                  ? "text-amber-600 dark:text-amber-400 font-bold"
+                                  : "text-zinc-500 dark:text-zinc-400 font-medium"
+                              }
+                            >
                               {ret.reportingStoresCount}/{ret.eligibleStoresCount}
                             </span>
                           ) : (

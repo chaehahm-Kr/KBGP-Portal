@@ -59,3 +59,18 @@ export function formatEasternDateTime(
 export function getEasternTodayString(): string {
   return formatEasternDate(new Date());
 }
+
+/**
+ * Computes the authoritative ISO 8601 reporting week (e.g. "2026-W42")
+ * evaluated consistently in the business reporting timezone (Eastern Time America/New_York).
+ */
+export function getEasternReportingWeek(date: Date = new Date()): string {
+  const easternDateStr = formatEasternDate(date);
+  const [y, m, d] = easternDateStr.split("-").map(Number);
+  const target = new Date(Date.UTC(y, m - 1, d));
+  const dayNum = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${target.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
