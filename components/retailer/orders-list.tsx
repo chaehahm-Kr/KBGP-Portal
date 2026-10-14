@@ -17,6 +17,29 @@ interface OrdersListProps {
   initialFilters?: GetRetailerOrdersFilter;
 }
 
+const FULFILLMENT_OPTIONS = [
+  { key: "submitted", label: "Submitted" },
+  { key: "processing", label: "Processing" },
+  { key: "partially_shipped", label: "Partially Shipped" },
+  { key: "shipped", label: "Shipped" },
+  { key: "partially_cancelled", label: "Partially Cancelled" },
+  { key: "cancelled", label: "Cancelled" },
+];
+
+const PAYMENT_METHOD_OPTIONS = [
+  { key: "card", label: "Credit Card", icon: "💳" },
+  { key: "ach", label: "ACH", icon: "🏦" },
+  { key: "terms", label: "Net Terms", icon: "📄" },
+];
+
+const INVOICE_STATUS_OPTIONS = [
+  { key: "paid", label: "Paid" },
+  { key: "unpaid", label: "Unpaid" },
+  { key: "partially_paid", label: "Partially Paid" },
+  { key: "not_issued", label: "Not Issued" },
+  { key: "void", label: "Void" },
+];
+
 export function RetailerOrdersList({
   orders: propOrders,
   initialOrders,
@@ -34,16 +57,48 @@ export function RetailerOrdersList({
   const [skuTerm, setSkuTerm] = useState(initialFilters?.sku || "");
   const [startDate, setStartDate] = useState(initialFilters?.startDate || "");
   const [endDate, setEndDate] = useState(initialFilters?.endDate || "");
-  const [orderStatus, setOrderStatus] = useState(initialFilters?.orderStatus || "all");
-  const [paymentStatus, setPaymentStatus] = useState(initialFilters?.paymentStatus || "all");
+
+  const [selectedOrderStatuses, setSelectedOrderStatuses] = useState<string[]>(() => {
+    if (initialFilters?.orderStatuses && initialFilters.orderStatuses.length > 0) {
+      return initialFilters.orderStatuses.map((s) => s.toLowerCase());
+    }
+    if (initialFilters?.orderStatus && initialFilters.orderStatus !== "all") {
+      return initialFilters.orderStatus
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+    }
+    return [];
+  });
+
+  const [selectedPaymentMethods, setSelectedPaymentMethods] = useState<string[]>(() => {
+    if (initialFilters?.paymentMethods && initialFilters.paymentMethods.length > 0) {
+      return initialFilters.paymentMethods.map((m) => m.toLowerCase());
+    }
+    return [];
+  });
+
+  const [selectedInvoiceStatuses, setSelectedInvoiceStatuses] = useState<string[]>(() => {
+    if (initialFilters?.invoiceStatuses && initialFilters.invoiceStatuses.length > 0) {
+      return initialFilters.invoiceStatuses.map((s) => s.toLowerCase());
+    }
+    if (initialFilters?.paymentStatus && initialFilters.paymentStatus !== "all") {
+      return initialFilters.paymentStatus
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+    }
+    return [];
+  });
 
   const hasActiveFilters = Boolean(
     searchTerm.trim() ||
       skuTerm.trim() ||
       startDate ||
       endDate ||
-      orderStatus !== "all" ||
-      paymentStatus !== "all"
+      selectedOrderStatuses.length > 0 ||
+      selectedPaymentMethods.length > 0 ||
+      selectedInvoiceStatuses.length > 0
   );
 
   // Synchronize when parent prop orders update
@@ -53,16 +108,93 @@ export function RetailerOrdersList({
     }
   }, [propOrders, hasActiveFilters]);
 
+  // Sync URL parameters without page refresh
+  const syncUrlParams = (params: {
+    search?: string;
+    sku?: string;
+    startDate?: string;
+    endDate?: string;
+    orderStatuses?: string[];
+    paymentMethods?: string[];
+    invoiceStatuses?: string[];
+  }) => {
+    if (typeof window === "undefined") return;
+    try {
+      const url = new URL(window.location.href);
+      if (params.search) url.searchParams.set("search", params.search);
+      else url.searchParams.delete("search");
+
+      if (params.sku) url.searchParams.set("sku", params.sku);
+      else url.searchParams.delete("sku");
+
+      if (params.startDate) url.searchParams.set("startDate", params.startDate);
+      else url.searchParams.delete("startDate");
+
+      if (params.endDate) url.searchParams.set("endDate", params.endDate);
+      else url.searchParams.delete("endDate");
+
+      if (params.orderStatuses && params.orderStatuses.length > 0) {
+        url.searchParams.set("orderStatus", params.orderStatuses.join(","));
+      } else {
+        url.searchParams.delete("orderStatus");
+      }
+
+      if (params.paymentMethods && params.paymentMethods.length > 0) {
+        url.searchParams.set("paymentMethod", params.paymentMethods.join(","));
+      } else {
+        url.searchParams.delete("paymentMethod");
+      }
+
+      if (params.invoiceStatuses && params.invoiceStatuses.length > 0) {
+        url.searchParams.set("invoiceStatus", params.invoiceStatuses.join(","));
+      } else {
+        url.searchParams.delete("invoiceStatus");
+        url.searchParams.delete("paymentStatus");
+      }
+
+      window.history.replaceState(null, "", url.toString());
+    } catch (e) {
+      // ignore
+    }
+  };
+
   // Execute server query
-  const executeFilterQuery = (customFilters?: Partial<GetRetailerOrdersFilter>) => {
+  const executeFilterQuery = (customFilters?: {
+    search?: string;
+    sku?: string;
+    startDate?: string;
+    endDate?: string;
+    orderStatuses?: string[];
+    paymentMethods?: string[];
+    invoiceStatuses?: string[];
+  }) => {
+    const nextSearch = customFilters?.search !== undefined ? customFilters.search : searchTerm.trim();
+    const nextSku = customFilters?.sku !== undefined ? customFilters.sku : skuTerm.trim();
+    const nextStartDate = customFilters?.startDate !== undefined ? customFilters.startDate : startDate;
+    const nextEndDate = customFilters?.endDate !== undefined ? customFilters.endDate : endDate;
+    const nextOrderStatuses = customFilters?.orderStatuses !== undefined ? customFilters.orderStatuses : selectedOrderStatuses;
+    const nextPaymentMethods = customFilters?.paymentMethods !== undefined ? customFilters.paymentMethods : selectedPaymentMethods;
+    const nextInvoiceStatuses = customFilters?.invoiceStatuses !== undefined ? customFilters.invoiceStatuses : selectedInvoiceStatuses;
+
+    syncUrlParams({
+      search: nextSearch,
+      sku: nextSku,
+      startDate: nextStartDate,
+      endDate: nextEndDate,
+      orderStatuses: nextOrderStatuses,
+      paymentMethods: nextPaymentMethods,
+      invoiceStatuses: nextInvoiceStatuses,
+    });
+
     startTransition(async () => {
       const activeQuery: GetRetailerOrdersFilter = {
-        search: customFilters?.search !== undefined ? customFilters.search : searchTerm.trim() || undefined,
-        sku: customFilters?.sku !== undefined ? customFilters.sku : skuTerm.trim() || undefined,
-        startDate: customFilters?.startDate !== undefined ? customFilters.startDate : startDate || undefined,
-        endDate: customFilters?.endDate !== undefined ? customFilters.endDate : endDate || undefined,
-        orderStatus: customFilters?.orderStatus !== undefined ? customFilters.orderStatus : orderStatus,
-        paymentStatus: customFilters?.paymentStatus !== undefined ? customFilters.paymentStatus : paymentStatus,
+        search: nextSearch || undefined,
+        sku: nextSku || undefined,
+        startDate: nextStartDate || undefined,
+        endDate: nextEndDate || undefined,
+        orderStatuses: nextOrderStatuses.length > 0 ? nextOrderStatuses : undefined,
+        paymentMethods: nextPaymentMethods.length > 0 ? nextPaymentMethods : undefined,
+        invoiceStatuses: nextInvoiceStatuses.length > 0 ? nextInvoiceStatuses : undefined,
       };
 
       const results = await getRetailerOrdersAction(activeQuery);
@@ -70,13 +202,52 @@ export function RetailerOrdersList({
     });
   };
 
+  const toggleOrderStatus = (status: string) => {
+    const normalized = status.toLowerCase();
+    const next = selectedOrderStatuses.includes(normalized)
+      ? selectedOrderStatuses.filter((s) => s !== normalized)
+      : [...selectedOrderStatuses, normalized];
+    setSelectedOrderStatuses(next);
+    executeFilterQuery({ orderStatuses: next });
+  };
+
+  const togglePaymentMethod = (method: string) => {
+    const normalized = method.toLowerCase();
+    const next = selectedPaymentMethods.includes(normalized)
+      ? selectedPaymentMethods.filter((m) => m !== normalized)
+      : [...selectedPaymentMethods, normalized];
+    setSelectedPaymentMethods(next);
+    executeFilterQuery({ paymentMethods: next });
+  };
+
+  const toggleInvoiceStatus = (invStatus: string) => {
+    const normalized = invStatus.toLowerCase();
+    const next = selectedInvoiceStatuses.includes(normalized)
+      ? selectedInvoiceStatuses.filter((s) => s !== normalized)
+      : [...selectedInvoiceStatuses, normalized];
+    setSelectedInvoiceStatuses(next);
+    executeFilterQuery({ invoiceStatuses: next });
+  };
+
   const handleResetFilters = () => {
     setSearchTerm("");
     setSkuTerm("");
     setStartDate("");
     setEndDate("");
-    setOrderStatus("all");
-    setPaymentStatus("all");
+    setSelectedOrderStatuses([]);
+    setSelectedPaymentMethods([]);
+    setSelectedInvoiceStatuses([]);
+
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        url.search = "";
+        window.history.replaceState(null, "", url.toString());
+      } catch (e) {
+        // ignore
+      }
+    }
+
     startTransition(async () => {
       const results = await getRetailerOrdersAction({});
       setOrders(results);
@@ -215,6 +386,25 @@ export function RetailerOrdersList({
     badgeClass: string;
     invoiceNumbers: string[];
   } => {
+    if (order.invoiceSummary) {
+      const s = order.invoiceSummary.status;
+      let badgeClass = "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700";
+      if (s === "paid") {
+        badgeClass = "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800";
+      } else if (s === "unpaid") {
+        badgeClass = "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800";
+      } else if (s === "partially_paid") {
+        badgeClass = "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 border border-sky-200 dark:border-sky-800";
+      } else if (s === "void") {
+        badgeClass = "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800";
+      }
+      return {
+        status: order.invoiceSummary.displayStatus,
+        badgeClass,
+        invoiceNumbers: order.invoiceSummary.invoices.map((i) => i.invoiceNumber),
+      };
+    }
+
     const invs = order.invoices || [];
     if (invs.length === 0) {
       return {
@@ -396,49 +586,135 @@ export function RetailerOrdersList({
           </div>
         </div>
 
-        {/* Secondary Row: Status Filters & Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {/* Fulfillment Status Filter */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-zinc-500 font-medium">Fulfillment:</span>
-              <select
-                value={orderStatus}
-                onChange={(e) => {
-                  setOrderStatus(e.target.value);
-                  executeFilterQuery({ orderStatus: e.target.value });
-                }}
-                className="px-2.5 py-1 text-xs rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white font-medium"
-              >
-                <option value="all">All Statuses</option>
-                <option value="submitted">Submitted</option>
-                <option value="processing">Processing</option>
-                <option value="partially_shipped">Partially Shipped</option>
-                <option value="shipped">Shipped</option>
-                <option value="partially_cancelled">Partially Cancelled</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+        {/* Multi-Select Toggle Filter Groups */}
+        <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+          {/* Group 1: Fulfillment Status */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:w-28 shrink-0">
+              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                Fulfillment:
+              </span>
+              {selectedOrderStatuses.length === 0 ? (
+                <span className="text-[10px] text-zinc-400 font-medium">(All)</span>
+              ) : (
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded-md">
+                  {selectedOrderStatuses.length}
+                </span>
+              )}
             </div>
-
-            {/* Payment Status Filter */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-zinc-500 font-medium">Payment:</span>
-              <select
-                value={paymentStatus}
-                onChange={(e) => {
-                  setPaymentStatus(e.target.value);
-                  executeFilterQuery({ paymentStatus: e.target.value });
-                }}
-                className="px-2.5 py-1 text-xs rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white font-medium"
-              >
-                <option value="all">All Payment Statuses</option>
-                <option value="unpaid">Unpaid</option>
-                <option value="pending">Pending</option>
-                <option value="paid">Paid</option>
-              </select>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {FULFILLMENT_OPTIONS.map((opt) => {
+                const isSelected = selectedOrderStatuses.includes(opt.key);
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => toggleOrderStatus(opt.key)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all select-none ${
+                      isSelected
+                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-xs ring-1 ring-zinc-900 dark:ring-white"
+                        : "bg-zinc-100/80 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/60 border border-zinc-200/80 dark:border-zinc-700/60"
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {isSelected && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-white dark:bg-zinc-950 inline-block ml-0.5" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
+          {/* Group 2: Payment Method */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:w-28 shrink-0">
+              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                Payment:
+              </span>
+              {selectedPaymentMethods.length === 0 ? (
+                <span className="text-[10px] text-zinc-400 font-medium">(All)</span>
+              ) : (
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded-md">
+                  {selectedPaymentMethods.length}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {PAYMENT_METHOD_OPTIONS.map((opt) => {
+                const isSelected = selectedPaymentMethods.includes(opt.key);
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => togglePaymentMethod(opt.key)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all select-none ${
+                      isSelected
+                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-xs ring-1 ring-zinc-900 dark:ring-white"
+                        : "bg-zinc-100/80 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/60 border border-zinc-200/80 dark:border-zinc-700/60"
+                    }`}
+                  >
+                    <span>{opt.icon}</span>
+                    <span>{opt.label}</span>
+                    {isSelected && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-white dark:bg-zinc-950 inline-block ml-0.5" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Group 3: Invoice Status */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:w-28 shrink-0">
+              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                Invoice:
+              </span>
+              {selectedInvoiceStatuses.length === 0 ? (
+                <span className="text-[10px] text-zinc-400 font-medium">(All)</span>
+              ) : (
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded-md">
+                  {selectedInvoiceStatuses.length}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {INVOICE_STATUS_OPTIONS.map((opt) => {
+                const isSelected = selectedInvoiceStatuses.includes(opt.key);
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => toggleInvoiceStatus(opt.key)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all select-none ${
+                      isSelected
+                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-xs ring-1 ring-zinc-900 dark:ring-white"
+                        : "bg-zinc-100/80 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/60 border border-zinc-200/80 dark:border-zinc-700/60"
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {isSelected && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-white dark:bg-zinc-950 inline-block ml-0.5" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Action Row */}
+        <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
+          <div className="text-xs text-zinc-500">
+            {hasActiveFilters ? (
+              <span className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-medium">
+                <span>Active filters applied</span>
+              </span>
+            ) : (
+              <span className="text-zinc-400">Showing all records</span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -585,8 +861,8 @@ export function RetailerOrdersList({
                       </td>
 
                       {/* Shipped Qty Column */}
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap font-medium text-zinc-800 dark:text-zinc-200">
-                        {order.totalShippedUnits || 0} / {order.totalOrderedUnits || order.totalItemsCount}
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap font-semibold text-zinc-900 dark:text-white">
+                        {order.totalShippedUnits || 0}
                       </td>
 
                       {/* Tracking Column */}
@@ -714,7 +990,7 @@ export function RetailerOrdersList({
                     <div className="flex items-center gap-1.5">
                       <span className="text-zinc-500">Shipped:</span>
                       <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                        {order.totalShippedUnits || 0} / {order.totalOrderedUnits || order.totalItemsCount}
+                        {order.totalShippedUnits || 0}
                       </span>
                     </div>
                     <div>

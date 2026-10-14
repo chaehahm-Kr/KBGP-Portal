@@ -24,6 +24,11 @@ import { getRetailerAccountPurchaseAllowance } from "@/lib/retailer/purchase-lim
 import { evaluatePromotionsForCart } from "@/lib/retailer/promotions";
 import { resolveCarrierTrackingUrl } from "@/lib/orders/carrier-resolver";
 import { computeAuthoritativeOrderStatus } from "@/lib/orders/order-status-utils";
+import type { OrderInvoiceSummary } from "@/lib/orders/order-invoice-utils";
+import {
+  computeOrderInvoiceSummary,
+  resolveAuthoritativeOrderPaymentStatus,
+} from "@/lib/orders/order-invoice-utils";
 
 function parsePaymentNotesSnapshot(notes?: string | null): {
   payment_snapshot?: any;
@@ -84,9 +89,12 @@ export interface RetailerOrderSummary {
     invoiceNumber: string;
     invoiceStatus: string;
     paymentStatus: string;
+    totalAmount?: number;
+    amountPaid?: number;
     balanceDue: number;
     dueDate: string;
   }>;
+  invoiceSummary?: OrderInvoiceSummary;
   cancellationRequested?: boolean;
   refundAmount?: number;
   refundStatus?: string;
@@ -105,6 +113,9 @@ export interface GetRetailerOrdersFilter {
   endDate?: string;
   orderStatus?: string;
   paymentStatus?: string;
+  orderStatuses?: string[];
+  paymentMethods?: string[];
+  invoiceStatuses?: string[];
 }
 
 export interface RetailerOrderItemDetail {
@@ -1131,12 +1142,34 @@ export async function getRetailerOrders(
       query = query.lte("created_at", `${filters.endDate}T23:59:59.999Z`);
     }
 
-    // Status filters
-    if (filters?.orderStatus && filters.orderStatus !== "all") {
-      query = query.eq("order_status", filters.orderStatus.toLowerCase());
+    // Status filter criteria
+    const targetOrderStatuses: string[] = [];
+    if (Array.isArray(filters?.orderStatuses) && filters.orderStatuses.length > 0) {
+      targetOrderStatuses.push(...filters.orderStatuses.map((s) => s.toLowerCase().trim()).filter(Boolean));
+    } else if (filters?.orderStatus && filters.orderStatus !== "all") {
+      targetOrderStatuses.push(
+        ...filters.orderStatus
+          .split(",")
+          .map((s) => s.toLowerCase().trim())
+          .filter((s) => Boolean(s) && s !== "all")
+      );
     }
-    if (filters?.paymentStatus && filters.paymentStatus !== "all") {
-      query = query.eq("payment_status", filters.paymentStatus.toLowerCase());
+
+    const targetPaymentMethods: string[] = [];
+    if (Array.isArray(filters?.paymentMethods) && filters.paymentMethods.length > 0) {
+      targetPaymentMethods.push(...filters.paymentMethods.map((m) => m.toLowerCase().trim()).filter(Boolean));
+    }
+
+    const targetInvoiceStatuses: string[] = [];
+    if (Array.isArray(filters?.invoiceStatuses) && filters.invoiceStatuses.length > 0) {
+      targetInvoiceStatuses.push(...filters.invoiceStatuses.map((s) => s.toLowerCase().trim()).filter(Boolean));
+    } else if (filters?.paymentStatus && filters.paymentStatus !== "all") {
+      targetInvoiceStatuses.push(
+        ...filters.paymentStatus
+          .split(",")
+          .map((s) => s.toLowerCase().trim())
+          .filter((s) => Boolean(s) && s !== "all")
+      );
     }
 
     query = query.order("created_at", { ascending: false });
@@ -1188,12 +1221,6 @@ export async function getRetailerOrders(
       if (filters?.endDate) {
         baseQuery = baseQuery.lte("created_at", `${filters.endDate}T23:59:59.999Z`);
       }
-      if (filters?.orderStatus && filters.orderStatus !== "all") {
-        baseQuery = baseQuery.eq("order_status", filters.orderStatus.toLowerCase());
-      }
-      if (filters?.paymentStatus && filters.paymentStatus !== "all") {
-        baseQuery = baseQuery.eq("payment_status", filters.paymentStatus.toLowerCase());
-      }
       baseQuery = baseQuery.order("created_at", { ascending: false });
 
       const fallbackRes = await baseQuery;
@@ -1207,13 +1234,15 @@ export async function getRetailerOrders(
     const packagesMap = new Map<string, any[]>();
     const invoicesMap = new Map<string, any[]>();
     const fulfillmentsMap = new Map<string, any[]>();
+    const paymentsMap = new Map<string, any[]>();
 
     if (orderIds.length > 0) {
-      const [itemsRes, pkgsRes, invsRes, fulsRes] = await Promise.all([
+      const [itemsRes, pkgsRes, invsRes, fulsRes, paymentsRes] = await Promise.all([
         adminClient.from("retailer_order_items").select("order_id, quantity, quantity_shipped, quantity_cancelled").in("order_id", orderIds),
         adminClient.from("retailer_order_packages").select("*").in("order_id", orderIds).order("box_number", { ascending: true }),
-        adminClient.from("retailer_invoices").select("id, order_id, invoice_number, invoice_status, payment_status, balance_due, due_date").in("order_id", orderIds),
+        adminClient.from("retailer_invoices").select("id, order_id, invoice_number, invoice_status, payment_status, total_amount, amount_paid, balance_due, due_date").in("order_id", orderIds),
         adminClient.from("retailer_order_fulfillments").select("id, order_id, fulfillment_number, carrier, tracking_number, tracking_url, status, box_count").in("order_id", orderIds).order("created_at", { ascending: true }),
+        adminClient.from("retailer_order_payments").select("id, order_id, payment_method, status, amount, fee_amount, created_at").in("order_id", orderIds),
       ]);
 
       if (itemsRes.data) {
@@ -1245,6 +1274,8 @@ export async function getRetailerOrders(
             invoiceNumber: inv.invoice_number,
             invoiceStatus: inv.invoice_status,
             paymentStatus: inv.payment_status,
+            totalAmount: Number(inv.total_amount || 0),
+            amountPaid: Number(inv.amount_paid || 0),
             balanceDue: Number(inv.balance_due || 0),
             dueDate: inv.due_date,
           });
@@ -1266,9 +1297,16 @@ export async function getRetailerOrders(
           fulfillmentsMap.set(f.order_id, arr);
         });
       }
+      if (paymentsRes.data) {
+        paymentsRes.data.forEach((p: any) => {
+          const arr = paymentsMap.get(p.order_id) || [];
+          arr.push(p);
+          paymentsMap.set(p.order_id, arr);
+        });
+      }
     }
 
-    return orders.map((o: any) => {
+    let mappedOrders = orders.map((o: any) => {
       const parsed = parsePaymentNotesSnapshot(o.payment_notes);
       const snap = o.shipping_snapshot || parsed?.shipping_snapshot;
 
@@ -1306,6 +1344,13 @@ export async function getRetailerOrders(
       // Box count comes strictly from package records; do NOT fabricate box counts or assume 1 Dispatch = 1 Box
       const boxCount = pkgs.length;
       const invs = invoicesMap.get(o.id) || [];
+      const invoiceSummary = computeOrderInvoiceSummary(invs);
+      const oPayments = paymentsMap.get(o.id) || [];
+      const authoritativePaymentStatus = resolveAuthoritativeOrderPaymentStatus(
+        o,
+        oPayments,
+        invoiceSummary
+      );
 
       const authoritativeStatus = computeAuthoritativeOrderStatus(
         o.order_status,
@@ -1318,7 +1363,7 @@ export async function getRetailerOrders(
         id: o.id,
         orderNumber: o.order_number,
         orderStatus: authoritativeStatus,
-        paymentStatus: o.payment_status,
+        paymentStatus: authoritativePaymentStatus,
         paymentMethod: (o.payment_method as RetailerPaymentMethod) || null,
         paymentTerms: o.payment_terms || "PREPAID",
         paymentDueDate: o.payment_due_date,
@@ -1339,6 +1384,7 @@ export async function getRetailerOrders(
         packages: pkgs,
         fulfillments: fuls,
         invoices: invs,
+        invoiceSummary,
         cancellationRequested: Boolean(o.cancellation_requested),
         refundAmount: Number(o.refund_amount || 0),
         refundStatus: o.refund_status || "none",
@@ -1350,6 +1396,35 @@ export async function getRetailerOrders(
         isTest: Boolean(o.is_test),
       };
     });
+
+    // Multi-select Fulfillment filter (OR logic within group)
+    if (targetOrderStatuses.length > 0) {
+      mappedOrders = mappedOrders.filter((o) =>
+        targetOrderStatuses.includes(o.orderStatus.toLowerCase())
+      );
+    }
+
+    // Multi-select Payment Method filter (OR logic within group)
+    if (targetPaymentMethods.length > 0) {
+      mappedOrders = mappedOrders.filter((o) => {
+        const m = (o.paymentMethod || "").toLowerCase();
+        return targetPaymentMethods.some((target) => {
+          if (target === "card" || target === "credit_card") return m === "card" || m === "credit_card";
+          if (target === "terms" || target === "net_terms") return m === "terms" || m === "net_terms";
+          return m === target;
+        });
+      });
+    }
+
+    // Multi-select Invoice Status filter (OR logic within group)
+    if (targetInvoiceStatuses.length > 0) {
+      mappedOrders = mappedOrders.filter((o) => {
+        const invStatus = (o.invoiceSummary?.status || "not_issued").toLowerCase();
+        return targetInvoiceStatuses.includes(invStatus);
+      });
+    }
+
+    return mappedOrders;
   } catch (err) {
     console.error("getRetailerOrders exception:", err);
     return [];

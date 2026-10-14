@@ -24,16 +24,31 @@ export default async function RetailerOrdersPage({
   const sku = typeof resolvedParams.sku === "string" ? resolvedParams.sku : undefined;
   const startDate = typeof resolvedParams.startDate === "string" ? resolvedParams.startDate : undefined;
   const endDate = typeof resolvedParams.endDate === "string" ? resolvedParams.endDate : undefined;
-  const orderStatus = typeof resolvedParams.orderStatus === "string" ? resolvedParams.orderStatus : undefined;
-  const paymentStatus = typeof resolvedParams.paymentStatus === "string" ? resolvedParams.paymentStatus : undefined;
+
+  const parseMultiParam = (val: string | string[] | undefined): string[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) {
+      return val.flatMap((v) => v.split(",")).map((s) => s.trim().toLowerCase()).filter(Boolean);
+    }
+    return val.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  };
+
+  const orderStatuses = parseMultiParam(resolvedParams.orderStatus || resolvedParams.orderStatuses);
+  const paymentMethods = parseMultiParam(resolvedParams.paymentMethod || resolvedParams.paymentMethods);
+  const invoiceStatuses = parseMultiParam(
+    resolvedParams.invoiceStatus || resolvedParams.invoiceStatuses || resolvedParams.paymentStatus
+  );
 
   const initialFilters = {
     search,
     sku,
     startDate,
     endDate,
-    orderStatus,
-    paymentStatus,
+    orderStatus: orderStatuses.length > 0 ? orderStatuses.join(",") : undefined,
+    orderStatuses: orderStatuses.length > 0 ? orderStatuses : undefined,
+    paymentMethods: paymentMethods.length > 0 ? paymentMethods : undefined,
+    paymentStatus: invoiceStatuses.length > 0 ? invoiceStatuses.join(",") : undefined,
+    invoiceStatuses: invoiceStatuses.length > 0 ? invoiceStatuses : undefined,
   };
 
   const orders = await getRetailerOrders(initialFilters);
