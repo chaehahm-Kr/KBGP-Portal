@@ -139,11 +139,10 @@ export function calculateCreditExposure(params: {
       continue;
     }
 
-    // 2.2 Verify active fulfillment lifecycle
     // Cancelled orders have $0 reservation.
-    // Shipped or delivered orders have $0 reservation (all dispatches completed; liability is in Open AR).
+    // Shipped, delivered, or partially_cancelled orders have $0 reservation (all dispatches completed or remaining cancelled; liability is in Open AR).
     const st = (order.order_status || "submitted").toLowerCase();
-    if (["cancelled", "shipped", "delivered"].includes(st)) {
+    if (["cancelled", "shipped", "delivered", "partially_cancelled"].includes(st)) {
       continue;
     }
 
@@ -281,7 +280,7 @@ export async function getRetailerCreditExposure(
       )
     `)
     .eq("company_id", companyId)
-    .not("order_status", "in", '("cancelled","shipped","delivered")');
+    .not("order_status", "in", '("cancelled","shipped","delivered","partially_cancelled")');
 
   if (ordErr) {
     console.error("Error fetching orders for credit exposure:", ordErr);

@@ -1,15 +1,18 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { RetailerOrderDetail } from "@/lib/retailer/orders";
 import { PackagesPopover } from "@/components/admin/orders/packages-popover";
+import { RetailerCancellationModal } from "./retailer-cancellation-modal";
 
 interface OrderDetailViewProps {
   order: RetailerOrderDetail;
 }
 
 export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelModalMode, setCancelModalMode] = useState<"direct_cancel" | "request_cancel">("direct_cancel");
   const getStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
       case "submitted":
@@ -156,8 +159,62 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {getStatusBadge(order.orderStatus)}
+
+          {/* Direct Cancel for Submitted Orders */}
+          {order.orderStatus.toLowerCase() === "submitted" && (
+            <button
+              type="button"
+              onClick={() => {
+                setCancelModalMode("direct_cancel");
+                setCancelModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-400 border border-rose-500/30 transition-colors"
+            >
+              <span>✕</span>
+              <span>Cancel Order</span>
+            </button>
+          )}
+
+          {/* Request Cancellation for Processing Orders */}
+          {order.orderStatus.toLowerCase() === "processing" && !order.cancellationRequested && (
+            <button
+              type="button"
+              onClick={() => {
+                setCancelModalMode("request_cancel");
+                setCancelModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/30 transition-colors"
+            >
+              <span>⚠️</span>
+              <span>Request Cancellation</span>
+            </button>
+          )}
+
+          {/* Cancel Remaining for Partially Shipped Orders */}
+          {order.orderStatus.toLowerCase() === "partially_shipped" &&
+            !order.cancellationRequested &&
+            order.totalRemainingUnits > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelModalMode("request_cancel");
+                  setCancelModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/30 transition-colors"
+              >
+                <span>⚠️</span>
+                <span>Cancel Remaining Units</span>
+              </button>
+            )}
+
+          {Boolean(order.cancellationRequested) && (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/30">
+              Cancellation In Review
+            </span>
+          )}
+
           <Link
             href={`/support?new=1&category=order_delivery&order_id=${order.id}&store_id=${order.storeId || ""}&title=${encodeURIComponent(`[Order #${order.orderNumber}] Order & Delivery Inquiry`)}`}
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 transition-colors"
@@ -730,6 +787,14 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
           </div>
         </div>
       </div>
+
+      {/* Cancellation Modal */}
+      <RetailerCancellationModal
+        isOpen={cancelModalOpen}
+        onClose={() => setCancelModalOpen(false)}
+        order={order}
+        mode={cancelModalMode}
+      />
     </div>
   );
 }

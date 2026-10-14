@@ -726,6 +726,7 @@ export async function adminCreateShipmentWithPackagesAction(params: {
 
 /**
  * Admin Action: Update status directly (e.g. Cancel Order, Mark Processing)
+ * If setting to 'cancelled', atomically cancels all remaining unshipped line items.
  */
 export async function adminUpdateOrderStatusAction(
   orderId: string,
@@ -736,17 +737,62 @@ export async function adminUpdateOrderStatusAction(
     await verifyAdminSession();
     const adminClient = createAdminClient();
 
-    const { error } = await adminClient
+    const { data: order, error: orderErr } = await adminClient
       .from("retailer_orders")
-      .update({
-        order_status: newStatus,
-        notes: notes ? notes.trim() : undefined,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", orderId);
+      .select("id, total_ordered_units, total_shipped_units, total_cancelled_units, retailer_order_items(id, quantity, quantity_shipped, quantity_cancelled)")
+      .eq("id", orderId)
+      .maybeSingle();
 
-    if (error) {
-      return { success: false, error: error.message };
+    if (orderErr || !order) {
+      return { success: false, error: "Order not found." };
+    }
+
+    const now = new Date().toISOString();
+
+    if (newStatus === "cancelled") {
+      // Guard: Cannot cancel if any units were already shipped
+      const items = order.retailer_order_items || [];
+      const totalShipped = items.reduce((sum: number, it: any) => sum + Number(it.quantity_shipped || 0), 0);
+      if (totalShipped > 0) {
+        return {
+          success: false,
+          error: "Cannot cancel order completely because some units have already been shipped. Please cancel remaining units instead.",
+        };
+      }
+
+      // Mark all items as 100% cancelled
+      for (const it of items) {
+        await adminClient
+          .from("retailer_order_items")
+          .update({
+            quantity_cancelled: it.quantity,
+            cancellation_reason: notes?.trim() || "Cancelled by Admin",
+            cancelled_at: now,
+          })
+          .eq("id", it.id);
+      }
+
+      const totalOrdered = items.reduce((sum: number, it: any) => sum + Number(it.quantity || 0), 0) || order.total_ordered_units;
+
+      await adminClient
+        .from("retailer_orders")
+        .update({
+          order_status: "cancelled",
+          total_cancelled_units: totalOrdered,
+          total_remaining_units: 0,
+          notes: notes ? notes.trim() : undefined,
+          updated_at: now,
+        })
+        .eq("id", orderId);
+    } else {
+      await adminClient
+        .from("retailer_orders")
+        .update({
+          order_status: newStatus,
+          notes: notes ? notes.trim() : undefined,
+          updated_at: now,
+        })
+        .eq("id", orderId);
     }
 
     revalidatePath("/admin/sales/orders");
@@ -762,6 +808,7 @@ export async function adminUpdateOrderStatusAction(
 
 /**
  * Admin Action: Partially or fully cancel an order line item
+ * Atomically updates quantity_cancelled on line item and order header totals.
  */
 export async function adminCancelOrderLineAction(params: {
   orderId: string;
@@ -775,7 +822,7 @@ export async function adminCancelOrderLineAction(params: {
 
     const { data: item, error: itemErr } = await adminClient
       .from("retailer_order_items")
-      .select("id, quantity, quantity_shipped, quantity_cancelled")
+      .select("id, order_id, quantity, quantity_shipped, quantity_cancelled")
       .eq("id", params.orderItemId)
       .maybeSingle();
 
@@ -790,35 +837,65 @@ export async function adminCancelOrderLineAction(params: {
     if (params.quantityToCancel > maxCancellable) {
       return {
         success: false,
-        error: `Cannot cancel ${params.quantityToCancel} units. Only ${maxCancellable} active units remain.`,
+        error: `Cannot cancel ${params.quantityToCancel} units. Only ${maxCancellable} active unshipped units remain.`,
       };
     }
 
+    const now = new Date().toISOString();
+
+    // 1. Update line item cancelled quantity
     await adminClient
       .from("retailer_order_items")
       .update({
         quantity_cancelled: curCancelled + params.quantityToCancel,
-        cancellation_reason: params.reason?.trim() || "Item out of stock / shortened",
-        cancelled_at: new Date().toISOString(),
+        cancellation_reason: params.reason?.trim() || "Item out of stock / shortened by Admin",
+        cancelled_at: now,
       })
       .eq("id", params.orderItemId);
 
-    // Recompute order status
-    const detail = await getAdminRetailerOrderDetailAction(params.orderId);
-    let newStatus: ApprovedOrderStatus = "partially_cancelled";
-    if (detail?.totalRemainingUnits === 0 && detail.totalShippedUnits === 0) {
-      newStatus = "cancelled";
-    }
+    // 2. Fetch all items to recompute header unit accounting
+    const { data: allItems } = await adminClient
+      .from("retailer_order_items")
+      .select("quantity, quantity_shipped, quantity_cancelled")
+      .eq("order_id", params.orderId);
 
+    const items = allItems || [];
+    const totalOrdered = items.reduce((sum: number, it: any) => sum + Number(it.quantity || 0), 0);
+    const totalShipped = items.reduce((sum: number, it: any) => sum + Number(it.quantity_shipped || 0), 0);
+    const totalCancelled = items.reduce((sum: number, it: any) => sum + Number(it.quantity_cancelled || 0), 0);
+    const totalRemaining = Math.max(0, totalOrdered - totalShipped - totalCancelled);
+
+    // 3. Fetch parent order to get current raw status
+    const { data: parentOrder } = await adminClient
+      .from("retailer_orders")
+      .select("order_status")
+      .eq("id", params.orderId)
+      .single();
+
+    const newStatus = computeAuthoritativeOrderStatus(
+      parentOrder?.order_status || "processing",
+      totalOrdered,
+      totalShipped,
+      totalCancelled
+    );
+
+    // 4. Update retailer_orders header totals and status
     await adminClient
       .from("retailer_orders")
-      .update({ order_status: newStatus, updated_at: new Date().toISOString() })
+      .update({
+        order_status: newStatus,
+        total_cancelled_units: totalCancelled,
+        total_remaining_units: totalRemaining,
+        updated_at: now,
+      })
       .eq("id", params.orderId);
 
     revalidatePath("/admin/sales/orders");
     revalidatePath(`/admin/sales/orders/${params.orderId}`);
+    revalidatePath("/admin/finance/receivables");
     revalidatePath("/orders");
     revalidatePath(`/orders/${params.orderId}`);
+    revalidatePath("/bills");
 
     return { success: true };
   } catch (err: any) {
@@ -827,25 +904,81 @@ export async function adminCancelOrderLineAction(params: {
 }
 
 /**
- * Admin Action: Record refund amount on order
+ * Admin Action: Record refund amount on order with payment verification
+ * Strictly enforces that refund amount cannot exceed verified collected funds.
  */
 export async function adminProcessOrderRefundAction(params: {
   orderId: string;
   refundAmount: number;
   notes?: string;
+  providerRef?: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    await verifyAdminSession();
+    const session = await verifyAdminSession();
     const adminClient = createAdminClient();
 
+    // 1. Fetch order and collected payments
+    const { data: order, error: ordErr } = await adminClient
+      .from("retailer_orders")
+      .select("id, company_id, total_amount, payment_status, refund_amount")
+      .eq("id", params.orderId)
+      .maybeSingle();
+
+    if (ordErr || !order) {
+      return { success: false, error: "Order not found." };
+    }
+
+    const { data: payments } = await adminClient
+      .from("retailer_order_payments")
+      .select("amount, status")
+      .eq("order_id", params.orderId)
+      .eq("status", "paid");
+
+    const totalPaid = (payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+
+    if (totalPaid <= 0 && params.refundAmount > 0) {
+      return {
+        success: false,
+        error: "Cannot process refund: No collected payments exist for this order (payment status is unpaid). Refund amount must be $0.00.",
+      };
+    }
+
+    const maxRefundable = Math.max(0, totalPaid - Number(order.refund_amount || 0));
+    if (params.refundAmount > maxRefundable) {
+      return {
+        success: false,
+        error: `Refund amount ($${params.refundAmount.toFixed(2)}) exceeds available collected funds ($${maxRefundable.toFixed(2)}).`,
+      };
+    }
+
+    const now = new Date().toISOString();
+
+    // 2. Create refund record in retailer_order_refund_records
+    await adminClient.from("retailer_order_refund_records").insert({
+      order_id: order.id,
+      company_id: order.company_id,
+      total_refund_amount: params.refundAmount,
+      refund_status: params.providerRef ? "completed" : "approved",
+      provider: "manual",
+      provider_refund_id: params.providerRef?.trim() || null,
+      reviewed_by: session.userId,
+      reviewed_at: now,
+      completed_at: params.providerRef ? now : null,
+      notes: params.notes?.trim() || "Manual refund recorded by Admin",
+      created_at: now,
+      updated_at: now,
+    });
+
+    // 3. Update retailer_orders
+    const newRefundStatus = params.providerRef ? "refunded" : "approved";
     const { error } = await adminClient
       .from("retailer_orders")
       .update({
-        refund_amount: params.refundAmount,
-        refund_status: "refunded",
-        refunded_at: new Date().toISOString(),
-        cancellation_notes: params.notes?.trim() || "Refund issued",
-        updated_at: new Date().toISOString(),
+        refund_amount: Number(order.refund_amount || 0) + params.refundAmount,
+        refund_status: newRefundStatus,
+        refunded_at: params.providerRef ? now : null,
+        cancellation_notes: params.notes?.trim() || "Refund updated",
+        updated_at: now,
       })
       .eq("id", params.orderId);
 

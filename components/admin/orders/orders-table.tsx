@@ -435,6 +435,11 @@ export function AdminOrdersTable({ initialOrders, initialTotal }: OrdersTablePro
 
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         {getStatusBadge(ord.orderStatus)}
+                        {ord.cancellationRequested && (
+                          <span className="block mt-1 text-[10px] font-bold text-orange-600 dark:text-orange-400 animate-pulse">
+                            ⚠️ Cancellation Requested
+                          </span>
+                        )}
                       </td>
 
                       {/* 4-Way Units Breakdown Column */}

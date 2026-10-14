@@ -12,6 +12,7 @@ import {
 } from "@/lib/admin/orders-actions";
 import { PackagesPopover } from "./packages-popover";
 import { CreateShipmentModal } from "./create-shipment-modal";
+import { CancellationRequestReviewCard } from "./cancellation-request-review-card";
 
 interface AdminOrderDetailViewProps {
   order: AdminRetailerOrderDetail;
@@ -178,18 +179,23 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
             </button>
           )}
 
-          {order.orderStatus !== "cancelled" && order.orderStatus !== "shipped" && (
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => handleStatusChange("cancelled")}
-              className="px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 rounded-xl transition-colors"
-            >
-              Void Order
-            </button>
-          )}
+          {order.orderStatus !== "cancelled" &&
+            order.orderStatus !== "shipped" &&
+            order.orderStatus !== "partially_cancelled" && (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => handleStatusChange("cancelled")}
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 transition-colors"
+              >
+                {order.totalShippedUnits > 0 ? "Cancel Remaining Units" : "Void / Cancel Order"}
+              </button>
+            )}
         </div>
       </div>
+
+      {/* SECTION 0: Cancellation Request Review Card (if requested) */}
+      <CancellationRequestReviewCard order={order} />
 
       {/* SECTION 1: 4-Way Units Reconciliation Summary Card */}
       <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs space-y-4">
