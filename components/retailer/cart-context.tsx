@@ -24,6 +24,8 @@ interface CartContextType {
       msrp: number;
       marginPercent?: number;
       cartonPackQty?: number;
+      moq?: number;
+      orderMultiple?: number;
       availableStock?: number;
       salesPolicy?: import("@/lib/product/retailer-policy").ResolvedRetailerSalesPolicy;
       targetStoreId?: string;
@@ -97,12 +99,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [items, isLoading]);
 
   const addItem: CartContextType["addItem"] = (product, requestedQty) => {
-    const pack = Math.max(1, product.cartonPackQty || 1);
-    let qtyToAdd = requestedQty && requestedQty >= pack ? requestedQty : pack;
-    // Snap to nearest multiple of case pack if needed
-    const rem = qtyToAdd % pack;
+    const policyMoq = product.salesPolicy?.moq ?? product.moq ?? product.cartonPackQty ?? 1;
+    const policyMultiple = product.salesPolicy?.orderMultiple ?? product.orderMultiple ?? policyMoq;
+    const safeMoq = Math.max(1, Math.floor(policyMoq || 1));
+    const safeMultiple = Math.max(1, Math.floor(policyMultiple || safeMoq || 1));
+    const minValidQty = Math.ceil(safeMoq / safeMultiple) * safeMultiple;
+
+    let qtyToAdd = requestedQty && requestedQty >= minValidQty ? requestedQty : minValidQty;
+    // Snap to nearest multiple of order multiple if needed
+    const rem = qtyToAdd % safeMultiple;
     if (rem !== 0) {
-      qtyToAdd = qtyToAdd + (pack - rem);
+      qtyToAdd = qtyToAdd + (safeMultiple - rem);
     }
 
     const existingItem = items.find((i) => i.productId === product.id);
@@ -120,6 +127,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         nextItems[existingIndex] = {
           ...current,
           quantity: nextQty,
+          casePackQty: safeMultiple,
+          moq: safeMoq,
+          orderMultiple: safeMultiple,
+          cartonPackQty: product.cartonPackQty || current.cartonPackQty,
           availableStock: product.availableStock !== undefined ? product.availableStock : current.availableStock,
           salesPolicy: product.salesPolicy || current.salesPolicy,
           targetStoreId: product.targetStoreId || current.targetStoreId,
@@ -138,7 +149,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           msrp: product.msrp,
           marginPercent: product.marginPercent ?? 50,
           quantity: qtyToAdd,
-          casePackQty: pack,
+          casePackQty: safeMultiple,
+          moq: safeMoq,
+          orderMultiple: safeMultiple,
+          cartonPackQty: product.cartonPackQty,
           lineTotal: 0,
           availableStock: product.availableStock,
           salesPolicy: product.salesPolicy,
@@ -164,13 +178,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const target = prev.find((i) => i.productId === productId);
       if (!target) return prev;
 
-      const pack = Math.max(1, target.casePackQty || 1);
+      const policyMoq = target.salesPolicy?.moq ?? target.moq ?? target.casePackQty ?? 1;
+      const policyMultiple = target.salesPolicy?.orderMultiple ?? target.orderMultiple ?? policyMoq;
+      const safeMoq = Math.max(1, Math.floor(policyMoq || 1));
+      const safeMultiple = Math.max(1, Math.floor(policyMultiple || safeMoq || 1));
+      const minValidQty = Math.ceil(safeMoq / safeMultiple) * safeMultiple;
+
       let validQty = quantity;
-      if (validQty < pack) validQty = pack;
-      // Snap to nearest multiple
-      const remainder = validQty % pack;
-      if (remainder !== 0) {
-        validQty = validQty + (pack - remainder);
+      if (validQty < minValidQty) {
+        validQty = minValidQty;
+      } else {
+        const remainder = validQty % safeMultiple;
+        if (remainder !== 0) {
+          validQty = validQty + (safeMultiple - remainder);
+        }
       }
 
       const next = prev.map((item) =>
@@ -178,6 +199,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           ? {
               ...item,
               quantity: validQty,
+              casePackQty: safeMultiple,
+              moq: safeMoq,
+              orderMultiple: safeMultiple,
               lineTotal: Number((validQty * item.wholesalePrice).toFixed(2)),
             }
           : item

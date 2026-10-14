@@ -52,6 +52,7 @@ export interface ResolvedRetailerSalesPolicy {
   isConfigured: boolean;
   initialSource: "saved_policy" | "catalog_case" | "needs_setup";
   moq: number;
+  orderMultiple: number;
   baseWholesalePrice: number;
   isMoqValid: boolean;
   isBasePriceValid: boolean;
@@ -104,12 +105,107 @@ export function calculateTierUnitPrice(basePrice: number, discountPercent: numbe
 /**
  * Checks if order quantity satisfies MOQ batching rules:
  * 1. quantity >= MOQ
- * 2. quantity % MOQ === 0
+ * 2. quantity % orderMultiple === 0 (defaults to MOQ)
  */
-export function isValidMoqOrderQuantity(quantity: number, moq: number): boolean {
+export function isValidMoqOrderQuantity(quantity: number, moq: number, orderMultiple?: number | null): boolean {
   if (!Number.isInteger(quantity) || quantity <= 0) return false;
   if (!Number.isInteger(moq) || moq <= 0) return false;
-  return quantity >= moq && quantity % moq === 0;
+  const multiple = orderMultiple && orderMultiple > 0 ? Math.floor(orderMultiple) : moq;
+  return quantity >= moq && quantity % multiple === 0;
+}
+
+/**
+ * Result of reorder quantity normalization.
+ */
+export interface NormalizedReorderQuantityResult {
+  minValidQty: number;
+  orderMultiple: number;
+  normalizedQty: number;
+  isAdjusted: boolean;
+  adjustmentReason?: "adjusted_to_multiple" | "adjusted_to_minimum" | "default_minimum";
+}
+
+/**
+ * Authoritative Reorder Quantity Normalization Engine (RTP-PERFORMANCE-P4-001-R2).
+ * Shared across Product Performance, Quick Reorder, Cart, and Checkout.
+ * 
+ * Rules:
+ * RULE A — NO VALID SUGGESTION:
+ *   If Suggested Reorder is missing, unavailable, insufficient data, zero, or negative:
+ *   Use the minimum valid purchasing quantity based on Retailer MOQ and required order multiple.
+ * 
+ * RULE B — SUGGESTION BELOW MOQ:
+ *   If Suggested Reorder is less than the valid minimum order quantity:
+ *   Use the minimum valid order quantity.
+ * 
+ * RULE C — VALID SUGGESTION:
+ *   Round DOWN (FLOOR) to the nearest valid ordering multiple without going below the minimum valid quantity.
+ *   When MOQ and multiple are aligned:
+ *     Final Quantity = MAX(Retail MOQ, FLOOR(Suggested Qty / Order Multiple) * Order Multiple)
+ *   If MOQ is not a valid multiple:
+ *     First determine the smallest valid quantity that satisfies both:
+ *       Quantity >= Retail MOQ AND Quantity % Order Multiple == 0
+ *     Then apply floor rounding to suggestions above that minimum.
+ * 
+ * Never produce quantities that Checkout rejects.
+ */
+export function normalizeReorderQuantity(
+  suggestedQty: number | null | undefined,
+  moq: number,
+  orderMultiple?: number | null,
+  isOrderable: boolean = true
+): NormalizedReorderQuantityResult {
+  const safeMoq = Math.max(1, Math.floor(moq || 1));
+  const safeMultiple = Math.max(1, Math.floor(orderMultiple || safeMoq));
+  
+  // Smallest valid quantity that satisfies both: Quantity >= Retail MOQ AND Quantity % Order Multiple == 0
+  const minValidQty = Math.ceil(safeMoq / safeMultiple) * safeMultiple;
+
+  if (!isOrderable) {
+    return {
+      minValidQty,
+      orderMultiple: safeMultiple,
+      normalizedQty: 0,
+      isAdjusted: false,
+      adjustmentReason: undefined,
+    };
+  }
+
+  // RULE A: Missing, unavailable, zero, or negative
+  if (suggestedQty === null || suggestedQty === undefined || isNaN(suggestedQty) || suggestedQty <= 0) {
+    return {
+      minValidQty,
+      orderMultiple: safeMultiple,
+      normalizedQty: minValidQty,
+      isAdjusted: false,
+      adjustmentReason: "default_minimum",
+    };
+  }
+
+  const rawSuggested = Math.floor(suggestedQty);
+
+  // RULE B: Suggestion below minimum valid quantity
+  if (rawSuggested < minValidQty) {
+    return {
+      minValidQty,
+      orderMultiple: safeMultiple,
+      normalizedQty: minValidQty,
+      isAdjusted: rawSuggested !== minValidQty,
+      adjustmentReason: "adjusted_to_minimum",
+    };
+  }
+
+  // RULE C: Valid suggestion above minimum -> Round DOWN (FLOOR) to nearest valid order multiple
+  const floorMultiple = Math.floor(rawSuggested / safeMultiple) * safeMultiple;
+  const finalQty = Math.max(minValidQty, floorMultiple);
+
+  return {
+    minValidQty,
+    orderMultiple: safeMultiple,
+    normalizedQty: finalQty,
+    isAdjusted: finalQty !== rawSuggested,
+    adjustmentReason: finalQty !== rawSuggested ? "adjusted_to_multiple" : undefined,
+  };
 }
 
 /**
@@ -172,6 +268,14 @@ export function resolveRetailerSalesPolicy(product: any): ResolvedRetailerSalesP
   } else if (adminOverrides.carton_pack_qty && Number(adminOverrides.carton_pack_qty) > 0) {
     moq = Math.floor(Number(adminOverrides.carton_pack_qty));
     initialSource = "catalog_case";
+  }
+
+  // 1b. Resolve Order Multiple
+  let orderMultiple: number = moq > 0 ? moq : 1;
+  if (savedPolicy && typeof savedPolicy.order_multiple === "number" && savedPolicy.order_multiple > 0) {
+    orderMultiple = Math.floor(savedPolicy.order_multiple);
+  } else if (moq > 0) {
+    orderMultiple = moq;
   }
 
   // 2. Resolve Base Wholesale Price
@@ -291,6 +395,7 @@ export function resolveRetailerSalesPolicy(product: any): ResolvedRetailerSalesP
     isConfigured: isMoqValid && isBasePriceValid,
     initialSource: savedPolicy ? "saved_policy" : initialSource,
     moq,
+    orderMultiple,
     baseWholesalePrice,
     isMoqValid,
     isBasePriceValid,
@@ -335,12 +440,13 @@ export function calculateApplicablePrice(
   }
 
   // Validate MOQ multiple rule
-  if (!isValidMoqOrderQuantity(safeQty, policy.moq)) {
+  if (!isValidMoqOrderQuantity(safeQty, policy.moq, policy.orderMultiple)) {
+    const mult = policy.orderMultiple || policy.moq;
     return {
       isOrderable: false,
-      orderableReason: `주문 수량은 최소 ${policy.moq}개 이상이며, ${policy.moq}개 단위의 배수여야 합니다.`,
+      orderableReason: `주문 수량은 최소 ${policy.moq}개 이상이며, ${mult}개 단위의 배수여야 합니다.`,
       quantity: safeQty,
-      bundleCount: Math.floor(safeQty / policy.moq),
+      bundleCount: Math.floor(safeQty / mult),
       baseUnitPrice: policy.baseWholesalePrice,
       effectiveUnitPrice: policy.baseWholesalePrice,
       discountPercent: 0,

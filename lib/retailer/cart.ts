@@ -16,6 +16,9 @@ export interface CartItem {
   marginPercent: number;
   quantity: number;
   casePackQty: number; // MOQ & order multiple
+  moq?: number;
+  orderMultiple?: number;
+  cartonPackQty?: number;
   lineTotal: number;
   availableStock?: number;
   salesPolicy?: ResolvedRetailerSalesPolicy;
@@ -34,38 +37,54 @@ export interface CartSummary {
 
 /**
  * Validate that a quantity is valid given an MOQ/case pack quantity.
- * Minimum is casePackQty, and quantity must be a multiple of casePackQty.
+ * Minimum is MOQ (or casePackQty), and quantity must be a multiple of casePackQty/orderMultiple.
  */
-export function isValidCartQuantity(quantity: number, casePackQty: number): boolean {
+export function isValidCartQuantity(quantity: number, casePackQty: number, moq?: number): boolean {
   if (!quantity || quantity <= 0) return false;
-  const pack = Math.max(1, casePackQty || 1);
-  return quantity >= pack && quantity % pack === 0;
+  const multiple = Math.max(1, casePackQty || 1);
+  const minQty = Math.max(multiple, moq || multiple);
+  return quantity >= minQty && quantity % multiple === 0;
 }
 
 /**
  * Calculate the next valid quantity step
  */
-export function getNextValidQuantity(currentQty: number, casePackQty: number, direction: "up" | "down"): number {
-  const pack = Math.max(1, casePackQty || 1);
+export function getNextValidQuantity(currentQty: number, casePackQty: number, direction: "up" | "down", moq?: number): number {
+  const multiple = Math.max(1, casePackQty || 1);
+  const minQty = Math.max(multiple, moq || multiple);
   if (direction === "up") {
-    if (currentQty <= 0) return pack;
-    return currentQty + pack;
+    if (currentQty <= 0) return minQty;
+    return currentQty + multiple;
   } else {
-    return Math.max(pack, currentQty - pack);
+    return Math.max(minQty, currentQty - multiple);
   }
 }
 
 /**
- * Recalculate summary metrics from items with dynamic Tier & Promo price resolution
+ * Recalculate summary metrics from items with dynamic Tier & Promo price resolution.
+ * Automatically aligns quantities and case packs with policy MOQ and orderMultiple.
  */
 export function computeCartSummary(items: CartItem[]): CartSummary {
   let subtotal = 0;
   let totalUnits = 0;
 
   const sanitizedItems = items.map((item) => {
-    const pack = Math.max(1, item.casePackQty || 1);
+    const policyMoq = item.salesPolicy?.moq ?? item.moq ?? item.casePackQty ?? 1;
+    const policyMultiple = item.salesPolicy?.orderMultiple ?? item.orderMultiple ?? policyMoq;
+    const safeMoq = Math.max(1, Math.floor(policyMoq || 1));
+    const safeMultiple = Math.max(1, Math.floor(policyMultiple || safeMoq || 1));
+    const minValidQty = Math.ceil(safeMoq / safeMultiple) * safeMultiple;
+
     let qty = item.quantity;
-    if (qty < pack) qty = pack;
+    if (qty < minValidQty) {
+      qty = minValidQty;
+    } else {
+      const rem = qty % safeMultiple;
+      if (rem !== 0) {
+        // Snap to valid multiple (floor non-conforming numbers like 50 -> 48 for KLALAB DR120)
+        qty = Math.max(minValidQty, Math.floor(qty / safeMultiple) * safeMultiple);
+      }
+    }
 
     let effectivePrice = item.wholesalePrice;
     let discountPercent = item.discountPercent || 0;
@@ -89,7 +108,9 @@ export function computeCartSummary(items: CartItem[]): CartSummary {
     return {
       ...item,
       quantity: qty,
-      casePackQty: pack,
+      casePackQty: safeMultiple,
+      moq: safeMoq,
+      orderMultiple: safeMultiple,
       wholesalePrice: effectivePrice,
       discountPercent,
       appliedReason,

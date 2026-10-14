@@ -20,6 +20,7 @@ import {
   StoreBreakdownRow,
 } from "@/components/retailer/performance-ui/types";
 import { useCart } from "@/components/retailer/cart-context";
+import { normalizeReorderQuantity } from "@/lib/product/retailer-policy";
 
 interface ProductPerformanceDetailViewProps {
   product: ProductPerformanceItem;
@@ -60,13 +61,11 @@ export function ProductPerformanceDetailView({
     });
   };
 
-  const handleAddToCartMain = (productId: string, quantity: number, storeId?: string) => {
-    const targetStoreId = storeId || (currentStoreId !== "all" ? currentStoreId : undefined);
-    const targetStoreName = targetStoreId
-      ? product.storesBreakdown.find((s) => s.storeId === targetStoreId)?.storeName
-      : product.storesBreakdown.length === 1
-      ? product.storesBreakdown[0].storeName
-      : undefined;
+  const handleAddToCartMain = (productId: string, quantity: number) => {
+    const effectiveMoq = product.moq || product.cartonPackQty || 1;
+    const effectiveMultiple = product.orderMultiple || effectiveMoq || 1;
+    const normalizedQty = normalizeReorderQuantity(quantity, effectiveMoq, effectiveMultiple, product.isOrderable).normalizedQty;
+    if (normalizedQty <= 0) return;
 
     const result = addItem(
       {
@@ -79,32 +78,37 @@ export function ProductPerformanceDetailView({
         wholesalePrice: product.wholesalePrice || 0,
         msrp: product.msrp || 0,
         cartonPackQty: product.cartonPackQty,
-        targetStoreId: targetStoreId,
-        targetStoreName: targetStoreName,
+        moq: effectiveMoq,
+        orderMultiple: effectiveMultiple,
+        salesPolicy: product.salesPolicy || undefined,
       },
-      quantity
+      normalizedQty
     );
 
-    const cases = Math.ceil(quantity / product.cartonPackQty);
-    const totalCases = Math.ceil(result.newQty / product.cartonPackQty);
-    const storeNotice = targetStoreName ? ` for ${targetStoreName}` : "";
+    const packs = Math.max(1, Math.round(normalizedQty / effectiveMultiple));
+    const totalPacks = Math.max(1, Math.round(result.newQty / effectiveMultiple));
 
     if (result.previousQty > 0) {
       setCartFeedback({
         title: "Cart Quantity Updated",
-        message: `Added ${quantity.toLocaleString()} units (${cases} cs)${storeNotice}.`,
-        subtext: `Cart now contains ${result.newQty.toLocaleString()} units (${totalCases} cs) of ${product.productName}.`,
+        message: `Added ${normalizedQty.toLocaleString()} units (${packs} pk).`,
+        subtext: `Cart now contains ${result.newQty.toLocaleString()} units (${totalPacks} pk) of ${product.productName}.`,
       });
     } else {
       setCartFeedback({
         title: "Added to Cart",
-        message: `Added ${quantity.toLocaleString()} units (${cases} cs)${storeNotice} of ${product.productName}.`,
+        message: `Added ${normalizedQty.toLocaleString()} units (${packs} pk) of ${product.productName}.`,
         subtext: `Total in cart: ${result.newQty.toLocaleString()} units.`,
       });
     }
   };
 
   const handleAddToCartStore = (storeId: string, storeName: string, quantity: number) => {
+    const effectiveMoq = product.moq || product.cartonPackQty || 1;
+    const effectiveMultiple = product.orderMultiple || effectiveMoq || 1;
+    const normalizedQty = normalizeReorderQuantity(quantity, effectiveMoq, effectiveMultiple, product.isOrderable).normalizedQty;
+    if (normalizedQty <= 0) return;
+
     const result = addItem(
       {
         id: product.productId,
@@ -116,25 +120,26 @@ export function ProductPerformanceDetailView({
         wholesalePrice: product.wholesalePrice || 0,
         msrp: product.msrp || 0,
         cartonPackQty: product.cartonPackQty,
-        targetStoreId: storeId,
-        targetStoreName: storeName,
+        moq: effectiveMoq,
+        orderMultiple: effectiveMultiple,
+        salesPolicy: product.salesPolicy || undefined,
       },
-      quantity
+      normalizedQty
     );
 
-    const cases = Math.ceil(quantity / product.cartonPackQty);
-    const totalCases = Math.ceil(result.newQty / product.cartonPackQty);
+    const packs = Math.max(1, Math.round(normalizedQty / effectiveMultiple));
+    const totalPacks = Math.max(1, Math.round(result.newQty / effectiveMultiple));
 
     if (result.previousQty > 0) {
       setCartFeedback({
         title: "Cart Quantity Updated",
-        message: `Added ${quantity.toLocaleString()} units (${cases} cs) for ${storeName}.`,
-        subtext: `Cart now contains ${result.newQty.toLocaleString()} units (${totalCases} cs) of ${product.productName}.`,
+        message: `Added ${normalizedQty.toLocaleString()} units (${packs} pk) based on ${storeName} demand.`,
+        subtext: `Cart now contains ${result.newQty.toLocaleString()} units (${totalPacks} pk) of ${product.productName}.`,
       });
     } else {
       setCartFeedback({
         title: "Added to Cart",
-        message: `Added ${quantity.toLocaleString()} units (${cases} cs) for ${storeName}.`,
+        message: `Added ${normalizedQty.toLocaleString()} units (${packs} pk) based on ${storeName} demand.`,
         subtext: `Total in cart: ${result.newQty.toLocaleString()} units.`,
       });
     }
@@ -220,7 +225,7 @@ export function ProductPerformanceDetailView({
               </span>
               <span className="text-zinc-300 dark:text-zinc-700">·</span>
               <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                MOQ: {product.cartonPackQty} units / case
+                MOQ: {product.moq || product.cartonPackQty} units{product.orderMultiple ? ` · Mult: ${product.orderMultiple}` : ""}
               </span>
               <DataReliabilityBadge signal={product.reorderSignal as ReorderRecommendationSignal} size="sm" />
             </div>
@@ -399,6 +404,9 @@ export function ProductPerformanceDetailView({
         productName={product.productName}
         sku={product.sku}
         cartonPackQty={product.cartonPackQty}
+        moq={product.moq}
+        orderMultiple={product.orderMultiple}
+        salesPolicy={product.salesPolicy}
         coverageTarget={activeCoverage as ReorderCoverageTarget}
         onCoverageChange={handleCoverageChange}
         currentReportedStock={product.totalReportedRemaining}
@@ -439,6 +447,8 @@ export function ProductPerformanceDetailView({
         stores={storeRows}
         coverageTarget={activeCoverage as ReorderCoverageTarget}
         cartonPackQty={product.cartonPackQty}
+        moq={product.moq}
+        orderMultiple={product.orderMultiple}
         productId={product.productId}
         isOrderable={product.isOrderable}
         onAddToCartStore={handleAddToCartStore}

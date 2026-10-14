@@ -688,10 +688,11 @@ export async function submitRetailerOrder(
       }
 
       // Enforce MOQ & Multiple
-      if (!isValidMoqOrderQuantity(item.quantity, policy.moq)) {
+      if (!isValidMoqOrderQuantity(item.quantity, policy.moq, policy.orderMultiple)) {
+        const mult = policy.orderMultiple || policy.moq;
         return {
           success: false,
-          error: `Quantity for "${prod.name}" must be at least ${policy.moq} and a multiple of ${policy.moq}.`,
+          error: `Quantity for "${prod.name}" must be at least ${policy.moq} and a multiple of ${mult}.`,
         };
       }
 

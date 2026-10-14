@@ -23,6 +23,12 @@ import {
   AnalysisPeriod,
 } from "./performance-financial-types";
 
+import {
+  resolveRetailerSalesPolicy,
+  type ResolvedRetailerSalesPolicy,
+  normalizeReorderQuantity,
+} from "@/lib/product/retailer-policy";
+
 export type { FinancialMetrics, FinancialReliabilityStatus };
 
 /**
@@ -70,6 +76,8 @@ export interface StorePerformanceBreakdown {
   targetDemand: number;
   rawReorderNeed: number;
   suggestedReorderQty: number;
+  moq?: number;
+  orderMultiple?: number;
 
   // P5: Financials
   financialStatus?: FinancialReliabilityStatus;
@@ -87,7 +95,10 @@ export interface ProductPerformanceItem {
   thumbnailUrl: string | null;
   category: string;
   categoryLabel: string;
-  cartonPackQty: number; // MOQ & Order multiple
+  cartonPackQty: number; // Master packaging spec
+  moq: number; // Authoritative Retailer MOQ
+  orderMultiple: number; // Authoritative Retailer Order Multiple
+  salesPolicy?: ResolvedRetailerSalesPolicy;
   wholesalePrice: number;
   msrp: number;
   priceBasisLabel: string;
@@ -711,21 +722,23 @@ export async function getRetailerPerformanceData(
       resolveEffectiveSku(overrides.manufacture_sku, rawProd.manufacture_sku) ||
       "KS-PROD";
 
+    const policy = resolveRetailerSalesPolicy(rawProd);
+
     // Wholesale Price & MSRP Resolution
     const salesPolicy = info.retailer_sales_policy || {};
     let wholesalePrice = 0;
     if (curation?.wholesale_price && Number(curation.wholesale_price) > 0) {
       wholesalePrice = Number(curation.wholesale_price);
-    } else if (salesPolicy.promo_wholesale_price && Number(salesPolicy.promo_wholesale_price) > 0) {
-      wholesalePrice = Number(salesPolicy.promo_wholesale_price);
-    } else if (salesPolicy.base_wholesale_price && Number(salesPolicy.base_wholesale_price) > 0) {
-      wholesalePrice = Number(salesPolicy.base_wholesale_price);
+    } else if (policy.promoWholesalePrice && policy.promoWholesalePrice > 0) {
+      wholesalePrice = policy.promoWholesalePrice;
+    } else if (policy.baseWholesalePrice && policy.baseWholesalePrice > 0) {
+      wholesalePrice = policy.baseWholesalePrice;
     } else if (rawProd.trading_wholesale_price && Number(rawProd.trading_wholesale_price) > 0) {
       wholesalePrice = Number(rawProd.trading_wholesale_price);
     }
 
     const isOrderable =
-      wholesalePrice > 0 &&
+      (wholesalePrice > 0 || policy.baseWholesalePrice > 0) &&
       rawProd.status !== "discontinued" &&
       (rawProd.status === "selling" ||
         rawProd.trading_status === "active" ||
@@ -735,6 +748,8 @@ export async function getRetailerPerformanceData(
     let msrp = 0;
     if (curation?.suggest_retail_price && Number(curation.suggest_retail_price) > 0) {
       msrp = Number(curation.suggest_retail_price);
+    } else if (policy.srpPrice && policy.srpPrice > 0) {
+      msrp = policy.srpPrice;
     } else if (salesPolicy.srp_price && Number(salesPolicy.srp_price) > 0) {
       msrp = Number(salesPolicy.srp_price);
     } else if (info.trading_overrides?.srp_price && Number(info.trading_overrides.srp_price) > 0) {
@@ -745,13 +760,11 @@ export async function getRetailerPerformanceData(
       msrp = Number((wholesalePrice * 2.0).toFixed(2));
     }
 
+    const moq = Math.max(1, policy.moq || 1);
+    const orderMultiple = Math.max(1, policy.orderMultiple || moq);
     const cartonPackQty = Math.max(
       1,
-      overrides.carton_pack_qty ||
-      salesPolicy.moq ||
-      salesPolicy.order_multiple ||
-      rawProd.carton_pack_qty ||
-      1
+      rawProd.carton_pack_qty || overrides.carton_pack_qty || moq
     );
 
     // Authoritative Product Image
@@ -846,6 +859,8 @@ export async function getRetailerPerformanceData(
           targetDemand: 0,
           rawReorderNeed: 0,
           suggestedReorderQty: 0,
+          moq,
+          orderMultiple,
 
           financialStatus: emptyStoreEstimate.periodMetrics.status,
           periodMetrics: emptyStoreEstimate.periodMetrics,
@@ -967,6 +982,8 @@ export async function getRetailerPerformanceData(
         targetDemand: storeTargetDemand,
         rawReorderNeed: storeRawReorder,
         suggestedReorderQty: storeSuggestedReorder,
+        moq,
+        orderMultiple,
 
         financialStatus: storePeriodMetrics.status,
         periodMetrics: storePeriodMetrics,
@@ -1117,6 +1134,9 @@ export async function getRetailerPerformanceData(
       category: rawProd.category || "skincare",
       categoryLabel,
       cartonPackQty,
+      moq,
+      orderMultiple,
+      salesPolicy: policy,
       wholesalePrice,
       msrp,
       priceBasisLabel,

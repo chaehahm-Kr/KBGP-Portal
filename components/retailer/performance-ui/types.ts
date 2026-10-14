@@ -43,7 +43,10 @@ export interface ReorderRecommendationPanelProps {
   productId: string;
   productName: string;
   sku: string;
-  cartonPackQty: number; // MOQ / case multiple
+  cartonPackQty: number; // Master packaging spec
+  moq?: number; // Authoritative Retailer MOQ
+  orderMultiple?: number; // Authoritative Retailer Order Multiple
+  salesPolicy?: import("@/lib/product/retailer-policy").ResolvedRetailerSalesPolicy;
   coverageTarget: ReorderCoverageTarget;
   onCoverageChange?: (target: ReorderCoverageTarget) => void;
   currentReportedStock: number | null;
@@ -99,6 +102,8 @@ export interface StorePerformanceBreakdownViewProps {
   stores: StoreBreakdownRow[];
   coverageTarget: ReorderCoverageTarget;
   cartonPackQty: number;
+  moq?: number;
+  orderMultiple?: number;
   productId?: string;
   isOrderable?: boolean;
   onAddToCartStore?: (storeId: string, storeName: string, quantity: number) => void;
@@ -113,6 +118,9 @@ export interface PerformanceProductRowData {
   thumbnailUrl: string | null;
   categoryLabel: string;
   cartonPackQty: number;
+  moq?: number;
+  orderMultiple?: number;
+  salesPolicy?: import("@/lib/product/retailer-policy").ResolvedRetailerSalesPolicy;
   wholesalePrice: number | null;
   msrp: number | null;
 

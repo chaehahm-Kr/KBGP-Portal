@@ -23,6 +23,7 @@ import {
   ReorderRecommendationSignal,
 } from "@/components/retailer/performance-ui/types";
 import { useCart } from "@/components/retailer/cart-context";
+import { normalizeReorderQuantity } from "@/lib/product/retailer-policy";
 
 interface SalesPerformanceDashboardProps {
   data: PerformanceDashboardData;
@@ -38,20 +39,6 @@ export function SalesPerformanceDashboard({ data }: SalesPerformanceDashboardPro
     title: string;
     message: string;
     subtext?: string;
-  } | null>(null);
-
-  const [storePickerProduct, setStorePickerProduct] = useState<{
-    product: PerformanceProductRowData;
-    targetQty: number;
-    mode: "suggested" | "manual";
-    storesOptions: Array<{
-      storeId: string;
-      storeName: string;
-      qty: number;
-      cases: number;
-      cost: string | null;
-      badgeText?: string;
-    }>;
   } | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -104,12 +91,23 @@ export function SalesPerformanceDashboard({ data }: SalesPerformanceDashboardPro
 
   const executeAddToCart = (
     product: PerformanceProductRowData,
-    storeId?: string,
-    storeName?: string,
     overrideQty?: number
   ) => {
-    const qty = overrideQty || product.suggestedReorderQty;
-    if (!qty || qty <= 0) return;
+    const moq = Math.max(1, product.moq || product.cartonPackQty || 1);
+    const orderMultiple = Math.max(1, product.orderMultiple || moq);
+    const hasSuggested = product.reorderSignal === "reorder_needed" && product.suggestedReorderQty > 0;
+
+    // Determine raw target quantity
+    const targetQty =
+      overrideQty !== undefined
+        ? overrideQty
+        : hasSuggested
+        ? product.suggestedReorderQty
+        : null;
+
+    // Authoritative Reorder Normalization
+    const { normalizedQty } = normalizeReorderQuantity(targetQty, moq, orderMultiple);
+    if (!normalizedQty || normalizedQty <= 0) return;
 
     const result = addItem(
       {
@@ -122,26 +120,28 @@ export function SalesPerformanceDashboard({ data }: SalesPerformanceDashboardPro
         wholesalePrice: product.wholesalePrice || 0,
         msrp: product.msrp || 0,
         cartonPackQty: product.cartonPackQty,
-        targetStoreId: storeId,
-        targetStoreName: storeName,
+        moq,
+        orderMultiple,
+        salesPolicy: product.salesPolicy,
+        // Destination shipping location is selected at Checkout
       },
-      qty
+      normalizedQty
     );
 
-    const cases = Math.ceil(qty / product.cartonPackQty);
-    const totalCases = Math.ceil(result.newQty / product.cartonPackQty);
-    const storeNotice = storeName ? ` for ${storeName}` : "";
+    const isPackMultiple = product.cartonPackQty > 0 && normalizedQty % product.cartonPackQty === 0;
+    const cases = isPackMultiple ? Math.ceil(normalizedQty / product.cartonPackQty) : null;
+    const casesText = cases ? ` (${cases} cs)` : "";
 
     if (result.previousQty > 0) {
       setCartFeedback({
         title: "Cart Quantity Updated",
-        message: `Added ${qty.toLocaleString()} units (${cases} cs)${storeNotice}.`,
-        subtext: `Cart now contains ${result.newQty.toLocaleString()} units (${totalCases} cs) of ${product.productName}.`,
+        message: `Added ${normalizedQty.toLocaleString()} units${casesText}.`,
+        subtext: `Cart now contains ${result.newQty.toLocaleString()} units of ${product.productName}.`,
       });
     } else {
       setCartFeedback({
         title: "Added to Cart",
-        message: `Added ${qty.toLocaleString()} units (${cases} cs)${storeNotice} of ${product.productName}.`,
+        message: `Added ${normalizedQty.toLocaleString()} units${casesText} of ${product.productName}.`,
         subtext: `Total in cart: ${result.newQty.toLocaleString()} units.`,
       });
     }
@@ -149,83 +149,10 @@ export function SalesPerformanceDashboard({ data }: SalesPerformanceDashboardPro
 
   const handleAddToCart = (
     product: PerformanceProductRowData,
-    storeId?: string,
+    _storeId?: string,
     quantity?: number
   ) => {
-    const qty = quantity || product.suggestedReorderQty || product.cartonPackQty;
-    const isManual = quantity !== undefined && quantity !== product.suggestedReorderQty;
-
-    // 1. If currently scoped to a specific store or explicit store provided
-    const explicitStoreId =
-      storeId || (selectedStoreId && selectedStoreId !== "all" ? selectedStoreId : undefined);
-    if (explicitStoreId) {
-      const storeObj = stores.find((s) => s.id === explicitStoreId);
-      executeAddToCart(product, explicitStoreId, storeObj?.name, qty);
-      return;
-    }
-
-    // 2. Single-store company -> no ambiguity
-    if (stores.length === 1) {
-      executeAddToCart(product, stores[0].id, stores[0].name, qty);
-      return;
-    }
-
-    // 3. Multi-store company in Company-Wide scope:
-    // If it's a Suggested Order (not manual override)
-    if (!isManual && product.suggestedReorderQty > 0) {
-      const breakdown = product.storesBreakdown || [];
-      const storesWithNeed = breakdown.filter(
-        (s) => s.suggestedReorderQty > 0 && s.signal === "reorder_needed"
-      );
-
-      if (storesWithNeed.length === 1) {
-        // Exactly 1 store needs replenishment -> directly add for that store
-        const s = storesWithNeed[0];
-        executeAddToCart(product, s.storeId, s.storeName, s.suggestedReorderQty);
-        return;
-      } else if (storesWithNeed.length > 1) {
-        // Multiple stores need replenishment -> prompt the retailer to select destination store
-        setStorePickerProduct({
-          product,
-          targetQty: qty,
-          mode: "suggested",
-          storesOptions: storesWithNeed.map((s) => {
-            const cases = Math.ceil(s.suggestedReorderQty / product.cartonPackQty);
-            const cost = product.wholesalePrice
-              ? (s.suggestedReorderQty * product.wholesalePrice).toFixed(2)
-              : null;
-            return {
-              storeId: s.storeId,
-              storeName: s.storeName,
-              qty: s.suggestedReorderQty,
-              cases,
-              cost,
-              badgeText: "Suggested Restock",
-            };
-          }),
-        });
-        return;
-      }
-    }
-
-    // 4. Otherwise, it's a Manual Reorder or general company-wide restock
-    setStorePickerProduct({
-      product,
-      targetQty: qty,
-      mode: "manual",
-      storesOptions: stores.map((s) => {
-        const cases = Math.ceil(qty / product.cartonPackQty);
-        const cost = product.wholesalePrice ? (qty * product.wholesalePrice).toFixed(2) : null;
-        return {
-          storeId: s.id,
-          storeName: s.name,
-          qty,
-          cases,
-          cost,
-          badgeText: "Manual Reorder",
-        };
-      }),
-    });
+    executeAddToCart(product, quantity);
   };
 
   // Filter products by search and filter tab
@@ -437,6 +364,9 @@ export function SalesPerformanceDashboard({ data }: SalesPerformanceDashboardPro
                     thumbnailUrl: p.thumbnailUrl,
                     categoryLabel: p.categoryLabel,
                     cartonPackQty: p.cartonPackQty,
+                    moq: p.moq,
+                    orderMultiple: p.orderMultiple,
+                    salesPolicy: p.salesPolicy,
                     wholesalePrice: p.wholesalePrice,
                     msrp: p.msrp,
 
@@ -500,85 +430,6 @@ export function SalesPerformanceDashboard({ data }: SalesPerformanceDashboardPro
             <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
               *Estimates are calculated from submitted weekly counts and do not replace physical store POS tracking.
             </span>
-          </div>
-        </div>
-      )}
-
-      {/* Company-Wide Multi-Store Reorder Selection Modal */}
-      {storePickerProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl text-left">
-            <div className="flex items-start justify-between gap-3 border-b border-zinc-800 pb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-white">Select Destination Store</h3>
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                      storePickerProduct.mode === "suggested"
-                        ? "bg-indigo-950/80 text-indigo-300 border-indigo-800/60"
-                        : "bg-zinc-800 text-zinc-300 border-zinc-700"
-                    }`}
-                  >
-                    {storePickerProduct.mode === "suggested" ? "Suggested" : "Manual Reorder"}
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  {storePickerProduct.product.productName} ({storePickerProduct.product.sku})
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setStorePickerProduct(null)}
-                className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              {storePickerProduct.mode === "suggested"
-                ? "This product has replenishment recommendations for multiple store locations. Orders are fulfilled per destination store. Select which store you would like to restock:"
-                : "Fulfillment is organized per destination store. Select which store location you would like to restock:"}
-            </p>
-
-            <div className="space-y-2 max-h-60 overflow-y-auto divide-y divide-zinc-800">
-              {storePickerProduct.storesOptions.map((s) => (
-                <div key={s.storeId} className="flex items-center justify-between py-3 first:pt-1 last:pb-1">
-                  <div>
-                    <span className="text-xs font-bold text-white block">📍 {s.storeName}</span>
-                    <span className="text-[11px] text-zinc-400">
-                      {s.qty.toLocaleString()} units ({s.cases} {s.cases === 1 ? "case" : "cases"})
-                      {s.cost && ` · Est. $${s.cost}`}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      executeAddToCart(
-                        storePickerProduct.product,
-                        s.storeId,
-                        s.storeName,
-                        s.qty
-                      );
-                      setStorePickerProduct(null);
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-colors cursor-pointer"
-                  >
-                    + Add to Cart
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="pt-2 border-t border-zinc-800 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setStorePickerProduct(null)}
-                className="px-3.5 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
           </div>
         </div>
       )}

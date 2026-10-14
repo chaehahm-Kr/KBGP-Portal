@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { PerformanceProductRowProps } from "./types";
 import { DataReliabilityBadge } from "./data-reliability-badge";
+import { normalizeReorderQuantity } from "@/lib/product/retailer-policy";
 
 export function PerformanceProductRow({
   product,
@@ -25,6 +26,8 @@ export function PerformanceProductRow({
     thumbnailUrl,
     categoryLabel,
     cartonPackQty,
+    moq: rawMoq,
+    orderMultiple: rawOrderMultiple,
     periodEstUnitsSold,
     periodEstRetailSales,
     periodEstGrossProfit,
@@ -41,6 +44,24 @@ export function PerformanceProductRow({
     wholesalePrice,
   } = product;
 
+  const moq = Math.max(1, rawMoq || cartonPackQty || 1);
+  const orderMultiple = Math.max(1, rawOrderMultiple || moq);
+
+  // Authoritative Normalizations:
+  const suggestedNormalized = normalizeReorderQuantity(
+    suggestedReorderQty,
+    moq,
+    orderMultiple
+  );
+  const manualNormalized = normalizeReorderQuantity(
+    0,
+    moq,
+    orderMultiple
+  );
+
+  const purchaseSuggestedQty = suggestedNormalized.normalizedQty;
+  const purchaseManualQty = manualNormalized.normalizedQty;
+
   // P4-R1 Dual-Mode Reorder Eligibility
   const hasSuggested = isOrderable && reorderSignal === "reorder_needed" && suggestedReorderQty > 0;
   const isManualAvailable = isOrderable && wholesalePrice !== null && wholesalePrice !== undefined;
@@ -54,7 +75,13 @@ export function PerformanceProductRow({
   const handleAddToCartClick = (e: React.MouseEvent, overrideQty?: number) => {
     e.stopPropagation();
     if (!isOrderable || isAdding) return;
-    const finalQty = overrideQty || (hasSuggested ? suggestedReorderQty : cartonPackQty);
+    const rawTarget =
+      overrideQty !== undefined
+        ? overrideQty
+        : hasSuggested
+        ? purchaseSuggestedQty
+        : purchaseManualQty;
+    const finalQty = normalizeReorderQuantity(rawTarget, moq, orderMultiple).normalizedQty;
     if (!finalQty || finalQty <= 0) return;
     setIsAdding(true);
     if (onAddToCart) {
@@ -190,14 +217,18 @@ export function PerformanceProductRow({
               </div>
               <button
                 type="button"
-                onClick={(e) => handleAddToCartClick(e, suggestedReorderQty)}
+                onClick={(e) => handleAddToCartClick(e, purchaseSuggestedQty)}
                 disabled={isAdding}
                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
                   justAdded
                     ? "bg-emerald-600 text-white"
                     : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
                 } disabled:opacity-50`}
-                title={`Add suggested ${suggestedReorderQty} units (${suggestedCases} cases) to Cart`}
+                title={
+                  suggestedReorderQty !== purchaseSuggestedQty
+                    ? `Add suggested ${purchaseSuggestedQty} units to Cart (calculated: ${suggestedReorderQty} units, adjusted to order multiple of ${orderMultiple})`
+                    : `Add suggested ${purchaseSuggestedQty} units (${suggestedCases} cases) to Cart`
+                }
               >
                 <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -216,14 +247,14 @@ export function PerformanceProductRow({
               )}
               <button
                 type="button"
-                onClick={(e) => handleAddToCartClick(e, cartonPackQty)}
+                onClick={(e) => handleAddToCartClick(e, purchaseManualQty)}
                 disabled={isAdding}
                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
                   justAdded
                     ? "bg-emerald-600 text-white"
                     : "bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-white border border-zinc-700/80"
                 } disabled:opacity-50`}
-                title={`Manual Quick Reorder: Add 1 case (${cartonPackQty} units) to Cart`}
+                title={`Manual Quick Reorder: Add minimum order (${purchaseManualQty} units) to Cart`}
               >
                 <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -323,11 +354,11 @@ export function PerformanceProductRow({
                 {hasSuggested ? (
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-indigo-400">
-                      Order: {suggestedReorderQty.toLocaleString()}
+                      Order: {purchaseSuggestedQty.toLocaleString()}
                     </span>
                     <button
                       type="button"
-                      onClick={(e) => handleAddToCartClick(e, suggestedReorderQty)}
+                      onClick={(e) => handleAddToCartClick(e, purchaseSuggestedQty)}
                       disabled={isAdding}
                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
                         justAdded
@@ -345,14 +376,14 @@ export function PerformanceProductRow({
                     </span>
                     <button
                       type="button"
-                      onClick={(e) => handleAddToCartClick(e, cartonPackQty)}
+                      onClick={(e) => handleAddToCartClick(e, purchaseManualQty)}
                       disabled={isAdding}
                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
                         justAdded
                           ? "bg-emerald-600 text-white"
                           : "bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-white border border-zinc-700/80"
                       } disabled:opacity-50`}
-                      title={`Manual Quick Reorder: Add 1 case (${cartonPackQty} units)`}
+                      title={`Manual Quick Reorder: Add minimum order (${purchaseManualQty} units)`}
                     >
                       <span>{justAdded ? "✓ Added" : "+ Reorder"}</span>
                     </button>

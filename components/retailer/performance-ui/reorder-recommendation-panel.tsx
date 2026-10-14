@@ -4,12 +4,16 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ReorderRecommendationPanelProps, ReorderCoverageTarget } from "./types";
 import { DataReliabilityBadge } from "./data-reliability-badge";
+import { normalizeReorderQuantity } from "@/lib/product/retailer-policy";
 
 export function ReorderRecommendationPanel({
   productId,
   productName,
   sku,
   cartonPackQty,
+  moq,
+  orderMultiple,
+  salesPolicy,
   coverageTarget,
   onCoverageChange,
   currentReportedStock,
@@ -37,39 +41,44 @@ export function ReorderRecommendationPanel({
   const [isAdding, setIsAdding] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
 
-  // P4-R1 Dual-Mode Reorder Architecture:
+  // Authoritative Policy Resolution
+  const policyMoq = salesPolicy?.moq ?? moq ?? cartonPackQty ?? 1;
+  const policyMultiple = salesPolicy?.orderMultiple ?? orderMultiple ?? policyMoq;
+  const safeMoq = Math.max(1, Math.floor(policyMoq || 1));
+  const safeMultiple = Math.max(1, Math.floor(policyMultiple || safeMoq || 1));
+  const minValidQty = Math.ceil(safeMoq / safeMultiple) * safeMultiple;
+
+  // P4-R1 & P4-R2 Dual-Mode Reorder Architecture:
   // 1. Suggested Mode: P3 computed replenishment need (reorder_needed & suggestedReorderQty > 0)
   // 2. Manual Mode: Always available for any orderable SKU independent of performance observations
   const hasSuggested = isOrderable && signal === "reorder_needed" && suggestedReorderQty > 0;
   const isManualAvailable = isOrderable && wholesalePrice !== null && wholesalePrice !== undefined;
   const canOrder = hasSuggested || isManualAvailable;
 
-  // Case stepper state: defaults to suggested cases if recommendation exists, or 1 case (MOQ)
-  const initialCases = hasSuggested ? Math.max(1, suggestedCases) : 1;
-  const [orderCases, setOrderCases] = useState<number>(initialCases);
+  // Authoritative purchase quantity normalized to retailer order multiple & MOQ
+  const basePurchaseQty = hasSuggested
+    ? normalizeReorderQuantity(suggestedReorderQty, safeMoq, safeMultiple, isOrderable).normalizedQty
+    : minValidQty;
+
+  const [orderUnits, setOrderUnits] = useState<number>(basePurchaseQty);
 
   useEffect(() => {
-    if (hasSuggested) {
-      setOrderCases(Math.max(1, suggestedCases));
-    }
-  }, [hasSuggested, suggestedCases, coverageTarget]);
+    const nextBase = hasSuggested
+      ? normalizeReorderQuantity(suggestedReorderQty, safeMoq, safeMultiple, isOrderable).normalizedQty
+      : minValidQty;
+    setOrderUnits(nextBase);
+  }, [hasSuggested, suggestedReorderQty, safeMoq, safeMultiple, isOrderable, coverageTarget, minValidQty]);
 
-  // Destination store selection for Company-Wide view
-  const [customStoreId, setCustomStoreId] = useState<string | undefined>(undefined);
-  const activeTargetStoreId =
-    selectedStoreId && selectedStoreId !== "all"
-      ? selectedStoreId
-      : customStoreId || (availableStores && availableStores.length > 0 ? availableStores[0].id : undefined);
-
-  const packMultiple = Math.max(1, cartonPackQty || 1);
-  const orderUnits = orderCases * packMultiple;
-  const isSuggestedMode = hasSuggested && orderCases === suggestedCases;
+  // Multiple calculations based on safeMultiple
+  const orderMultiplesCount = Math.max(1, Math.round(orderUnits / safeMultiple));
+  const isSuggestedMode = hasSuggested && orderUnits === basePurchaseQty;
+  const hasAdjustment = hasSuggested && suggestedReorderQty !== basePurchaseQty;
 
   const handleAddToCart = () => {
     if (!canOrder || isAdding || orderUnits <= 0) return;
     setIsAdding(true);
     if (onAddToCart) {
-      onAddToCart(productId, orderUnits, activeTargetStoreId);
+      onAddToCart(productId, orderUnits);
     } else if (onAddToCartPlaceholder) {
       onAddToCartPlaceholder(productId, orderUnits);
     }
@@ -88,7 +97,7 @@ export function ReorderRecommendationPanel({
             <DataReliabilityBadge signal={signal} size="md" />
           </div>
           <p className="text-xs text-zinc-400">
-            Automated stock replenishment guidance rounded to case pack multiples (MOQ: {cartonPackQty} units/case).
+            Automated stock replenishment guidance rounded to retailer order multiples (MOQ: {safeMoq} units, Mult: {safeMultiple} units).
           </p>
         </div>
 
@@ -143,22 +152,27 @@ export function ReorderRecommendationPanel({
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-zinc-800/80 text-xs text-zinc-400 flex items-center justify-between">
+          <div className="mt-4 pt-3 border-t border-zinc-800/80 text-xs text-zinc-400 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
             <span>
               {signalReason ||
                 (suggestedReorderQty > 0
-                  ? `Raw deficit: ${rawReorderNeed} units, rounded up to ${suggestedCases} full case(s)`
+                  ? `Raw deficit: ${rawReorderNeed} units, rounded to ${suggestedCases} full case(s)`
                   : "Current stock plus incoming pipeline covers the target demand period")}
             </span>
             {wholesalePrice && suggestedReorderQty > 0 && (
               <span className="font-semibold text-zinc-300">
-                Est. Cost: ${(suggestedReorderQty * wholesalePrice).toFixed(2)}
+                Est. Cost: ${(basePurchaseQty * wholesalePrice).toFixed(2)}
               </span>
             )}
           </div>
+          {hasAdjustment && (
+            <div className="mt-2 text-[11px] font-medium text-amber-300/90 bg-amber-950/30 border border-amber-800/40 rounded-lg px-2.5 py-1">
+              ⚡ Adjusted to retailer order multiple ({basePurchaseQty} units)
+            </div>
+          )}
         </div>
 
-        {/* P4-R1 Active Quick Reorder Box (Suggested or Manual) */}
+        {/* P4-R1 & P4-R2 Active Quick Reorder Box (Suggested or Manual) */}
         <div className="bg-zinc-800/40 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between space-y-3">
           <div className="space-y-1">
             <div className="flex items-center justify-between">
@@ -181,50 +195,31 @@ export function ReorderRecommendationPanel({
               {!isOrderable
                 ? "Product currently unavailable for ordering on HUB."
                 : hasSuggested
-                ? `System recommended replenishment for ${coverageTarget === "30d" ? "30-day" : "60-day"} demand.`
+                ? `Replenishment recommendation for ${coverageTarget === "30d" ? "30-day" : "60-day"} demand.`
                 : isInsufficient
-                ? "No sales velocity data yet. Manual case pack reorder is active."
+                ? "No sales velocity data yet. Manual MOQ reorder is active."
                 : isNeedsReview
-                ? "Stock review recommended. Manual case pack reorder is active."
-                : "Stock covers demand. Manual case pack restock is active."}
+                ? "Stock review recommended. Manual MOQ reorder is active."
+                : "Stock covers demand. Manual MOQ restock is active."}
             </p>
           </div>
-
-          {/* Destination Store Picker if Company-Wide & Multiple Stores */}
-          {selectedStoreId === "all" && availableStores && availableStores.length > 1 && canOrder && (
-            <div className="space-y-1">
-              <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                <span>Destination Store</span>
-                <span className="text-[10px] text-zinc-500 font-normal">Fulfillment</span>
-              </label>
-              <select
-                value={activeTargetStoreId || ""}
-                onChange={(e) => setCustomStoreId(e.target.value)}
-                className="w-full text-xs bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-              >
-                {availableStores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    📍 {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
 
           {/* Stepper Controls */}
           {canOrder && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-zinc-400 font-medium">Order Quantity:</span>
-                <span className="text-zinc-400 text-[10px]">{packMultiple} units/case</span>
+                <span className="text-zinc-400 text-[10px]">
+                  {orderMultiplesCount} × {safeMultiple} units
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={orderCases <= 1}
-                  onClick={() => setOrderCases(Math.max(1, orderCases - 1))}
+                  disabled={orderUnits <= minValidQty}
+                  onClick={() => setOrderUnits(Math.max(minValidQty, orderUnits - safeMultiple))}
                   className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold flex items-center justify-center border border-zinc-700 text-sm transition-colors cursor-pointer"
-                  title="Decrease 1 case"
+                  title={`Decrease ${safeMultiple} units`}
                 >
                   −
                 </button>
@@ -233,14 +228,14 @@ export function ReorderRecommendationPanel({
                     {orderUnits.toLocaleString()} <span className="text-[10px] font-normal text-zinc-400">units</span>
                   </div>
                   <div className="text-[10px] text-zinc-400">
-                    {orderCases} {orderCases === 1 ? "case" : "cases"}
+                    {orderMultiplesCount} {orderMultiplesCount === 1 ? "multiple" : "multiples"} (MOQ: {safeMoq})
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setOrderCases(orderCases + 1)}
+                  onClick={() => setOrderUnits(orderUnits + safeMultiple)}
                   className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-bold flex items-center justify-center border border-zinc-700 text-sm transition-colors cursor-pointer"
-                  title="Increase 1 case"
+                  title={`Increase ${safeMultiple} units`}
                 >
                   +
                 </button>
@@ -263,8 +258,8 @@ export function ReorderRecommendationPanel({
                   {justAdded
                     ? "✓ Added to Cart!"
                     : isSuggestedMode
-                    ? `Add Suggested ${orderUnits.toLocaleString()} Units (${orderCases} cs)`
-                    : `Add ${orderUnits.toLocaleString()} Units (${orderCases} cs)`}
+                    ? `Add Suggested ${orderUnits.toLocaleString()} Units`
+                    : `Add ${orderUnits.toLocaleString()} Units`}
                 </span>
               </button>
             ) : (
@@ -295,7 +290,7 @@ export function ReorderRecommendationPanel({
                 ) : (
                   <span>Rounded to MOQ</span>
                 )}
-                <span>MOQ: {packMultiple} u/cs</span>
+                <span>MOQ: {safeMoq} | Mult: {safeMultiple}</span>
               </div>
             ) : (
               <p className="text-[10px] text-zinc-500 text-center">

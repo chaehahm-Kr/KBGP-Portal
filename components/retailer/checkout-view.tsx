@@ -53,10 +53,6 @@ export function RetailerCheckoutView({
   });
 
   const [selectedStoreId, setSelectedStoreId] = useState<string>(() => {
-    const itemWithStore = items.find((i) => i.targetStoreId && stores.some((s) => s.id === i.targetStoreId));
-    if (itemWithStore && itemWithStore.targetStoreId) {
-      return itemWithStore.targetStoreId;
-    }
     return stores.length > 0 ? stores[0].id : "";
   });
 
