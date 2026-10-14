@@ -7,6 +7,23 @@ import { getRetailerAccessibleStores } from "@/lib/retailer/weekly-check";
 import { getFulfillmentSettings } from "@/lib/settings/fulfillment-settings";
 import { DEFAULT_ESTIMATED_SHIPPING_DAYS } from "@/lib/settings/fulfillment-constants";
 import { resolveAuthoritativeProductImages } from "@/lib/retailer/product-images";
+import {
+  buildStoreSkuFinancialEstimate,
+  aggregateStoreEstimatesToCompany,
+  aggregateCompanySummary,
+  SnapshotInput,
+  PricingInput,
+} from "./performance-financial-pure";
+import {
+  FinancialMetrics,
+  FinancialReliabilityStatus,
+  ReceiptEvent,
+  CompanySkuFinancialEstimate,
+  StoreSkuFinancialEstimate,
+  AnalysisPeriod,
+} from "./performance-financial-types";
+
+export type { FinancialMetrics, FinancialReliabilityStatus };
 
 /**
  * @deprecated Legacy target constant kept for backward compatibility with external admin callers.
@@ -53,6 +70,11 @@ export interface StorePerformanceBreakdown {
   targetDemand: number;
   rawReorderNeed: number;
   suggestedReorderQty: number;
+
+  // P5: Financials
+  financialStatus?: FinancialReliabilityStatus;
+  periodMetrics?: FinancialMetrics | null;
+  cumulativeMetrics?: FinancialMetrics | null;
 }
 
 export interface ProductPerformanceItem {
@@ -93,10 +115,14 @@ export interface ProductPerformanceItem {
   nextEstimatedReceiptDate: string | null;
   dataReliability: "verified" | "estimated";
 
-  // Financials
-  estimatedRetailSales: number;
-  estimatedGrossProfit: number;
-  estimatedGrossMargin: number;
+  // Financials (P5 Engine Authoritative)
+  estimatedRetailSales: number | null;
+  estimatedGrossProfit: number | null;
+  estimatedGrossMargin: number | null;
+  estimatedUnitsSold: number | null;
+  financialStatus: FinancialReliabilityStatus;
+  financialStatusReason?: string;
+  cumulativeMetrics?: FinancialMetrics | null;
   isFinancialsHidden: boolean;
 
   // P3: Supply, Coverage & Reorder
@@ -136,15 +162,18 @@ export interface PerformanceDashboardData {
 
   // Top Summary KPIs
   summary: {
-    totalEstimatedMovement: number;
-    totalEstimatedRetailSales: number;
-    totalEstimatedGrossProfit: number;
-    averageGrossMargin: number;
+    totalEstimatedMovement: number | null;
+    totalEstimatedRetailSales: number | null;
+    totalEstimatedGrossProfit: number | null;
+    averageGrossMargin: number | null;
+    financialStatus: FinancialReliabilityStatus;
     productsNeedingReorderCount: number;
     totalProductsAssorted: number;
     totalIncomingQty: number;
     totalInTransitQty: number;
     totalPendingQty: number;
+    skusWithEstimatesCount: number;
+    skusNeedsReviewCount: number;
     defaultShippingDays: number;
     priceBasisNotice: string;
     isFinancialsHidden: boolean;
@@ -422,6 +451,7 @@ export async function getRetailerPerformanceData(
   }
 
   const productStoreDispatches = new Map<string, Map<string, ProductStoreDispatch[]>>();
+  const productStoreReceiptEvents = new Map<string, Map<string, ReceiptEvent[]>>();
 
   const getOrCreateFlow = (pId: string, sId: string): StoreInventoryFlow => {
     if (!productStoreFlows.has(pId)) {
@@ -512,6 +542,28 @@ export async function getRetailerPerformanceData(
         qty,
         isReceived,
       });
+
+      // P5: Collect structured receipt events for observation interval reconciliation
+      if (estDateStr) {
+        if (!productStoreReceiptEvents.has(pId)) {
+          productStoreReceiptEvents.set(pId, new Map());
+        }
+        const pReceiptMap = productStoreReceiptEvents.get(pId)!;
+        if (!pReceiptMap.has(sId)) {
+          pReceiptMap.set(sId, []);
+        }
+        pReceiptMap.get(sId)!.push({
+          id: `${ff.id}_${fi.id || pId}`,
+          orderId: ff.order_id || "",
+          storeId: sId,
+          productId: pId,
+          quantity: qty,
+          receiptDate: estDateStr,
+          receiptTimestamp: estDate ? estDate.getTime() : 0,
+          isEstimated: !isExplicitlyDelivered,
+          deliveryStatus: isExplicitlyDelivered ? "delivered" : "estimated_in_transit",
+        });
+      }
 
       if (isReceived) {
         flow.estimatedReceivedQty += qty;
@@ -629,6 +681,7 @@ export async function getRetailerPerformanceData(
 
   // 8. Process Performance Metrics per Product
   const productPerformanceList: ProductPerformanceItem[] = [];
+  const allCompanySkuEstimates: CompanySkuFinancialEstimate[] = [];
 
   for (const productId of Array.from(allProductIds)) {
     const rawProd = productMap.get(productId);
@@ -676,6 +729,7 @@ export async function getRetailerPerformanceData(
     // Evaluate Store Snapshots for this product
     const storeBreakdowns: StorePerformanceBreakdown[] = [];
     const storeSnapMap = productStoreSnapshots.get(productId) || new Map();
+    const skuStoreEstimates: StoreSkuFinancialEstimate[] = [];
 
     let companyTotalRemaining = 0;
     let companyTotalMovement = 0;
@@ -697,6 +751,12 @@ export async function getRetailerPerformanceData(
         (associatedStores.size === 0 || associatedStores.has(s.id))
     );
 
+    const pricingInput: PricingInput = {
+      wholesalePrice,
+      curationSrp: curation?.suggest_retail_price ? Number(curation.suggest_retail_price) : null,
+      catalogErp: rawProd.estimated_retail_price ? Number(rawProd.estimated_retail_price) : null,
+    };
+
     // Process each relevant store for this product
     for (const store of targetStores) {
       const snapshots = storeSnapMap.get(store.id) || [];
@@ -714,6 +774,18 @@ export async function getRetailerPerformanceData(
       };
 
       if (snapshots.length === 0) {
+        const emptyStoreEstimate = buildStoreSkuFinancialEstimate({
+          storeId: store.id,
+          storeName: store.name,
+          productId: rawProd.id,
+          sku: effectiveSku,
+          selectedPeriod: period as any,
+          snapshots: [],
+          receipts: [],
+          pricing: pricingInput,
+        });
+        skuStoreEstimates.push(emptyStoreEstimate);
+
         storeBreakdowns.push({
           storeId: store.id,
           storeName: store.name,
@@ -743,6 +815,10 @@ export async function getRetailerPerformanceData(
           targetDemand: 0,
           rawReorderNeed: 0,
           suggestedReorderQty: 0,
+
+          financialStatus: emptyStoreEstimate.periodMetrics.status,
+          periodMetrics: emptyStoreEstimate.periodMetrics,
+          cumulativeMetrics: emptyStoreEstimate.cumulativeMetrics,
         });
         continue;
       }
@@ -752,68 +828,52 @@ export async function getRetailerPerformanceData(
       const latestRemaining = latestSnapshot.reportedRemaining;
       companyTotalRemaining += latestRemaining;
 
-      // Calculate movements across consecutive intervals in this store
-      let storeMovement = 0;
-      let storeUsableWeeks = 0;
-      let storeObservedDays = 0;
+      // P5: Build store financial estimate using pure calculation engine
+      const storeReceipts = productStoreReceiptEvents.get(productId)?.get(store.id) || [];
+      const storeSnapshotsInput: SnapshotInput[] = snapshots.map((s: any) => ({
+        checkId: s.checkId,
+        storeId: s.storeId,
+        reportDate: s.reportDate,
+        reportedRemaining: s.reportedRemaining,
+        retailPriceSnapshot: s.retailPriceSnapshot,
+        retailPriceBasis: s.retailPriceBasis,
+      }));
+
+      const storeSkuEstimate = buildStoreSkuFinancialEstimate({
+        storeId: store.id,
+        storeName: store.name,
+        productId: rawProd.id,
+        sku: effectiveSku,
+        selectedPeriod: period as any,
+        snapshots: storeSnapshotsInput,
+        receipts: storeReceipts,
+        pricing: pricingInput,
+      });
+      skuStoreEstimates.push(storeSkuEstimate);
+
+      // Extract metrics from P5 estimate
+      const storePeriodMetrics = storeSkuEstimate.periodMetrics;
+      const storeMovement = storePeriodMetrics.estimatedUnitsSold ?? 0;
+      const storeDailyVelocity = storePeriodMetrics.estimatedDailySalesRate ?? 0;
+      const storeAvgWeekly = storePeriodMetrics.estimatedWeeklySalesRate ?? 0;
+      const storeObservedDays = storePeriodMetrics.observedDays;
+      const storeUsableWeeks = storePeriodMetrics.intervalsCount;
+
       let storeVarianceCount = 0;
       let storeMovementStatus: MovementStatus = "baseline";
-
-      for (let i = 0; i < snapshots.length; i++) {
-        const snap = snapshots[i];
-        if (snap.previousReported === null) {
-          // Baseline check -> Starting stock, not a sales interval
-          continue;
-        }
-
+      if (storePeriodMetrics.status === "needs_review") {
+        storeMovementStatus = "variance";
+        storeVarianceCount += 1;
+      } else if (storePeriodMetrics.status === "available") {
+        storeMovementStatus = "normal";
         isAllBaseline = false;
-        const prev = snap.previousReported;
-        const curr = snap.reportedRemaining;
-        const delivered = snap.deliveredSincePrevious;
+      } else if (snapshots.length > 1) {
+        storeMovementStatus = "provisional";
+      }
 
-        let intervalDays = 7;
-        if (i > 0 && snapshots[i - 1].reportDate && snap.reportDate) {
-          const pTime = new Date(snapshots[i - 1].reportDate).getTime();
-          const cTime = new Date(snap.reportDate).getTime();
-          const diff = Math.round((cTime - pTime) / 86400000);
-          if (diff > 0) intervalDays = diff;
-        }
-
-        let intervalMovement: number;
-
-        if (delivered !== null) {
-          // Confirmed Delivery Available: prev + delivered - curr
-          intervalMovement = prev + delivered - curr;
-          storeMovementStatus = "normal";
-        } else {
-          // Delivery Data Unknown: prev - curr (Provisional)
-          intervalMovement = prev - curr;
-          if (storeMovementStatus !== "variance") {
-            storeMovementStatus = "provisional";
-          }
-        }
-
-        if (intervalMovement < 0) {
-          // Negative / Unusual movement (Variance)
-          storeVarianceCount += 1;
-          storeMovementStatus = "variance";
-        } else {
-          storeMovement += intervalMovement;
-          storeUsableWeeks += 1;
-          storeObservedDays += intervalDays;
-
-          // Resolve effective unit selling price for this specific interval
-          const unitSellingPrice =
-            snap.retailPriceSnapshot !== null && snap.retailPriceSnapshot > 0
-              ? snap.retailPriceSnapshot
-              : msrp;
-
-          if (snap.retailPriceSnapshot !== null && snap.retailPriceSnapshot > 0) {
-            hasTaggedPriceSnapshot = true;
-          }
-
-          companyTotalSales += intervalMovement * unitSellingPrice;
-        }
+      // Check if price snapshots exist
+      if (snapshots.some((s: any) => s.retailPriceSnapshot !== null && s.retailPriceSnapshot > 0)) {
+        hasTaggedPriceSnapshot = true;
       }
 
       // Time-aware Post-Report Estimated Receipts for this store
@@ -830,10 +890,6 @@ export async function getRetailerPerformanceData(
         }
       }
 
-      const storeDailyVelocity =
-        storeObservedDays > 0 ? Number((storeMovement / storeObservedDays).toFixed(2)) : 0;
-      const storeAvgWeekly =
-        storeUsableWeeks > 0 ? Number((storeMovement / storeUsableWeeks).toFixed(1)) : 0;
       const storeWeeksSupply =
         storeAvgWeekly > 0 ? Number((latestRemaining / storeAvgWeekly).toFixed(1)) : null;
 
@@ -880,46 +936,58 @@ export async function getRetailerPerformanceData(
         targetDemand: storeTargetDemand,
         rawReorderNeed: storeRawReorder,
         suggestedReorderQty: storeSuggestedReorder,
+
+        financialStatus: storePeriodMetrics.status,
+        periodMetrics: storePeriodMetrics,
+        cumulativeMetrics: storeSkuEstimate.cumulativeMetrics,
       });
     }
 
-    // Determine Company-level Movement Status
+    // Aggregate store estimates into Company-level SKU estimate via P5 pure engine
+    const companySkuEstimate = aggregateStoreEstimatesToCompany({
+      companyId,
+      productId: rawProd.id,
+      sku: effectiveSku,
+      productName: overrides.name?.trim() || rawProd.name,
+      productNameEn: overrides.name_en?.trim() || rawProd.name_en || null,
+      brandName,
+      category: rawProd.category || "skincare",
+      cartonPackQty,
+      selectedPeriod: period as any,
+      totalCompanyStoresCount: targetStores.length || stores.length,
+      storeEstimates: skuStoreEstimates,
+    });
+    allCompanySkuEstimates.push(companySkuEstimate);
+
+    const compPeriodMetrics = companySkuEstimate.periodMetrics;
+
+    // Movement status
     let companyMovementStatus: MovementStatus = "no_data";
     if (hasAnyCount) {
-      if (isAllBaseline) {
-        companyMovementStatus = "baseline";
-      } else if (companyVarianceCount > 0 && companyTotalMovement === 0) {
+      if (compPeriodMetrics.status === "needs_review") {
         companyMovementStatus = "variance";
-      } else if (storeBreakdowns.some((s) => s.movementStatus === "provisional")) {
-        companyMovementStatus = "provisional";
-      } else {
+      } else if (compPeriodMetrics.status === "available") {
         companyMovementStatus = "normal";
+      } else if (isAllBaseline) {
+        companyMovementStatus = "baseline";
+      } else {
+        companyMovementStatus = "provisional";
       }
     }
 
-    // Velocity & Average Daily / Weekly Movement
-    const averageWeeklyMovement =
-      companyUsableWeeks > 0 ? Number((companyTotalMovement / companyUsableWeeks).toFixed(1)) : 0;
+    const companyDailyVelocity = compPeriodMetrics.estimatedDailySalesRate ?? 0;
+    const averageWeeklyMovement = compPeriodMetrics.estimatedWeeklySalesRate ?? 0;
 
-    const companyDailyVelocity =
-      companyTotalObservedDays > 0
-        ? Number((companyTotalMovement / companyTotalObservedDays).toFixed(2))
-        : 0;
-
-    // Approx Weeks of Supply
     const approxWeeksOfSupply =
       averageWeeklyMovement > 0
         ? Number((companyTotalRemaining / averageWeeklyMovement).toFixed(1))
         : null;
 
-    // Financial Metrics (Calculated using interval price snapshots with MSRP fallback)
-    const estimatedRetailSales = Number(companyTotalSales.toFixed(2));
-    const estimatedProductCost = Number((companyTotalMovement * wholesalePrice).toFixed(2));
-    const estimatedGrossProfit = Number((estimatedRetailSales - estimatedProductCost).toFixed(2));
-    const estimatedGrossMargin =
-      estimatedRetailSales > 0
-        ? Number((((estimatedGrossProfit) / estimatedRetailSales) * 100).toFixed(1))
-        : 0;
+    // Authoritative P5 financial metrics
+    const estimatedRetailSales = compPeriodMetrics.estimatedRetailSales;
+    const estimatedGrossProfit = compPeriodMetrics.estimatedGrossProfit;
+    const estimatedGrossMargin = compPeriodMetrics.estimatedGrossMargin;
+    const estimatedUnitsSold = compPeriodMetrics.estimatedUnitsSold;
 
     // Aggregate Company-level Inventory Flow & Incoming quantities
     let companyOrderedQty = 0;
@@ -961,11 +1029,11 @@ export async function getRetailerPerformanceData(
       ? companyTotalRemaining + companyTotalPostReportReceipts + companyIncomingQty
       : null;
 
-    // Reorder Calculations
+    // Reorder Calculations (P3 Engine aligned with P5 Velocity)
     const targetDemand = Math.ceil(companyDailyVelocity * coverageDays);
 
     const rawReorderNeed =
-      companyUsableWeeks > 0 && projectedAvailableStock !== null
+      compPeriodMetrics.intervalsCount > 0 && projectedAvailableStock !== null
         ? Math.max(0, targetDemand - projectedAvailableStock)
         : 0;
 
@@ -979,11 +1047,11 @@ export async function getRetailerPerformanceData(
 
     // Reorder Confidence & Signal
     let reorderConfidence: ReorderConfidence = "insufficient_data";
-    if (companyVarianceCount > 0) {
+    if (compPeriodMetrics.status === "needs_review" || companyVarianceCount > 0) {
       reorderConfidence = "needs_review";
-    } else if (companyUsableWeeks >= 2) {
+    } else if (compPeriodMetrics.intervalsCount >= 2) {
       reorderConfidence = "recommendation_available";
-    } else if (companyUsableWeeks === 1) {
+    } else if (compPeriodMetrics.intervalsCount === 1) {
       reorderConfidence = "early_signal";
     }
 
@@ -1022,14 +1090,14 @@ export async function getRetailerPerformanceData(
       msrp,
       priceBasisLabel,
       totalReportedRemaining,
-      estimatedMovement: companyTotalMovement,
+      estimatedMovement: estimatedUnitsSold ?? 0,
       movementStatus: companyMovementStatus,
       provisionalMovement: companyProvisionalMovement,
-      usableWeeksCount: companyUsableWeeks,
-      totalObservedDays: companyTotalObservedDays,
+      usableWeeksCount: compPeriodMetrics.intervalsCount,
+      totalObservedDays: compPeriodMetrics.observedDays,
       averageWeeklyMovement,
       dailyVelocity: companyDailyVelocity,
-      hasNegativeVariance: companyVarianceCount > 0,
+      hasNegativeVariance: companyVarianceCount > 0 || compPeriodMetrics.status === "needs_review",
       varianceCount: companyVarianceCount,
 
       // P2: Automatic Estimated Receipt & Inventory Flow
@@ -1043,10 +1111,17 @@ export async function getRetailerPerformanceData(
       nextEstimatedReceiptDate: companyNextEstDate,
       dataReliability: companyHasLegacy ? "estimated" : "verified",
 
+      // Financials (P5 Engine Authoritative)
       estimatedRetailSales,
       estimatedGrossProfit,
       estimatedGrossMargin,
+      estimatedUnitsSold,
+      financialStatus: compPeriodMetrics.status,
+      financialStatusReason: compPeriodMetrics.statusReason,
+      cumulativeMetrics: companySkuEstimate.cumulativeMetrics,
       isFinancialsHidden,
+
+      // P3: Supply, Coverage & Reorder
       approxWeeksOfSupply,
       coverage,
       coverageDays,
@@ -1075,19 +1150,28 @@ export async function getRetailerPerformanceData(
     return (a.productName || "").localeCompare(b.productName || "");
   });
 
-  // 9. Calculate Top Summary KPIs
-  let totalEstimatedMovement = 0;
-  let totalEstimatedRetailSales = 0;
-  let totalEstimatedGrossProfit = 0;
+  // 9. Calculate Top Summary KPIs using P5 aggregateCompanySummary
+  const companySummary = aggregateCompanySummary({
+    companyId,
+    selectedPeriod: period as any,
+    totalStoresCount: stores.length,
+    products: allCompanySkuEstimates,
+  });
+
+  const hasReliableEstimates = companySummary.skusWithEstimatesCount > 0;
+  const overallFinancialStatus: FinancialReliabilityStatus =
+    companySummary.skusWithEstimatesCount > 0
+      ? "available"
+      : companySummary.skusNeedsReviewCount > 0
+      ? "needs_review"
+      : "insufficient_data";
+
   let productsNeedingReorderCount = 0;
   let totalIncomingQty = 0;
   let totalInTransitQty = 0;
   let totalPendingQty = 0;
 
   productPerformanceList.forEach((p) => {
-    totalEstimatedMovement += p.estimatedMovement;
-    totalEstimatedRetailSales += p.estimatedRetailSales;
-    totalEstimatedGrossProfit += p.estimatedGrossProfit;
     totalIncomingQty += p.incomingQty;
     totalInTransitQty += p.inTransitQty;
     totalPendingQty += p.pendingQty;
@@ -1095,11 +1179,6 @@ export async function getRetailerPerformanceData(
       productsNeedingReorderCount += 1;
     }
   });
-
-  const averageGrossMargin =
-    totalEstimatedRetailSales > 0
-      ? Number(((totalEstimatedGrossProfit / totalEstimatedRetailSales) * 100).toFixed(1))
-      : 0;
 
   return {
     companyId,
@@ -1115,15 +1194,18 @@ export async function getRetailerPerformanceData(
       isPartial,
     },
     summary: {
-      totalEstimatedMovement,
-      totalEstimatedRetailSales: Number(totalEstimatedRetailSales.toFixed(2)),
-      totalEstimatedGrossProfit: Number(totalEstimatedGrossProfit.toFixed(2)),
-      averageGrossMargin,
+      totalEstimatedMovement: hasReliableEstimates ? companySummary.totalEstimatedUnitsSold : null,
+      totalEstimatedRetailSales: hasReliableEstimates ? companySummary.totalEstimatedRetailSales : null,
+      totalEstimatedGrossProfit: hasReliableEstimates ? companySummary.totalEstimatedGrossProfit : null,
+      averageGrossMargin: hasReliableEstimates ? companySummary.weightedGrossMargin : null,
+      financialStatus: overallFinancialStatus,
       productsNeedingReorderCount,
       totalProductsAssorted: productPerformanceList.length,
       totalIncomingQty,
       totalInTransitQty,
       totalPendingQty,
+      skusWithEstimatesCount: companySummary.skusWithEstimatesCount,
+      skusNeedsReviewCount: companySummary.skusNeedsReviewCount,
       defaultShippingDays,
       priceBasisNotice: "Retail sales and gross profit estimated based on Suggested Retail Price (MSRP)",
       isFinancialsHidden,

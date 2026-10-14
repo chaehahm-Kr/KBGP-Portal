@@ -59,6 +59,7 @@ export function PerformanceProductRow({
                   alt={productName}
                   width={40}
                   height={40}
+                  unoptimized
                   className="object-cover w-full h-full"
                   onError={() => setImgError(true)}
                 />
@@ -190,6 +191,7 @@ export function PerformanceProductRow({
                       alt={productName}
                       width={44}
                       height={44}
+                      unoptimized
                       className="object-cover w-full h-full"
                       onError={() => setImgError(true)}
                     />
