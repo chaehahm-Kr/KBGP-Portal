@@ -369,6 +369,14 @@ export function RetailerCartView() {
                       <span className="text-zinc-600 dark:text-zinc-400 font-medium">
                         가용 재고: <strong className={stock > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600"}>{stock} EA</strong>
                       </span>
+                      {item.targetStoreName && (
+                        <>
+                          <span>•</span>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60">
+                            📍 For: {item.targetStoreName}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -7,10 +7,14 @@ import { DataReliabilityBadge } from "./data-reliability-badge";
 
 export function PerformanceProductRow({
   product,
+  selectedStoreId,
   onSelectProduct,
+  onAddToCart,
   onAddToCartPlaceholder,
 }: PerformanceProductRowProps) {
   const [imgError, setImgError] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
 
   const {
     productId,
@@ -33,12 +37,29 @@ export function PerformanceProductRow({
     suggestedReorderQty,
     suggestedCases,
     reorderSignal,
+    isOrderable,
   } = product;
+
+  const isEligible = isOrderable && reorderSignal === "reorder_needed" && suggestedReorderQty > 0;
 
   const handleRowClick = () => {
     if (onSelectProduct) {
       onSelectProduct(productId);
     }
+  };
+
+  const handleAddToCartClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isEligible || isAdding) return;
+    setIsAdding(true);
+    if (onAddToCart) {
+      onAddToCart(product);
+    } else if (onAddToCartPlaceholder) {
+      onAddToCartPlaceholder(productId, suggestedReorderQty);
+    }
+    setJustAdded(true);
+    setTimeout(() => setIsAdding(false), 500);
+    setTimeout(() => setJustAdded(false), 3000);
   };
 
   return (
@@ -155,13 +176,33 @@ export function PerformanceProductRow({
           {reorderSignal === "insufficient_data" ? (
             <span className="text-xs text-zinc-500 italic">Insufficient Data</span>
           ) : suggestedReorderQty > 0 ? (
-            <div className="flex flex-col items-end">
-              <span className="text-xs font-extrabold text-indigo-400">
-                {suggestedReorderQty} units
-              </span>
-              <span className="text-[10px] text-zinc-400">
-                ({suggestedCases} {suggestedCases === 1 ? "case" : "cases"})
-              </span>
+            <div className="flex flex-col items-end gap-1">
+              <div>
+                <span className="text-xs font-extrabold text-indigo-400">
+                  {suggestedReorderQty.toLocaleString()} units
+                </span>
+                <span className="text-[10px] text-zinc-400 ml-1">
+                  ({suggestedCases} {suggestedCases === 1 ? "case" : "cases"})
+                </span>
+              </div>
+              {isEligible && (
+                <button
+                  type="button"
+                  onClick={handleAddToCartClick}
+                  disabled={isAdding}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
+                    justAdded
+                      ? "bg-emerald-600 text-white"
+                      : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
+                  } disabled:opacity-50`}
+                  title={`Add ${suggestedReorderQty} units (${suggestedCases} cases) to Cart`}
+                >
+                  <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <span>{justAdded ? "✓ Added" : "+ Cart"}</span>
+                </button>
+              )}
             </div>
           ) : (
             <span className="text-xs text-emerald-400/80 font-medium">Adequate (0)</span>
@@ -248,11 +289,27 @@ export function PerformanceProductRow({
                   </strong>
                 </span>
               </div>
-              <div>
+              <div className="flex items-center gap-2">
                 {suggestedReorderQty > 0 ? (
-                  <span className="text-xs font-bold text-indigo-400">
-                    Order: {suggestedReorderQty} units
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-indigo-400">
+                      Order: {suggestedReorderQty.toLocaleString()}
+                    </span>
+                    {isEligible && (
+                      <button
+                        type="button"
+                        onClick={handleAddToCartClick}
+                        disabled={isAdding}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
+                          justAdded
+                            ? "bg-emerald-600 text-white"
+                            : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
+                        } disabled:opacity-50`}
+                      >
+                        <span>{justAdded ? "✓ Added" : "+ Cart"}</span>
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <span className="text-[11px] text-emerald-400/80 font-medium">Adequate</span>
                 )}

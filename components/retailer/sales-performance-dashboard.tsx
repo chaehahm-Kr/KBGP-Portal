@@ -22,6 +22,7 @@ import {
   MetricState,
   ReorderRecommendationSignal,
 } from "@/components/retailer/performance-ui/types";
+import { useCart } from "@/components/retailer/cart-context";
 
 interface SalesPerformanceDashboardProps {
   data: PerformanceDashboardData;
@@ -31,6 +32,24 @@ export function SalesPerformanceDashboard({ data }: SalesPerformanceDashboardPro
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+
+  const { addItem } = useCart();
+  const [cartFeedback, setCartFeedback] = useState<{
+    title: string;
+    message: string;
+    subtext?: string;
+  } | null>(null);
+
+  const [storePickerProduct, setStorePickerProduct] = useState<{
+    product: PerformanceProductRowData;
+    storesNeedingReorder: Array<{
+      storeId: string;
+      storeName: string;
+      suggestedReorderQty: number;
+      rawReorderNeed: number;
+      signal: ReorderRecommendationSignal;
+    }>;
+  } | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilterTab, setActiveFilterTab] = useState<
@@ -78,6 +97,82 @@ export function SalesPerformanceDashboard({ data }: SalesPerformanceDashboardPro
   const handleSelectProduct = (productId: string) => {
     const storeParam = selectedStoreId && selectedStoreId !== "all" ? `&store=${selectedStoreId}` : "";
     router.push(`/sales/${productId}?coverage=${selectedCoverage}&period=${selectedPeriod}${storeParam}`);
+  };
+
+  const executeAddToCart = (
+    product: PerformanceProductRowData,
+    storeId?: string,
+    storeName?: string,
+    overrideQty?: number
+  ) => {
+    const qty = overrideQty || product.suggestedReorderQty;
+    if (!qty || qty <= 0) return;
+
+    const result = addItem(
+      {
+        id: product.productId,
+        name: product.productName,
+        nameEn: product.productNameEn,
+        brandName: product.brandName,
+        sku: product.sku,
+        thumbnailUrl: product.thumbnailUrl,
+        wholesalePrice: product.wholesalePrice || 0,
+        msrp: product.msrp || 0,
+        cartonPackQty: product.cartonPackQty,
+        targetStoreId: storeId,
+        targetStoreName: storeName,
+      },
+      qty
+    );
+
+    const cases = Math.ceil(qty / product.cartonPackQty);
+    const totalCases = Math.ceil(result.newQty / product.cartonPackQty);
+    const storeNotice = storeName ? ` for ${storeName}` : "";
+
+    if (result.previousQty > 0) {
+      setCartFeedback({
+        title: "Cart Quantity Updated",
+        message: `Added ${qty.toLocaleString()} units (${cases} cs)${storeNotice}.`,
+        subtext: `Cart now contains ${result.newQty.toLocaleString()} units (${totalCases} cs) of ${product.productName}.`,
+      });
+    } else {
+      setCartFeedback({
+        title: "Added to Cart",
+        message: `Added ${qty.toLocaleString()} units (${cases} cs)${storeNotice} of ${product.productName}.`,
+        subtext: `Total in cart: ${result.newQty.toLocaleString()} units.`,
+      });
+    }
+  };
+
+  const handleAddToCart = (product: PerformanceProductRowData) => {
+    // 1. If currently scoped to a specific store
+    if (selectedStoreId && selectedStoreId !== "all") {
+      const storeObj = stores.find((s) => s.id === selectedStoreId);
+      executeAddToCart(product, selectedStoreId, storeObj?.name);
+      return;
+    }
+
+    // 2. Company-wide scope ("all"): check stores breakdown
+    const breakdown = product.storesBreakdown || [];
+    const storesWithNeed = breakdown.filter(
+      (s) => s.suggestedReorderQty > 0 && s.signal === "reorder_needed"
+    );
+
+    if (storesWithNeed.length === 1) {
+      // Exactly 1 store needs replenishment -> directly add for that store
+      const s = storesWithNeed[0];
+      executeAddToCart(product, s.storeId, s.storeName, s.suggestedReorderQty);
+    } else if (storesWithNeed.length > 1) {
+      // Multiple stores need replenishment -> prompt the retailer to select destination store
+      setStorePickerProduct({
+        product,
+        storesNeedingReorder: storesWithNeed,
+      });
+    } else {
+      // Fallback if no specific store breakdown available or single-store company
+      const singleStore = stores.length === 1 ? stores[0] : undefined;
+      executeAddToCart(product, singleStore?.id, singleStore?.name);
+    }
   };
 
   // Filter products by search and filter tab
@@ -308,13 +403,35 @@ export function SalesPerformanceDashboard({ data }: SalesPerformanceDashboardPro
                     reorderSignal: p.reorderSignal as ReorderRecommendationSignal,
 
                     isOrderable: p.isOrderable,
+
+                    storesBreakdown: (p.storesBreakdown || []).map((sb) => {
+                      let storeSignal: ReorderRecommendationSignal = "insufficient_data";
+                      if (sb.rawReorderNeed > 0) {
+                        storeSignal = "reorder_needed";
+                      } else if (sb.movementStatus === "variance") {
+                        storeSignal = "needs_review";
+                      } else if (sb.latestReportedRemaining === null) {
+                        storeSignal = "insufficient_data";
+                      } else {
+                        storeSignal = "sufficient_stock";
+                      }
+                      return {
+                        storeId: sb.storeId,
+                        storeName: sb.storeName,
+                        suggestedReorderQty: sb.suggestedReorderQty,
+                        rawReorderNeed: sb.rawReorderNeed,
+                        signal: storeSignal,
+                      };
+                    }),
                   };
 
                   return (
                     <PerformanceProductRow
                       key={p.productId}
                       product={rowData}
+                      selectedStoreId={selectedStoreId}
                       onSelectProduct={handleSelectProduct}
+                      onAddToCart={handleAddToCart}
                     />
                   );
                 })}
@@ -330,6 +447,114 @@ export function SalesPerformanceDashboard({ data }: SalesPerformanceDashboardPro
             <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
               *Estimates are calculated from submitted weekly counts and do not replace physical store POS tracking.
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Company-Wide Multi-Store Reorder Selection Modal */}
+      {storePickerProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl text-left">
+            <div className="flex items-start justify-between gap-3 border-b border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white">Select Destination Store</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {storePickerProduct.product.productName} ({storePickerProduct.product.sku})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStorePickerProduct(null)}
+                className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              This product has replenishment recommendations for multiple store locations. Orders are fulfilled per destination store. Select which store you would like to restock:
+            </p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto divide-y divide-zinc-800">
+              {storePickerProduct.storesNeedingReorder.map((s) => {
+                const cases = Math.ceil(s.suggestedReorderQty / storePickerProduct.product.cartonPackQty);
+                const cost = storePickerProduct.product.wholesalePrice
+                  ? (s.suggestedReorderQty * storePickerProduct.product.wholesalePrice).toFixed(2)
+                  : null;
+                return (
+                  <div key={s.storeId} className="flex items-center justify-between py-3 first:pt-1 last:pb-1">
+                    <div>
+                      <span className="text-xs font-bold text-white block">📍 {s.storeName}</span>
+                      <span className="text-[11px] text-zinc-400">
+                        {s.suggestedReorderQty.toLocaleString()} units ({cases} {cases === 1 ? "case" : "cases"})
+                        {cost && ` · Est. $${cost}`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        executeAddToCart(
+                          storePickerProduct.product,
+                          s.storeId,
+                          s.storeName,
+                          s.suggestedReorderQty
+                        );
+                        setStorePickerProduct(null);
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-colors cursor-pointer"
+                    >
+                      + Add to Cart
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-zinc-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setStorePickerProduct(null)}
+                className="px-3.5 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Cart Feedback Notification */}
+      {cartFeedback && (
+        <div className="fixed bottom-5 right-5 z-50 max-w-sm bg-zinc-900 border border-zinc-700/80 rounded-xl p-4 shadow-2xl text-white space-y-1.5 animate-in slide-in-from-bottom-5 duration-200">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold shrink-0">
+                ✓
+              </span>
+              <span className="text-xs font-bold text-zinc-100">{cartFeedback.title}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCartFeedback(null)}
+              className="text-zinc-400 hover:text-white text-xs px-1 hover:bg-zinc-800 rounded transition-colors cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="text-xs text-zinc-300 leading-normal pl-7">
+            {cartFeedback.message}
+          </p>
+          {cartFeedback.subtext && (
+            <p className="text-[11px] text-zinc-400 pl-7">{cartFeedback.subtext}</p>
+          )}
+          <div className="pl-7 pt-1">
+            <Link
+              href="/cart"
+              className="inline-flex items-center gap-1 text-xs font-bold text-indigo-400 hover:text-indigo-300 hover:underline"
+            >
+              <span>View Cart</span>
+              <span>→</span>
+            </Link>
           </div>
         </div>
       )}

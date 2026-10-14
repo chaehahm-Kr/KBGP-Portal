@@ -21,6 +21,8 @@ export interface CartItem {
   salesPolicy?: ResolvedRetailerSalesPolicy;
   discountPercent?: number;
   appliedReason?: string;
+  targetStoreId?: string;
+  targetStoreName?: string;
 }
 
 export interface CartSummary {

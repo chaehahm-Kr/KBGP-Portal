@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
+import Link from "next/link";
 import { ReorderRecommendationPanelProps, ReorderCoverageTarget } from "./types";
 import { DataReliabilityBadge } from "./data-reliability-badge";
 
@@ -24,10 +25,43 @@ export function ReorderRecommendationPanel({
   signalReason,
   isOrderable,
   wholesalePrice,
+  selectedStoreId,
+  selectedStoreName,
+  onAddToCart,
   onAddToCartPlaceholder,
 }: ReorderRecommendationPanelProps) {
   const isInsufficient = signal === "insufficient_data";
   const isNeedsReview = signal === "needs_review";
+
+  const [isAdding, setIsAdding] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
+
+  // Authoritative eligibility check per P4 spec
+  const isEligible = isOrderable && signal === "reorder_needed" && suggestedReorderQty > 0;
+
+  let disabledReason = "Reorder not required";
+  if (!isOrderable) {
+    disabledReason = "Product currently unavailable on HUB";
+  } else if (isInsufficient) {
+    disabledReason = "Insufficient sales data to calculate restock";
+  } else if (isNeedsReview) {
+    disabledReason = "Count review required before reordering";
+  } else if (suggestedReorderQty === 0) {
+    disabledReason = `Adequate stock for ${coverageTarget === "30d" ? "30 days" : "60 days"}`;
+  }
+
+  const handleAddToCart = () => {
+    if (!isEligible || isAdding) return;
+    setIsAdding(true);
+    if (onAddToCart) {
+      onAddToCart(productId, suggestedReorderQty, selectedStoreId === "all" ? undefined : selectedStoreId);
+    } else if (onAddToCartPlaceholder) {
+      onAddToCartPlaceholder(productId, suggestedReorderQty);
+    }
+    setJustAdded(true);
+    setTimeout(() => setIsAdding(false), 500);
+    setTimeout(() => setJustAdded(false), 4000);
+  };
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-5">
@@ -109,34 +143,76 @@ export function ReorderRecommendationPanel({
           </div>
         </div>
 
-        {/* P4 Add to Cart Placeholder Box */}
+        {/* P4 Active Quick Reorder Box */}
         <div className="bg-zinc-800/40 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between space-y-3">
           <div className="space-y-1">
-            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-              Quick Reorder
-            </span>
-            <p className="text-[11px] text-zinc-500 leading-relaxed">
-              One-click reorder dispatch to your shopping cart.
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                Quick Reorder
+              </span>
+              {selectedStoreName && selectedStoreId !== "all" && (
+                <span className="text-[10px] text-indigo-400 font-medium truncate max-w-[120px]" title={selectedStoreName}>
+                  📍 {selectedStoreName}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              Dispatch advisory restock quantity directly to your cart.
             </p>
           </div>
 
           <div className="space-y-2">
-            {/* P4 Integration Button (Prepared & Disabled per P4 constraint) */}
-            <button
-              type="button"
-              disabled
-              onClick={() => onAddToCartPlaceholder && onAddToCartPlaceholder(productId, suggestedReorderQty)}
-              className="w-full py-2.5 px-3 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
-              title="Add to Cart integration is coming in Phase P4"
-            >
-              <svg className="w-4 h-4 text-zinc-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              <span>Add to Cart (Phase P4)</span>
-            </button>
-            <p className="text-[10px] text-zinc-500 text-center">
-              Reorder fulfillment flow active in Phase P4.
-            </p>
+            {isEligible ? (
+              <button
+                type="button"
+                disabled={isAdding}
+                onClick={handleAddToCart}
+                className="w-full py-2.5 px-3 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+              >
+                <svg className="w-4 h-4 text-white shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span>
+                  {justAdded
+                    ? "✓ Added to Cart!"
+                    : `Add ${suggestedReorderQty.toLocaleString()} Units (${suggestedCases} cs)`}
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="w-full py-2.5 px-3 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+                title={disabledReason}
+              >
+                <svg className="w-4 h-4 text-zinc-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span>Add to Cart</span>
+              </button>
+            )}
+
+            {justAdded ? (
+              <div className="flex items-center justify-between text-[11px] pt-1 text-emerald-400">
+                <span>✓ Added to cart</span>
+                <Link href="/cart" className="underline font-bold text-indigo-400 hover:text-indigo-300">
+                  View Cart →
+                </Link>
+              </div>
+            ) : isEligible ? (
+              <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-0.5">
+                {wholesalePrice ? (
+                  <span>Est. Wholesale: ${(suggestedReorderQty * wholesalePrice).toFixed(2)}</span>
+                ) : (
+                  <span>Rounded to MOQ</span>
+                )}
+                <span>{cartonPackQty} units/case</span>
+              </div>
+            ) : (
+              <p className="text-[10px] text-zinc-500 text-center">
+                {disabledReason}
+              </p>
+            )}
           </div>
         </div>
       </div>

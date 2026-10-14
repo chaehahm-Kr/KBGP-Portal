@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { StorePerformanceBreakdownViewProps } from "./types";
 import { DataReliabilityBadge } from "./data-reliability-badge";
 
@@ -8,7 +8,13 @@ export function StorePerformanceBreakdownView({
   stores,
   coverageTarget,
   cartonPackQty,
+  productId,
+  isOrderable = true,
+  onAddToCartStore,
 }: StorePerformanceBreakdownViewProps) {
+  const [addingStoreId, setAddingStoreId] = useState<string | null>(null);
+  const [addedStoreId, setAddedStoreId] = useState<string | null>(null);
+
   if (stores.length === 0) {
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center space-y-2">
@@ -104,7 +110,33 @@ export function StorePerformanceBreakdownView({
                   {s.signal === "insufficient_data" ? (
                     <span className="text-zinc-500 font-normal">N/A</span>
                   ) : s.suggestedReorderQty && s.suggestedReorderQty > 0 ? (
-                    <span className="text-indigo-400">{s.suggestedReorderQty} units</span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-indigo-400">{s.suggestedReorderQty} units</span>
+                      {s.signal === "reorder_needed" && isOrderable && onAddToCartStore && (
+                        <button
+                          type="button"
+                          disabled={addingStoreId === s.storeId}
+                          onClick={() => {
+                            setAddingStoreId(s.storeId);
+                            onAddToCartStore(s.storeId, s.storeName, s.suggestedReorderQty!);
+                            setAddedStoreId(s.storeId);
+                            setTimeout(() => setAddingStoreId(null), 500);
+                            setTimeout(() => setAddedStoreId(null), 3000);
+                          }}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
+                            addedStoreId === s.storeId
+                              ? "bg-emerald-600 text-white"
+                              : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
+                          } disabled:opacity-50`}
+                          title={`Add ${s.suggestedReorderQty} units to Cart for ${s.storeName}`}
+                        >
+                          <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                          <span>{addedStoreId === s.storeId ? "✓ Added" : "+ Cart"}</span>
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <span className="text-emerald-400/80 font-normal">0</span>
                   )}
@@ -148,11 +180,33 @@ export function StorePerformanceBreakdownView({
                   {s.estimatedMovement !== null ? `${s.estimatedMovement} units` : "—"}
                 </span>
               </div>
-              <div>
-                <span className="text-[10px] text-zinc-400 block">Suggested Reorder</span>
-                <span className="font-bold text-indigo-400">
-                  {s.suggestedReorderQty && s.suggestedReorderQty > 0 ? `${s.suggestedReorderQty} units` : "0"}
-                </span>
+              <div className="flex items-center justify-between col-span-2 pt-1 border-t border-zinc-800/40">
+                <div>
+                  <span className="text-[10px] text-zinc-400 block">Suggested Reorder</span>
+                  <span className="font-bold text-indigo-400">
+                    {s.suggestedReorderQty && s.suggestedReorderQty > 0 ? `${s.suggestedReorderQty} units` : "0 units (Adequate)"}
+                  </span>
+                </div>
+                {s.suggestedReorderQty && s.suggestedReorderQty > 0 && s.signal === "reorder_needed" && isOrderable && onAddToCartStore && (
+                  <button
+                    type="button"
+                    disabled={addingStoreId === s.storeId}
+                    onClick={() => {
+                      setAddingStoreId(s.storeId);
+                      onAddToCartStore(s.storeId, s.storeName, s.suggestedReorderQty!);
+                      setAddedStoreId(s.storeId);
+                      setTimeout(() => setAddingStoreId(null), 500);
+                      setTimeout(() => setAddedStoreId(null), 3000);
+                    }}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-xs transition-colors cursor-pointer ${
+                      addedStoreId === s.storeId
+                        ? "bg-emerald-600 text-white"
+                        : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white"
+                    } disabled:opacity-50`}
+                  >
+                    <span>{addedStoreId === s.storeId ? "✓ Added" : "+ Cart"}</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

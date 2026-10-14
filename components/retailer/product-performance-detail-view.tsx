@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useTransition } from "react";
+import React, { useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ProductPerformanceItem,
   ReorderCoverage,
@@ -19,12 +19,14 @@ import {
   ReorderRecommendationSignal,
   StoreBreakdownRow,
 } from "@/components/retailer/performance-ui/types";
+import { useCart } from "@/components/retailer/cart-context";
 
 interface ProductPerformanceDetailViewProps {
   product: ProductPerformanceItem;
   userRole: string;
   selectedCoverage?: ReorderCoverage;
   period?: string;
+  selectedStoreId?: string | "all";
 }
 
 export function ProductPerformanceDetailView({
@@ -32,17 +34,110 @@ export function ProductPerformanceDetailView({
   userRole,
   selectedCoverage,
   period = "30d",
+  selectedStoreId: propStoreId,
 }: ProductPerformanceDetailViewProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+
+  const { addItem } = useCart();
+  const [cartFeedback, setCartFeedback] = useState<{
+    title: string;
+    message: string;
+    subtext?: string;
+  } | null>(null);
 
   const activeCoverage: ReorderCoverage = selectedCoverage || product.coverage || "30d";
   const isFinancialsHidden = userRole === "employee" || product.isFinancialsHidden;
 
+  const currentStoreId = propStoreId || searchParams.get("store") || "all";
+  const currentStoreObj = product.storesBreakdown.find((s) => s.storeId === currentStoreId);
+
   const handleCoverageChange = (cov: ReorderCoverageTarget) => {
     startTransition(() => {
-      router.push(`/sales/${product.productId}?coverage=${cov}&period=${period}`);
+      const storeParam = currentStoreId && currentStoreId !== "all" ? `&store=${currentStoreId}` : "";
+      router.push(`/sales/${product.productId}?coverage=${cov}&period=${period}${storeParam}`);
     });
+  };
+
+  const handleAddToCartMain = (productId: string, quantity: number, storeId?: string) => {
+    const targetStoreId = storeId || (currentStoreId !== "all" ? currentStoreId : undefined);
+    const targetStoreName = targetStoreId
+      ? product.storesBreakdown.find((s) => s.storeId === targetStoreId)?.storeName
+      : product.storesBreakdown.length === 1
+      ? product.storesBreakdown[0].storeName
+      : undefined;
+
+    const result = addItem(
+      {
+        id: product.productId,
+        name: product.productName,
+        nameEn: product.productNameEn,
+        brandName: product.brandName,
+        sku: product.sku,
+        thumbnailUrl: product.thumbnailUrl,
+        wholesalePrice: product.wholesalePrice || 0,
+        msrp: product.msrp || 0,
+        cartonPackQty: product.cartonPackQty,
+        targetStoreId: targetStoreId,
+        targetStoreName: targetStoreName,
+      },
+      quantity
+    );
+
+    const cases = Math.ceil(quantity / product.cartonPackQty);
+    const totalCases = Math.ceil(result.newQty / product.cartonPackQty);
+    const storeNotice = targetStoreName ? ` for ${targetStoreName}` : "";
+
+    if (result.previousQty > 0) {
+      setCartFeedback({
+        title: "Cart Quantity Updated",
+        message: `Added ${quantity.toLocaleString()} units (${cases} cs)${storeNotice}.`,
+        subtext: `Cart now contains ${result.newQty.toLocaleString()} units (${totalCases} cs) of ${product.productName}.`,
+      });
+    } else {
+      setCartFeedback({
+        title: "Added to Cart",
+        message: `Added ${quantity.toLocaleString()} units (${cases} cs)${storeNotice} of ${product.productName}.`,
+        subtext: `Total in cart: ${result.newQty.toLocaleString()} units.`,
+      });
+    }
+  };
+
+  const handleAddToCartStore = (storeId: string, storeName: string, quantity: number) => {
+    const result = addItem(
+      {
+        id: product.productId,
+        name: product.productName,
+        nameEn: product.productNameEn,
+        brandName: product.brandName,
+        sku: product.sku,
+        thumbnailUrl: product.thumbnailUrl,
+        wholesalePrice: product.wholesalePrice || 0,
+        msrp: product.msrp || 0,
+        cartonPackQty: product.cartonPackQty,
+        targetStoreId: storeId,
+        targetStoreName: storeName,
+      },
+      quantity
+    );
+
+    const cases = Math.ceil(quantity / product.cartonPackQty);
+    const totalCases = Math.ceil(result.newQty / product.cartonPackQty);
+
+    if (result.previousQty > 0) {
+      setCartFeedback({
+        title: "Cart Quantity Updated",
+        message: `Added ${quantity.toLocaleString()} units (${cases} cs) for ${storeName}.`,
+        subtext: `Cart now contains ${result.newQty.toLocaleString()} units (${totalCases} cs) of ${product.productName}.`,
+      });
+    } else {
+      setCartFeedback({
+        title: "Added to Cart",
+        message: `Added ${quantity.toLocaleString()} units (${cases} cs) for ${storeName}.`,
+        subtext: `Total in cart: ${result.newQty.toLocaleString()} units.`,
+      });
+    }
   };
 
   // Map stores breakdown to StoreBreakdownRow for P6 view
@@ -318,6 +413,9 @@ export function ProductPerformanceDetailView({
         signal={product.reorderSignal as ReorderRecommendationSignal}
         isOrderable={product.isOrderable}
         wholesalePrice={product.wholesalePrice}
+        selectedStoreId={currentStoreId}
+        selectedStoreName={currentStoreObj?.storeName}
+        onAddToCart={handleAddToCartMain}
       />
 
       {/* SECTION 4: P6 Inventory Flow & Pipeline Summary */}
@@ -337,6 +435,9 @@ export function ProductPerformanceDetailView({
         stores={storeRows}
         coverageTarget={activeCoverage as ReorderCoverageTarget}
         cartonPackQty={product.cartonPackQty}
+        productId={product.productId}
+        isOrderable={product.isOrderable}
+        onAddToCartStore={handleAddToCartStore}
       />
 
       {/* SECTION 6: Estimation Disclosure Footer */}
@@ -353,6 +454,42 @@ export function ProductPerformanceDetailView({
           unreported store-to-store transfers, or pending customer returns.
         </p>
       </div>
+
+      {/* Floating Cart Feedback Notification */}
+      {cartFeedback && (
+        <div className="fixed bottom-5 right-5 z-50 max-w-sm bg-zinc-900 border border-zinc-700/80 rounded-xl p-4 shadow-2xl text-white space-y-1.5 animate-in slide-in-from-bottom-5 duration-200">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold shrink-0">
+                ✓
+              </span>
+              <span className="text-xs font-bold text-zinc-100">{cartFeedback.title}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCartFeedback(null)}
+              className="text-zinc-400 hover:text-white text-xs px-1 hover:bg-zinc-800 rounded transition-colors cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="text-xs text-zinc-300 leading-normal pl-7">
+            {cartFeedback.message}
+          </p>
+          {cartFeedback.subtext && (
+            <p className="text-[11px] text-zinc-400 pl-7">{cartFeedback.subtext}</p>
+          )}
+          <div className="pl-7 pt-1">
+            <Link
+              href="/cart"
+              className="inline-flex items-center gap-1 text-xs font-bold text-indigo-400 hover:text-indigo-300 hover:underline"
+            >
+              <span>View Cart</span>
+              <span>→</span>
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

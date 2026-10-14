@@ -59,7 +59,11 @@ export interface ReorderRecommendationPanelProps {
   signalReason?: string;
   isOrderable: boolean;
   wholesalePrice: number | null;
-  // P4 Integration Hook Placeholder
+  selectedStoreId?: string | "all";
+  selectedStoreName?: string;
+  // P4 Add to Cart Action
+  onAddToCart?: (productId: string, quantity: number, storeId?: string) => void;
+  // P4 Integration Hook Placeholder (Backwards-compatibility)
   onAddToCartPlaceholder?: (productId: string, quantity: number) => void;
 }
 
@@ -94,6 +98,9 @@ export interface StorePerformanceBreakdownViewProps {
   stores: StoreBreakdownRow[];
   coverageTarget: ReorderCoverageTarget;
   cartonPackQty: number;
+  productId?: string;
+  isOrderable?: boolean;
+  onAddToCartStore?: (storeId: string, storeName: string, quantity: number) => void;
 }
 
 export interface PerformanceProductRowData {
@@ -127,12 +134,24 @@ export interface PerformanceProductRowData {
   reorderSignal: ReorderRecommendationSignal;
 
   isOrderable: boolean;
+
+  // Store-level Breakdown for Multi-store Disambiguation
+  storesBreakdown?: Array<{
+    storeId: string;
+    storeName: string;
+    suggestedReorderQty: number;
+    rawReorderNeed: number;
+    signal: ReorderRecommendationSignal;
+  }>;
 }
 
 export interface PerformanceProductRowProps {
   product: PerformanceProductRowData;
+  selectedStoreId?: string | "all";
   onSelectProduct?: (productId: string) => void;
-  // P4 Add to Cart callback placeholder
+  // P4 Add to Cart callback
+  onAddToCart?: (product: PerformanceProductRowData, storeId?: string, quantity?: number) => void;
+  // P4 Add to Cart callback placeholder (Backwards-compatibility)
   onAddToCartPlaceholder?: (productId: string, quantity: number) => void;
 }
 

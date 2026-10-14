@@ -26,9 +26,11 @@ interface CartContextType {
       cartonPackQty?: number;
       availableStock?: number;
       salesPolicy?: import("@/lib/product/retailer-policy").ResolvedRetailerSalesPolicy;
+      targetStoreId?: string;
+      targetStoreName?: string;
     },
     quantity?: number
-  ) => void;
+  ) => { previousQty: number; newQty: number; addedQty: number };
   updateQuantity: (productId: string, quantity: number) => void;
   removeItem: (productId: string) => void;
   clearCart: () => void;
@@ -96,7 +98,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem: CartContextType["addItem"] = (product, requestedQty) => {
     const pack = Math.max(1, product.cartonPackQty || 1);
-    const qtyToAdd = requestedQty && requestedQty >= pack ? requestedQty : pack;
+    let qtyToAdd = requestedQty && requestedQty >= pack ? requestedQty : pack;
+    // Snap to nearest multiple of case pack if needed
+    const rem = qtyToAdd % pack;
+    if (rem !== 0) {
+      qtyToAdd = qtyToAdd + (pack - rem);
+    }
+
+    const existingItem = items.find((i) => i.productId === product.id);
+    const previousQty = existingItem ? existingItem.quantity : 0;
+    const newQty = previousQty + qtyToAdd;
 
     setItems((prev) => {
       const existingIndex = prev.findIndex((i) => i.productId === product.id);
@@ -104,13 +115,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
       if (existingIndex > -1) {
         const current = prev[existingIndex];
-        const newQty = current.quantity + qtyToAdd;
+        const nextQty = current.quantity + qtyToAdd;
         nextItems = [...prev];
         nextItems[existingIndex] = {
           ...current,
-          quantity: newQty,
+          quantity: nextQty,
           availableStock: product.availableStock !== undefined ? product.availableStock : current.availableStock,
           salesPolicy: product.salesPolicy || current.salesPolicy,
+          targetStoreId: product.targetStoreId || current.targetStoreId,
+          targetStoreName: product.targetStoreName || current.targetStoreName,
         };
       } else {
         const newItem: CartItem = {
@@ -129,6 +142,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           lineTotal: 0,
           availableStock: product.availableStock,
           salesPolicy: product.salesPolicy,
+          targetStoreId: product.targetStoreId,
+          targetStoreName: product.targetStoreName,
         };
         nextItems = [newItem, ...prev];
       }
@@ -140,6 +155,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       return summary.items;
     });
+
+    return { previousQty, newQty, addedQty: qtyToAdd };
   };
 
   const updateQuantity = (productId: string, quantity: number) => {
