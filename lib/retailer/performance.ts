@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { formatCategoryName } from "@/lib/retailer/products";
 import { getRetailerAccessibleStores } from "@/lib/retailer/weekly-check";
+import { getFulfillmentSettings } from "@/lib/settings/fulfillment-settings";
+import { DEFAULT_ESTIMATED_SHIPPING_DAYS } from "@/lib/settings/fulfillment-constants";
 
 export const TARGET_WEEKS_OF_SUPPLY = 4; // Centralized configurable V1 target
 
@@ -24,6 +26,17 @@ export interface StorePerformanceBreakdown {
   usableWeeksCount: number;
   lastReportDate: string | null;
   lastReportingWeek: string | null;
+
+  // P2: Automatic Estimated Receipt & Inventory Flow
+  orderedQty: number;
+  cancelledQty: number;
+  confirmedShippedQty: number;
+  pendingQty: number;
+  inTransitQty: number;
+  estimatedReceivedQty: number;
+  incomingQty: number;
+  nextEstimatedReceiptDate: string | null;
+  dataReliability: "verified" | "estimated";
 }
 
 export interface ProductPerformanceItem {
@@ -50,6 +63,17 @@ export interface ProductPerformanceItem {
   averageWeeklyMovement: number;
   hasNegativeVariance: boolean;
   varianceCount: number;
+
+  // P2: Automatic Estimated Receipt & Inventory Flow
+  orderedQty: number;
+  cancelledQty: number;
+  confirmedShippedQty: number;
+  pendingQty: number;
+  inTransitQty: number;
+  estimatedReceivedQty: number;
+  incomingQty: number;
+  nextEstimatedReceiptDate: string | null;
+  dataReliability: "verified" | "estimated";
 
   // Financials
   estimatedRetailSales: number;
@@ -94,6 +118,10 @@ export interface PerformanceDashboardData {
     averageGrossMargin: number;
     productsNeedingReorderCount: number;
     totalProductsAssorted: number;
+    totalIncomingQty: number;
+    totalInTransitQty: number;
+    totalPendingQty: number;
+    defaultShippingDays: number;
     priceBasisNotice: string;
     isFinancialsHidden: boolean;
   };
@@ -259,12 +287,19 @@ export async function getRetailerPerformanceData(
   let orderItemsQuery = adminClient
     .from("retailer_order_items")
     .select(`
+      id,
       product_id,
+      sku,
+      quantity,
+      quantity_shipped,
+      quantity_cancelled,
       retailer_orders!inner (
         id,
+        order_number,
         company_id,
         store_id,
-        order_status
+        order_status,
+        created_at
       )
     `)
     .eq("retailer_orders.company_id", companyId)
@@ -277,6 +312,184 @@ export async function getRetailerPerformanceData(
   const { data: orderItemRows, error: orderItemsError } = await orderItemsQuery;
   if (orderItemsError) {
     console.error("Error fetching ordered items for performance inclusion:", orderItemsError);
+  }
+
+  // 6.1 Fetch Confirmed Fulfillments & items for this company
+  let fulfillmentsQuery = adminClient
+    .from("retailer_order_fulfillments")
+    .select(`
+      id,
+      fulfillment_number,
+      order_id,
+      company_id,
+      store_id,
+      status,
+      carrier,
+      tracking_number,
+      shipped_at,
+      delivered_at,
+      created_at,
+      retailer_order_fulfillment_items (
+        id,
+        order_item_id,
+        product_id,
+        quantity_shipped,
+        quantity_delivered
+      )
+    `)
+    .eq("company_id", companyId)
+    .in("status", ["shipped", "delivered"]);
+
+  if (activeStoreIds.length > 0) {
+    fulfillmentsQuery = fulfillmentsQuery.in("store_id", activeStoreIds);
+  }
+
+  const { data: rawFulfillments, error: ffError } = await fulfillmentsQuery;
+  if (ffError) {
+    console.error("Error fetching fulfillments for performance reconciliation:", ffError);
+  }
+
+  // 6.2 Fetch Invoices for this company to identify voided dispatches
+  const { data: rawInvoices, error: invError } = await adminClient
+    .from("retailer_invoices")
+    .select("id, fulfillment_id, fulfillment_number, invoice_status")
+    .eq("retailer_company_id", companyId);
+
+  if (invError) {
+    console.error("Error fetching invoices for performance reconciliation:", invError);
+  }
+
+  const voidFulfillmentIds = new Set<string>();
+  const voidFulfillmentNumbers = new Set<string>();
+  (rawInvoices || []).forEach((inv) => {
+    if (inv.invoice_status === "void") {
+      if (inv.fulfillment_id) voidFulfillmentIds.add(inv.fulfillment_id);
+      if (inv.fulfillment_number) voidFulfillmentNumbers.add(inv.fulfillment_number);
+    }
+  });
+
+  // 6.3 Fetch Authoritative Fulfillment Settings (default shipping days)
+  const fulfillmentSettings = await getFulfillmentSettings();
+  const defaultShippingDays =
+    fulfillmentSettings.default_estimated_shipping_days || DEFAULT_ESTIMATED_SHIPPING_DAYS;
+
+  // 6.4 Build Store Inventory Flow Map (ProductId -> StoreId -> StoreInventoryFlow)
+  interface StoreInventoryFlow {
+    orderedQty: number;
+    cancelledQty: number;
+    confirmedShippedQty: number;
+    orderReportedShippedQty: number;
+    pendingQty: number;
+    inTransitQty: number;
+    estimatedReceivedQty: number;
+    incomingQty: number;
+    nextEstimatedReceiptDate: string | null;
+    hasLegacyDispatch: boolean;
+  }
+
+  const productStoreFlows = new Map<string, Map<string, StoreInventoryFlow>>();
+
+  const getOrCreateFlow = (pId: string, sId: string): StoreInventoryFlow => {
+    if (!productStoreFlows.has(pId)) {
+      productStoreFlows.set(pId, new Map());
+    }
+    const storeMap = productStoreFlows.get(pId)!;
+    if (!storeMap.has(sId)) {
+      storeMap.set(sId, {
+        orderedQty: 0,
+        cancelledQty: 0,
+        confirmedShippedQty: 0,
+        orderReportedShippedQty: 0,
+        pendingQty: 0,
+        inTransitQty: 0,
+        estimatedReceivedQty: 0,
+        incomingQty: 0,
+        nextEstimatedReceiptDate: null,
+        hasLegacyDispatch: false,
+      });
+    }
+    return storeMap.get(sId)!;
+  };
+
+  // Process Order Items
+  (orderItemRows || []).forEach((row: any) => {
+    const pId = row.product_id;
+    const sId = row.retailer_orders?.store_id || "unassigned";
+    const orderStatus = row.retailer_orders?.order_status;
+    const ordered = Number(row.quantity) || 0;
+    let cancelled = Number(row.quantity_cancelled) || 0;
+    const shipped = Number(row.quantity_shipped) || 0;
+
+    if (orderStatus === "cancelled") {
+      if (cancelled === 0) {
+        cancelled = Math.max(0, ordered - shipped);
+      }
+    }
+
+    const pending = orderStatus === "cancelled"
+      ? 0
+      : Math.max(0, ordered - shipped - cancelled);
+
+    const flow = getOrCreateFlow(pId, sId);
+    flow.orderedQty += ordered;
+    flow.cancelledQty += cancelled;
+    flow.pendingQty += pending;
+    flow.orderReportedShippedQty += shipped;
+  });
+
+  // Process Confirmed Fulfillments
+  const nowMs = Date.now();
+  (rawFulfillments || []).forEach((ff: any) => {
+    // Exclude voided/cancelled dispatches
+    if (
+      voidFulfillmentIds.has(ff.id) ||
+      (ff.fulfillment_number && voidFulfillmentNumbers.has(ff.fulfillment_number))
+    ) {
+      return;
+    }
+
+    const sId = ff.store_id || "unassigned";
+    const isExplicitlyDelivered = ff.status === "delivered" || !!ff.delivered_at;
+    const shippedTimestamp = ff.shipped_at || ff.created_at;
+    const estDate = shippedTimestamp
+      ? new Date(new Date(shippedTimestamp).getTime() + defaultShippingDays * 86400000)
+      : null;
+
+    const isDateReached = estDate ? nowMs >= estDate.getTime() : false;
+    const isReceived = isExplicitlyDelivered || isDateReached;
+    const estDateStr = estDate ? estDate.toISOString().split("T")[0] : null;
+
+    const ffItems = (ff.retailer_order_fulfillment_items as any[]) || [];
+    ffItems.forEach((fi) => {
+      const pId = fi.product_id;
+      const qty = Number(fi.quantity_shipped) || 0;
+      const flow = getOrCreateFlow(pId, sId);
+      flow.confirmedShippedQty += qty;
+
+      if (isReceived) {
+        flow.estimatedReceivedQty += qty;
+      } else {
+        flow.inTransitQty += qty;
+        if (estDateStr) {
+          if (!flow.nextEstimatedReceiptDate || estDateStr < flow.nextEstimatedReceiptDate) {
+            flow.nextEstimatedReceiptDate = estDateStr;
+          }
+        }
+      }
+    });
+  });
+
+  // Reconcile and calculate incomingQty
+  for (const [, storeMap] of productStoreFlows.entries()) {
+    for (const [, flow] of storeMap.entries()) {
+      if (flow.orderReportedShippedQty > flow.confirmedShippedQty) {
+        const legacyDiff = flow.orderReportedShippedQty - flow.confirmedShippedQty;
+        flow.confirmedShippedQty += legacyDiff;
+        flow.estimatedReceivedQty += legacyDiff;
+        flow.hasLegacyDispatch = true;
+      }
+      flow.incomingQty = flow.pendingQty + flow.inTransitQty;
+    }
   }
 
   // Group check items by product and store
@@ -446,6 +659,19 @@ export async function getRetailerPerformanceData(
     // Process each relevant store for this product
     for (const store of targetStores) {
       const snapshots = storeSnapMap.get(store.id) || [];
+      const storeFlow = productStoreFlows.get(productId)?.get(store.id) || {
+        orderedQty: 0,
+        cancelledQty: 0,
+        confirmedShippedQty: 0,
+        orderReportedShippedQty: 0,
+        pendingQty: 0,
+        inTransitQty: 0,
+        estimatedReceivedQty: 0,
+        incomingQty: 0,
+        nextEstimatedReceiptDate: null,
+        hasLegacyDispatch: false,
+      };
+
       if (snapshots.length === 0) {
         storeBreakdowns.push({
           storeId: store.id,
@@ -458,6 +684,16 @@ export async function getRetailerPerformanceData(
           usableWeeksCount: 0,
           lastReportDate: null,
           lastReportingWeek: null,
+
+          orderedQty: storeFlow.orderedQty,
+          cancelledQty: storeFlow.cancelledQty,
+          confirmedShippedQty: storeFlow.confirmedShippedQty,
+          pendingQty: storeFlow.pendingQty,
+          inTransitQty: storeFlow.inTransitQty,
+          estimatedReceivedQty: storeFlow.estimatedReceivedQty,
+          incomingQty: storeFlow.incomingQty,
+          nextEstimatedReceiptDate: storeFlow.nextEstimatedReceiptDate,
+          dataReliability: storeFlow.hasLegacyDispatch ? "estimated" : "verified",
         });
         continue;
       }
@@ -541,6 +777,16 @@ export async function getRetailerPerformanceData(
         usableWeeksCount: storeUsableWeeks,
         lastReportDate: latestSnapshot.reportDate,
         lastReportingWeek: latestSnapshot.reportingWeek,
+
+        orderedQty: storeFlow.orderedQty,
+        cancelledQty: storeFlow.cancelledQty,
+        confirmedShippedQty: storeFlow.confirmedShippedQty,
+        pendingQty: storeFlow.pendingQty,
+        inTransitQty: storeFlow.inTransitQty,
+        estimatedReceivedQty: storeFlow.estimatedReceivedQty,
+        incomingQty: storeFlow.incomingQty,
+        nextEstimatedReceiptDate: storeFlow.nextEstimatedReceiptDate,
+        dataReliability: storeFlow.hasLegacyDispatch ? "estimated" : "verified",
       });
     }
 
@@ -577,10 +823,47 @@ export async function getRetailerPerformanceData(
         ? Number((((estimatedGrossProfit) / estimatedRetailSales) * 100).toFixed(1))
         : 0;
 
+    // Aggregate Company-level Inventory Flow & Incoming quantities
+    let companyOrderedQty = 0;
+    let companyCancelledQty = 0;
+    let companyConfirmedShippedQty = 0;
+    let companyPendingQty = 0;
+    let companyInTransitQty = 0;
+    let companyEstimatedReceivedQty = 0;
+    let companyNextEstDate: string | null = null;
+    let companyHasLegacy = false;
+
+    const allStoreFlowsForProduct = productStoreFlows.get(productId);
+    if (allStoreFlowsForProduct) {
+      for (const [sId, fl] of allStoreFlowsForProduct.entries()) {
+        if (activeStoreIds.length === 0 || activeStoreIds.includes(sId) || sId === "unassigned") {
+          companyOrderedQty += fl.orderedQty;
+          companyCancelledQty += fl.cancelledQty;
+          companyConfirmedShippedQty += fl.confirmedShippedQty;
+          companyPendingQty += fl.pendingQty;
+          companyInTransitQty += fl.inTransitQty;
+          companyEstimatedReceivedQty += fl.estimatedReceivedQty;
+          if (fl.nextEstimatedReceiptDate) {
+            if (!companyNextEstDate || fl.nextEstimatedReceiptDate < companyNextEstDate) {
+              companyNextEstDate = fl.nextEstimatedReceiptDate;
+            }
+          }
+          if (fl.hasLegacyDispatch) {
+            companyHasLegacy = true;
+          }
+        }
+      }
+    }
+
+    const companyIncomingQty = companyPendingQty + companyInTransitQty;
+
     // Reorder Calculations
     const totalReportedRemaining: number | null = hasAnyCount ? companyTotalRemaining : null;
     const targetQty = Math.ceil(averageWeeklyMovement * TARGET_WEEKS_OF_SUPPLY);
-    const rawReorderNeed = hasAnyCount ? Math.max(0, targetQty - (totalReportedRemaining ?? 0)) : 0;
+    
+    // Consider incoming inventory (pending + in transit) to prevent duplicate purchasing
+    const effectiveAvailableStock = (totalReportedRemaining ?? 0) + companyIncomingQty;
+    const rawReorderNeed = hasAnyCount ? Math.max(0, targetQty - effectiveAvailableStock) : 0;
 
     // Round UP to valid MOQ / Case Pack Multiple
     let suggestedReorderQty = 0;
@@ -637,6 +920,18 @@ export async function getRetailerPerformanceData(
       averageWeeklyMovement,
       hasNegativeVariance: companyVarianceCount > 0,
       varianceCount: companyVarianceCount,
+
+      // P2: Automatic Estimated Receipt & Inventory Flow
+      orderedQty: companyOrderedQty,
+      cancelledQty: companyCancelledQty,
+      confirmedShippedQty: companyConfirmedShippedQty,
+      pendingQty: companyPendingQty,
+      inTransitQty: companyInTransitQty,
+      estimatedReceivedQty: companyEstimatedReceivedQty,
+      incomingQty: companyIncomingQty,
+      nextEstimatedReceiptDate: companyNextEstDate,
+      dataReliability: companyHasLegacy ? "estimated" : "verified",
+
       estimatedRetailSales,
       estimatedGrossProfit,
       estimatedGrossMargin,
@@ -669,11 +964,17 @@ export async function getRetailerPerformanceData(
   let totalEstimatedRetailSales = 0;
   let totalEstimatedGrossProfit = 0;
   let productsNeedingReorderCount = 0;
+  let totalIncomingQty = 0;
+  let totalInTransitQty = 0;
+  let totalPendingQty = 0;
 
   productPerformanceList.forEach((p) => {
     totalEstimatedMovement += p.estimatedMovement;
     totalEstimatedRetailSales += p.estimatedRetailSales;
     totalEstimatedGrossProfit += p.estimatedGrossProfit;
+    totalIncomingQty += p.incomingQty;
+    totalInTransitQty += p.inTransitQty;
+    totalPendingQty += p.pendingQty;
     if (p.suggestedReorderQty > 0) {
       productsNeedingReorderCount += 1;
     }
@@ -703,6 +1004,10 @@ export async function getRetailerPerformanceData(
       averageGrossMargin,
       productsNeedingReorderCount,
       totalProductsAssorted: productPerformanceList.length,
+      totalIncomingQty,
+      totalInTransitQty,
+      totalPendingQty,
+      defaultShippingDays,
       priceBasisNotice: "Retail sales and gross profit estimated based on Suggested Retail Price (MSRP)",
       isFinancialsHidden,
     },

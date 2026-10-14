@@ -196,7 +196,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
       </div>
 
       {/* Top KPI Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
         {/* Estimated Movement */}
         <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-4 sm:p-5 shadow-sm space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
@@ -207,6 +207,19 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
           </div>
           <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
             From submitted weekly checks
+          </p>
+        </div>
+
+        {/* Incoming Stock (In Transit + Pending) */}
+        <div className="rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20 p-4 sm:p-5 shadow-sm space-y-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+            Incoming Stock
+          </span>
+          <div className="text-2xl sm:text-3xl font-extrabold text-blue-700 dark:text-blue-300">
+            {summary.totalIncomingQty > 0 ? `+${summary.totalIncomingQty.toLocaleString()}` : "0"}
+          </div>
+          <p className="text-[10px] text-blue-600/80 dark:text-blue-400/80">
+            {summary.totalInTransitQty} in transit • {summary.totalPendingQty} pending
           </p>
         </div>
 
@@ -258,7 +271,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
         </div>
 
         {/* Reorder Alerts */}
-        <div className="col-span-2 lg:col-span-1 rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 p-4 sm:p-5 shadow-sm space-y-1">
+        <div className="col-span-2 sm:col-span-1 rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 p-4 sm:p-5 shadow-sm space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-700 dark:text-purple-300">
             Reorder Needed
           </span>
@@ -339,6 +352,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                     <th className="py-3.5 px-3 text-center">Movement Status</th>
                     <th className="py-3.5 px-3 text-right">Est. Movement</th>
                     <th className="py-3.5 px-3 text-right">Reported Stock</th>
+                    <th className="py-3.5 px-3 text-right">Incoming Stock</th>
                     <th className="py-3.5 px-3 text-right">Avg Wkly / Wks Supply</th>
                     {!summary.isFinancialsHidden && (
                       <>
@@ -427,6 +441,34 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                           {p.totalReportedRemaining !== null
                             ? `Across ${p.storesBreakdown.length} store(s)`
                             : "Pending first check"}
+                        </div>
+                      </td>
+
+                      {/* Incoming Stock (In Transit + Pending) */}
+                      <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                          {p.incomingQty > 0 ? (
+                            <span className="text-blue-600 dark:text-blue-400 font-bold">
+                              +{p.incomingQty} units
+                            </span>
+                          ) : (
+                            <span className="text-zinc-400 font-normal">0 units</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-zinc-400">
+                          {p.inTransitQty > 0 && p.pendingQty > 0 ? (
+                            <span>{p.inTransitQty} transit • {p.pendingQty} pending</span>
+                          ) : p.inTransitQty > 0 ? (
+                            <span className="text-blue-500 font-medium">
+                              {p.inTransitQty} in transit{p.nextEstimatedReceiptDate ? ` (ETA ${p.nextEstimatedReceiptDate.slice(5)})` : ""}
+                            </span>
+                          ) : p.pendingQty > 0 ? (
+                            <span>{p.pendingQty} pending dispatch</span>
+                          ) : p.estimatedReceivedQty > 0 ? (
+                            <span>{p.estimatedReceivedQty} est. received</span>
+                          ) : (
+                            <span>No incoming</span>
+                          )}
                         </div>
                       </td>
 
@@ -564,6 +606,16 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                   </div>
 
                   <div>
+                    <span className="text-[10px] text-zinc-400 uppercase font-semibold">Incoming Stock</span>
+                    <div className="font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                      {p.incomingQty > 0 ? `+${p.incomingQty} units` : "0 units"}
+                    </div>
+                    <span className="text-[10px] text-zinc-400">
+                      {p.inTransitQty > 0 ? `${p.inTransitQty} transit` : p.pendingQty > 0 ? `${p.pendingQty} pending` : "No incoming"}
+                    </span>
+                  </div>
+
+                  <div>
                     <span className="text-[10px] text-zinc-400 uppercase font-semibold">Weeks Supply</span>
                     <div className="font-semibold text-zinc-900 dark:text-zinc-200 mt-0.5">
                       {p.approxWeeksOfSupply !== null ? `${p.approxWeeksOfSupply} wks` : "—"}
@@ -571,7 +623,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                   </div>
 
                   {!summary.isFinancialsHidden && (
-                    <div>
+                    <div className="col-span-2">
                       <span className="text-[10px] text-zinc-400 uppercase font-semibold">Est. Gross Profit</span>
                       <div className="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                         {p.movementStatus === "no_data"

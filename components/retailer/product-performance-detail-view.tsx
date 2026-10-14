@@ -158,7 +158,7 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
         </div>
 
         {/* Calculation Step Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/80 dark:bg-zinc-900/80 rounded-xl p-4 border border-purple-100 dark:border-purple-900/40 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-white/80 dark:bg-zinc-900/80 rounded-xl p-4 border border-purple-100 dark:border-purple-900/40 text-xs">
           <div>
             <span className="text-[10px] uppercase font-bold text-zinc-400">Company Movement</span>
             <div className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">
@@ -190,6 +190,22 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
           </div>
 
           <div>
+            <span className="text-[10px] uppercase font-bold text-blue-600 dark:text-blue-400">Incoming Stock</span>
+            <div className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+              {product.incomingQty > 0 ? `+${product.incomingQty} units` : "0 units"}
+            </div>
+            <span className="text-[10px] text-zinc-400">
+              {product.inTransitQty > 0 && product.pendingQty > 0
+                ? `${product.inTransitQty} transit • ${product.pendingQty} pending`
+                : product.inTransitQty > 0
+                ? `${product.inTransitQty} in transit`
+                : product.pendingQty > 0
+                ? `${product.pendingQty} pending dispatch`
+                : "No pending orders"}
+            </span>
+          </div>
+
+          <div>
             <span className="text-[10px] uppercase font-bold text-purple-700 dark:text-purple-300">
               Suggested Reorder
             </span>
@@ -198,6 +214,8 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
                 ? `${product.suggestedReorderQty} units`
                 : product.movementStatus === "no_data"
                 ? "—"
+                : product.incomingQty > 0 && product.targetQty > (product.totalReportedRemaining ?? 0)
+                ? "0 (Covered)"
                 : "0 (Healthy)"}
             </div>
             <span className="text-[10px] text-purple-600/80 dark:text-purple-400/80">
@@ -205,8 +223,103 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
                 ? `Rounded to pack of ${product.cartonPackQty}`
                 : product.movementStatus === "no_data"
                 ? "Requires weekly check counts"
+                : product.incomingQty > 0 && product.targetQty > (product.totalReportedRemaining ?? 0)
+                ? "Covered by incoming inventory"
                 : `Pack of ${product.cartonPackQty}`}
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Inventory Flow & Incoming Stock Reconciliation Card */}
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-5 sm:p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white">
+                📦 Inventory Flow & Incoming Reconciliation
+              </h3>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                product.dataReliability === "verified"
+                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                  : "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+              }`}>
+                {product.dataReliability === "verified" ? "✓ Verified via Invoices & Dispatches" : "⚡ Estimated Transit Policy"}
+              </span>
+            </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              발송 확인(Confirmed Dispatch) 및 송장 발행일 기준으로 입고 예정(In Transit)과 자동 입고(Est. Received)를 산정합니다.
+            </p>
+          </div>
+
+          {product.nextEstimatedReceiptDate && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-semibold">
+              <span>🚚</span>
+              <span>Next Est. Arrival: <strong>{product.nextEstimatedReceiptDate}</strong></span>
+            </div>
+          )}
+        </div>
+
+        {/* 5-Tile Flow Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1">
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800 space-y-0.5">
+            <span className="text-[10px] font-semibold text-zinc-400 uppercase">Ordered Total</span>
+            <div className="text-base font-bold text-zinc-900 dark:text-white">
+              {product.orderedQty} units
+            </div>
+            <p className="text-[10px] text-zinc-400">
+              Cancelled: {product.cancelledQty} units
+            </p>
+          </div>
+
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800 space-y-0.5">
+            <span className="text-[10px] font-semibold text-zinc-400 uppercase">Confirmed Shipped</span>
+            <div className="text-base font-bold text-zinc-900 dark:text-white">
+              {product.confirmedShippedQty} units
+            </div>
+            <p className="text-[10px] text-zinc-400">
+              Transit + Est. Received
+            </p>
+          </div>
+
+          <div className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 space-y-0.5">
+            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase">In Transit</span>
+            <div className="text-base font-extrabold text-blue-700 dark:text-blue-300">
+              {product.inTransitQty} units
+            </div>
+            <p className="text-[10px] text-blue-500">
+              En route to stores
+            </p>
+          </div>
+
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800 space-y-0.5">
+            <span className="text-[10px] font-semibold text-zinc-400 uppercase">Est. Received</span>
+            <div className="text-base font-bold text-zinc-900 dark:text-white">
+              {product.estimatedReceivedQty} units
+            </div>
+            <p className="text-[10px] text-zinc-400">
+              Delivered / Date reached
+            </p>
+          </div>
+
+          <div className="col-span-2 sm:col-span-1 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800 space-y-0.5">
+            <span className="text-[10px] font-semibold text-zinc-400 uppercase">Pending Dispatch</span>
+            <div className="text-base font-bold text-zinc-900 dark:text-white">
+              {product.pendingQty} units
+            </div>
+            <p className="text-[10px] text-zinc-400">
+              Awaiting fulfillment
+            </p>
+          </div>
+        </div>
+
+        {/* Invariant Equation Confirmation */}
+        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800/30 p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2 font-mono">
+          <div>
+            <span>Ordered ({product.orderedQty})</span> = <span>Shipped ({product.confirmedShippedQty})</span> + <span>Cancelled ({product.cancelledQty})</span> + <span>Pending ({product.pendingQty})</span>
+          </div>
+          <div className="text-blue-600 dark:text-blue-400">
+            Total Incoming: <strong>+{product.incomingQty}</strong> (In Transit: {product.inTransitQty} + Pending: {product.pendingQty})
           </div>
         </div>
       </div>
@@ -233,7 +346,9 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
                 <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/75 dark:bg-zinc-800/40 text-zinc-500 dark:text-zinc-400 font-semibold">
                   <th className="py-3 pl-4 pr-3">Store Location</th>
                   <th className="py-3 px-3 text-center">Status</th>
-                  <th className="py-3 px-3 text-right">Latest Stock</th>
+                  <th className="py-3 px-3 text-right">Reported Stock</th>
+                  <th className="py-3 px-3 text-right">Incoming Stock</th>
+                  <th className="py-3 px-3 text-right">Est. Received</th>
                   <th className="py-3 px-3 text-right">Est. Movement</th>
                   <th className="py-3 px-3 text-right">Avg Weekly</th>
                   <th className="py-3 px-3 text-right">Weeks Supply</th>
@@ -253,6 +368,31 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
 
                     <td className="py-3 px-3 text-right font-semibold text-zinc-900 dark:text-zinc-100">
                       {sb.latestReportedRemaining !== null ? `${sb.latestReportedRemaining} units` : "Not Reported"}
+                    </td>
+
+                    <td className="py-3 px-3 text-right whitespace-nowrap">
+                      <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                        {sb.incomingQty > 0 ? (
+                          <span className="text-blue-600 dark:text-blue-400 font-bold">
+                            +{sb.incomingQty} units
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400 font-normal">0 units</span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-zinc-400">
+                        {sb.inTransitQty > 0 && sb.pendingQty > 0
+                          ? `${sb.inTransitQty} transit • ${sb.pendingQty} pending`
+                          : sb.inTransitQty > 0
+                          ? `${sb.inTransitQty} transit`
+                          : sb.pendingQty > 0
+                          ? `${sb.pendingQty} pending`
+                          : "No orders"}
+                      </div>
+                    </td>
+
+                    <td className="py-3 px-3 text-right font-medium text-zinc-700 dark:text-zinc-300">
+                      {sb.estimatedReceivedQty} units
                     </td>
 
                     <td className="py-3 px-3 text-right font-bold text-zinc-900 dark:text-white">

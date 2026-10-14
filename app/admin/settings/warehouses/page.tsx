@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getWarehouses, getUnlinkedShippingOrigins } from "@/lib/warehouse/actions";
+import { getFulfillmentSettings } from "@/lib/settings/fulfillment-settings";
 import { WarehouseSettingsManager } from "@/components/admin/settings/warehouse-settings-manager";
+import { FulfillmentSettingsCard } from "@/components/admin/settings/fulfillment-settings-card";
 
 export const metadata: Metadata = {
   title: "물류창고 설정 관리 | K SELECT NETWORK 어드민",
@@ -12,10 +14,11 @@ export default async function AdminWarehousesPage() {
   const session = await verifyAdminSession();
   const supabase = await createClient();
 
-  // 1. Fetch warehouses and unlinked shipping origins in parallel
-  const [warehouses, unlinkedOrigins] = await Promise.all([
+  // 1. Fetch warehouses, unlinked shipping origins, and fulfillment settings in parallel
+  const [warehouses, unlinkedOrigins, fulfillmentSettings] = await Promise.all([
     getWarehouses(),
     getUnlinkedShippingOrigins(),
+    getFulfillmentSettings(),
   ]);
 
   // 2. Fetch companies for select dropdown
@@ -46,6 +49,11 @@ export default async function AdminWarehousesPage() {
           회사별로 여러 물류창고를 등록하고 관리할 수 있는 공통 Warehouse Master입니다.
         </p>
       </div>
+
+      <FulfillmentSettingsCard
+        initialSettings={fulfillmentSettings}
+        canEdit={canEdit}
+      />
 
       <WarehouseSettingsManager
         initialWarehouses={warehouses}
