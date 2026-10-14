@@ -143,6 +143,12 @@ export function AdminOrdersTable({
   // Selected row IDs for batch operations
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
 
+  useEffect(() => {
+    setOrders(initialOrders);
+    setTotalCount(initialTotal);
+    if (initialCounters) setCounters(initialCounters);
+  }, [initialOrders, initialTotal, initialCounters]);
+
   // In-place tracking modal state
   const [trackingModalState, setTrackingModalState] = useState<{
     fulfillmentId: string;
@@ -288,32 +294,35 @@ export function AdminOrdersTable({
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", nextUrl);
     }
-    router.replace(nextUrl, { scroll: false });
 
     startTransition(async () => {
-      const activeFilter: AdminOrderFilter = {
-        quickFilter: (nextQuickFilter as any) || undefined,
-        search: nextSearch || undefined,
-        sku: nextSku || undefined,
-        companyId: nextCompanyId !== "all" ? nextCompanyId : undefined,
-        storeId: nextStoreId !== "all" ? nextStoreId : undefined,
-        status: nextStatus !== "all" ? nextStatus : undefined,
-        paymentStatus: nextPaymentStatus !== "all" ? nextPaymentStatus : undefined,
-        datePreset: (nextDatePreset as any) || undefined,
-        startDate: nextStartDate || undefined,
-        endDate: nextEndDate || undefined,
-        testMode: (nextTestMode as any) || undefined,
-        sortBy: (nextSortBy as any) || undefined,
-        sortDirection: nextSortDirection || undefined,
-        page: nextPage,
-        pageSize: nextPageSize,
-      };
+      try {
+        const activeFilter: AdminOrderFilter = {
+          quickFilter: (nextQuickFilter as any) || undefined,
+          search: nextSearch || undefined,
+          sku: nextSku || undefined,
+          companyId: nextCompanyId !== "all" ? nextCompanyId : undefined,
+          storeId: nextStoreId !== "all" ? nextStoreId : undefined,
+          status: nextStatus !== "all" ? nextStatus : undefined,
+          paymentStatus: nextPaymentStatus !== "all" ? nextPaymentStatus : undefined,
+          datePreset: (nextDatePreset as any) || undefined,
+          startDate: nextStartDate || undefined,
+          endDate: nextEndDate || undefined,
+          testMode: (nextTestMode as any) || undefined,
+          sortBy: (nextSortBy as any) || undefined,
+          sortDirection: nextSortDirection || undefined,
+          page: nextPage,
+          pageSize: nextPageSize,
+        };
 
-      const res = await getAdminRetailerOrdersAction(activeFilter);
-      setOrders(res.orders);
-      setTotalCount(res.totalCount);
-      setCounters(res.summaryCounters);
-      setCurrentPage(nextPage);
+        const res = await getAdminRetailerOrdersAction(activeFilter);
+        setOrders(res.orders);
+        setTotalCount(res.totalCount);
+        setCounters(res.summaryCounters);
+        setCurrentPage(nextPage);
+      } catch (err) {
+        console.error("Failed to query orders:", err);
+      }
     });
   };
 
@@ -397,13 +406,16 @@ export function AdminOrdersTable({
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", pathname);
     }
-    router.replace(pathname, { scroll: false });
 
     startTransition(async () => {
-      const res = await getAdminRetailerOrdersAction({});
-      setOrders(res.orders);
-      setTotalCount(res.totalCount);
-      setCounters(res.summaryCounters);
+      try {
+        const res = await getAdminRetailerOrdersAction({});
+        setOrders(res.orders);
+        setTotalCount(res.totalCount);
+        setCounters(res.summaryCounters);
+      } catch (err) {
+        console.error("Failed to reset orders:", err);
+      }
     });
   };
 

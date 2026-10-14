@@ -7,6 +7,8 @@ const ADMIN_URL = 'https://admin.kselectnetwork.com';
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
+  page.on('console', msg => console.log(`[BROWSER CONSOLE ${msg.type()}]:`, msg.text()));
+  page.on('pageerror', err => console.log('[BROWSER UNCAUGHT ERROR]:', err.message));
 
   try {
     // 1. Login to Admin
@@ -162,9 +164,19 @@ const ADMIN_URL = 'https://admin.kselectnetwork.com';
 
     // Click Completed KPI tab
     await completedKpiCard.click();
-    await page.locator('text=Updating queue...').waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
-    await page.locator('text=Filtering...').waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
-    await page.waitForTimeout(1000);
+    console.log('Clicked Completed KPI card. Waiting for filter transition...');
+
+    // Wait for URL to update
+    await page.waitForURL((url) => url.searchParams.get('quickFilter') === 'completed', { timeout: 10000 });
+    console.log('URL updated to:', page.url());
+
+    // Wait for table to finish updating and display exactly 6 rows
+    await page.waitForFunction(() => {
+      const rows = document.querySelectorAll('tbody tr');
+      const isFiltering = document.body.innerText.includes('Updating queue...');
+      return !isFiltering && rows.length === 6;
+    }, { timeout: 15000 });
+
     const filteredRowsCount = await page.locator('tbody tr').count();
     console.log(`Completed filtered rows displayed: ${filteredRowsCount}`);
     if (filteredRowsCount !== 6) throw new Error(`Expected 6 rows in Completed filter, got: ${filteredRowsCount}`);
