@@ -302,6 +302,22 @@ const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     triggerCondition: "리테일러 온보딩 또는 포털에서 Retailer Operating Agreement 전자서명이 완료되었을 때, 서명자에게 체결 완료 확인 및 불변 전자서명 PDF 사본이 첨부되어 발송됩니다.",
     scope: "hub",
   },
+  hub_retailer_weekly_performance_report: {
+    recipientType: "partner",
+    recipientLabel: "리테일러 바이어/오너 (Retailer)",
+    triggerType: "auto",
+    triggerLabel: "주간 발송 (Weekly Opt-in)",
+    triggerCondition: "포털 알림 설정에서 주간 실적 리포트 수신을 활성화한 리테일러 담당자에게 주간 집계 완료 시 자동 발송됩니다.",
+    scope: "hub",
+  },
+  hub_retailer_weekly_check_reminder: {
+    recipientType: "partner",
+    recipientLabel: "매장 매니저/바이어 (Store Team)",
+    triggerType: "manual",
+    triggerLabel: "어드민 발송 (Admin Triggered)",
+    triggerCondition: "당해 주차 재고 실사가 미제출된 매장의 담당자에게 어드민 Retailer 360 화면에서 사전 검토 후 수동 발송됩니다.",
+    scope: "hub",
+  },
 };
 
 const SCOPE_CATEGORIES: Record<
@@ -382,6 +398,14 @@ const SCOPE_CATEGORIES: Record<
         "hub_shipment_created",
         "hub_shipment_tracking_update",
         "hub_order_delivered",
+      ],
+    },
+    {
+      id: "hub_weekly_inventory",
+      name: "📊 주간 실적 및 재고 조사 (Weekly Performance & Check)",
+      keys: [
+        "hub_retailer_weekly_performance_report",
+        "hub_retailer_weekly_check_reminder",
       ],
     },
   ],
@@ -642,6 +666,25 @@ const TEMPLATE_VARIABLE_CHIPS: Record<string, Array<{ tag: string; label: string
     { tag: "{{infoBox}}", label: "Agreement Summary Card" },
     { tag: "{{ctaButton}}", label: "View Agreement Button" },
   ],
+  hub_retailer_weekly_performance_report: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{reportingWeek}}", label: "Reporting Week (YYYY-Www)" },
+    { tag: "{{estimatedSales}}", label: "Est. Retail Sales" },
+    { tag: "{{estimatedGrossProfit}}", label: "Est. Gross Profit" },
+    { tag: "{{estimatedUnitsSold}}", label: "Est. Units Sold" },
+    { tag: "{{reorderProductCount}}", label: "Reorder Needed Count" },
+    { tag: "{{infoBox}}", label: "Performance Summary Box" },
+    { tag: "{{ctaButton}}", label: "Open Portal Report Button" },
+  ],
+  hub_retailer_weekly_check_reminder: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company Name" },
+    { tag: "{{storeName}}", label: "Store Name" },
+    { tag: "{{reportingWeek}}", label: "Reporting Week" },
+    { tag: "{{infoBox}}", label: "Check Summary Box" },
+    { tag: "{{ctaButton}}", label: "Start Inventory Check Button" },
+  ],
 };
 
 export function EmailTemplatesWorkspace({
@@ -664,6 +707,7 @@ export function EmailTemplatesWorkspace({
     hub_account: true,
     hub_agreement: true,
     hub_orders: true,
+    hub_weekly_inventory: true,
   });
 
   // Panel sizing resizable states

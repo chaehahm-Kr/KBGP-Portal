@@ -135,14 +135,22 @@ async function runWeeklyReportsP3QA() {
     console.log("✓ Logged into Admin Portal. Current URL:", pageAdmin.url());
 
     // Navigate to Test Retailer 360 Performance Tab
-    console.log("Navigating to Retailer 360 for Test Retailer (/admin/retailers/effe7832-096c-4ae1-86c7-3cb189b59731?tab=performance)...");
+    console.log("Navigating to Retailer 360 for Test Retailer (/admin/retailers/effe7832-096c-4ae1-86c7-3cb189b59731)...");
     await pageAdmin.goto(
-      `${PROD_ADMIN_URL}/admin/retailers/effe7832-096c-4ae1-86c7-3cb189b59731?tab=performance`,
-      { waitUntil: "networkidle", timeout: 30000 }
+      `${PROD_ADMIN_URL}/admin/retailers/effe7832-096c-4ae1-86c7-3cb189b59731`,
+      { waitUntil: "domcontentloaded", timeout: 30000 }
     );
-    await pageAdmin.waitForTimeout(2500);
+    await pageAdmin.waitForTimeout(3000);
 
-    const checkStatusTableVisible = await pageAdmin.locator("text=Current Week Store Check Status").isVisible();
+    // Click Performance & Check Tab
+    console.log("Clicking 'Performance & Check' Tab...");
+    const perfTab = pageAdmin.locator("button:has-text('Performance & Check')").first();
+    if (await perfTab.isVisible()) {
+      await perfTab.click();
+      await pageAdmin.waitForTimeout(2000);
+    }
+
+    const checkStatusTableVisible = await pageAdmin.locator("text=Current Week Store Check Status").first().isVisible();
     console.log("Store Check Status Table Visible:", checkStatusTableVisible);
 
     // Find and click Send Reminder button
@@ -152,10 +160,10 @@ async function runWeeklyReportsP3QA() {
       await sendReminderBtn.click();
       await pageAdmin.waitForTimeout(2000);
 
-      const reminderModalVisible = await pageAdmin.locator("text=Send Weekly Inventory Check Reminder").isVisible();
+      const reminderModalVisible = await pageAdmin.locator("text=Send Weekly Inventory Check Reminder").first().isVisible();
       console.log("✓ Weekly Check Reminder Modal Visible:", reminderModalVisible);
 
-      const emailPreviewVisible = await pageAdmin.locator("text=hub_retailer_weekly_check_reminder").isVisible();
+      const emailPreviewVisible = await pageAdmin.locator("text=hub_retailer_weekly_check_reminder").first().isVisible();
       console.log("✓ Email Template hub_retailer_weekly_check_reminder Preview Visible:", emailPreviewVisible);
 
       await pageAdmin.screenshot({
@@ -164,13 +172,13 @@ async function runWeeklyReportsP3QA() {
       console.log("✓ Saved artifact: prod_p3_admin_weekly_check_reminder_modal.png");
 
       // Test Send Reminder in modal
-      const confirmSendBtn = pageAdmin.locator("button:has-text('Send Reminder (')");
+      const confirmSendBtn = pageAdmin.locator("button:has-text('Send Reminder (')").first();
       if (await confirmSendBtn.isVisible()) {
         console.log("Clicking Confirm Send in Reminder Modal...");
         await confirmSendBtn.click();
         await pageAdmin.waitForTimeout(2500);
 
-        const successNotice = await pageAdmin.locator("text=Successfully sent").isVisible();
+        const successNotice = await pageAdmin.locator("text=Successfully sent").first().isVisible();
         console.log("✓ Reminder delivery success feedback visible:", successNotice);
       }
     } else {
@@ -181,11 +189,19 @@ async function runWeeklyReportsP3QA() {
     // SCENARIO 4: Admin Settings — Email Templates Verification
     // =========================================================================
     console.log("\n[SCENARIO 4: Admin Settings Email Templates Verification]");
-    await pageAdmin.goto(`${PROD_ADMIN_URL}/admin/settings/email-templates`, { waitUntil: "networkidle", timeout: 30000 });
-    await pageAdmin.waitForTimeout(2000);
+    await pageAdmin.goto(`${PROD_ADMIN_URL}/admin/settings/email-templates`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await pageAdmin.waitForTimeout(3000);
 
-    const reportTemplateItem = await pageAdmin.locator("text=hub_retailer_weekly_performance_report").isVisible();
-    const reminderTemplateItem = await pageAdmin.locator("text=hub_retailer_weekly_check_reminder").isVisible();
+    // Switch to K SELECT HUB templates
+    console.log("Switching to K SELECT HUB templates tab...");
+    const hubTabBtn = pageAdmin.locator("button:has-text('K SELECT HUB')").first();
+    if (await hubTabBtn.isVisible()) {
+      await hubTabBtn.click();
+      await pageAdmin.waitForTimeout(2000);
+    }
+
+    const reportTemplateItem = await pageAdmin.locator("text=hub_retailer_weekly_performance_report").first().isVisible();
+    const reminderTemplateItem = await pageAdmin.locator("text=hub_retailer_weekly_check_reminder").first().isVisible();
     console.log("Registered Email Templates Found:", {
       hub_retailer_weekly_performance_report: reportTemplateItem,
       hub_retailer_weekly_check_reminder: reminderTemplateItem,
