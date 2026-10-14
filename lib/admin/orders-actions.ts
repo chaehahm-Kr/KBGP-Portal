@@ -18,8 +18,13 @@ import {
   AdminOrderLineItem,
   AdminRetailerOrdersResult,
   AdminOrderSummaryCounters,
+  AdminOrderDispatchSummary,
 } from "./orders-types";
-import { computeAuthoritativeOrderStatus } from "@/lib/orders/order-status-utils";
+import {
+  computeAuthoritativeOrderStatus,
+  isOrderOperationallyCompleted,
+  calculateDaysOpenNumber,
+} from "@/lib/orders/order-status-utils";
 
 /**
  * Fetch all Retailer Orders for Admin Centralized Orders Management
@@ -212,7 +217,6 @@ export async function getAdminRetailerOrdersAction(
     const totalRemainingUnits = Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits);
 
     const pkgs = packagesMap.get(o.id) || [];
-    const totalBoxCount = pkgs.length;
 
     const authoritativeStatus = computeAuthoritativeOrderStatus(
       o.order_status,
@@ -240,15 +244,129 @@ export async function getAdminRetailerOrdersAction(
     const fulfillments = o.retailer_order_fulfillments || [];
     const dispatchCount = fulfillments.length;
 
-    // Check if any active/non-cancelled fulfillment has missing tracking
-    const hasMissingTracking = fulfillments.some((f: any) => {
-      if (f.status === "cancelled") return false;
-      const hasFulfillmentTracking = Boolean(f.tracking_number && f.tracking_number.trim());
-      const hasBoxTracking = (f.retailer_order_fulfillment_boxes || []).some(
-        (b: any) => b.status === "active" && Boolean(b.tracking_number && b.tracking_number.trim())
-      );
-      return !hasFulfillmentTracking && !hasBoxTracking;
+    // Map dispatches with canonical multi-box and legacy fallback evaluation
+    const dispatches = fulfillments.map((f: any) => {
+      const rawBoxes = f.retailer_order_fulfillment_boxes || [];
+      const mappedBoxes: AdminOrderBox[] =
+        rawBoxes.length > 0
+          ? rawBoxes.map((b: any) => ({
+              id: b.id,
+              fulfillmentId: f.id,
+              orderId: o.id,
+              boxNumber: b.box_number || 1,
+              boxTotal: b.box_total || rawBoxes.length || 1,
+              carrier: b.carrier || f.carrier || "ups",
+              trackingNumber: b.tracking_number || null,
+              trackingUrl: resolveCarrierTrackingUrl(b.carrier || f.carrier, b.tracking_number),
+              weightLbs: b.weight_lbs ?? null,
+              dimensionsInch: b.dimensions_inch ?? null,
+              status: b.status || "active",
+              notes: b.notes || null,
+              createdAt: b.created_at || f.created_at,
+            }))
+          : f.tracking_number
+          ? [
+              {
+                id: `legacy-${f.id}`,
+                fulfillmentId: f.id,
+                orderId: o.id,
+                boxNumber: 1,
+                boxTotal: 1,
+                carrier: f.carrier || "ups",
+                trackingNumber: f.tracking_number,
+                trackingUrl: resolveCarrierTrackingUrl(f.carrier, f.tracking_number),
+                status: "active" as const,
+                notes: null,
+                createdAt: f.created_at,
+              },
+            ]
+          : [];
+
+      const activeBoxes = mappedBoxes.filter((b) => b.status === "active");
+      const isTrackingComplete =
+        f.status === "cancelled" ||
+        (activeBoxes.length > 0
+          ? activeBoxes.every((b) => Boolean(b.trackingNumber && b.trackingNumber.trim()))
+          : Boolean(f.tracking_number && f.tracking_number.trim()));
+
+      return {
+        id: f.id,
+        fulfillmentNumber: f.fulfillment_number,
+        status: f.status,
+        carrier: f.carrier,
+        trackingNumber: f.tracking_number,
+        trackingUrl: resolveCarrierTrackingUrl(f.carrier, f.tracking_number),
+        boxCount: activeBoxes.length > 0 ? activeBoxes.length : Number(f.box_count || 1),
+        shippedAt: f.shipped_at,
+        notes: f.notes,
+        createdAt: f.created_at,
+        boxes: mappedBoxes,
+        isTrackingComplete,
+      };
     });
+
+    const hasConfirmedDispatch = dispatches.some((d: any) => d.status !== "cancelled");
+    const untrackedDispatchesCount = dispatches.filter(
+      (d: any) => d.status !== "cancelled" && !d.isTrackingComplete
+    ).length;
+    const hasMissingTracking = untrackedDispatchesCount > 0;
+
+    // Synthesize fallback packages if packagesMap is empty
+    let finalPackages = pkgs;
+    if (finalPackages.length === 0 && dispatches.length > 0) {
+      const synthPkgs: AdminOrderPackage[] = [];
+      dispatches
+        .filter((d: any) => d.status !== "cancelled")
+        .forEach((d: any) => {
+          const activeBoxes = d.boxes.filter((b: any) => b.status === "active");
+          if (activeBoxes.length > 0) {
+            activeBoxes.forEach((b: any, idx: number, arr: any[]) => {
+              synthPkgs.push({
+                id: b.id,
+                fulfillmentId: d.id,
+                orderId: o.id,
+                boxNumber: b.boxNumber || idx + 1,
+                boxTotal: b.boxTotal || arr.length,
+                carrier: b.carrier || d.carrier || "ups",
+                trackingNumber: b.trackingNumber || "",
+                trackingUrl: b.trackingUrl || resolveCarrierTrackingUrl(b.carrier || d.carrier, b.trackingNumber),
+                weightLbs: b.weightLbs ?? null,
+                dimensionsInch: b.dimensionsInch ?? null,
+                packageItems: [],
+                createdAt: b.createdAt || d.createdAt,
+              });
+            });
+          } else if (d.trackingNumber) {
+            synthPkgs.push({
+              id: `legacy-pkg-${d.id}`,
+              fulfillmentId: d.id,
+              orderId: o.id,
+              boxNumber: 1,
+              boxTotal: 1,
+              carrier: d.carrier || "ups",
+              trackingNumber: d.trackingNumber,
+              trackingUrl: d.trackingUrl,
+              weightLbs: null,
+              dimensionsInch: null,
+              packageItems: [],
+              createdAt: d.createdAt,
+            });
+          }
+        });
+      if (synthPkgs.length > 0) {
+        finalPackages = synthPkgs;
+      }
+    }
+    const totalBoxCount = finalPackages.length;
+
+    const isCompleted = isOrderOperationallyCompleted({
+      orderStatus: authoritativeStatus,
+      totalOrderedUnits,
+      totalShippedUnits,
+      totalCancelledUnits,
+      totalRemainingUnits,
+    });
+    const daysOpen = isCompleted ? null : calculateDaysOpenNumber(o.created_at);
 
     // Derive actionable warehouse priority
     let actionRequired: "new_order" | "ready_to_ship" | "hold_cancellation" | "tracking_needed" | "completed" | "none" = "none";
@@ -260,7 +378,7 @@ export async function getAdminRetailerOrdersAction(
       actionRequired = "new_order";
     } else if (["submitted", "processing", "partially_shipped"].includes(authoritativeStatus) && totalRemainingUnits > 0) {
       actionRequired = "ready_to_ship";
-    } else if (["shipped", "cancelled"].includes(authoritativeStatus) || (totalRemainingUnits === 0 && totalShippedUnits > 0)) {
+    } else if (isCompleted) {
       actionRequired = "completed";
     }
 
@@ -298,7 +416,12 @@ export async function getAdminRetailerOrdersAction(
       totalCancelledUnits,
       totalRemainingUnits,
       totalBoxCount,
-      packages: pkgs,
+      packages: finalPackages,
+      dispatches,
+      untrackedDispatchesCount,
+      hasConfirmedDispatch,
+      daysOpen,
+      isCompleted,
       invoices,
       dispatchCount,
       hasMissingTracking,
@@ -336,10 +459,7 @@ export async function getAdminRetailerOrdersAction(
     if (ord.orderStatus === "partially_shipped") summaryCounters.partiallyShipped++;
     if (ord.cancellationRequested) summaryCounters.onHold++;
     if (ord.hasMissingTracking) summaryCounters.trackingMissing++;
-    if (
-      ["shipped", "cancelled"].includes(ord.orderStatus) ||
-      (ord.totalRemainingUnits === 0 && ord.totalShippedUnits > 0)
-    ) {
+    if (ord.isCompleted) {
       summaryCounters.completed++;
     }
   });
@@ -380,25 +500,41 @@ export async function getAdminRetailerOrdersAction(
         filtered = filtered.filter((o) => o.hasMissingTracking);
         break;
       case "completed":
-        filtered = filtered.filter(
-          (o) =>
-            ["shipped", "cancelled"].includes(o.orderStatus) ||
-            (o.totalRemainingUnits === 0 && o.totalShippedUnits > 0)
-        );
+        filtered = filtered.filter((o) => o.isCompleted);
         break;
     }
   }
 
-  // Status Filter
+  // Multi-Select Status Filter
+  let filterStatuses: string[] = [];
   if (filters?.status && filters.status !== "all") {
-    filtered = filtered.filter((ord) => ord.orderStatus === filters.status);
+    if (Array.isArray(filters.status)) {
+      filterStatuses = filters.status.map((s) => s.trim().toLowerCase());
+    } else {
+      filterStatuses = filters.status
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+    }
+  }
+  if (filterStatuses.length > 0 && !filterStatuses.includes("all")) {
+    filtered = filtered.filter((ord) => filterStatuses.includes(ord.orderStatus.toLowerCase()));
   }
 
   // Date Presets & Custom Ranges
-  const now = new Date();
-  if (filters?.datePreset && filters.datePreset !== "all") {
+  if (filters?.startDate || filters?.endDate) {
+    if (filters.startDate) {
+      const startMs = new Date(`${filters.startDate}T00:00:00.000Z`).getTime();
+      filtered = filtered.filter((ord) => new Date(ord.createdAt).getTime() >= startMs);
+    }
+    if (filters.endDate) {
+      const endMs = new Date(`${filters.endDate}T23:59:59.999Z`).getTime();
+      filtered = filtered.filter((ord) => new Date(ord.createdAt).getTime() <= endMs);
+    }
+  } else if (filters?.datePreset && filters.datePreset !== "all") {
+    const now = new Date();
     if (filters.datePreset === "today") {
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).getTime();
       filtered = filtered.filter((ord) => new Date(ord.createdAt).getTime() >= todayStart);
     } else if (filters.datePreset === "7d") {
       const past7d = now.getTime() - 7 * 24 * 60 * 60 * 1000;
@@ -406,15 +542,6 @@ export async function getAdminRetailerOrdersAction(
     } else if (filters.datePreset === "30d") {
       const past30d = now.getTime() - 30 * 24 * 60 * 60 * 1000;
       filtered = filtered.filter((ord) => new Date(ord.createdAt).getTime() >= past30d);
-    }
-  } else {
-    if (filters?.startDate) {
-      const startMs = new Date(`${filters.startDate}T00:00:00.000Z`).getTime();
-      filtered = filtered.filter((ord) => new Date(ord.createdAt).getTime() >= startMs);
-    }
-    if (filters?.endDate) {
-      const endMs = new Date(`${filters.endDate}T23:59:59.999Z`).getTime();
-      filtered = filtered.filter((ord) => new Date(ord.createdAt).getTime() <= endMs);
     }
   }
 
@@ -468,6 +595,11 @@ export async function getAdminRetailerOrdersAction(
         return a.companyName.localeCompare(b.companyName) * sortMultiplier;
       case "remaining":
         return (a.totalRemainingUnits - b.totalRemainingUnits) * sortMultiplier;
+      case "days_open": {
+        const aVal = a.daysOpen !== null ? a.daysOpen : -1;
+        const bVal = b.daysOpen !== null ? b.daysOpen : -1;
+        return (aVal - bVal) * sortMultiplier;
+      }
       case "total":
         return (a.totalAmount - b.totalAmount) * sortMultiplier;
       case "updated_at":
@@ -772,6 +904,36 @@ export async function getAdminRetailerOrderDetailAction(
     prepaymentAllocatedAmount: Number(inv.prepayment_allocated_amount || 0),
   }));
 
+  const dispatches: AdminOrderDispatchSummary[] = shipments.map((s) => ({
+    id: s.id,
+    fulfillmentNumber: s.fulfillmentNumber,
+    status: s.status,
+    carrier: s.carrier,
+    trackingNumber: s.trackingNumber,
+    trackingUrl: s.trackingUrl,
+    boxCount: s.boxCount,
+    shippedAt: s.shippedAt,
+    notes: s.notes,
+    createdAt: s.createdAt,
+    boxes: s.boxes,
+    isTrackingComplete:
+      s.status === "cancelled" ||
+      (s.boxes.length > 0
+        ? s.boxes.filter((b) => b.status === "active").length > 0 &&
+          s.boxes.filter((b) => b.status === "active").every((b) => Boolean(b.trackingNumber && b.trackingNumber.trim()))
+        : Boolean(s.trackingNumber && s.trackingNumber.trim())),
+  }));
+  const hasConfirmedDispatch = dispatches.some((d) => d.status !== "cancelled");
+  const untrackedDispatchesCount = dispatches.filter((d) => d.status !== "cancelled" && !d.isTrackingComplete).length;
+  const isCompleted = isOrderOperationallyCompleted({
+    orderStatus: authoritativeStatus,
+    totalOrderedUnits,
+    totalShippedUnits,
+    totalCancelledUnits,
+    totalRemainingUnits,
+  });
+  const daysOpen = isCompleted ? null : calculateDaysOpenNumber(o.created_at);
+
   return {
     id: o.id,
     orderNumber: o.order_number,
@@ -813,6 +975,11 @@ export async function getAdminRetailerOrderDetailAction(
     refundStatus: o.refund_status || "none",
     refundedAt: o.refunded_at,
     isTest: Boolean(o.is_test),
+    dispatches,
+    untrackedDispatchesCount,
+    hasConfirmedDispatch,
+    daysOpen,
+    isCompleted,
     createdAt: o.created_at,
     updatedAt: o.updated_at,
     items,

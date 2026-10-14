@@ -10,9 +10,83 @@ import {
   ApprovedOrderStatus,
   AdminOrderFilter,
   AdminOrderSummaryCounters,
+  AdminOrderBox,
 } from "@/lib/admin/orders-types";
 import { getAdminRetailerOrdersAction } from "@/lib/admin/orders-actions";
 import { PackagesPopover } from "./packages-popover";
+import { EditTrackingModal } from "./edit-tracking-modal";
+
+function formatYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+const STATUS_CHIP_OPTIONS: Array<{
+  id: ApprovedOrderStatus;
+  label: string;
+  icon: string;
+  activeBg: string;
+  activeText: string;
+  activeBorder: string;
+  activeRing: string;
+}> = [
+  {
+    id: "submitted",
+    label: "Submitted",
+    icon: "🆕",
+    activeBg: "bg-blue-600",
+    activeText: "text-white",
+    activeBorder: "border-blue-600",
+    activeRing: "ring-blue-500/30",
+  },
+  {
+    id: "processing",
+    label: "Processing",
+    icon: "⚡",
+    activeBg: "bg-amber-600",
+    activeText: "text-white",
+    activeBorder: "border-amber-600",
+    activeRing: "ring-amber-500/30",
+  },
+  {
+    id: "partially_shipped",
+    label: "Partially Shipped",
+    icon: "📦",
+    activeBg: "bg-indigo-600",
+    activeText: "text-white",
+    activeBorder: "border-indigo-600",
+    activeRing: "ring-indigo-500/30",
+  },
+  {
+    id: "shipped",
+    label: "Shipped",
+    icon: "✓",
+    activeBg: "bg-emerald-600",
+    activeText: "text-white",
+    activeBorder: "border-emerald-600",
+    activeRing: "ring-emerald-500/30",
+  },
+  {
+    id: "partially_cancelled",
+    label: "Partially Cancelled",
+    icon: "⚠️",
+    activeBg: "bg-orange-600",
+    activeText: "text-white",
+    activeBorder: "border-orange-600",
+    activeRing: "ring-orange-500/30",
+  },
+  {
+    id: "cancelled",
+    label: "Cancelled",
+    icon: "🛑",
+    activeBg: "bg-rose-600",
+    activeText: "text-white",
+    activeBorder: "border-rose-600",
+    activeRing: "ring-rose-500/30",
+  },
+];
 
 interface OrdersTableProps {
   initialOrders: AdminRetailerOrderSummary[];
@@ -52,6 +126,15 @@ export function AdminOrdersTable({
   // Selected row IDs for batch operations
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
 
+  // In-place tracking modal state
+  const [trackingModalState, setTrackingModalState] = useState<{
+    fulfillmentId: string;
+    fulfillmentNumber: string;
+    orderNumber: string;
+    currentBoxes: AdminOrderBox[];
+    currentNotes?: string | null;
+  } | null>(null);
+
   // Filter States initialized from URL searchParams
   const [quickFilter, setQuickFilter] = useState<string>(
     searchParams.get("quickFilter") || "all"
@@ -71,6 +154,16 @@ export function AdminOrdersTable({
   const [statusFilter, setStatusFilter] = useState<string>(
     searchParams.get("status") || "all"
   );
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<ApprovedOrderStatus>>(() => {
+    const raw = searchParams.get("status");
+    if (!raw || raw === "all") return new Set<ApprovedOrderStatus>();
+    const list = raw.split(",").map((s) => s.trim().toLowerCase()) as ApprovedOrderStatus[];
+    return new Set(
+      list.filter((s) =>
+        ["submitted", "processing", "partially_shipped", "shipped", "partially_cancelled", "cancelled"].includes(s)
+      )
+    );
+  });
   const [paymentStatus, setPaymentStatus] = useState<string>(
     searchParams.get("paymentStatus") || "all"
   );
@@ -115,7 +208,7 @@ export function AdminOrdersTable({
       Boolean(skuTerm.trim()) ||
       selectedCompanyId !== "all" ||
       selectedStoreId !== "all" ||
-      statusFilter !== "all" ||
+      (statusFilter !== "all" && selectedStatuses.size > 0 && selectedStatuses.size < 6) ||
       paymentStatus !== "all" ||
       datePreset !== "all" ||
       Boolean(startDate) ||
@@ -129,6 +222,7 @@ export function AdminOrdersTable({
     selectedCompanyId,
     selectedStoreId,
     statusFilter,
+    selectedStatuses,
     paymentStatus,
     datePreset,
     startDate,
@@ -161,7 +255,7 @@ export function AdminOrdersTable({
     if (nextSku) query.set("sku", nextSku);
     if (nextCompanyId && nextCompanyId !== "all") query.set("companyId", nextCompanyId);
     if (nextStoreId && nextStoreId !== "all") query.set("storeId", nextStoreId);
-    if (nextStatus && nextStatus !== "all") query.set("status", nextStatus);
+    if (nextStatus && nextStatus !== "all") query.set("status", typeof nextStatus === "string" ? nextStatus : nextStatus.join(","));
     if (nextPaymentStatus && nextPaymentStatus !== "all") query.set("paymentStatus", nextPaymentStatus);
     if (nextDatePreset && nextDatePreset !== "all") query.set("datePreset", nextDatePreset);
     if (nextStartDate) query.set("startDate", nextStartDate);
@@ -202,6 +296,66 @@ export function AdminOrdersTable({
     });
   };
 
+  const handleToggleAllStatuses = () => {
+    setSelectedStatuses(new Set());
+    setStatusFilter("all");
+    executeQuery({ status: "all", page: 1 });
+  };
+
+  const handleToggleStatus = (statusId: ApprovedOrderStatus) => {
+    const nextSet = new Set(selectedStatuses);
+    if (nextSet.has(statusId)) {
+      nextSet.delete(statusId);
+    } else {
+      nextSet.add(statusId);
+    }
+    setSelectedStatuses(nextSet);
+
+    let nextStatusParam = "all";
+    if (nextSet.size > 0 && nextSet.size < 6) {
+      nextStatusParam = Array.from(nextSet).join(",");
+    } else {
+      nextSet.clear();
+      setSelectedStatuses(new Set());
+    }
+    setStatusFilter(nextStatusParam);
+    executeQuery({ status: nextStatusParam, page: 1 });
+  };
+
+  const handleSelectDatePreset = (preset: "all" | "today" | "7d" | "30d") => {
+    setDatePreset(preset);
+    const now = new Date();
+    let nextStart = "";
+    let nextEnd = "";
+    if (preset === "today") {
+      nextStart = formatYMD(now);
+      nextEnd = formatYMD(now);
+    } else if (preset === "7d") {
+      const past7 = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+      nextStart = formatYMD(past7);
+      nextEnd = formatYMD(now);
+    } else if (preset === "30d") {
+      const past30 = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
+      nextStart = formatYMD(past30);
+      nextEnd = formatYMD(now);
+    }
+    setStartDate(nextStart);
+    setEndDate(nextEnd);
+    executeQuery({ datePreset: preset, startDate: nextStart, endDate: nextEnd, page: 1 });
+  };
+
+  const handleDateInputChange = (newStart: string, newEnd: string) => {
+    let validatedStart = newStart;
+    let validatedEnd = newEnd;
+    if (validatedStart && validatedEnd && validatedStart > validatedEnd) {
+      validatedEnd = validatedStart;
+    }
+    setStartDate(validatedStart);
+    setEndDate(validatedEnd);
+    setDatePreset("");
+    executeQuery({ datePreset: undefined, startDate: validatedStart, endDate: validatedEnd, page: 1 });
+  };
+
   const handleReset = () => {
     setQuickFilter("all");
     setSearchTerm("");
@@ -209,6 +363,7 @@ export function AdminOrdersTable({
     setSelectedCompanyId("all");
     setSelectedStoreId("all");
     setStatusFilter("all");
+    setSelectedStatuses(new Set());
     setPaymentStatus("all");
     setDatePreset("all");
     setStartDate("");
@@ -228,7 +383,7 @@ export function AdminOrdersTable({
     });
   };
 
-  const handleSort = (field: "created_at" | "order_number" | "retailer" | "remaining" | "total" | "updated_at") => {
+  const handleSort = (field: "created_at" | "order_number" | "retailer" | "remaining" | "total" | "updated_at" | "days_open") => {
     const nextDirection = sortBy === field && sortDirection === "desc" ? "asc" : "desc";
     setSortBy(field);
     setSortDirection(nextDirection);
@@ -708,32 +863,98 @@ export function AdminOrdersTable({
           </div>
         </div>
 
-        {/* Row 2: Status, Payment, Date Presets & Custom Calendar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
-          <div className="flex flex-wrap items-center gap-2.5 text-xs">
-            {/* Status Dropdown */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold text-zinc-500">Status:</span>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  executeQuery({ status: e.target.value, page: 1 });
-                }}
-                className="px-2.5 py-1 text-xs rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white font-medium"
+        {/* Row 2: Status Multi-Select Filter Chips */}
+        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mr-1">
+            Status:
+          </span>
+          {/* All Statuses Toggle Chip */}
+          <button
+            type="button"
+            onClick={handleToggleAllStatuses}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border ${
+              selectedStatuses.size === 0 || selectedStatuses.size === 6
+                ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 border-zinc-900 dark:border-white shadow-2xs"
+                : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 border-transparent"
+            }`}
+          >
+            All Statuses
+          </button>
+
+          {/* 6 Individual Status Chips */}
+          {STATUS_CHIP_OPTIONS.map((opt) => {
+            const isSelected = selectedStatuses.has(opt.id);
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => handleToggleStatus(opt.id)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all border ${
+                  isSelected
+                    ? `${opt.activeBg} ${opt.activeText} ${opt.activeBorder} shadow-2xs ring-2 ${opt.activeRing}`
+                    : "bg-white dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700"
+                }`}
               >
-                <option value="all">All 6 Statuses</option>
-                <option value="submitted">Submitted</option>
-                <option value="processing">Processing</option>
-                <option value="partially_shipped">Partially Shipped</option>
-                <option value="shipped">Shipped</option>
-                <option value="partially_cancelled">Partially Cancelled</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+                <span>{opt.icon}</span>
+                <span>{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Row 3: Date Presets & Pickers, Payment Status, Mode & Apply Button */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            {/* Always Visible Date Pickers & Presets */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-zinc-500 mr-0.5">Date:</span>
+              {(["all", "today", "7d", "30d"] as const).map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => handleSelectDatePreset(preset)}
+                  className={`px-2 py-1 rounded-md text-[11px] font-bold transition-colors ${
+                    datePreset === preset
+                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-2xs"
+                      : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
+                  }`}
+                >
+                  {preset === "all" ? "All" : preset === "today" ? "Today" : preset === "7d" ? "7 Days" : "30 Days"}
+                </button>
+              ))}
+
+              {/* From and To Date Inputs ALWAYS VISIBLE Side-by-Side */}
+              <div className="flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-800/80 px-2 py-1 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase">From:</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => handleDateInputChange(e.target.value, endDate)}
+                  onClick={(e) => {
+                    try {
+                      e.currentTarget.showPicker?.();
+                    } catch {}
+                  }}
+                  className="w-28 px-1.5 py-0.5 text-[11px] rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
+                />
+                <span className="text-zinc-400 text-xs">→</span>
+                <span className="text-[10px] font-bold text-zinc-500 uppercase">To:</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => handleDateInputChange(startDate, e.target.value)}
+                  onClick={(e) => {
+                    try {
+                      e.currentTarget.showPicker?.();
+                    } catch {}
+                  }}
+                  className="w-28 px-1.5 py-0.5 text-[11px] rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
+                />
+              </div>
             </div>
 
             {/* Payment Status Dropdown */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 pl-2 border-l border-zinc-200 dark:border-zinc-700">
               <span className="text-[11px] font-semibold text-zinc-500">Payment:</span>
               <select
                 value={paymentStatus}
@@ -751,65 +972,6 @@ export function AdminOrdersTable({
               </select>
             </div>
 
-            {/* Date Preset Buttons */}
-            <div className="flex items-center gap-1 pl-2 border-l border-zinc-200 dark:border-zinc-700">
-              <span className="text-[11px] font-semibold text-zinc-500 mr-1">Date:</span>
-              {(["all", "today", "7d", "30d", "custom"] as const).map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => {
-                    setDatePreset(preset);
-                    if (preset !== "custom") {
-                      setStartDate("");
-                      setEndDate("");
-                      executeQuery({ datePreset: preset, startDate: "", endDate: "", page: 1 });
-                    }
-                  }}
-                  className={`px-2 py-1 rounded-md text-[11px] font-bold transition-colors ${
-                    datePreset === preset
-                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                      : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
-                  }`}
-                >
-                  {preset === "all"
-                    ? "All"
-                    : preset === "today"
-                    ? "Today"
-                    : preset === "7d"
-                    ? "7 Days"
-                    : preset === "30d"
-                    ? "30 Days"
-                    : "Custom"}
-                </button>
-              ))}
-            </div>
-
-            {/* Real From & To Date Pickers (Custom) */}
-            {datePreset === "custom" && (
-              <div className="flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-800/80 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => {
-                    setStartDate(e.target.value);
-                    executeQuery({ startDate: e.target.value, page: 1 });
-                  }}
-                  className="px-2 py-1 text-[11px] rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                />
-                <span className="text-zinc-400 text-xs">to</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => {
-                    setEndDate(e.target.value);
-                    executeQuery({ endDate: e.target.value, page: 1 });
-                  }}
-                  className="px-2 py-1 text-[11px] rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                />
-              </div>
-            )}
-
             {/* Test Mode Selector */}
             <div className="flex items-center gap-1 pl-2 border-l border-zinc-200 dark:border-zinc-700">
               <span className="text-[11px] font-semibold text-zinc-500 mr-1">Mode:</span>
@@ -824,8 +986,8 @@ export function AdminOrdersTable({
                   className={`px-2 py-1 rounded-md text-[11px] font-bold transition-colors ${
                     testMode === mode
                       ? mode === "test"
-                        ? "bg-amber-600 text-white"
-                        : "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
+                        ? "bg-amber-600 text-white shadow-2xs"
+                        : "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-2xs"
                       : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
                   }`}
                 >
@@ -940,6 +1102,12 @@ export function AdminOrdersTable({
                     Date & Activity {sortBy === "created_at" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
                   <th
+                    className="py-3 px-3 text-center cursor-pointer hover:text-zinc-900 dark:hover:text-white"
+                    onClick={() => handleSort("days_open")}
+                  >
+                    Days Open {sortBy === "days_open" && (sortDirection === "asc" ? "▲" : "▼")}
+                  </th>
+                  <th
                     className="py-3 px-3 cursor-pointer hover:text-zinc-900 dark:hover:text-white"
                     onClick={() => handleSort("retailer")}
                   >
@@ -1028,6 +1196,25 @@ export function AdminOrdersTable({
                         </span>
                       </td>
 
+                      {/* Days Open */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        {ord.isCompleted || ord.daysOpen === null ? (
+                          <span className="text-zinc-400 text-xs font-mono">—</span>
+                        ) : ord.daysOpen >= 7 ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30 animate-pulse">
+                            {ord.daysOpen}d
+                          </span>
+                        ) : ord.daysOpen >= 3 ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                            {ord.daysOpen}d
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                            {ord.daysOpen}d
+                          </span>
+                        )}
+                      </td>
+
                       {/* Retailer & Destination */}
                       <td className="py-3 px-3">
                         <div className="font-semibold text-zinc-900 dark:text-white leading-tight">
@@ -1092,17 +1279,72 @@ export function AdminOrdersTable({
 
                       {/* Tracking & Cartons */}
                       <td className="py-3 px-3 text-center">
-                        <div className="flex flex-col items-center gap-1">
-                          <PackagesPopover
-                            packages={ord.packages}
-                            orderNumber={ord.orderNumber}
-                          />
-                          {ord.hasMissingTracking && (
-                            <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">
-                              ⚠️ Tracking Needed
+                        {!ord.hasConfirmedDispatch ? (
+                          <span className="text-zinc-400 text-xs italic">— Not Shipped</span>
+                        ) : ord.untrackedDispatchesCount > 0 ? (
+                          <div className="flex flex-col items-center gap-1">
+                            {ord.packages.length > 0 && (
+                              <PackagesPopover
+                                packages={ord.packages}
+                                orderNumber={ord.orderNumber}
+                              />
+                            )}
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                              ⚠️ {ord.untrackedDispatchesCount} {ord.untrackedDispatchesCount === 1 ? "Dispatch" : "Dispatches"} Missing Track
                             </span>
-                          )}
-                        </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const untracked =
+                                  ord.dispatches.find((d) => d.status !== "cancelled" && !d.isTrackingComplete) ||
+                                  ord.dispatches[0];
+                                if (untracked) {
+                                  setTrackingModalState({
+                                    fulfillmentId: untracked.id,
+                                    fulfillmentNumber: untracked.fulfillmentNumber,
+                                    orderNumber: ord.orderNumber,
+                                    currentBoxes: untracked.boxes,
+                                    currentNotes: untracked.notes,
+                                  });
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-2xs transition-colors"
+                            >
+                              + Add Track
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="flex items-center gap-1.5">
+                              <PackagesPopover
+                                packages={ord.packages}
+                                orderNumber={ord.orderNumber}
+                              />
+                              {ord.dispatches.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const target = ord.dispatches[ord.dispatches.length - 1] || ord.dispatches[0];
+                                    setTrackingModalState({
+                                      fulfillmentId: target.id,
+                                      fulfillmentNumber: target.fulfillmentNumber,
+                                      orderNumber: ord.orderNumber,
+                                      currentBoxes: target.boxes,
+                                      currentNotes: target.notes,
+                                    });
+                                  }}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                                  title="Edit Tracking / Boxes"
+                                >
+                                  ✏️ Edit
+                                </button>
+                              )}
+                            </div>
+                            <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
+                              ✓ All Tracked
+                            </span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Invoice & Terms */}
@@ -1154,19 +1396,12 @@ export function AdminOrdersTable({
                           >
                             {ord.totalShippedUnits === 0 ? "Process Order ⚡" : `Ship Rem (${ord.totalRemainingUnits}) 📦`}
                           </Link>
-                        ) : ord.hasMissingTracking ? (
-                          <Link
-                            href={`/admin/sales/orders/${ord.id}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-2xs transition-colors"
-                          >
-                            Add Track ⚠️
-                          </Link>
                         ) : (
                           <Link
                             href={`/admin/sales/orders/${ord.id}`}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 transition-colors"
                           >
-                            View ↗
+                            View Details ↗
                           </Link>
                         )}
                       </td>
@@ -1242,6 +1477,23 @@ export function AdminOrdersTable({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 6. In-place Multi-Box Tracking Modal */}
+      {trackingModalState && (
+        <EditTrackingModal
+          isOpen={Boolean(trackingModalState)}
+          fulfillmentId={trackingModalState.fulfillmentId}
+          fulfillmentNumber={trackingModalState.fulfillmentNumber}
+          orderNumber={trackingModalState.orderNumber}
+          currentBoxes={trackingModalState.currentBoxes}
+          currentNotes={trackingModalState.currentNotes}
+          onClose={() => setTrackingModalState(null)}
+          onSuccess={() => {
+            setTrackingModalState(null);
+            executeQuery();
+          }}
+        />
       )}
     </div>
   );

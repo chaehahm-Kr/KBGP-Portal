@@ -57,3 +57,40 @@ export function computeAuthoritativeOrderStatus(
 
   return "submitted";
 }
+
+/**
+ * Checks whether an order is operationally completed according to the 4-way quantity invariant:
+ * Ordered = Shipped + Cancelled + Remaining (where Remaining === 0).
+ * Zero-unit orders are only completed if cancelled, preventing 0/0 arithmetic from marking processing orders as completed.
+ */
+export function isOrderOperationallyCompleted(ord: {
+  orderStatus: ApprovedOrderStatus;
+  totalOrderedUnits: number;
+  totalShippedUnits: number;
+  totalCancelledUnits: number;
+  totalRemainingUnits: number;
+}): boolean {
+  if (ord.totalOrderedUnits === 0) {
+    return ord.orderStatus === "cancelled";
+  }
+  if (ord.totalRemainingUnits > 0) {
+    return false;
+  }
+  if (ord.totalShippedUnits + ord.totalCancelledUnits !== ord.totalOrderedUnits) {
+    return false;
+  }
+  return ["shipped", "cancelled", "partially_cancelled"].includes(ord.orderStatus);
+}
+
+/**
+ * Calculates whole calendar days open in UTC since order submission.
+ */
+export function calculateDaysOpenNumber(createdAt: string): number {
+  const createdDate = new Date(createdAt);
+  const now = new Date();
+  const utcCreated = Date.UTC(createdDate.getUTCFullYear(), createdDate.getUTCMonth(), createdDate.getUTCDate());
+  const utcNow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const diff = Math.floor((utcNow - utcCreated) / (1000 * 60 * 60 * 24));
+  return Math.max(0, diff);
+}
+

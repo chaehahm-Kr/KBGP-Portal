@@ -98,6 +98,21 @@ export interface AdminOrderLineItem {
   cancelledAt?: string | null;
 }
 
+export interface AdminOrderDispatchSummary {
+  id: string;
+  fulfillmentNumber: string;
+  status: "pending" | "processing" | "shipped" | "delivered" | "cancelled";
+  carrier: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  boxCount: number;
+  shippedAt: string | null;
+  notes?: string | null;
+  createdAt: string;
+  boxes: AdminOrderBox[];
+  isTrackingComplete: boolean;
+}
+
 export interface AdminOrderInvoiceSummary {
   id: string;
   invoiceNumber: string;
@@ -139,6 +154,11 @@ export interface AdminRetailerOrderSummary {
   totalRemainingUnits: number;
   totalBoxCount: number;
   packages: AdminOrderPackage[];
+  dispatches: AdminOrderDispatchSummary[];
+  untrackedDispatchesCount: number;
+  hasConfirmedDispatch: boolean;
+  daysOpen: number | null;
+  isCompleted: boolean;
   invoices: AdminOrderInvoiceSummary[];
   cancellationRequested: boolean;
   refundAmount: number;
@@ -186,7 +206,7 @@ export interface AdminOrderFilter {
   quickFilter?: "all" | "new" | "ready" | "partially_shipped" | "on_hold" | "tracking_missing" | "completed";
   search?: string;
   sku?: string;
-  status?: string;
+  status?: string | string[];
   paymentStatus?: string;
   companyId?: string;
   storeId?: string;
@@ -194,7 +214,7 @@ export interface AdminOrderFilter {
   endDate?: string;
   datePreset?: "all" | "today" | "7d" | "30d" | "custom";
   testMode?: "all" | "live" | "test";
-  sortBy?: "created_at" | "updated_at" | "order_number" | "retailer" | "remaining" | "total";
+  sortBy?: "created_at" | "updated_at" | "order_number" | "retailer" | "remaining" | "total" | "days_open";
   sortDirection?: "asc" | "desc";
   page?: number;
   pageSize?: number;

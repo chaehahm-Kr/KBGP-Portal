@@ -169,9 +169,23 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
               </span>
             )}
           </div>
-          <p className="text-xs text-zinc-500">
-            Placed on {new Date(order.createdAt).toLocaleString()} • Retailer:{" "}
-            <strong>{order.companyName}</strong>
+          <p className="text-xs text-zinc-500 flex items-center gap-1.5 flex-wrap">
+            <span>
+              Placed on {new Date(order.createdAt).toLocaleString()} • Retailer: <strong>{order.companyName}</strong>
+            </span>
+            {order.daysOpen !== null && order.daysOpen !== undefined && (
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  order.daysOpen >= 7
+                    ? "bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30 animate-pulse"
+                    : order.daysOpen >= 3
+                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30"
+                    : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+                }`}
+              >
+                ⏱ {order.daysOpen} {order.daysOpen === 1 ? "day" : "days"} open
+              </span>
+            )}
           </p>
         </div>
 
