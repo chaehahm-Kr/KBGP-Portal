@@ -93,7 +93,7 @@ export function RetailerHeader({
 
   return (
     <>
-      <header className="sticky top-0 z-40 h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between">
+      <header className="sticky top-0 z-40 h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between">
         {/* Left: Mobile Logo & Title or Desktop Store Info */}
         <div className="flex items-center gap-3">
           {/* Mobile Menu Button */}
@@ -137,7 +137,7 @@ export function RetailerHeader({
         </div>
 
         {/* Right Actions: Cart, Language Toggle, Theme Toggle & User Menu */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           {/* Language Toggle (Desktop Header) */}
           <LanguageToggle variant="compact" />
 

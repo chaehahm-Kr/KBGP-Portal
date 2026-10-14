@@ -787,18 +787,18 @@ export function RetailerOrdersList({
             <table className="w-full text-left text-xs table-auto">
               <thead className="bg-zinc-50/80 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 uppercase tracking-wider font-semibold text-[10px]">
                 <tr>
-                  <th className="py-2.5 px-2.5 whitespace-nowrap">Order #</th>
-                  <th className="py-2.5 px-2 whitespace-nowrap">Date</th>
-                  <th className="py-2.5 px-2.5 whitespace-nowrap">Destination</th>
-                  <th className="py-2.5 px-1.5 text-center whitespace-nowrap">SKUs</th>
-                  <th className="py-2.5 px-1.5 text-center whitespace-nowrap">Units</th>
-                  <th className="py-2.5 px-1.5 text-center whitespace-nowrap">Shipped</th>
-                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Tracking</th>
-                  <th className="py-2.5 px-2.5 whitespace-nowrap">Status</th>
-                  <th className="py-2.5 px-2 whitespace-nowrap">Payment</th>
-                  <th className="py-2.5 px-2.5 whitespace-nowrap">Invoice</th>
-                  <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Total</th>
-                  <th className="py-2.5 px-2.5 text-right whitespace-nowrap">{t.common.actions}</th>
+                  <th className="py-2.5 px-2 whitespace-nowrap">Order #</th>
+                  <th className="py-2.5 px-1.5 whitespace-nowrap">Date</th>
+                  <th className="py-2.5 px-2 whitespace-nowrap">Destination</th>
+                  <th className="py-2.5 px-1 text-center whitespace-nowrap">SKUs</th>
+                  <th className="py-2.5 px-1 text-center whitespace-nowrap">Units</th>
+                  <th className="py-2.5 px-1 text-center whitespace-nowrap">Shipped</th>
+                  <th className="py-2.5 px-1.5 text-center whitespace-nowrap">Tracking</th>
+                  <th className="py-2.5 px-2 whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-1.5 whitespace-nowrap">Payment</th>
+                  <th className="py-2.5 px-2 whitespace-nowrap">Invoice</th>
+                  <th className="py-2.5 px-2 text-right whitespace-nowrap">Total</th>
+                  <th className="py-2.5 px-2 text-right whitespace-nowrap">{t.common.actions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
@@ -811,7 +811,7 @@ export function RetailerOrdersList({
                       className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/40 transition-colors"
                     >
                       {/* Order # (Never wrap, single line) */}
-                      <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <td className="py-2.5 px-2 whitespace-nowrap">
                         <div className="flex items-center gap-1.5 whitespace-nowrap">
                           <Link
                             href={`/orders/${order.orderNumber}`}
@@ -828,12 +828,12 @@ export function RetailerOrdersList({
                       </td>
 
                       {/* Order Date (Single line) */}
-                      <td className="py-2.5 px-2 text-zinc-600 dark:text-zinc-400 whitespace-nowrap text-xs">
+                      <td className="py-2.5 px-1.5 text-zinc-600 dark:text-zinc-400 whitespace-nowrap text-xs">
                         {formatDate(order.createdAt)}
                       </td>
 
                       {/* Destination (Single line with controlled ellipsis) */}
-                      <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <td className="py-2.5 px-2 whitespace-nowrap">
                         <div className="flex items-center gap-1 max-w-[140px] xl:max-w-[200px]">
                           <span
                             className="font-semibold text-zinc-900 dark:text-white truncate"
@@ -848,22 +848,22 @@ export function RetailerOrdersList({
                       </td>
 
                       {/* SKUs */}
-                      <td className="py-2.5 px-1.5 text-center whitespace-nowrap font-extrabold text-zinc-900 dark:text-white">
+                      <td className="py-2.5 px-1 text-center whitespace-nowrap font-extrabold text-zinc-900 dark:text-white">
                         {order.totalSkusCount}
                       </td>
 
                       {/* Units */}
-                      <td className="py-2.5 px-1.5 text-center whitespace-nowrap font-medium text-zinc-600 dark:text-zinc-400">
+                      <td className="py-2.5 px-1 text-center whitespace-nowrap font-medium text-zinc-600 dark:text-zinc-400">
                         {order.totalItemsCount.toLocaleString()}
                       </td>
 
                       {/* Shipped Qty */}
-                      <td className="py-2.5 px-1.5 text-center whitespace-nowrap font-semibold text-zinc-900 dark:text-white">
+                      <td className="py-2.5 px-1 text-center whitespace-nowrap font-semibold text-zinc-900 dark:text-white">
                         {order.totalShippedUnits || 0}
                       </td>
 
                       {/* Tracking */}
-                      <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                      <td className="py-2.5 px-1.5 text-center whitespace-nowrap">
                         <TrackingPopover
                           orderNumber={order.orderNumber}
                           packages={order.packages as any}
@@ -872,11 +872,11 @@ export function RetailerOrdersList({
                       </td>
 
                       {/* Unified Status */}
-                      <td className="py-2.5 px-2.5 whitespace-nowrap">
-                        <div className="flex items-center gap-1">
+                      <td className="py-2.5 px-2 whitespace-nowrap">
+                        <div className="flex flex-col items-start gap-0.5">
                           {getStatusBadge(order.orderStatus)}
                           {order.totalCancelledUnits > 0 && (
-                            <span className="text-[9px] text-orange-600 font-bold shrink-0">
+                            <span className="text-[9px] text-orange-600 font-bold leading-none">
                               ({order.totalCancelledUnits} void)
                             </span>
                           )}
@@ -884,42 +884,43 @@ export function RetailerOrdersList({
                       </td>
 
                       {/* Payment Method */}
-                      <td className="py-2.5 px-2 whitespace-nowrap">
+                      <td className="py-2.5 px-1.5 whitespace-nowrap">
                         {renderPaymentMethod(order)}
                       </td>
 
-                      {/* Invoice */}
-                      <td className="py-2.5 px-2.5 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
+                      {/* Invoice (Stacked badge and primary invoice with tooltip for secondary) */}
+                      <td className="py-2.5 px-2 whitespace-nowrap">
+                        <div className="flex flex-col items-start gap-0.5">
                           <span
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${invSummary.badgeClass}`}
+                            className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold leading-tight shrink-0 ${invSummary.badgeClass}`}
                           >
                             {invSummary.status}
                           </span>
                           {invSummary.invoiceNumbers.length > 0 && (
-                            <div className="flex items-center gap-1 text-[10px] text-zinc-500 font-mono">
-                              {invSummary.invoiceNumbers.map((num, idx) => (
-                                <Link
-                                  key={num}
-                                  href="/bills"
-                                  className="hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline"
-                                >
-                                  {num}
-                                  {idx < invSummary.invoiceNumbers.length - 1 ? "," : ""}
-                                </Link>
-                              ))}
+                            <div
+                              className="text-[10px] text-zinc-500 font-mono leading-tight hover:text-indigo-600 dark:hover:text-indigo-400"
+                              title={invSummary.invoiceNumbers.join(", ")}
+                            >
+                              <Link href="/bills" className="hover:underline">
+                                {invSummary.invoiceNumbers[0]}
+                              </Link>
+                              {invSummary.invoiceNumbers.length > 1 && (
+                                <span className="ml-1 text-[9px] font-sans font-semibold text-zinc-400">
+                                  +{invSummary.invoiceNumbers.length - 1}
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
                       </td>
 
                       {/* Total Amount */}
-                      <td className="py-2.5 px-2.5 text-right font-extrabold text-zinc-900 dark:text-white text-xs whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-right font-extrabold text-zinc-900 dark:text-white text-xs whitespace-nowrap">
                         ${order.totalAmount.toFixed(2)}
                       </td>
 
                       {/* Actions */}
-                      <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-right whitespace-nowrap">
                         <Link
                           href={`/orders/${order.orderNumber}`}
                           className="inline-flex items-center gap-0.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
