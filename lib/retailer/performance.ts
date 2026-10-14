@@ -6,10 +6,17 @@ import { formatCategoryName } from "@/lib/retailer/products";
 import { getRetailerAccessibleStores } from "@/lib/retailer/weekly-check";
 import { getFulfillmentSettings } from "@/lib/settings/fulfillment-settings";
 import { DEFAULT_ESTIMATED_SHIPPING_DAYS } from "@/lib/settings/fulfillment-constants";
+import { resolveAuthoritativeProductImages } from "@/lib/retailer/product-images";
 
-export const TARGET_WEEKS_OF_SUPPLY = 4; // Centralized configurable V1 target
+/**
+ * @deprecated Legacy target constant kept for backward compatibility with external admin callers.
+ * Product Performance P3 uses dynamic selectable coverage (30d / 60d).
+ */
+export const TARGET_WEEKS_OF_SUPPLY = 4;
 
 export type ReportingPeriod = "7d" | "30d" | "90d" | "all";
+export type ReorderCoverage = "30d" | "60d";
+export const DEFAULT_REORDER_COVERAGE: ReorderCoverage = "30d";
 
 export type MovementStatus = "normal" | "baseline" | "provisional" | "variance" | "no_data";
 export type ReorderSignal = "reorder_needed" | "sufficient_stock" | "overstock" | "insufficient_data" | "needs_review";
@@ -22,6 +29,8 @@ export interface StorePerformanceBreakdown {
   estimatedMovement: number;
   movementStatus: MovementStatus;
   avgWeeklyMovement: number;
+  dailyVelocity: number;
+  totalObservedDays: number;
   approxWeeksOfSupply: number | null;
   usableWeeksCount: number;
   lastReportDate: string | null;
@@ -37,6 +46,13 @@ export interface StorePerformanceBreakdown {
   incomingQty: number;
   nextEstimatedReceiptDate: string | null;
   dataReliability: "verified" | "estimated";
+
+  // P3: Time-Aware Post-Report Estimated Receipts & Safe Reorder
+  postReportEstimatedReceipts: number;
+  projectedAvailableStock: number | null;
+  targetDemand: number;
+  rawReorderNeed: number;
+  suggestedReorderQty: number;
 }
 
 export interface ProductPerformanceItem {
@@ -60,7 +76,9 @@ export interface ProductPerformanceItem {
   movementStatus: MovementStatus;
   provisionalMovement: number;
   usableWeeksCount: number;
+  totalObservedDays: number;
   averageWeeklyMovement: number;
+  dailyVelocity: number;
   hasNegativeVariance: boolean;
   varianceCount: number;
 
@@ -81,12 +99,17 @@ export interface ProductPerformanceItem {
   estimatedGrossMargin: number;
   isFinancialsHidden: boolean;
 
-  // Supply & Reorder
+  // P3: Supply, Coverage & Reorder
   approxWeeksOfSupply: number | null;
+  coverage: ReorderCoverage;
+  coverageDays: number;
   targetWeeksOfSupply: number;
-  targetQty: number;
+  targetDemand: number;
+  postReportEstimatedReceipts: number;
+  projectedAvailableStock: number | null;
   rawReorderNeed: number;
   suggestedReorderQty: number;
+  suggestedCases: number;
   reorderSignal: ReorderSignal;
   reorderConfidence: ReorderConfidence;
   isOrderable: boolean;
@@ -99,6 +122,7 @@ export interface PerformanceDashboardData {
   companyId: string;
   userRole: string;
   selectedPeriod: ReportingPeriod;
+  selectedCoverage: ReorderCoverage;
   selectedStoreId: string | "all";
   stores: Array<{ id: string; name: string }>;
   
@@ -124,6 +148,7 @@ export interface PerformanceDashboardData {
     defaultShippingDays: number;
     priceBasisNotice: string;
     isFinancialsHidden: boolean;
+    coverageDays: number;
   };
 
   // Product List
@@ -158,7 +183,8 @@ function getPeriodCutoffDate(period: ReportingPeriod): Date | null {
  */
 export async function getRetailerPerformanceData(
   period: ReportingPeriod = "30d",
-  storeIdFilter: string = "all"
+  storeIdFilter: string = "all",
+  coverage: ReorderCoverage = "30d"
 ): Promise<PerformanceDashboardData> {
   const session = await verifyRetailerSession();
   const adminClient = createAdminClient();
@@ -389,6 +415,14 @@ export async function getRetailerPerformanceData(
 
   const productStoreFlows = new Map<string, Map<string, StoreInventoryFlow>>();
 
+  interface ProductStoreDispatch {
+    estDateStr: string | null;
+    qty: number;
+    isReceived: boolean;
+  }
+
+  const productStoreDispatches = new Map<string, Map<string, ProductStoreDispatch[]>>();
+
   const getOrCreateFlow = (pId: string, sId: string): StoreInventoryFlow => {
     if (!productStoreFlows.has(pId)) {
       productStoreFlows.set(pId, new Map());
@@ -465,6 +499,19 @@ export async function getRetailerPerformanceData(
       const qty = Number(fi.quantity_shipped) || 0;
       const flow = getOrCreateFlow(pId, sId);
       flow.confirmedShippedQty += qty;
+
+      if (!productStoreDispatches.has(pId)) {
+        productStoreDispatches.set(pId, new Map());
+      }
+      const pDispMap = productStoreDispatches.get(pId)!;
+      if (!pDispMap.has(sId)) {
+        pDispMap.set(sId, []);
+      }
+      pDispMap.get(sId)!.push({
+        estDateStr,
+        qty,
+        isReceived,
+      });
 
       if (isReceived) {
         flow.estimatedReceivedQty += qty;
@@ -576,7 +623,11 @@ export async function getRetailerPerformanceData(
   // Collect all eligible product IDs (union of assortment, checks, and orders)
   const allProductIds = Array.from(productAssociatedStoreIds.keys());
 
-  // 7. Process Performance Metrics per Product
+  // 7. Authoritative Image Resolution & Target Coverage Settings
+  const imageMap = await resolveAuthoritativeProductImages(adminClient, allProductIds);
+  const coverageDays = coverage === "60d" ? 60 : 30;
+
+  // 8. Process Performance Metrics per Product
   const productPerformanceList: ProductPerformanceItem[] = [];
 
   for (const productId of Array.from(allProductIds)) {
@@ -619,20 +670,8 @@ export async function getRetailerPerformanceData(
 
     const cartonPackQty = Math.max(1, overrides.carton_pack_qty || rawProd.carton_pack_qty || 1);
 
-    // Image signing
-    const rawImages = (rawProd.product_images as any[]) || [];
-    const sortedImages = [...rawImages].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-    let thumbnailUrl: string | null = null;
-    if (sortedImages.length > 0 && sortedImages[0].storage_path) {
-      try {
-        const { data: signed } = await adminClient.storage
-          .from("company-uploads")
-          .createSignedUrl(sortedImages[0].storage_path, 3600);
-        thumbnailUrl = signed?.signedUrl || null;
-      } catch {
-        // ignore
-      }
-    }
+    // Authoritative Product Image
+    const thumbnailUrl = imageMap[productId]?.primaryUrl || null;
 
     // Evaluate Store Snapshots for this product
     const storeBreakdowns: StorePerformanceBreakdown[] = [];
@@ -642,8 +681,10 @@ export async function getRetailerPerformanceData(
     let companyTotalMovement = 0;
     let companyProvisionalMovement = 0;
     let companyUsableWeeks = 0;
+    let companyTotalObservedDays = 0;
     let companyVarianceCount = 0;
     let companyTotalSales = 0;
+    let companyTotalPostReportReceipts = 0;
     let hasAnyCount = false;
     let isAllBaseline = true;
     let hasTaggedPriceSnapshot = false;
@@ -680,6 +721,8 @@ export async function getRetailerPerformanceData(
           estimatedMovement: 0,
           movementStatus: "no_data",
           avgWeeklyMovement: 0,
+          dailyVelocity: 0,
+          totalObservedDays: 0,
           approxWeeksOfSupply: null,
           usableWeeksCount: 0,
           lastReportDate: null,
@@ -694,6 +737,12 @@ export async function getRetailerPerformanceData(
           incomingQty: storeFlow.incomingQty,
           nextEstimatedReceiptDate: storeFlow.nextEstimatedReceiptDate,
           dataReliability: storeFlow.hasLegacyDispatch ? "estimated" : "verified",
+
+          postReportEstimatedReceipts: 0,
+          projectedAvailableStock: null,
+          targetDemand: 0,
+          rawReorderNeed: 0,
+          suggestedReorderQty: 0,
         });
         continue;
       }
@@ -706,12 +755,14 @@ export async function getRetailerPerformanceData(
       // Calculate movements across consecutive intervals in this store
       let storeMovement = 0;
       let storeUsableWeeks = 0;
+      let storeObservedDays = 0;
       let storeVarianceCount = 0;
       let storeMovementStatus: MovementStatus = "baseline";
 
-      for (const snap of snapshots) {
+      for (let i = 0; i < snapshots.length; i++) {
+        const snap = snapshots[i];
         if (snap.previousReported === null) {
-          // Baseline check -> No movement calculation
+          // Baseline check -> Starting stock, not a sales interval
           continue;
         }
 
@@ -719,6 +770,14 @@ export async function getRetailerPerformanceData(
         const prev = snap.previousReported;
         const curr = snap.reportedRemaining;
         const delivered = snap.deliveredSincePrevious;
+
+        let intervalDays = 7;
+        if (i > 0 && snapshots[i - 1].reportDate && snap.reportDate) {
+          const pTime = new Date(snapshots[i - 1].reportDate).getTime();
+          const cTime = new Date(snap.reportDate).getTime();
+          const diff = Math.round((cTime - pTime) / 86400000);
+          if (diff > 0) intervalDays = diff;
+        }
 
         let intervalMovement: number;
 
@@ -738,11 +797,10 @@ export async function getRetailerPerformanceData(
           // Negative / Unusual movement (Variance)
           storeVarianceCount += 1;
           storeMovementStatus = "variance";
-          // Defensible aggregation rule: do not let unresolved negative error depress legitimate movement
-          // We flag the variance count and do not add negative to total sales movement
         } else {
           storeMovement += intervalMovement;
           storeUsableWeeks += 1;
+          storeObservedDays += intervalDays;
 
           // Resolve effective unit selling price for this specific interval
           const unitSellingPrice =
@@ -758,13 +816,40 @@ export async function getRetailerPerformanceData(
         }
       }
 
-      const storeAvgWeekly = storeUsableWeeks > 0 ? Number((storeMovement / storeUsableWeeks).toFixed(1)) : 0;
+      // Time-aware Post-Report Estimated Receipts for this store
+      let storePostReportReceipts = 0;
+      const storeDispatches = productStoreDispatches.get(productId)?.get(store.id) || [];
+      for (const disp of storeDispatches) {
+        if (
+          disp.isReceived &&
+          disp.estDateStr &&
+          latestSnapshot.reportDate &&
+          disp.estDateStr > latestSnapshot.reportDate
+        ) {
+          storePostReportReceipts += disp.qty;
+        }
+      }
+
+      const storeDailyVelocity =
+        storeObservedDays > 0 ? Number((storeMovement / storeObservedDays).toFixed(2)) : 0;
+      const storeAvgWeekly =
+        storeUsableWeeks > 0 ? Number((storeMovement / storeUsableWeeks).toFixed(1)) : 0;
       const storeWeeksSupply =
         storeAvgWeekly > 0 ? Number((latestRemaining / storeAvgWeekly).toFixed(1)) : null;
 
+      const storeTargetDemand = Math.ceil(storeDailyVelocity * coverageDays);
+      const storeProjectedStock =
+        latestRemaining + storePostReportReceipts + storeFlow.incomingQty;
+      const storeRawReorder =
+        storeUsableWeeks > 0 ? Math.max(0, storeTargetDemand - storeProjectedStock) : 0;
+      const storeSuggestedReorder =
+        storeRawReorder > 0 ? Math.ceil(storeRawReorder / cartonPackQty) * cartonPackQty : 0;
+
       companyTotalMovement += storeMovement;
       companyUsableWeeks += storeUsableWeeks;
+      companyTotalObservedDays += storeObservedDays;
       companyVarianceCount += storeVarianceCount;
+      companyTotalPostReportReceipts += storePostReportReceipts;
 
       storeBreakdowns.push({
         storeId: store.id,
@@ -773,6 +858,8 @@ export async function getRetailerPerformanceData(
         estimatedMovement: storeMovement,
         movementStatus: storeMovementStatus,
         avgWeeklyMovement: storeAvgWeekly,
+        dailyVelocity: storeDailyVelocity,
+        totalObservedDays: storeObservedDays,
         approxWeeksOfSupply: storeWeeksSupply,
         usableWeeksCount: storeUsableWeeks,
         lastReportDate: latestSnapshot.reportDate,
@@ -787,6 +874,12 @@ export async function getRetailerPerformanceData(
         incomingQty: storeFlow.incomingQty,
         nextEstimatedReceiptDate: storeFlow.nextEstimatedReceiptDate,
         dataReliability: storeFlow.hasLegacyDispatch ? "estimated" : "verified",
+
+        postReportEstimatedReceipts: storePostReportReceipts,
+        projectedAvailableStock: storeProjectedStock,
+        targetDemand: storeTargetDemand,
+        rawReorderNeed: storeRawReorder,
+        suggestedReorderQty: storeSuggestedReorder,
       });
     }
 
@@ -804,9 +897,14 @@ export async function getRetailerPerformanceData(
       }
     }
 
-    // Velocity & Average Weekly Movement
+    // Velocity & Average Daily / Weekly Movement
     const averageWeeklyMovement =
       companyUsableWeeks > 0 ? Number((companyTotalMovement / companyUsableWeeks).toFixed(1)) : 0;
+
+    const companyDailyVelocity =
+      companyTotalObservedDays > 0
+        ? Number((companyTotalMovement / companyTotalObservedDays).toFixed(2))
+        : 0;
 
     // Approx Weeks of Supply
     const approxWeeksOfSupply =
@@ -857,19 +955,27 @@ export async function getRetailerPerformanceData(
 
     const companyIncomingQty = companyPendingQty + companyInTransitQty;
 
-    // Reorder Calculations
+    // Company Projected Available Stock
     const totalReportedRemaining: number | null = hasAnyCount ? companyTotalRemaining : null;
-    const targetQty = Math.ceil(averageWeeklyMovement * TARGET_WEEKS_OF_SUPPLY);
-    
-    // Consider incoming inventory (pending + in transit) to prevent duplicate purchasing
-    const effectiveAvailableStock = (totalReportedRemaining ?? 0) + companyIncomingQty;
-    const rawReorderNeed = hasAnyCount ? Math.max(0, targetQty - effectiveAvailableStock) : 0;
+    const projectedAvailableStock: number | null = hasAnyCount
+      ? companyTotalRemaining + companyTotalPostReportReceipts + companyIncomingQty
+      : null;
+
+    // Reorder Calculations
+    const targetDemand = Math.ceil(companyDailyVelocity * coverageDays);
+
+    const rawReorderNeed =
+      companyUsableWeeks > 0 && projectedAvailableStock !== null
+        ? Math.max(0, targetDemand - projectedAvailableStock)
+        : 0;
 
     // Round UP to valid MOQ / Case Pack Multiple
     let suggestedReorderQty = 0;
     if (rawReorderNeed > 0) {
       suggestedReorderQty = Math.ceil(rawReorderNeed / cartonPackQty) * cartonPackQty;
     }
+    const suggestedCases =
+      suggestedReorderQty > 0 ? Math.ceil(suggestedReorderQty / cartonPackQty) : 0;
 
     // Reorder Confidence & Signal
     let reorderConfidence: ReorderConfidence = "insufficient_data";
@@ -888,7 +994,10 @@ export async function getRetailerPerformanceData(
       reorderSignal = "insufficient_data";
     } else if (suggestedReorderQty > 0) {
       reorderSignal = "reorder_needed";
-    } else if (approxWeeksOfSupply !== null && approxWeeksOfSupply > 8) {
+    } else if (
+      approxWeeksOfSupply !== null &&
+      approxWeeksOfSupply > (coverage === "60d" ? 12 : 8)
+    ) {
       reorderSignal = "overstock";
     } else {
       reorderSignal = "sufficient_stock";
@@ -917,7 +1026,9 @@ export async function getRetailerPerformanceData(
       movementStatus: companyMovementStatus,
       provisionalMovement: companyProvisionalMovement,
       usableWeeksCount: companyUsableWeeks,
+      totalObservedDays: companyTotalObservedDays,
       averageWeeklyMovement,
+      dailyVelocity: companyDailyVelocity,
       hasNegativeVariance: companyVarianceCount > 0,
       varianceCount: companyVarianceCount,
 
@@ -937,10 +1048,15 @@ export async function getRetailerPerformanceData(
       estimatedGrossMargin,
       isFinancialsHidden,
       approxWeeksOfSupply,
-      targetWeeksOfSupply: TARGET_WEEKS_OF_SUPPLY,
-      targetQty,
+      coverage,
+      coverageDays,
+      targetWeeksOfSupply: Math.round(coverageDays / 7),
+      targetDemand,
+      postReportEstimatedReceipts: companyTotalPostReportReceipts,
+      projectedAvailableStock,
       rawReorderNeed,
       suggestedReorderQty,
+      suggestedCases,
       reorderSignal,
       reorderConfidence,
       isOrderable,
@@ -959,7 +1075,7 @@ export async function getRetailerPerformanceData(
     return (a.productName || "").localeCompare(b.productName || "");
   });
 
-  // 7. Calculate Top Summary KPIs
+  // 9. Calculate Top Summary KPIs
   let totalEstimatedMovement = 0;
   let totalEstimatedRetailSales = 0;
   let totalEstimatedGrossProfit = 0;
@@ -989,6 +1105,7 @@ export async function getRetailerPerformanceData(
     companyId,
     userRole,
     selectedPeriod: period,
+    selectedCoverage: coverage,
     selectedStoreId: storeIdFilter,
     stores: stores.map((s) => ({ id: s.id, name: s.name })),
     dataCoverage: {
@@ -1010,6 +1127,7 @@ export async function getRetailerPerformanceData(
       defaultShippingDays,
       priceBasisNotice: "Retail sales and gross profit estimated based on Suggested Retail Price (MSRP)",
       isFinancialsHidden,
+      coverageDays,
     },
     products: productPerformanceList,
   };
@@ -1020,17 +1138,20 @@ export async function getRetailerPerformanceData(
  */
 export async function getProductPerformanceDetail(
   productId: string,
-  period: ReportingPeriod = "30d"
+  period: ReportingPeriod = "30d",
+  coverage: ReorderCoverage = "30d"
 ): Promise<{
   product: ProductPerformanceItem | null;
   stores: Array<{ id: string; name: string }>;
   userRole: string;
+  selectedCoverage: ReorderCoverage;
 }> {
-  const data = await getRetailerPerformanceData(period, "all");
+  const data = await getRetailerPerformanceData(period, "all", coverage);
   const product = data.products.find((p) => p.productId === productId) || null;
   return {
     product,
     stores: data.stores,
     userRole: data.userRole,
+    selectedCoverage: coverage,
   };
 }

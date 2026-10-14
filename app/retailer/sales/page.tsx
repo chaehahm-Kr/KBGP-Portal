@@ -1,6 +1,10 @@
 import React from "react";
 import { verifyRetailerSession } from "@/lib/auth/dal";
-import { getRetailerPerformanceData, ReportingPeriod } from "@/lib/retailer/performance";
+import {
+  getRetailerPerformanceData,
+  ReportingPeriod,
+  ReorderCoverage,
+} from "@/lib/retailer/performance";
 import { SalesPerformanceDashboard } from "@/components/retailer/sales-performance-dashboard";
 
 import type { Metadata } from "next";
@@ -16,6 +20,7 @@ interface RetailerSalesPageProps {
   searchParams: Promise<{
     period?: string;
     store?: string;
+    coverage?: string;
   }>;
 }
 
@@ -28,7 +33,10 @@ export default async function RetailerSalesPage({ searchParams }: RetailerSalesP
   const period: ReportingPeriod = validPeriods.includes(rawPeriod) ? rawPeriod : "30d";
   const storeId = resolvedParams.store || "all";
 
-  const data = await getRetailerPerformanceData(period, storeId);
+  const rawCoverage = resolvedParams.coverage as ReorderCoverage;
+  const coverage: ReorderCoverage = rawCoverage === "60d" ? "60d" : "30d";
+
+  const data = await getRetailerPerformanceData(period, storeId, coverage);
 
   return <SalesPerformanceDashboard data={data} />;
 }

@@ -1,21 +1,43 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ProductPerformanceItem, StorePerformanceBreakdown } from "@/lib/retailer/performance";
+import { useRouter } from "next/navigation";
+import {
+  ProductPerformanceItem,
+  StorePerformanceBreakdown,
+  ReorderCoverage,
+  ReorderSignal,
+} from "@/lib/retailer/performance";
 import { useCart } from "@/components/retailer/cart-context";
 
 interface ProductPerformanceDetailViewProps {
   product: ProductPerformanceItem;
   userRole: string;
+  selectedCoverage?: ReorderCoverage;
+  period?: string;
 }
 
-export function ProductPerformanceDetailView({ product, userRole }: ProductPerformanceDetailViewProps) {
+export function ProductPerformanceDetailView({
+  product,
+  userRole,
+  selectedCoverage,
+  period = "30d",
+}: ProductPerformanceDetailViewProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const { addItem } = useCart();
   const [isAdded, setIsAdded] = useState(false);
 
+  const activeCoverage: ReorderCoverage = selectedCoverage || product.coverage || "30d";
   const isFinancialsHidden = userRole === "employee";
+
+  const handleCoverageChange = (cov: ReorderCoverage) => {
+    startTransition(() => {
+      router.push(`/sales/${product.productId}?coverage=${cov}&period=${period}`);
+    });
+  };
 
   const handleAddToCart = () => {
     if (!product.isOrderable || product.suggestedReorderQty <= 0) return;
@@ -45,7 +67,7 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
       {/* Navigation Breadcrumb */}
       <div className="flex items-center justify-between gap-4">
         <Link
-          href="/sales"
+          href={`/sales?coverage=${activeCoverage}&period=${period}`}
           className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
         >
           ← Back to Performance Dashboard
@@ -63,6 +85,7 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
                 src={product.thumbnailUrl}
                 alt={product.productName}
                 fill
+                unoptimized
                 className="object-cover"
                 sizes="96px"
               />
@@ -128,17 +151,42 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
       {/* Demand & Reorder Recommendation Card */}
       <div className="rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 p-5 sm:p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-base font-bold text-purple-900 dark:text-purple-200">
                 Demand Signal & Reorder Recommendation
               </h2>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-purple-200 text-purple-900 dark:bg-purple-900 dark:text-purple-100">
-                Target: 4 Weeks Supply
-              </span>
+
+              {/* Target Coverage Toggle (30 Days | 60 Days) */}
+              <div className="inline-flex items-center gap-1 bg-white/90 dark:bg-zinc-900/90 p-0.5 rounded-xl border border-purple-200 dark:border-purple-800 shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => handleCoverageChange("30d")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
+                    activeCoverage === "30d"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                  }`}
+                >
+                  30 Days
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCoverageChange("60d")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
+                    activeCoverage === "60d"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                  }`}
+                >
+                  60 Days
+                </button>
+              </div>
+
+              <DetailReorderSignalBadge signal={product.reorderSignal} qty={product.suggestedReorderQty} />
             </div>
-            <p className="text-xs text-purple-700/80 dark:text-purple-300/80 mt-0.5">
-              Calculated from multi-store company-wide velocity and reported remaining stock.
+            <p className="text-xs text-purple-700/80 dark:text-purple-300/80">
+              {product.coverageDays}-day forward inventory target based on observed daily velocity and projected stock.
             </p>
           </div>
 
@@ -160,22 +208,24 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
         {/* Calculation Step Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-white/80 dark:bg-zinc-900/80 rounded-xl p-4 border border-purple-100 dark:border-purple-900/40 text-xs">
           <div>
-            <span className="text-[10px] uppercase font-bold text-zinc-400">Company Movement</span>
+            <span className="text-[10px] uppercase font-bold text-zinc-400">Avg. Daily Velocity</span>
             <div className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">
-              {product.movementStatus === "no_data" ? "—" : `${product.estimatedMovement} units`}
+              {product.dailyVelocity > 0 ? `${product.dailyVelocity.toFixed(2)} / day` : "—"}
             </div>
             <span className="text-[10px] text-zinc-400">
-              {product.movementStatus === "no_data" ? "No check submitted" : "Across usable periods"}
+              {product.usableWeeksCount > 0 ? `${product.averageWeeklyMovement}/wk (${product.totalObservedDays}d obs.)` : "No velocity data"}
             </span>
           </div>
 
           <div>
-            <span className="text-[10px] uppercase font-bold text-zinc-400">Avg. Velocity</span>
-            <div className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">
-              {product.averageWeeklyMovement > 0 ? `${product.averageWeeklyMovement} / wk` : "—"}
+            <span className="text-[10px] uppercase font-bold text-purple-700 dark:text-purple-300">
+              Target Demand ({product.coverageDays}d)
+            </span>
+            <div className="text-lg font-bold text-purple-700 dark:text-purple-300 mt-0.5">
+              {product.targetDemand} units
             </div>
             <span className="text-[10px] text-zinc-400">
-              {product.usableWeeksCount > 0 ? `${product.usableWeeksCount} report intervals` : "No velocity data"}
+              {product.dailyVelocity > 0 ? `${product.dailyVelocity.toFixed(2)} × ${product.coverageDays} days` : "Requires velocity"}
             </span>
           </div>
 
@@ -185,23 +235,17 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
               {product.totalReportedRemaining !== null ? `${product.totalReportedRemaining} units` : "Not Reported"}
             </div>
             <span className="text-[10px] text-zinc-400">
-              {product.approxWeeksOfSupply !== null ? `${product.approxWeeksOfSupply} wks supply` : "Supply N/A"}
+              {product.approxWeeksOfSupply !== null ? `~${product.approxWeeksOfSupply} wks on hand` : "Supply N/A"}
             </span>
           </div>
 
           <div>
-            <span className="text-[10px] uppercase font-bold text-blue-600 dark:text-blue-400">Incoming Stock</span>
+            <span className="text-[10px] uppercase font-bold text-blue-600 dark:text-blue-400">Projected Available</span>
             <div className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-              {product.incomingQty > 0 ? `+${product.incomingQty} units` : "0 units"}
+              {product.projectedAvailableStock !== null ? `${product.projectedAvailableStock} units` : "—"}
             </div>
             <span className="text-[10px] text-zinc-400">
-              {product.inTransitQty > 0 && product.pendingQty > 0
-                ? `${product.inTransitQty} transit • ${product.pendingQty} pending`
-                : product.inTransitQty > 0
-                ? `${product.inTransitQty} in transit`
-                : product.pendingQty > 0
-                ? `${product.pendingQty} pending dispatch`
-                : "No pending orders"}
+              +{product.incomingQty} incoming{product.postReportEstimatedReceipts > 0 ? ` (+${product.postReportEstimatedReceipts} post-check)` : ""}
             </span>
           </div>
 
@@ -212,18 +256,22 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
             <div className="text-lg font-extrabold text-purple-700 dark:text-purple-300 mt-0.5">
               {product.suggestedReorderQty > 0
                 ? `${product.suggestedReorderQty} units`
-                : product.movementStatus === "no_data"
+                : product.reorderConfidence === "insufficient_data" || product.movementStatus === "no_data"
                 ? "—"
-                : product.incomingQty > 0 && product.targetQty > (product.totalReportedRemaining ?? 0)
+                : product.reorderSignal === "overstock"
+                ? "0 (Overstocked)"
+                : product.incomingQty > 0 && product.targetDemand > (product.totalReportedRemaining ?? 0)
                 ? "0 (Covered)"
                 : "0 (Healthy)"}
             </div>
             <span className="text-[10px] text-purple-600/80 dark:text-purple-400/80">
               {product.suggestedReorderQty > 0
-                ? `Rounded to pack of ${product.cartonPackQty}`
-                : product.movementStatus === "no_data"
+                ? `${product.suggestedCases} case(s) (pack of ${product.cartonPackQty})`
+                : product.reorderConfidence === "insufficient_data"
                 ? "Requires weekly check counts"
-                : product.incomingQty > 0 && product.targetQty > (product.totalReportedRemaining ?? 0)
+                : product.reorderSignal === "overstock"
+                ? "Well stocked for target"
+                : product.incomingQty > 0 && product.targetDemand > (product.totalReportedRemaining ?? 0)
                 ? "Covered by incoming inventory"
                 : `Pack of ${product.cartonPackQty}`}
             </span>
@@ -429,7 +477,7 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
         </div>
         <ul className="list-disc pl-4 space-y-0.5">
           <li>
-            <strong>Estimated Retail Sales & Gross Profit:</strong> Estimated using K SELECT Suggested Retail Price (MSRP) and confidential Retailer wholesale purchase cost. Supplier FOB and sourcing costs are never used.
+            <strong>Estimated Retail Sales & Gross Profit:</strong> Estimated using K SELECT Suggested Retail Price (MSRP) and confidential Retailer wholesale purchase cost. Sourcing and FOB costs are never exposed or used.
           </li>
           <li>
             <strong>Baseline Counts:</strong> The initial weekly check for a product establishes the starting baseline stock and does not fabricate historical sales.
@@ -438,12 +486,51 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
             <strong>Provisional Movement:</strong> Interval calculation where delivery tracking is pending (<span className="italic">Previous Remaining − Current Remaining</span>).
           </li>
           <li>
-            <strong>Reorder Rules:</strong> Target quantity is calculated for a 4-week supply and automatically rounded up to the product’s valid carton case pack multiple.
+            <strong>30 / 60-Day Reorder Coverage:</strong> Target demand is calculated by multiplying observed daily velocity by the selected forward-looking coverage target (30 or 60 days). Recommended orders deduct projected available stock (reported remaining + post-report estimated receipts + incoming pending/transit) and automatically round up to the product’s valid carton case pack multiple.
+          </li>
+          <li>
+            <strong>Missing Inventory Safeguard:</strong> If no weekly inventory check has been submitted, suggested reorder remains zero and is flagged as insufficient data to prevent accidental or duplicate purchasing.
           </li>
         </ul>
       </div>
     </div>
   );
+}
+
+function DetailReorderSignalBadge({ signal, qty }: { signal: ReorderSignal; qty: number }) {
+  switch (signal) {
+    case "reorder_needed":
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-200 border border-purple-300 dark:border-purple-800">
+          🔔 Need {qty} Units
+        </span>
+      );
+    case "sufficient_stock":
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+          ✓ Stock Healthy
+        </span>
+      );
+    case "overstock":
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+          📦 Well Stocked
+        </span>
+      );
+    case "needs_review":
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+          ⚠️ Audit Variance
+        </span>
+      );
+    case "insufficient_data":
+    default:
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+          📊 Insufficient Data
+        </span>
+      );
+  }
 }
 
 function StoreStatusBadge({ status }: { status: string }) {
@@ -480,3 +567,4 @@ function StoreStatusBadge({ status }: { status: string }) {
       );
   }
 }
+

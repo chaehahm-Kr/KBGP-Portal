@@ -8,6 +8,7 @@ import {
   PerformanceDashboardData,
   ProductPerformanceItem,
   ReportingPeriod,
+  ReorderCoverage,
   MovementStatus,
   ReorderSignal,
 } from "@/lib/retailer/performance";
@@ -27,11 +28,27 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [addedProductId, setAddedProductId] = useState<string | null>(null);
 
-  const { selectedPeriod, selectedStoreId, stores, dataCoverage, summary, products } = data;
+  const {
+    selectedPeriod,
+    selectedCoverage,
+    selectedStoreId,
+    stores,
+    dataCoverage,
+    summary,
+    products,
+  } = data;
 
   const handlePeriodChange = (period: ReportingPeriod) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("period", period);
+    startTransition(() => {
+      router.push(`/sales?${params.toString()}`);
+    });
+  };
+
+  const handleCoverageChange = (coverage: ReorderCoverage) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("coverage", coverage);
     startTransition(() => {
       router.push(`/sales?${params.toString()}`);
     });
@@ -132,6 +149,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
 
           {/* Period Selector */}
           <div className="inline-flex rounded-xl bg-zinc-100 dark:bg-zinc-800/80 p-1 border border-zinc-200 dark:border-zinc-700/60">
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 pl-2 pr-1 self-center">Period:</span>
             {(
               [
                 { id: "7d", label: "7 Days" },
@@ -150,6 +168,31 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                 }`}
               >
                 {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Reorder Target Coverage Selector */}
+          <div className="inline-flex rounded-xl bg-purple-50/80 dark:bg-purple-950/40 p-1 border border-purple-200 dark:border-purple-800/60">
+            <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 pl-2 pr-1.5 flex items-center gap-1 self-center">
+              <span>🎯 Coverage:</span>
+            </span>
+            {(
+              [
+                { id: "30d", label: "30 Days" },
+                { id: "60d", label: "60 Days" },
+              ] as const
+            ).map((c) => (
+              <button
+                key={c.id}
+                onClick={() => handleCoverageChange(c.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  selectedCoverage === c.id
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "text-purple-700 dark:text-purple-300 hover:text-purple-900 dark:hover:text-purple-100"
+                }`}
+              >
+                {c.label}
               </button>
             ))}
           </div>
@@ -279,7 +322,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
             {summary.productsNeedingReorderCount} <span className="text-sm font-semibold">SKUs</span>
           </div>
           <p className="text-[10px] text-purple-600/80 dark:text-purple-400/80">
-            Below 4-week supply target
+            Below {selectedCoverage === "60d" ? "60-day" : "30-day"} supply target
           </p>
         </div>
       </div>
@@ -372,7 +415,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                       {/* Product Name & Brand */}
                       <td className="py-3.5 pl-4 pr-3">
                         <Link
-                          href={`/sales/${p.productId}`}
+                          href={`/sales/${p.productId}?coverage=${selectedCoverage}&period=${selectedPeriod}`}
                           className="flex items-center gap-3 group-hover:opacity-90"
                         >
                           <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 relative overflow-hidden flex-shrink-0 border border-zinc-200 dark:border-zinc-700/60">
@@ -381,6 +424,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                                 src={p.thumbnailUrl}
                                 alt={p.productName}
                                 fill
+                                unoptimized
                                 className="object-cover"
                                 sizes="40px"
                               />
@@ -560,6 +604,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                         src={p.thumbnailUrl}
                         alt={p.productName}
                         fill
+                        unoptimized
                         className="object-cover"
                         sizes="48px"
                       />
@@ -571,7 +616,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                   </div>
                   <div className="min-w-0 flex-1">
                     <Link
-                      href={`/sales/${p.productId}`}
+                      href={`/sales/${p.productId}?coverage=${selectedCoverage}&period=${selectedPeriod}`}
                       className="font-bold text-sm text-zinc-900 dark:text-white block hover:text-purple-600 dark:hover:text-purple-400 truncate"
                     >
                       {p.productName}
@@ -640,7 +685,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
 
                   <div className="flex items-center gap-2">
                     <Link
-                      href={`/sales/${p.productId}`}
+                      href={`/sales/${p.productId}?coverage=${selectedCoverage}&period=${selectedPeriod}`}
                       className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200"
                     >
                       Breakdown →

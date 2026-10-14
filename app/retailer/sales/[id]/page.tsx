@@ -2,7 +2,11 @@ import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { verifyRetailerSession } from "@/lib/auth/dal";
-import { getProductPerformanceDetail, ReportingPeriod } from "@/lib/retailer/performance";
+import {
+  getProductPerformanceDetail,
+  ReportingPeriod,
+  ReorderCoverage,
+} from "@/lib/retailer/performance";
 import { ProductPerformanceDetailView } from "@/components/retailer/product-performance-detail-view";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +17,7 @@ interface ProductPerformanceDetailPageProps {
   }>;
   searchParams: Promise<{
     period?: string;
+    coverage?: string;
   }>;
 }
 
@@ -28,7 +33,14 @@ export default async function ProductPerformanceDetailPage({
   const rawPeriod = resolvedSearchParams.period as ReportingPeriod;
   const period: ReportingPeriod = validPeriods.includes(rawPeriod) ? rawPeriod : "30d";
 
-  const { product, userRole } = await getProductPerformanceDetail(productId, period);
+  const rawCoverage = resolvedSearchParams.coverage as ReorderCoverage;
+  const coverage: ReorderCoverage = rawCoverage === "60d" ? "60d" : "30d";
+
+  const { product, userRole, selectedCoverage } = await getProductPerformanceDetail(
+    productId,
+    period,
+    coverage
+  );
 
   if (!product) {
     return (
@@ -44,7 +56,7 @@ export default async function ProductPerformanceDetailPage({
         </p>
         <div className="pt-2">
           <Link
-            href="/sales"
+            href={`/sales?coverage=${coverage}&period=${period}`}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
           >
             ← Back to Performance Dashboard
@@ -54,5 +66,12 @@ export default async function ProductPerformanceDetailPage({
     );
   }
 
-  return <ProductPerformanceDetailView product={product} userRole={userRole} />;
+  return (
+    <ProductPerformanceDetailView
+      product={product}
+      userRole={userRole}
+      selectedCoverage={selectedCoverage}
+      period={period}
+    />
+  );
 }

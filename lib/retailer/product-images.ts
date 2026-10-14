@@ -89,15 +89,12 @@ export async function resolveAuthoritativeProductImages(
   if (missingProductIds.length > 0) {
     const { data: fallbackProds, error: fbError } = await client
       .from("products")
-      .select("id, thumbnail_url, price_additional_info")
+      .select("id, price_additional_info")
       .in("id", missingProductIds);
 
     if (!fbError && fallbackProds) {
       for (const fp of fallbackProds) {
         const fallbacks: string[] = [];
-        if (fp.thumbnail_url) {
-          fallbacks.push(fp.thumbnail_url);
-        }
         const info = (fp.price_additional_info as any) || {};
         const overrides = info.admin_overrides || {};
         if (typeof overrides.thumbnail_url === "string" && overrides.thumbnail_url) {
