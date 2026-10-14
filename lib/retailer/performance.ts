@@ -706,22 +706,47 @@ export async function getRetailerPerformanceData(
       "KS-PROD";
 
     // Wholesale Price & MSRP Resolution
+    const salesPolicy = info.retailer_sales_policy || {};
     let wholesalePrice = 0;
     if (curation?.wholesale_price && Number(curation.wholesale_price) > 0) {
       wholesalePrice = Number(curation.wholesale_price);
+    } else if (salesPolicy.promo_wholesale_price && Number(salesPolicy.promo_wholesale_price) > 0) {
+      wholesalePrice = Number(salesPolicy.promo_wholesale_price);
+    } else if (salesPolicy.base_wholesale_price && Number(salesPolicy.base_wholesale_price) > 0) {
+      wholesalePrice = Number(salesPolicy.base_wholesale_price);
+    } else if (rawProd.trading_wholesale_price && Number(rawProd.trading_wholesale_price) > 0) {
+      wholesalePrice = Number(rawProd.trading_wholesale_price);
     }
-    const isOrderable = wholesalePrice > 0 && rawProd.status === "selling";
+
+    const isOrderable =
+      wholesalePrice > 0 &&
+      rawProd.status !== "discontinued" &&
+      (rawProd.status === "selling" ||
+        rawProd.trading_status === "active" ||
+        rawProd.selection_status === "SELECTED" ||
+        rawProd.retailer_visibility === "visible");
 
     let msrp = 0;
     if (curation?.suggest_retail_price && Number(curation.suggest_retail_price) > 0) {
       msrp = Number(curation.suggest_retail_price);
+    } else if (salesPolicy.srp_price && Number(salesPolicy.srp_price) > 0) {
+      msrp = Number(salesPolicy.srp_price);
+    } else if (info.trading_overrides?.srp_price && Number(info.trading_overrides.srp_price) > 0) {
+      msrp = Number(info.trading_overrides.srp_price);
     } else if (rawProd.estimated_retail_price && Number(rawProd.estimated_retail_price) > 0) {
       msrp = Number(rawProd.estimated_retail_price);
     } else if (wholesalePrice > 0) {
       msrp = Number((wholesalePrice * 2.0).toFixed(2));
     }
 
-    const cartonPackQty = Math.max(1, overrides.carton_pack_qty || rawProd.carton_pack_qty || 1);
+    const cartonPackQty = Math.max(
+      1,
+      overrides.carton_pack_qty ||
+      salesPolicy.moq ||
+      salesPolicy.order_multiple ||
+      rawProd.carton_pack_qty ||
+      1
+    );
 
     // Authoritative Product Image
     const thumbnailUrl = imageMap[productId]?.primaryUrl || null;
