@@ -11,6 +11,22 @@ import { getAdminRetailerOrdersAction } from "@/lib/admin/orders-actions";
 import { evaluateHubVisibility } from "@/lib/product/hub-visibility";
 import { getPendingPartnerInquiriesCount } from "@/lib/inquiry/actions";
 
+export type PriorityLevel = "critical" | "high" | "medium" | "low";
+export type ActionDomain = "hub" | "network" | "finance";
+
+export interface PriorityActionItem {
+  id: string;
+  domain: ActionDomain;
+  domainLabel: string;
+  title: string;
+  description: string;
+  priority: PriorityLevel;
+  count?: number;
+  amount?: number;
+  actionUrl: string;
+  actionLabel: string;
+}
+
 export interface AdminDashboardV2Metrics {
   // Top 4 Executive Core KPIs
   retailOrderValueMTD: number;
@@ -55,6 +71,12 @@ export interface AdminDashboardV2Metrics {
     totalBrands: number;
     openPartnerInquiriesCount: number;
   };
+
+  // Priority Action Center
+  priorityActions: PriorityActionItem[];
+
+  // Server generation timestamp (truthful, non-streaming indicator)
+  generatedAt: string;
 
   // Recent Activity
   recentOrders: {
@@ -298,6 +320,204 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
     createdAt: o.createdAt,
   }));
 
+  // F. Dynamic Priority Action Center Evaluation (100% Real Production DB records)
+  const priorityActions: PriorityActionItem[] = [];
+
+  // CRITICAL 1: Order Cancellation Hold / Review
+  const cancellationRequestedOrders = mappedOrders.filter(
+    (o) => o.cancellationRequested && !o.isCompleted && o.orderStatus !== "cancelled"
+  );
+  if (cancellationRequestedOrders.length > 0) {
+    priorityActions.push({
+      id: "critical-cancellation-requested",
+      domain: "hub",
+      domainLabel: "K SELECT HUB",
+      title: `${cancellationRequestedOrders.length}건의 주문 취소 요청 (출고 보류 및 승인 필요)`,
+      description: "리테일러로부터 취소 요청이 접수되어 출고 진행이 보류되었습니다. 취소 승인 및 크레딧 환불 처리가 필요합니다.",
+      priority: "critical",
+      count: cancellationRequestedOrders.length,
+      actionUrl: "/admin/sales/orders?quickFilter=on_hold",
+      actionLabel: "보류 주문 처리 →",
+    });
+  }
+
+  // CRITICAL 2: Overdue Accounts Receivable (Past Due Invoices)
+  if (arSummary.totalPastDueAmount > 0) {
+    priorityActions.push({
+      id: "critical-past-due-ar",
+      domain: "finance",
+      domainLabel: "Finance",
+      title: `연체 인보이스 미수금 발생 ($${arSummary.totalPastDueAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
+      description: "결제 기한이 경과된 미수금 인보이스가 존재합니다. 리테일러 입금 확인 또는 독촉 조치가 필요합니다.",
+      priority: "critical",
+      amount: arSummary.totalPastDueAmount,
+      actionUrl: "/admin/finance/receivables",
+      actionLabel: "연체 인보이스 관리 →",
+    });
+  }
+
+  // HIGH 1: New Submitted Orders Awaiting Processing
+  if (summaryCounters.newOrders > 0) {
+    priorityActions.push({
+      id: "high-new-orders",
+      domain: "hub",
+      domainLabel: "K SELECT HUB",
+      title: `${summaryCounters.newOrders}건의 신규 주문 접수 (주문 확인 대기)`,
+      description: "리테일러가 발주한 신규 주문이 접수되었습니다. 주문 확인 후 물류 피킹 및 패키징을 시작하세요.",
+      priority: "high",
+      count: summaryCounters.newOrders,
+      actionUrl: "/admin/sales/orders?status=submitted",
+      actionLabel: "신규 주문 확인 →",
+    });
+  }
+
+  // HIGH 2: Tracking Needed on Dispatched Orders
+  if (summaryCounters.trackingMissing > 0) {
+    priorityActions.push({
+      id: "high-tracking-needed",
+      domain: "hub",
+      domainLabel: "K SELECT HUB",
+      title: `${summaryCounters.trackingMissing}건의 출고 건 송장(Tracking) 등록 필요`,
+      description: "출고 발송 처리가 진행되었으나 택배사 운송장 번호(Tracking #)가 미등록된 건이 있습니다.",
+      priority: "high",
+      count: summaryCounters.trackingMissing,
+      actionUrl: "/admin/sales/orders?quickFilter=tracking_missing",
+      actionLabel: "운송장 등록하기 →",
+    });
+  }
+
+  // HIGH 3: Orders on Fulfillment Hold (Non-cancellation)
+  const remainingOnHoldCount = Math.max(0, summaryCounters.onHold - cancellationRequestedOrders.length);
+  if (remainingOnHoldCount > 0) {
+    priorityActions.push({
+      id: "high-fulfillment-hold",
+      domain: "hub",
+      domainLabel: "K SELECT HUB",
+      title: `${remainingOnHoldCount}건의 물류 출고 보류(Hold) 주문`,
+      description: "재고 확인 또는 수취지 정보 확인 등의 사유로 출고가 보류된 주문입니다.",
+      priority: "high",
+      count: remainingOnHoldCount,
+      actionUrl: "/admin/sales/orders?quickFilter=on_hold",
+      actionLabel: "보류 주문 확인 →",
+    });
+  }
+
+  // HIGH 4: Aging Orders 7+ Days
+  if (open7PlusDays > 0) {
+    priorityActions.push({
+      id: "high-aging-7plus",
+      domain: "hub",
+      domainLabel: "K SELECT HUB",
+      title: `${open7PlusDays}건의 장기 미출고 주문 (7일 이상 경과)`,
+      description: "발주 접수 후 7영업일 이상 출고가 완료되지 않은 장기 미결 주문입니다.",
+      priority: "high",
+      count: open7PlusDays,
+      actionUrl: "/admin/sales/orders?status=submitted,processing,partially_shipped",
+      actionLabel: "지연 주문 점검 →",
+    });
+  }
+
+  // MEDIUM 1: Brand Applications Awaiting Admin Review
+  if (pendingAdminReviewCount > 0) {
+    priorityActions.push({
+      id: "medium-applications-admin-review",
+      domain: "network",
+      domainLabel: "K SELECT NETWORK",
+      title: `${pendingAdminReviewCount}건의 브랜드 입점 신청서 심사 대기`,
+      description: "신규 브랜드사에서 제출한 공식 입점 신청서가 접수되었습니다. 적격성 및 서류 검토가 필요합니다.",
+      priority: "medium",
+      count: pendingAdminReviewCount,
+      actionUrl: "/admin/applications?status=submitted",
+      actionLabel: "신청서 심사하기 →",
+    });
+  }
+
+  // MEDIUM 2: Open Partner Inquiries Awaiting Response
+  if (pendingInquiriesCount > 0) {
+    priorityActions.push({
+      id: "medium-partner-inquiries",
+      domain: "network",
+      domainLabel: "K SELECT NETWORK",
+      title: `${pendingInquiriesCount}건의 미확인 파트너 문의 접수`,
+      description: "파트너사의 기술 지원, 입점 및 거래 문의 메시지가 도착했습니다. 신속한 회신이 필요합니다.",
+      priority: "medium",
+      count: pendingInquiriesCount,
+      actionUrl: "/admin/partner-inquiries",
+      actionLabel: "문의 응대하기 →",
+    });
+  }
+
+  // MEDIUM 3: Aging Orders 3-6 Days (Precedence deduplication: orders already counted in 7+ days are excluded)
+  const agingBetween3and6 = Math.max(0, open3PlusDays - open7PlusDays);
+  if (agingBetween3and6 > 0) {
+    priorityActions.push({
+      id: "medium-aging-3to6",
+      domain: "hub",
+      domainLabel: "K SELECT HUB",
+      title: `${agingBetween3and6}건의 주문 처리 지연 (3~6일 경과)`,
+      description: "발주 후 3일 이상 미완료 상태인 주문입니다. 피킹 및 패키징 진행을 점검하세요.",
+      priority: "medium",
+      count: agingBetween3and6,
+      actionUrl: "/admin/sales/orders?status=submitted,processing,partially_shipped",
+      actionLabel: "진행 상태 확인 →",
+    });
+  }
+
+  // LOW 1: Unreviewed Products Awaiting Selection Review
+  if (unreviewed > 0) {
+    priorityActions.push({
+      id: "low-unreviewed-products",
+      domain: "network",
+      domainLabel: "K SELECT NETWORK",
+      title: `${unreviewed}개 제품 입점 선정(Selection) 심사 대기`,
+      description: "브랜드사에서 신규 등록한 제품이 카탈로그 심사를 대기하고 있습니다.",
+      priority: "low",
+      count: unreviewed,
+      actionUrl: "/admin/products",
+      actionLabel: "카탈로그 검토 →",
+    });
+  }
+
+  // LOW 2: Missing Required Logistics Specifications
+  if (missingRequiredSpecs > 0) {
+    priorityActions.push({
+      id: "low-missing-specs",
+      domain: "network",
+      domainLabel: "K SELECT NETWORK",
+      title: `${missingRequiredSpecs}개 제품 물류 규격(CBM/중량) 미입력`,
+      description: "배송비 산출 및 표준 카톤 포장 계산을 위해 CBM 및 중량 정보 입력이 필요합니다.",
+      priority: "low",
+      count: missingRequiredSpecs,
+      actionUrl: "/admin/products",
+      actionLabel: "제품 규격 입력 →",
+    });
+  }
+
+  // LOW 3: Brand Applications Waiting for Brand Response
+  if (waitingForBrandCount > 0) {
+    priorityActions.push({
+      id: "low-waiting-for-brand",
+      domain: "network",
+      domainLabel: "K SELECT NETWORK",
+      title: `${waitingForBrandCount}건의 신청서 파트너사 보완 자료 회신 대기`,
+      description: "추가 서류 또는 정보 보완을 요청한 상태로 브랜드사의 회신을 대기 중입니다.",
+      priority: "low",
+      count: waitingForBrandCount,
+      actionUrl: "/admin/applications?status=info_requested",
+      actionLabel: "신청서 상태 확인 →",
+    });
+  }
+
+  // Sort by priority weights and slice to top 7
+  const priorityWeights: Record<PriorityLevel, number> = {
+    critical: 0,
+    high: 1,
+    medium: 2,
+    low: 3,
+  };
+  priorityActions.sort((a, b) => priorityWeights[a.priority] - priorityWeights[b.priority]);
+  const boundedPriorityActions = priorityActions.slice(0, 7);
+
   return {
     retailOrderValueMTD: Math.round(retailOrderValueMTD * 100) / 100,
     retailOrdersMTDCount,
@@ -339,6 +559,8 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
       totalBrands,
       openPartnerInquiriesCount: pendingInquiriesCount,
     },
+    priorityActions: boundedPriorityActions,
+    generatedAt: now.toISOString(),
     recentOrders,
     recentApplications,
     pendingPartnerInquiriesCount: pendingInquiriesCount,
