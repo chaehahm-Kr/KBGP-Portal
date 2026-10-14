@@ -31,6 +31,22 @@ export interface AdminOrderPackage {
   createdAt: string;
 }
 
+export interface AdminOrderBox {
+  id: string;
+  fulfillmentId: string;
+  orderId: string;
+  boxNumber: number;
+  boxTotal: number;
+  carrier: string;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  weightLbs?: number | null;
+  dimensionsInch?: string | null;
+  status: "active" | "void" | "archived";
+  notes?: string | null;
+  createdAt: string;
+}
+
 export interface AdminOrderShipmentItem {
   id: string;
   fulfillmentId: string;
@@ -60,6 +76,7 @@ export interface AdminOrderShipment {
   createdAt: string;
   items: AdminOrderShipmentItem[];
   packages: AdminOrderPackage[];
+  boxes: AdminOrderBox[];
 }
 
 export interface AdminOrderLineItem {

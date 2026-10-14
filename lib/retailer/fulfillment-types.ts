@@ -17,6 +17,22 @@ export interface RetailerFulfillmentItem {
   createdAt: string;
 }
 
+export interface RetailerFulfillmentBox {
+  id: string;
+  fulfillmentId: string;
+  orderId: string;
+  boxNumber: number;
+  boxTotal: number;
+  carrier: string;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  weightLbs?: number | null;
+  dimensionsInch?: string | null;
+  status: "active" | "void" | "archived";
+  notes?: string | null;
+  createdAt: string;
+}
+
 export interface RetailerFulfillment {
   id: string;
   fulfillmentNumber: string;
@@ -27,6 +43,7 @@ export interface RetailerFulfillment {
   carrier: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;
+  boxCount?: number;
   shippedAt: string | null;
   deliveredAt: string | null;
   shippedBy: string | null;
@@ -35,6 +52,7 @@ export interface RetailerFulfillment {
   createdAt: string;
   updatedAt: string;
   items: RetailerFulfillmentItem[];
+  boxes?: RetailerFulfillmentBox[];
 }
 
 export interface OrderFulfillmentProgress {

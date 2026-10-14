@@ -83,6 +83,7 @@ export interface RetailerOrderSummary {
     trackingUrl: string | null;
     status: string;
     boxCount?: number;
+    boxes?: import("./fulfillment-types").RetailerFulfillmentBox[];
   }>;
   invoices?: Array<{
     id: string;
@@ -1235,9 +1236,11 @@ export async function getRetailerOrders(
     const invoicesMap = new Map<string, any[]>();
     const fulfillmentsMap = new Map<string, any[]>();
     const paymentsMap = new Map<string, any[]>();
+    const boxesByFulfillmentId = new Map<string, any[]>();
+    const boxesByOrderId = new Map<string, any[]>();
 
     if (orderIds.length > 0) {
-      const [itemsRes, pkgsRes, invsRes, fulsRes, paymentsRes] = await Promise.all([
+      const [itemsRes, pkgsRes, invsRes, fulsRes, paymentsRes, boxesRes] = await Promise.all([
         adminClient.from("retailer_order_items").select("order_id, quantity, quantity_shipped, quantity_cancelled").in("order_id", orderIds),
         adminClient.from("retailer_order_packages").select("*").in("order_id", orderIds).order("box_number", { ascending: true }),
         adminClient.from("retailer_invoices").select("id, order_id, invoice_number, invoice_status, payment_status, total_amount, amount_paid, balance_due, due_date").in("order_id", orderIds),
@@ -1246,7 +1249,41 @@ export async function getRetailerOrders(
           retailer_order_fulfillment_items ( order_item_id, quantity_shipped, quantity_delivered )
         `).in("order_id", orderIds).order("created_at", { ascending: true }),
         adminClient.from("retailer_order_payments").select("id, order_id, payment_method, status, amount, fee_amount, created_at").in("order_id", orderIds),
+        (async () => {
+          try {
+            return await adminClient.from("retailer_order_fulfillment_boxes").select("*").in("order_id", orderIds).neq("status", "void").order("box_number", { ascending: true });
+          } catch {
+            return { data: null };
+          }
+        })(),
       ]);
+
+      if (boxesRes?.data && boxesRes.data.length > 0) {
+        boxesRes.data.forEach((b: any) => {
+          const item = {
+            id: b.id,
+            fulfillmentId: b.fulfillment_id,
+            orderId: b.order_id,
+            boxNumber: b.box_number,
+            boxTotal: b.box_total || 1,
+            carrier: b.carrier,
+            trackingNumber: b.tracking_number,
+            trackingUrl: resolveCarrierTrackingUrl(b.carrier, b.tracking_number, b.tracking_url),
+            weightLbs: b.weight_lbs,
+            dimensionsInch: b.dimensions_inch,
+            notes: b.notes,
+            status: b.status,
+            createdAt: b.created_at,
+          };
+          const fArr = boxesByFulfillmentId.get(b.fulfillment_id) || [];
+          fArr.push(item);
+          boxesByFulfillmentId.set(b.fulfillment_id, fArr);
+
+          const oArr = boxesByOrderId.get(b.order_id) || [];
+          oArr.push(item);
+          boxesByOrderId.set(b.order_id, oArr);
+        });
+      }
 
       if (itemsRes.data) {
         itemsRes.data.forEach((it: any) => {
@@ -1287,6 +1324,27 @@ export async function getRetailerOrders(
       }
       if (fulsRes.data) {
         fulsRes.data.forEach((f: any) => {
+          const fBoxes = boxesByFulfillmentId.get(f.id) || [];
+          // Safe legacy fallback: if no dedicated boxes recorded but fulfillment has tracking, synthesize 1 box
+          const finalBoxes = fBoxes.length > 0
+            ? fBoxes
+            : f.tracking_number
+            ? [
+                {
+                  id: `legacy-${f.id}`,
+                  fulfillmentId: f.id,
+                  orderId: f.order_id,
+                  boxNumber: 1,
+                  boxTotal: 1,
+                  carrier: f.carrier || "Standard Freight",
+                  trackingNumber: f.tracking_number,
+                  trackingUrl: resolveCarrierTrackingUrl(f.carrier, f.tracking_number, f.tracking_url),
+                  status: "active",
+                  createdAt: f.created_at,
+                },
+              ]
+            : [];
+
           const arr = fulfillmentsMap.get(f.order_id) || [];
           arr.push({
             id: f.id,
@@ -1295,7 +1353,8 @@ export async function getRetailerOrders(
             trackingNumber: f.tracking_number,
             trackingUrl: resolveCarrierTrackingUrl(f.carrier, f.tracking_number, f.tracking_url),
             status: f.status,
-            boxCount: Number(f.box_count || 0),
+            boxCount: finalBoxes.length > 0 ? finalBoxes.length : Number(f.box_count || 0),
+            boxes: finalBoxes,
             items: f.retailer_order_fulfillment_items || [],
           });
           fulfillmentsMap.set(f.order_id, arr);
@@ -1361,9 +1420,20 @@ export async function getRetailerOrders(
           );
 
       const totalRemainingUnits = Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits);
+      const oBoxes = boxesByOrderId.get(o.id) || [];
       const pkgs = packagesMap.get(o.id) || [];
-      // Box count comes strictly from package records; do NOT fabricate box counts or assume 1 Dispatch = 1 Box
-      const boxCount = pkgs.length;
+      const effectivePackages = oBoxes.length > 0
+        ? oBoxes.map((b: any) => ({
+            id: b.id,
+            boxNumber: b.boxNumber,
+            boxTotal: b.boxTotal,
+            carrier: b.carrier,
+            trackingNumber: b.trackingNumber,
+            trackingUrl: b.trackingUrl,
+          }))
+        : pkgs;
+      const totalBoxCountFromFulfillments = fuls.reduce((sum, f) => sum + (f.boxes ? f.boxes.length : (f.trackingNumber ? 1 : 0)), 0);
+      const boxCount = totalBoxCountFromFulfillments > 0 ? totalBoxCountFromFulfillments : effectivePackages.length;
       const invs = invoicesMap.get(o.id) || [];
       const invoiceSummary = computeOrderInvoiceSummary(invs);
       const oPayments = paymentsMap.get(o.id) || [];
@@ -1402,7 +1472,7 @@ export async function getRetailerOrders(
         totalCancelledUnits,
         totalRemainingUnits,
         boxCount,
-        packages: pkgs,
+        packages: effectivePackages,
         fulfillments: fuls,
         invoices: invs,
         invoiceSummary,

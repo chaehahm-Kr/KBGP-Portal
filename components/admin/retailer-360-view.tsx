@@ -33,6 +33,7 @@ import { formatCanonicalCountryName } from "@/lib/constants/countries";
 import { RetailerRole } from "@/lib/retailer/onboarding-types";
 import { Retailer360MemberItem } from "@/lib/retailer/admin-retailer-360";
 import { StartImpersonationModal } from "@/components/admin/start-impersonation-modal";
+import { EditTrackingModal } from "@/components/admin/orders/edit-tracking-modal";
 import {
   normalizeApprovedTerms,
   formatApprovedTermsDisplay,
@@ -230,6 +231,20 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
   const [fulfillmentModalOrder, setFulfillmentModalOrder] = useState<Retailer360OrderItem | null>(null);
   const [fulfillmentCarrier, setFulfillmentCarrier] = useState("FedEx");
   const [fulfillmentTracking, setFulfillmentTracking] = useState("");
+  const [fulfillmentBoxes, setFulfillmentBoxes] = useState<Array<{
+    boxNumber: number;
+    carrier: string;
+    trackingNumber: string;
+    weightLbs?: string;
+    dimensionsInch?: string;
+  }>>([{ boxNumber: 1, carrier: "FedEx", trackingNumber: "" }]);
+  const [editingFulfillment, setEditingFulfillment] = useState<{
+    id: string;
+    fulfillmentNumber: string;
+    orderNumber: string;
+    boxes: any[];
+    notes?: string | null;
+  } | null>(null);
   const [fulfillmentNotes, setFulfillmentNotes] = useState("");
   const [fulfillmentQuantities, setFulfillmentQuantities] = useState<Record<string, number>>({});
   const [fulfillmentError, setFulfillmentError] = useState("");
@@ -560,6 +575,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
     setFulfillmentModalOrder(order);
     setFulfillmentCarrier("FedEx");
     setFulfillmentTracking("");
+    setFulfillmentBoxes([{ boxNumber: 1, carrier: "FedEx", trackingNumber: "" }]);
     setFulfillmentNotes("");
     setFulfillmentError("");
 
@@ -592,13 +608,26 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
       return;
     }
 
+    const primaryBox = fulfillmentBoxes[0] || { carrier: fulfillmentCarrier, trackingNumber: "" };
+    const primaryCarrier = primaryBox.carrier || fulfillmentCarrier;
+    const primaryTracking = primaryBox.trackingNumber?.trim() || fulfillmentTracking.trim() || undefined;
+
+    const payloadBoxes = fulfillmentBoxes.map((b, idx) => ({
+      boxNumber: idx + 1,
+      carrier: b.carrier || primaryCarrier,
+      trackingNumber: b.trackingNumber?.trim() || undefined,
+      weightLbs: b.weightLbs ? Number(b.weightLbs) : undefined,
+      dimensionsInch: b.dimensionsInch?.trim() || undefined,
+    }));
+
     startTransition(async () => {
       const res = await adminCreateOrderFulfillmentAction({
         orderId: fulfillmentModalOrder.id,
-        carrier: fulfillmentCarrier,
-        trackingNumber: fulfillmentTracking.trim() || undefined,
+        carrier: primaryCarrier,
+        trackingNumber: primaryTracking,
         notes: fulfillmentNotes.trim() || undefined,
         items: itemsToShip,
+        boxes: payloadBoxes,
       });
 
       if (res.success) {
@@ -1662,11 +1691,27 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                                 </span>
                               </div>
                               <p className="text-[10px] text-zinc-500 mt-0.5">
+                                {ful.boxes && ful.boxes.length > 0
+                                  ? `${ful.boxes.length} ${ful.boxes.length === 1 ? "Box" : "Boxes"} · `
+                                  : ""}
                                 {ful.carrier} · {ful.trackingNumber ? `Tracking: ${ful.trackingNumber}` : "No tracking"}
                               </p>
                             </div>
 
                             <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setEditingFulfillment({
+                                  id: ful.id,
+                                  fulfillmentNumber: ful.fulfillmentNumber,
+                                  orderNumber: order.orderNumber,
+                                  boxes: ful.boxes || [],
+                                  notes: ful.notes,
+                                })}
+                                className="rounded-lg bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-2 py-1 text-[10px] font-bold hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors cursor-pointer"
+                              >
+                                ✏️ Edit Tracking
+                              </button>
                               {ful.status === "processing" && (
                                 <button
                                   type="button"
@@ -3208,36 +3253,99 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Carrier
+              {/* Dynamic Carton Boxes & Tracking */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300">
+                    Carton Packaging & Tracking ({fulfillmentBoxes.length} {fulfillmentBoxes.length === 1 ? "Box" : "Boxes"})
                   </label>
-                  <select
-                    value={fulfillmentCarrier}
-                    onChange={(e) => setFulfillmentCarrier(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentBoxes((prev) => [
+                      ...prev,
+                      {
+                        boxNumber: prev.length + 1,
+                        carrier: prev[prev.length - 1]?.carrier || fulfillmentCarrier,
+                        trackingNumber: "",
+                      },
+                    ])}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:hover:bg-indigo-900 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
                   >
-                    <option value="FedEx">FedEx</option>
-                    <option value="UPS">UPS</option>
-                    <option value="USPS">USPS</option>
-                    <option value="DHL">DHL</option>
-                    <option value="Freight">Freight / Pallet</option>
-                    <option value="Local Delivery">Local Delivery</option>
-                  </select>
+                    <span>+</span>
+                    <span>Add Box</span>
+                  </button>
                 </div>
 
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Tracking Number
-                  </label>
-                  <input
-                    type="text"
-                    value={fulfillmentTracking}
-                    onChange={(e) => setFulfillmentTracking(e.target.value)}
-                    placeholder="e.g. 789012345678"
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
-                  />
+                <div className="space-y-2.5 max-h-56 overflow-y-auto">
+                  {fulfillmentBoxes.map((box, idx) => (
+                    <div
+                      key={`box-input-${idx}`}
+                      className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-800/40 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-zinc-800 dark:text-zinc-200 text-xs">
+                          📦 Box #{idx + 1}
+                        </span>
+                        {fulfillmentBoxes.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFulfillmentBoxes((prev) => {
+                                const upd = prev.filter((_, i) => i !== idx);
+                                return upd.map((b, i) => ({ ...b, boxNumber: i + 1 }));
+                              });
+                            }}
+                            className="text-[10px] text-rose-600 hover:text-rose-700 font-semibold cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                        <div className="sm:col-span-5">
+                          <label className="block text-[10px] font-medium text-zinc-500 mb-0.5">
+                            Carrier
+                          </label>
+                          <select
+                            value={box.carrier}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFulfillmentBoxes((prev) =>
+                                prev.map((b, i) => (i === idx ? { ...b, carrier: val } : b))
+                              );
+                            }}
+                            className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                          >
+                            <option value="FedEx">FedEx</option>
+                            <option value="UPS">UPS</option>
+                            <option value="USPS">USPS</option>
+                            <option value="DHL">DHL</option>
+                            <option value="Freight">Freight / Pallet</option>
+                            <option value="Local Delivery">Local Delivery</option>
+                          </select>
+                        </div>
+
+                        <div className="sm:col-span-7">
+                          <label className="block text-[10px] font-medium text-zinc-500 mb-0.5">
+                            Tracking Number
+                          </label>
+                          <input
+                            type="text"
+                            value={box.trackingNumber}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFulfillmentBoxes((prev) =>
+                                prev.map((b, i) => (i === idx ? { ...b, trackingNumber: val } : b))
+                              );
+                            }}
+                            placeholder="e.g. 789012345678"
+                            className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -4049,6 +4157,20 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
           portalType: "RETAILER",
         }}
       />
+
+      {/* Edit Tracking Modal */}
+      {editingFulfillment && (
+        <EditTrackingModal
+          fulfillmentId={editingFulfillment.id}
+          fulfillmentNumber={editingFulfillment.fulfillmentNumber}
+          orderNumber={editingFulfillment.orderNumber}
+          currentBoxes={editingFulfillment.boxes || []}
+          currentNotes={editingFulfillment.notes}
+          isOpen={true}
+          onClose={() => setEditingFulfillment(null)}
+          onSuccess={() => window.location.reload()}
+        />
+      )}
     </div>
   );
 }

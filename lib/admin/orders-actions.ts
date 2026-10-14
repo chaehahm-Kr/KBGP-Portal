@@ -14,6 +14,7 @@ import {
   ApprovedOrderStatus,
   AdminOrderShipment,
   AdminOrderPackage,
+  AdminOrderBox,
   AdminOrderLineItem,
 } from "./orders-types";
 import { computeAuthoritativeOrderStatus } from "@/lib/orders/order-status-utils";
@@ -317,7 +318,40 @@ export async function getAdminRetailerOrderDetailAction(
     .eq("order_id", orderId)
     .order("created_at", { ascending: true });
 
-  // Fetch Packages
+  // Fetch Boxes from canonical Phase B2 table
+  const boxes: AdminOrderBox[] = [];
+  try {
+    const { data: rawBoxes, error: boxErr } = await adminClient
+      .from("retailer_order_fulfillment_boxes")
+      .select("*")
+      .eq("order_id", orderId)
+      .neq("status", "void")
+      .order("box_number", { ascending: true });
+
+    if (!boxErr && rawBoxes && rawBoxes.length > 0) {
+      rawBoxes.forEach((b: any) => {
+        boxes.push({
+          id: b.id,
+          fulfillmentId: b.fulfillment_id,
+          orderId: b.order_id,
+          boxNumber: b.box_number,
+          boxTotal: b.box_total || 1,
+          carrier: b.carrier,
+          trackingNumber: b.tracking_number,
+          trackingUrl: resolveCarrierTrackingUrl(b.carrier, b.tracking_number, b.tracking_url),
+          weightLbs: b.weight_lbs,
+          dimensionsInch: b.dimensions_inch,
+          status: b.status,
+          notes: b.notes,
+          createdAt: b.created_at,
+        });
+      });
+    }
+  } catch (bEx) {
+    console.warn("Could not query fulfillment boxes:", bEx);
+  }
+
+  // Fetch Packages (fallback or parallel)
   const { data: rawPackages } = await adminClient
     .from("retailer_order_packages")
     .select("*")
@@ -385,7 +419,45 @@ export async function getAdminRetailerOrderDetailAction(
   const totalRemainingUnits = Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits);
 
   const shipments: AdminOrderShipment[] = (rawFulfillments || []).map((f: any) => {
+    const fBoxes = boxes.filter((b) => b.fulfillmentId === f.id);
     const fPackages = packages.filter((p) => p.fulfillmentId === f.id);
+
+    const finalBoxes: AdminOrderBox[] = fBoxes.length > 0
+      ? fBoxes
+      : fPackages.length > 0
+      ? fPackages.map((p) => ({
+          id: p.id,
+          fulfillmentId: p.fulfillmentId,
+          orderId: p.orderId,
+          boxNumber: p.boxNumber,
+          boxTotal: p.boxTotal || 1,
+          carrier: p.carrier,
+          trackingNumber: p.trackingNumber,
+          trackingUrl: p.trackingUrl,
+          weightLbs: p.weightLbs,
+          dimensionsInch: p.dimensionsInch,
+          status: "active" as const,
+          notes: null,
+          createdAt: p.createdAt,
+        }))
+      : f.tracking_number
+      ? [
+          {
+            id: `legacy-${f.id}`,
+            fulfillmentId: f.id,
+            orderId: f.order_id,
+            boxNumber: 1,
+            boxTotal: 1,
+            carrier: f.carrier || "Standard Freight",
+            trackingNumber: f.tracking_number,
+            trackingUrl: resolveCarrierTrackingUrl(f.carrier, f.tracking_number, f.tracking_url),
+            status: "active" as const,
+            notes: null,
+            createdAt: f.created_at,
+          },
+        ]
+      : [];
+
     return {
       id: f.id,
       fulfillmentNumber: f.fulfillment_number,
@@ -396,7 +468,7 @@ export async function getAdminRetailerOrderDetailAction(
       carrier: f.carrier,
       trackingNumber: f.tracking_number,
       trackingUrl: resolveCarrierTrackingUrl(f.carrier, f.tracking_number, f.tracking_url),
-      boxCount: Number(f.box_count || fPackages.length || 1),
+      boxCount: finalBoxes.length > 0 ? finalBoxes.length : Number(f.box_count || fPackages.length || 1),
       shippedAt: f.shipped_at,
       deliveredAt: f.delivered_at,
       notes: f.notes,
@@ -415,6 +487,7 @@ export async function getAdminRetailerOrderDetailAction(
         };
       }),
       packages: fPackages,
+      boxes: finalBoxes,
     };
   });
 
@@ -638,39 +711,65 @@ export async function adminCreateShipmentWithPackagesAction(params: {
       }
     }
 
-    // 3. Insert individual package cartons
-    if (params.packages && params.packages.length > 0) {
-      const packageRows = params.packages.map((pkg, idx) => ({
-        fulfillment_id: newFulfillment.id,
-        order_id: params.orderId,
-        box_number: pkg.boxNumber || idx + 1,
-        box_total: boxCount,
-        carrier: pkg.carrier || params.carrier,
-        tracking_number: pkg.trackingNumber,
-        tracking_url: resolveCarrierTrackingUrl(pkg.carrier || params.carrier, pkg.trackingNumber),
-        weight_lbs: pkg.weightLbs || null,
-        dimensions_inch: pkg.dimensionsInch || null,
-        package_items: pkg.items || [],
-      }));
+    // 3. Insert individual fulfillment boxes (canonical Phase B2 table)
+    const boxesToInsert = (params.packages && params.packages.length > 0)
+      ? params.packages.map((pkg, idx) => ({
+          fulfillment_id: newFulfillment.id,
+          order_id: params.orderId,
+          box_number: pkg.boxNumber || idx + 1,
+          box_total: boxCount,
+          carrier: pkg.carrier || params.carrier,
+          tracking_number: pkg.trackingNumber?.trim() || null,
+          tracking_url: resolveCarrierTrackingUrl(pkg.carrier || params.carrier, pkg.trackingNumber),
+          weight_lbs: pkg.weightLbs || null,
+          dimensions_inch: pkg.dimensionsInch || null,
+          notes: null,
+          status: "active",
+        }))
+      : [
+          {
+            fulfillment_id: newFulfillment.id,
+            order_id: params.orderId,
+            box_number: 1,
+            box_total: 1,
+            carrier: params.carrier,
+            tracking_number: params.trackingNumber?.trim() || null,
+            tracking_url: resolveCarrierTrackingUrl(params.carrier, params.trackingNumber),
+            weight_lbs: null,
+            dimensions_inch: null,
+            notes: null,
+            status: "active",
+          },
+        ];
 
-      await adminClient.from("retailer_order_packages").insert(packageRows);
-    } else {
-      // Create single default package
-      await adminClient.from("retailer_order_packages").insert({
+    try {
+      await adminClient.from("retailer_order_fulfillment_boxes").insert(boxesToInsert);
+    } catch (boxErr) {
+      console.warn("Could not insert retailer_order_fulfillment_boxes:", boxErr);
+    }
+
+    // Also sync to legacy retailer_order_packages for backwards compatibility
+    try {
+      const packageRows = boxesToInsert.map((b) => ({
         fulfillment_id: newFulfillment.id,
         order_id: params.orderId,
-        box_number: 1,
-        box_total: 1,
-        carrier: params.carrier,
-        tracking_number: params.trackingNumber,
-        tracking_url: resolveCarrierTrackingUrl(params.carrier, params.trackingNumber),
+        box_number: b.box_number,
+        box_total: b.box_total,
+        carrier: b.carrier,
+        tracking_number: b.tracking_number,
+        tracking_url: b.tracking_url,
+        weight_lbs: b.weight_lbs,
+        dimensions_inch: b.dimensions_inch,
         package_items: validItems.map((it) => ({
           orderItemId: it.orderItemId,
           sku: "SKU",
           productName: "Products",
           quantity: it.quantityShipped,
         })),
-      });
+      }));
+      await adminClient.from("retailer_order_packages").insert(packageRows);
+    } catch (pkgErr) {
+      console.warn("Could not insert retailer_order_packages:", pkgErr);
     }
 
     // 4. Update parent order status
@@ -693,6 +792,9 @@ export async function adminCreateShipmentWithPackagesAction(params: {
       const invRes = await createDispatchInvoice(adminClient, newFulfillment.id);
       if (!invRes.success) {
         console.error("Critical: Dispatch invoice creation failed. Rolling back created shipment:", invRes.error);
+        try {
+          await adminClient.from("retailer_order_fulfillment_boxes").delete().eq("fulfillment_id", newFulfillment.id);
+        } catch (_) {}
         await adminClient.from("retailer_order_packages").delete().eq("fulfillment_id", newFulfillment.id);
         await adminClient.from("retailer_order_fulfillment_items").delete().eq("fulfillment_id", newFulfillment.id);
         await adminClient.from("retailer_order_fulfillments").delete().eq("id", newFulfillment.id);

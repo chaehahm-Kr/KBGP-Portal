@@ -6,8 +6,10 @@ import { revalidatePath } from "next/cache";
 import {
   RetailerFulfillment,
   RetailerFulfillmentStatus,
+  RetailerFulfillmentBox,
   OrderFulfillmentProgress,
 } from "./fulfillment-types";
+import { resolveCarrierTrackingUrl } from "@/lib/orders/carrier-resolver";
 
 /**
  * Fetch all fulfillments and items for a specific Retailer Order
@@ -42,35 +44,127 @@ export async function getOrderFulfillments(orderId: string): Promise<RetailerFul
     return [];
   }
 
-  return rawFulfillments.map((f: any) => ({
-    id: f.id,
-    fulfillmentNumber: f.fulfillment_number,
-    orderId: f.order_id,
-    companyId: f.company_id,
-    storeId: f.store_id,
-    status: f.status as RetailerFulfillmentStatus,
-    carrier: f.carrier,
-    trackingNumber: f.tracking_number,
-    trackingUrl: f.tracking_url,
-    shippedAt: f.shipped_at,
-    deliveredAt: f.delivered_at,
-    shippedBy: f.shipped_by,
-    deliveredBy: f.delivered_by,
-    notes: f.notes,
-    createdAt: f.created_at,
-    updatedAt: f.updated_at,
-    items: (f.retailer_order_fulfillment_items || []).map((it: any) => ({
-      id: it.id,
-      fulfillmentId: it.fulfillment_id,
-      orderItemId: it.order_item_id,
-      productId: it.product_id,
-      sku: it.products?.letusto_sku || it.products?.manufacture_sku || "KS-SKU",
-      productName: it.products?.name || "Product",
-      quantityShipped: Number(it.quantity_shipped || 0),
-      quantityDelivered: Number(it.quantity_delivered || 0),
-      createdAt: it.created_at,
-    })),
-  }));
+  // Batch load boxes for these fulfillments
+  const fulfillmentIds = rawFulfillments.map((f: any) => f.id);
+  const boxesMap = new Map<string, RetailerFulfillmentBox[]>();
+
+  if (fulfillmentIds.length > 0) {
+    try {
+      const { data: rawBoxes, error: boxErr } = await adminClient
+        .from("retailer_order_fulfillment_boxes")
+        .select("*")
+        .in("fulfillment_id", fulfillmentIds)
+        .neq("status", "void")
+        .order("box_number", { ascending: true });
+
+      if (!boxErr && rawBoxes && rawBoxes.length > 0) {
+        rawBoxes.forEach((b: any) => {
+          const arr = boxesMap.get(b.fulfillment_id) || [];
+          arr.push({
+            id: b.id,
+            fulfillmentId: b.fulfillment_id,
+            orderId: b.order_id,
+            boxNumber: b.box_number,
+            boxTotal: b.box_total || 1,
+            carrier: b.carrier,
+            trackingNumber: b.tracking_number,
+            trackingUrl: resolveCarrierTrackingUrl(b.carrier, b.tracking_number, b.tracking_url),
+            weightLbs: b.weight_lbs,
+            dimensionsInch: b.dimensions_inch,
+            status: b.status,
+            notes: b.notes,
+            createdAt: b.created_at,
+          });
+          boxesMap.set(b.fulfillment_id, arr);
+        });
+      } else {
+        // Fallback to retailer_order_packages if box table not populated
+        const { data: rawPkgs } = await adminClient
+          .from("retailer_order_packages")
+          .select("*")
+          .in("fulfillment_id", fulfillmentIds)
+          .order("box_number", { ascending: true });
+
+        if (rawPkgs && rawPkgs.length > 0) {
+          rawPkgs.forEach((p: any) => {
+            const arr = boxesMap.get(p.fulfillment_id) || [];
+            arr.push({
+              id: p.id,
+              fulfillmentId: p.fulfillment_id,
+              orderId: p.order_id,
+              boxNumber: p.box_number,
+              boxTotal: p.box_total || 1,
+              carrier: p.carrier,
+              trackingNumber: p.tracking_number,
+              trackingUrl: resolveCarrierTrackingUrl(p.carrier, p.tracking_number, p.tracking_url),
+              weightLbs: p.weight_lbs,
+              dimensionsInch: p.dimensions_inch,
+              status: "active",
+              createdAt: p.created_at,
+            });
+            boxesMap.set(p.fulfillment_id, arr);
+          });
+        }
+      }
+    } catch (bEx) {
+      console.warn("Could not query fulfillment boxes:", bEx);
+    }
+  }
+
+  return rawFulfillments.map((f: any) => {
+    const directBoxes = boxesMap.get(f.id) || [];
+    // Safe legacy fallback: if no dedicated boxes recorded but fulfillment has tracking, synthesize 1 box
+    const boxes = directBoxes.length > 0
+      ? directBoxes
+      : f.tracking_number
+      ? [
+          {
+            id: `legacy-${f.id}`,
+            fulfillmentId: f.id,
+            orderId: f.order_id,
+            boxNumber: 1,
+            boxTotal: 1,
+            carrier: f.carrier || "Standard Freight",
+            trackingNumber: f.tracking_number,
+            trackingUrl: resolveCarrierTrackingUrl(f.carrier, f.tracking_number, f.tracking_url),
+            status: "active" as const,
+            createdAt: f.created_at,
+          },
+        ]
+      : [];
+
+    return {
+      id: f.id,
+      fulfillmentNumber: f.fulfillment_number,
+      orderId: f.order_id,
+      companyId: f.company_id,
+      storeId: f.store_id,
+      status: f.status as RetailerFulfillmentStatus,
+      carrier: f.carrier,
+      trackingNumber: f.tracking_number,
+      trackingUrl: f.tracking_url,
+      boxCount: boxes.length > 0 ? boxes.length : Number(f.box_count || 1),
+      shippedAt: f.shipped_at,
+      deliveredAt: f.delivered_at,
+      shippedBy: f.shipped_by,
+      deliveredBy: f.delivered_by,
+      notes: f.notes,
+      createdAt: f.created_at,
+      updatedAt: f.updated_at,
+      items: (f.retailer_order_fulfillment_items || []).map((it: any) => ({
+        id: it.id,
+        fulfillmentId: it.fulfillment_id,
+        orderItemId: it.order_item_id,
+        productId: it.product_id,
+        sku: it.products?.letusto_sku || it.products?.manufacture_sku || "KS-SKU",
+        productName: it.products?.name || "Product",
+        quantityShipped: Number(it.quantity_shipped || 0),
+        quantityDelivered: Number(it.quantity_delivered || 0),
+        createdAt: it.created_at,
+      })),
+      boxes,
+    };
+  });
 }
 
 /**
@@ -127,6 +221,14 @@ export async function adminCreateOrderFulfillmentAction(params: {
     orderItemId: string;
     productId: string;
     quantityShipped: number;
+  }>;
+  boxes?: Array<{
+    boxNumber?: number;
+    carrier?: string;
+    trackingNumber?: string;
+    weightLbs?: number;
+    dimensionsInch?: string;
+    notes?: string;
   }>;
   markAsShipped?: boolean;
 }): Promise<{ success: boolean; fulfillmentId?: string; error?: string }> {
@@ -272,6 +374,70 @@ export async function adminCreateOrderFulfillmentAction(params: {
       return { success: false, error: "Failed to create fulfillment line items." };
     }
 
+    // 6.5. Insert Fulfillment Boxes (Phase B2 Canonical)
+    const rawInputBoxes = params.boxes && params.boxes.length > 0
+      ? params.boxes
+      : (params.trackingNumber || params.carrier)
+      ? [
+          {
+            boxNumber: 1,
+            carrier: params.carrier || "ups",
+            trackingNumber: params.trackingNumber,
+          },
+        ]
+      : [];
+
+    if (rawInputBoxes.length > 0) {
+      const boxTotal = rawInputBoxes.length;
+      const boxRows = rawInputBoxes.map((b, idx) => {
+        const c = (b.carrier || params.carrier || "ups").trim();
+        const t = b.trackingNumber?.trim() || null;
+        return {
+          fulfillment_id: newFulfillment.id,
+          order_id: params.orderId,
+          box_number: b.boxNumber || idx + 1,
+          box_total: boxTotal,
+          carrier: c,
+          tracking_number: t,
+          tracking_url: resolveCarrierTrackingUrl(c, t),
+          weight_lbs: b.weightLbs || null,
+          dimensions_inch: b.dimensionsInch?.trim() || null,
+          notes: b.notes?.trim() || null,
+          status: "active",
+        };
+      });
+
+      try {
+        await adminClient.from("retailer_order_fulfillment_boxes").insert(boxRows);
+      } catch (boxInsErr) {
+        console.warn("Could not insert retailer_order_fulfillment_boxes:", boxInsErr);
+      }
+
+      // Sync to retailer_order_packages for legacy compatibility
+      try {
+        const pkgRows = boxRows.map((b) => ({
+          fulfillment_id: newFulfillment.id,
+          order_id: params.orderId,
+          box_number: b.box_number,
+          box_total: b.box_total,
+          carrier: b.carrier,
+          tracking_number: b.tracking_number,
+          tracking_url: b.tracking_url,
+          weight_lbs: b.weight_lbs,
+          dimensions_inch: b.dimensions_inch,
+          package_items: validItems.map((it) => ({
+            orderItemId: it.order_item_id,
+            sku: "SKU",
+            productName: "Products",
+            quantity: it.quantity_shipped,
+          })),
+        }));
+        await adminClient.from("retailer_order_packages").insert(pkgRows);
+      } catch (pkgInsErr) {
+        console.warn("Could not insert retailer_order_packages fallback:", pkgInsErr);
+      }
+    }
+
     // 7. Update Retailer Order Status appropriately to 'processing'
     // Phase B1: Creating a shipment package puts order into processing; dispatching marks it as shipped/partially_shipped
     if (order.order_status === "submitted" || order.order_status === "confirmed") {
@@ -301,6 +467,16 @@ export async function adminMarkFulfillmentShippedAction(params: {
   carrier?: string;
   trackingNumber?: string;
   trackingUrl?: string;
+  boxes?: Array<{
+    id?: string;
+    boxNumber?: number;
+    carrier?: string;
+    trackingNumber?: string;
+    weightLbs?: number;
+    dimensionsInch?: string;
+    notes?: string;
+    status?: "active" | "void";
+  }>;
   shippedAt?: string;
   notes?: string;
 }): Promise<{ success: boolean; error?: string }> {
@@ -310,7 +486,7 @@ export async function adminMarkFulfillmentShippedAction(params: {
 
     const { data: fulfillment, error: fulErr } = await adminClient
       .from("retailer_order_fulfillments")
-      .select("id, order_id, company_id, status, carrier, tracking_number, tracking_url")
+      .select("id, order_id, company_id, status, carrier, tracking_number, tracking_url, box_count")
       .eq("id", params.fulfillmentId)
       .maybeSingle();
 
@@ -324,23 +500,118 @@ export async function adminMarkFulfillmentShippedAction(params: {
 
     const shippedTime = params.shippedAt || new Date().toISOString();
 
+    // Determine carrier & tracking from boxes if provided
+    let primaryCarrier = params.carrier !== undefined ? params.carrier?.trim() || null : fulfillment.carrier;
+    let primaryTracking = params.trackingNumber !== undefined ? params.trackingNumber?.trim() || null : fulfillment.tracking_number;
+    let primaryTrackingUrl = params.trackingUrl !== undefined ? params.trackingUrl?.trim() || null : fulfillment.tracking_url;
+
+    if (params.boxes && params.boxes.length > 0) {
+      const activeBoxes = params.boxes.filter((b) => b.status !== "void");
+      if (activeBoxes.length > 0) {
+        const first = activeBoxes[0];
+        primaryCarrier = (first.carrier || primaryCarrier || "ups").trim();
+        primaryTracking = first.trackingNumber?.trim() || null;
+        primaryTrackingUrl = resolveCarrierTrackingUrl(primaryCarrier, primaryTracking);
+      }
+    }
+
     const updatePayload: Record<string, any> = {
       status: "shipped",
       shipped_at: shippedTime,
       shipped_by: session.userId,
+      carrier: primaryCarrier,
+      tracking_number: primaryTracking,
+      tracking_url: primaryTrackingUrl || resolveCarrierTrackingUrl(primaryCarrier, primaryTracking),
       updated_at: new Date().toISOString(),
     };
-    if (params.carrier !== undefined) {
-      updatePayload.carrier = params.carrier?.trim() || null;
-    }
-    if (params.trackingNumber !== undefined) {
-      updatePayload.tracking_number = params.trackingNumber?.trim() || null;
-    }
-    if (params.trackingUrl !== undefined) {
-      updatePayload.tracking_url = params.trackingUrl?.trim() || null;
-    }
     if (params.notes !== undefined) {
       updatePayload.notes = params.notes?.trim() || null;
+    }
+
+    // Save/update boxes if supplied
+    if (params.boxes && params.boxes.length > 0) {
+      const activeBoxes = params.boxes.filter((b) => b.status !== "void");
+      const boxTotal = activeBoxes.length > 0 ? activeBoxes.length : 1;
+      updatePayload.box_count = boxTotal;
+
+      let activeIndex = 1;
+      for (const b of params.boxes) {
+        const isVoid = b.status === "void";
+        const bNum = isVoid ? (b.boxNumber || 99) : activeIndex++;
+        const c = (b.carrier || primaryCarrier || "ups").trim();
+        const t = b.trackingNumber?.trim() || null;
+        const u = resolveCarrierTrackingUrl(c, t);
+
+        if (b.id && !b.id.startsWith("legacy-")) {
+          try {
+            await adminClient
+              .from("retailer_order_fulfillment_boxes")
+              .update({
+                box_number: bNum,
+                box_total: boxTotal,
+                carrier: c,
+                tracking_number: t,
+                tracking_url: u,
+                weight_lbs: b.weightLbs ?? null,
+                dimensions_inch: b.dimensionsInch?.trim() || null,
+                notes: b.notes?.trim() || null,
+                status: isVoid ? "void" : "active",
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", b.id);
+          } catch (_) {}
+        } else if (!isVoid) {
+          try {
+            await adminClient
+              .from("retailer_order_fulfillment_boxes")
+              .insert({
+                fulfillment_id: params.fulfillmentId,
+                order_id: fulfillment.order_id,
+                box_number: bNum,
+                box_total: boxTotal,
+                carrier: c,
+                tracking_number: t,
+                tracking_url: u,
+                weight_lbs: b.weightLbs ?? null,
+                dimensions_inch: b.dimensionsInch?.trim() || null,
+                notes: b.notes?.trim() || null,
+                status: "active",
+              });
+          } catch (_) {}
+        }
+      }
+    } else if (primaryTracking) {
+      // If single tracking supplied, ensure at least Box 1 exists in retailer_order_fulfillment_boxes
+      try {
+        const { data: existingBoxes } = await adminClient
+          .from("retailer_order_fulfillment_boxes")
+          .select("id")
+          .eq("fulfillment_id", params.fulfillmentId)
+          .limit(1);
+
+        if (!existingBoxes || existingBoxes.length === 0) {
+          await adminClient.from("retailer_order_fulfillment_boxes").insert({
+            fulfillment_id: params.fulfillmentId,
+            order_id: fulfillment.order_id,
+            box_number: 1,
+            box_total: 1,
+            carrier: primaryCarrier || "ups",
+            tracking_number: primaryTracking,
+            tracking_url: primaryTrackingUrl || resolveCarrierTrackingUrl(primaryCarrier, primaryTracking),
+            status: "active",
+          });
+        } else {
+          await adminClient
+            .from("retailer_order_fulfillment_boxes")
+            .update({
+              carrier: primaryCarrier || "ups",
+              tracking_number: primaryTracking,
+              tracking_url: primaryTrackingUrl || resolveCarrierTrackingUrl(primaryCarrier, primaryTracking),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existingBoxes[0].id);
+        }
+      } catch (_) {}
     }
 
     const { error: updateErr } = await adminClient
@@ -624,3 +895,150 @@ export async function adminConfirmFulfillmentDeliveryAction(params: {
     return { success: false, error: err.message || "An unexpected error occurred." };
   }
 }
+
+/**
+ * Admin Action: Update, add, or void tracking boxes on an existing fulfillment dispatch
+ * Invariant: Modifies carton/tracking logistics ONLY.
+ * Never alters retailer_order_items.quantity_shipped and never creates/mutates invoices.
+ */
+export async function adminUpdateFulfillmentBoxesAction(params: {
+  fulfillmentId: string;
+  boxes: Array<{
+    id?: string;
+    boxNumber?: number;
+    carrier: string;
+    trackingNumber?: string | null;
+    trackingUrl?: string | null;
+    weightLbs?: number | null;
+    dimensionsInch?: string | null;
+    notes?: string | null;
+    status?: "active" | "void";
+  }>;
+  notes?: string | null;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await verifyAdminSession();
+    const adminClient = createAdminClient();
+
+    const { data: fulfillment, error: fulErr } = await adminClient
+      .from("retailer_order_fulfillments")
+      .select("id, order_id, company_id, status, carrier, tracking_number, tracking_url, box_count")
+      .eq("id", params.fulfillmentId)
+      .maybeSingle();
+
+    if (fulErr || !fulfillment) {
+      return { success: false, error: "Fulfillment record not found." };
+    }
+
+    const activeBoxes = params.boxes.filter((b) => b.status !== "void");
+    const boxTotal = activeBoxes.length > 0 ? activeBoxes.length : 1;
+
+    // Process each box
+    let activeBoxIndex = 1;
+    for (const b of params.boxes) {
+      const isVoid = b.status === "void";
+      const boxNumber = isVoid ? (b.boxNumber || 99) : activeBoxIndex++;
+      const carrier = (b.carrier || fulfillment.carrier || "ups").trim();
+      const trackingNumber = b.trackingNumber?.trim() || null;
+      const trackingUrl = resolveCarrierTrackingUrl(carrier, trackingNumber, b.trackingUrl);
+
+      if (b.id && !b.id.startsWith("legacy-")) {
+        try {
+          await adminClient
+            .from("retailer_order_fulfillment_boxes")
+            .update({
+              box_number: boxNumber,
+              box_total: boxTotal,
+              carrier,
+              tracking_number: trackingNumber,
+              tracking_url: trackingUrl,
+              weight_lbs: b.weightLbs ?? null,
+              dimensions_inch: b.dimensionsInch?.trim() || null,
+              notes: b.notes?.trim() || null,
+              status: isVoid ? "void" : "active",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", b.id);
+        } catch (updErr) {
+          console.warn("Could not update box:", updErr);
+        }
+      } else if (!isVoid) {
+        try {
+          await adminClient
+            .from("retailer_order_fulfillment_boxes")
+            .insert({
+              fulfillment_id: params.fulfillmentId,
+              order_id: fulfillment.order_id,
+              box_number: boxNumber,
+              box_total: boxTotal,
+              carrier,
+              tracking_number: trackingNumber,
+              tracking_url: trackingUrl,
+              weight_lbs: b.weightLbs ?? null,
+              dimensions_inch: b.dimensionsInch?.trim() || null,
+              notes: b.notes?.trim() || null,
+              status: "active",
+            });
+        } catch (insErr) {
+          console.warn("Could not insert box:", insErr);
+        }
+      }
+    }
+
+    // Update fulfillment header with primary box tracking and box_count
+    const firstActive = activeBoxes[0];
+    const headerCarrier = firstActive ? (firstActive.carrier || "ups").trim() : fulfillment.carrier;
+    const headerTracking = firstActive ? (firstActive.trackingNumber?.trim() || null) : null;
+    const headerTrackingUrl = resolveCarrierTrackingUrl(headerCarrier, headerTracking);
+
+    const updateHeaderPayload: Record<string, any> = {
+      carrier: headerCarrier,
+      tracking_number: headerTracking,
+      tracking_url: headerTrackingUrl,
+      box_count: activeBoxes.length,
+      updated_at: new Date().toISOString(),
+    };
+    if (params.notes !== undefined) {
+      updateHeaderPayload.notes = params.notes?.trim() || null;
+    }
+
+    await adminClient
+      .from("retailer_order_fulfillments")
+      .update(updateHeaderPayload)
+      .eq("id", params.fulfillmentId);
+
+    // Sync to legacy retailer_order_packages
+    try {
+      await adminClient.from("retailer_order_packages").delete().eq("fulfillment_id", params.fulfillmentId);
+      if (activeBoxes.length > 0) {
+        const pkgRows = activeBoxes.map((b, idx) => ({
+          fulfillment_id: params.fulfillmentId,
+          order_id: fulfillment.order_id,
+          box_number: idx + 1,
+          box_total: activeBoxes.length,
+          carrier: (b.carrier || "ups").trim(),
+          tracking_number: b.trackingNumber?.trim() || null,
+          tracking_url: resolveCarrierTrackingUrl(b.carrier || "ups", b.trackingNumber),
+          weight_lbs: b.weightLbs ?? null,
+          dimensions_inch: b.dimensionsInch?.trim() || null,
+          package_items: [],
+        }));
+        await adminClient.from("retailer_order_packages").insert(pkgRows);
+      }
+    } catch (syncErr) {
+      console.warn("Could not sync retailer_order_packages:", syncErr);
+    }
+
+    revalidatePath(`/admin/retailers/${fulfillment.company_id}`);
+    revalidatePath("/admin/sales/orders");
+    revalidatePath(`/admin/sales/orders/${fulfillment.order_id}`);
+    revalidatePath("/orders");
+    revalidatePath(`/orders/${fulfillment.order_id}`);
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("adminUpdateFulfillmentBoxesAction error:", err);
+    return { success: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+

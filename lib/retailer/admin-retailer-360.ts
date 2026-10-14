@@ -25,6 +25,7 @@ import { getRetailerARStatus } from "@/lib/finance/invoice-actions";
 import type { RetailerARStatus } from "@/lib/finance/invoice-types";
 import type { RetailerShippingAddress } from "./shipping-address-types";
 import { computeAuthoritativeOrderStatus } from "@/lib/orders/order-status-utils";
+import { resolveCarrierTrackingUrl } from "@/lib/orders/carrier-resolver";
 
 export interface NeedsAttentionItem {
   id: string;
@@ -160,6 +161,8 @@ export interface Retailer360OrderItem {
     carrier?: string | null;
     trackingNumber?: string | null;
     trackingUrl?: string | null;
+    boxCount?: number;
+    boxes?: import("./fulfillment-types").RetailerFulfillmentBox[];
     shippedAt?: string | null;
     deliveredAt?: string | null;
     notes?: string | null;
@@ -799,10 +802,65 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
       .in("order_id", orderIds)
       .order("created_at", { ascending: true });
 
+    const fulfillmentIds = (rawFulfillments || []).map((f: any) => f.id);
+    const boxesMap = new Map<string, any[]>();
+    if (fulfillmentIds.length > 0) {
+      try {
+        const { data: rawBoxes, error: bErr } = await adminClient
+          .from("retailer_order_fulfillment_boxes")
+          .select("*")
+          .in("fulfillment_id", fulfillmentIds)
+          .neq("status", "void")
+          .order("box_number", { ascending: true });
+
+        if (!bErr && rawBoxes && rawBoxes.length > 0) {
+          rawBoxes.forEach((b: any) => {
+            const arr = boxesMap.get(b.fulfillment_id) || [];
+            arr.push({
+              id: b.id,
+              fulfillmentId: b.fulfillment_id,
+              orderId: b.order_id,
+              boxNumber: b.box_number,
+              boxTotal: b.box_total || 1,
+              carrier: b.carrier,
+              trackingNumber: b.tracking_number,
+              trackingUrl: resolveCarrierTrackingUrl(b.carrier, b.tracking_number, b.tracking_url),
+              weightLbs: b.weight_lbs,
+              dimensionsInch: b.dimensions_inch,
+              notes: b.notes,
+              status: b.status,
+              createdAt: b.created_at,
+            });
+            boxesMap.set(b.fulfillment_id, arr);
+          });
+        }
+      } catch (_) {}
+    }
+
     (rawFulfillments || []).forEach((f: any) => {
       if (!fulfillmentsByOrderId[f.order_id]) {
         fulfillmentsByOrderId[f.order_id] = [];
       }
+      const fBoxes = boxesMap.get(f.id) || [];
+      const finalBoxes = fBoxes.length > 0
+        ? fBoxes
+        : f.tracking_number
+        ? [
+            {
+              id: `legacy-${f.id}`,
+              fulfillmentId: f.id,
+              orderId: f.order_id,
+              boxNumber: 1,
+              boxTotal: 1,
+              carrier: f.carrier || "Standard Freight",
+              trackingNumber: f.tracking_number,
+              trackingUrl: resolveCarrierTrackingUrl(f.carrier, f.tracking_number, f.tracking_url),
+              status: "active",
+              createdAt: f.created_at,
+            },
+          ]
+        : [];
+
       fulfillmentsByOrderId[f.order_id].push({
         id: f.id,
         fulfillmentNumber: f.fulfillment_number,
@@ -810,7 +868,9 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
         status: f.status,
         carrier: f.carrier,
         trackingNumber: f.tracking_number,
-        trackingUrl: f.tracking_url,
+        trackingUrl: resolveCarrierTrackingUrl(f.carrier, f.tracking_number, f.tracking_url),
+        boxCount: finalBoxes.length > 0 ? finalBoxes.length : Number(f.box_count || 1),
+        boxes: finalBoxes,
         shippedAt: f.shipped_at,
         deliveredAt: f.delivered_at,
         notes: f.notes,

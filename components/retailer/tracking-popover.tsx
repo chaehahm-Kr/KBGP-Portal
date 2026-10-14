@@ -1,9 +1,32 @@
+// components/retailer/tracking-popover.tsx
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
 import { formatCarrierName } from "@/lib/orders/carrier-resolver";
 
-interface TrackingPackage {
+export interface TrackingBoxItem {
+  id?: string;
+  boxNumber: number;
+  boxTotal: number;
+  carrier: string;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  weightLbs?: number | null;
+  dimensionsInch?: string | null;
+}
+
+export interface TrackingFulfillmentItem {
+  id: string;
+  fulfillmentNumber: string;
+  carrier: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  status: string;
+  boxCount?: number;
+  boxes?: TrackingBoxItem[];
+}
+
+export interface TrackingPackageItem {
   id: string;
   boxNumber: number;
   boxTotal: number;
@@ -12,20 +35,10 @@ interface TrackingPackage {
   trackingUrl: string | null;
 }
 
-interface TrackingFulfillment {
-  id: string;
-  fulfillmentNumber: string;
-  carrier: string | null;
-  trackingNumber: string | null;
-  trackingUrl: string | null;
-  status: string;
-  boxCount?: number;
-}
-
 interface TrackingPopoverProps {
   orderNumber: string;
-  packages?: TrackingPackage[];
-  fulfillments?: TrackingFulfillment[];
+  packages?: TrackingPackageItem[];
+  fulfillments?: TrackingFulfillmentItem[];
   className?: string;
 }
 
@@ -40,10 +53,87 @@ export function TrackingPopover({
   const [copiedAll, setCopiedAll] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Check tracking availability
-  const validPackages = (packages || []).filter((p) => Boolean(p.trackingNumber?.trim()));
-  const validFulfillments = (fulfillments || []).filter((f) => Boolean(f.trackingNumber?.trim()));
-  const hasTracking = validPackages.length > 0 || validFulfillments.length > 0;
+  // Group boxes by dispatch/fulfillment
+  const dispatches: Array<{
+    id: string;
+    fulfillmentNumber: string;
+    status: string;
+    boxes: Array<{
+      id: string;
+      boxNumber: number;
+      boxTotal: number;
+      carrier: string;
+      trackingNumber: string;
+      trackingUrl: string | null;
+      weightLbs?: number | null;
+      dimensionsInch?: string | null;
+    }>;
+  }> = [];
+
+  if (fulfillments && fulfillments.length > 0) {
+    fulfillments.forEach((f) => {
+      const fBoxes = (f.boxes || [])
+        .filter((b) => Boolean(b.trackingNumber?.trim()))
+        .map((b) => ({
+          id: b.id || `box-${b.boxNumber}`,
+          boxNumber: b.boxNumber,
+          boxTotal: b.boxTotal || f.boxes?.length || 1,
+          carrier: b.carrier || f.carrier || "Standard Freight",
+          trackingNumber: b.trackingNumber!.trim(),
+          trackingUrl: b.trackingUrl,
+          weightLbs: b.weightLbs,
+          dimensionsInch: b.dimensionsInch,
+        }));
+
+      if (fBoxes.length > 0) {
+        dispatches.push({
+          id: f.id,
+          fulfillmentNumber: f.fulfillmentNumber,
+          status: f.status,
+          boxes: fBoxes,
+        });
+      } else if (f.trackingNumber?.trim()) {
+        // Fallback for single legacy tracking
+        dispatches.push({
+          id: f.id,
+          fulfillmentNumber: f.fulfillmentNumber,
+          status: f.status,
+          boxes: [
+            {
+              id: `legacy-${f.id}`,
+              boxNumber: 1,
+              boxTotal: 1,
+              carrier: f.carrier || "Standard Freight",
+              trackingNumber: f.trackingNumber.trim(),
+              trackingUrl: f.trackingUrl,
+            },
+          ],
+        });
+      }
+    });
+  } else if (packages && packages.length > 0) {
+    const validPkgs = packages
+      .filter((p) => Boolean(p.trackingNumber?.trim()))
+      .map((p) => ({
+        id: p.id,
+        boxNumber: p.boxNumber,
+        boxTotal: p.boxTotal || packages.length,
+        carrier: p.carrier,
+        trackingNumber: p.trackingNumber.trim(),
+        trackingUrl: p.trackingUrl,
+      }));
+
+    if (validPkgs.length > 0) {
+      dispatches.push({
+        id: "packages-dispatch",
+        fulfillmentNumber: "Shipment",
+        status: "shipped",
+        boxes: validPkgs,
+      });
+    }
+  }
+
+  const totalBoxCount = dispatches.reduce((sum, d) => sum + d.boxes.length, 0);
 
   // Click outside to dismiss
   useEffect(() => {
@@ -71,7 +161,7 @@ export function TrackingPopover({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen]);
 
-  if (!hasTracking) {
+  if (totalBoxCount === 0) {
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 whitespace-nowrap">
         Not Available
@@ -89,11 +179,7 @@ export function TrackingPopover({
   const handleCopyAll = (e: React.MouseEvent) => {
     e.stopPropagation();
     const tracks: string[] = [];
-    if (validPackages.length > 0) {
-      validPackages.forEach((p) => tracks.push(p.trackingNumber));
-    } else {
-      validFulfillments.forEach((f) => f.trackingNumber && tracks.push(f.trackingNumber));
-    }
+    dispatches.forEach((d) => d.boxes.forEach((b) => tracks.push(b.trackingNumber)));
     navigator.clipboard.writeText(tracks.join("\n"));
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 2000);
@@ -111,7 +197,9 @@ export function TrackingPopover({
         }`}
       >
         <span className="text-[10px]">📍</span>
-        <span>Available</span>
+        <span>
+          {totalBoxCount === 1 ? "Tracking Available (1 Box)" : `Tracking Available (${totalBoxCount} Boxes)`}
+        </span>
         <span className="text-[9px] opacity-70">{isOpen ? "▲" : "▼"}</span>
       </button>
 
@@ -128,11 +216,9 @@ export function TrackingPopover({
                 <span className="text-xs font-bold text-zinc-900 dark:text-white">
                   Tracking Manifest
                 </span>
-                {validPackages.length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                    {validPackages.length} {validPackages.length === 1 ? "Box" : "Boxes"}
-                  </span>
-                )}
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  {totalBoxCount} {totalBoxCount === 1 ? "Box" : "Boxes"}
+                </span>
               </div>
               <p className="text-[10px] text-zinc-400 mt-0.5">Order #{orderNumber}</p>
             </div>
@@ -154,107 +240,81 @@ export function TrackingPopover({
             </div>
           </div>
 
-          {/* List of packages (B2 Package Architecture) */}
-          {validPackages.length > 0 ? (
-            <div className="max-h-60 overflow-y-auto space-y-2 pr-0.5">
-              {validPackages.map((pkg, idx) => (
-                <div
-                  key={pkg.id || `pkg-${idx}`}
-                  className="flex items-center justify-between p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-800/40 text-xs"
-                >
-                  <div className="space-y-0.5 min-w-0 pr-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-zinc-900 dark:text-white text-[11px]">
-                        📦 Box {pkg.boxNumber} of {pkg.boxTotal || validPackages.length}
-                      </span>
-                      <span className="text-[10px] font-semibold text-zinc-500 uppercase">
-                        · {formatCarrierName(pkg.carrier)}
-                      </span>
-                    </div>
-                    <div className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300 truncate">
-                      {pkg.trackingNumber}
-                    </div>
+          {/* Grouped by Dispatch */}
+          <div className="max-h-72 overflow-y-auto space-y-3 pr-0.5">
+            {dispatches.map((d, dIdx) => (
+              <div key={d.id || `dispatch-${dIdx}`} className="space-y-1.5">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-black text-zinc-800 dark:text-zinc-200">
+                      🚚 Dispatch #{d.fulfillmentNumber}
+                    </span>
+                    <span className="px-1.5 py-0.2 text-[9px] uppercase font-bold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                      {d.status}
+                    </span>
                   </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={(e) => handleCopySingle(pkg.trackingNumber, `pkg-${idx}`, e)}
-                      className="px-2 py-1 text-[10px] font-semibold rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
-                    >
-                      {copiedKey === `pkg-${idx}` ? "✓" : "Copy"}
-                    </button>
-                    {pkg.trackingUrl && (
-                      <a
-                        href={pkg.trackingUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="px-2 py-1 text-[10px] font-bold rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 inline-flex items-center gap-0.5 transition-colors"
-                      >
-                        <span>Track</span>
-                        <span className="text-[9px]">↗</span>
-                      </a>
-                    )}
-                  </div>
+                  <span className="text-[10px] text-zinc-400">
+                    {d.boxes.length} {d.boxes.length === 1 ? "Carton" : "Cartons"}
+                  </span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            /* Legacy Dispatch Tracking (No carton package records, 1 Dispatch != 1 Box) */
-            <div className="space-y-2">
-              <div className="px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 text-[10px] text-amber-800 dark:text-amber-300">
-                <span className="font-bold">Legacy Dispatch Tracking</span> · Carton manifest not recorded for this shipment.
-              </div>
 
-              <div className="max-h-60 overflow-y-auto space-y-2 pr-0.5">
-                {validFulfillments.map((ful, idx) => (
-                  <div
-                    key={ful.id || `ful-${idx}`}
-                    className="flex items-center justify-between p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-800/40 text-xs"
-                  >
-                    <div className="space-y-0.5 min-w-0 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-zinc-900 dark:text-white text-[11px]">
-                          🚚 Dispatch: {ful.fulfillmentNumber}
-                        </span>
-                        {ful.carrier && (
-                          <span className="text-[10px] font-semibold text-zinc-500 uppercase">
-                            · {formatCarrierName(ful.carrier)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300 truncate">
-                        {ful.trackingNumber}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => handleCopySingle(ful.trackingNumber!, `ful-${idx}`, e)}
-                        className="px-2 py-1 text-[10px] font-semibold rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                <div className="space-y-1.5">
+                  {d.boxes.map((box, bIdx) => {
+                    const boxKey = `${d.id}-b-${bIdx}`;
+                    return (
+                      <div
+                        key={box.id || boxKey}
+                        className="flex items-center justify-between p-2 rounded-xl border border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/60 dark:bg-zinc-800/40 text-xs"
                       >
-                        {copiedKey === `ful-${idx}` ? "✓" : "Copy"}
-                      </button>
-                      {ful.trackingUrl && (
-                        <a
-                          href={ful.trackingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="px-2 py-1 text-[10px] font-bold rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 inline-flex items-center gap-0.5 transition-colors"
-                        >
-                          <span>Track</span>
-                          <span className="text-[9px]">↗</span>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                        <div className="space-y-0.5 min-w-0 pr-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-zinc-900 dark:text-white text-[11px]">
+                              📦 Box {box.boxNumber} of {box.boxTotal || d.boxes.length}
+                            </span>
+                            <span className="text-[10px] font-semibold text-zinc-500 uppercase">
+                              · {formatCarrierName(box.carrier)}
+                            </span>
+                          </div>
+                          <div className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300 truncate">
+                            {box.trackingNumber}
+                          </div>
+                          {(box.weightLbs || box.dimensionsInch) && (
+                            <div className="text-[10px] text-zinc-400">
+                              {box.weightLbs ? `${box.weightLbs} lbs` : ""}
+                              {box.weightLbs && box.dimensionsInch ? " · " : ""}
+                              {box.dimensionsInch ? box.dimensionsInch : ""}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopySingle(box.trackingNumber, boxKey, e)}
+                            className="px-2 py-1 text-[10px] font-semibold rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                          >
+                            {copiedKey === boxKey ? "✓" : "Copy"}
+                          </button>
+                          {box.trackingUrl && (
+                            <a
+                              href={box.trackingUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="px-2 py-1 text-[10px] font-bold rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 inline-flex items-center gap-0.5 transition-colors"
+                            >
+                              <span>Track</span>
+                              <span className="text-[9px]">↗</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
     </div>

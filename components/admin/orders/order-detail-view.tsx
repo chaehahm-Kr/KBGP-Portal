@@ -4,7 +4,7 @@
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AdminRetailerOrderDetail, ApprovedOrderStatus } from "@/lib/admin/orders-types";
+import { AdminRetailerOrderDetail, ApprovedOrderStatus, AdminOrderShipment } from "@/lib/admin/orders-types";
 import {
   adminUpdateOrderStatusAction,
   adminCancelOrderLineAction,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/admin/orders-actions";
 import { PackagesPopover } from "./packages-popover";
 import { CreateShipmentModal } from "./create-shipment-modal";
+import { EditTrackingModal } from "./edit-tracking-modal";
 import { CancellationRequestReviewCard } from "./cancellation-request-review-card";
 
 interface AdminOrderDetailViewProps {
@@ -22,6 +23,7 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showShipModal, setShowShipModal] = useState(false);
+  const [editingShipment, setEditingShipment] = useState<AdminOrderShipment | null>(null);
   const [cancelModalItem, setCancelModalItem] = useState<{ id: string; name: string; max: number } | null>(null);
   const [cancelQty, setCancelQty] = useState(1);
   const [cancelReason, setCancelReason] = useState("Out of stock at warehouse");
@@ -404,6 +406,13 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
                           }
                           return null;
                         })()}
+                        <button
+                          type="button"
+                          onClick={() => setEditingShipment(sh)}
+                          className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:hover:bg-indigo-900 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
+                        >
+                          ✏️ Edit Tracking
+                        </button>
                         <PackagesPopover packages={sh.packages} orderNumber={order.orderNumber} />
                       </div>
                     </div>
@@ -445,6 +454,53 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
                         </p>
                       </div>
                     </div>
+
+                    {/* Multi-Box Carton Breakdown */}
+                    {sh.boxes && sh.boxes.length > 0 && (
+                      <div className="pt-2 border-t border-zinc-200/50 dark:border-zinc-800/80 space-y-1.5">
+                        <div className="flex items-center justify-between text-[10px] uppercase font-bold text-zinc-400">
+                          <span>Carton Boxes ({sh.boxes.length} {sh.boxes.length === 1 ? "Box" : "Boxes"})</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                          {sh.boxes.map((b) => (
+                            <div
+                              key={b.id}
+                              className="p-2.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs flex flex-col justify-between"
+                            >
+                              <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-white text-[11px]">
+                                <span>📦 Box #{b.boxNumber} of {b.boxTotal || sh.boxes.length}</span>
+                                <span className="uppercase text-[10px] text-zinc-500 font-semibold">{b.carrier}</span>
+                              </div>
+                              <div className="font-mono text-[11px] mt-1 text-zinc-700 dark:text-zinc-300 truncate">
+                                {b.trackingNumber ? (
+                                  b.trackingUrl ? (
+                                    <a
+                                      href={b.trackingUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-indigo-600 dark:text-indigo-400 underline hover:opacity-80"
+                                    >
+                                      {b.trackingNumber} ↗
+                                    </a>
+                                  ) : (
+                                    b.trackingNumber
+                                  )
+                                ) : (
+                                  <span className="text-zinc-400 text-[10px]">No tracking</span>
+                                )}
+                              </div>
+                              {(b.weightLbs || b.dimensionsInch) && (
+                                <div className="text-[10px] text-zinc-400 mt-1">
+                                  {b.weightLbs ? `${b.weightLbs} lbs` : ""}
+                                  {b.weightLbs && b.dimensionsInch ? " · " : ""}
+                                  {b.dimensionsInch ? b.dimensionsInch : ""}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {sh.notes && (
                       <p className="text-[11px] text-zinc-500 border-t border-zinc-200/50 dark:border-zinc-800 pt-1.5">
@@ -770,6 +826,20 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Edit Tracking Modal */}
+      {editingShipment && (
+        <EditTrackingModal
+          fulfillmentId={editingShipment.id}
+          fulfillmentNumber={editingShipment.fulfillmentNumber}
+          orderNumber={order.orderNumber}
+          currentBoxes={editingShipment.boxes || []}
+          currentNotes={editingShipment.notes}
+          isOpen={true}
+          onClose={() => setEditingShipment(null)}
+          onSuccess={() => window.location.reload()}
+        />
       )}
     </div>
   );

@@ -499,37 +499,88 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-zinc-400 block">Carrier & Tracking</span>
-                        <div className="font-semibold text-zinc-900 dark:text-white mt-0.5">
-                          {f.carrier || "Standard Freight"}
-                          {f.trackingNumber && (
-                            <span className="ml-2 font-mono text-indigo-600 dark:text-indigo-400">
-                              {f.trackingUrl ? (
-                                <a
-                                  href={f.trackingUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="underline hover:text-indigo-500"
-                                >
-                                  {f.trackingNumber} ↗
-                                </a>
-                              ) : (
-                                f.trackingNumber
+                    {f.boxes && f.boxes.length > 0 ? (
+                      <div className="space-y-2">
+                        <span className="text-[10px] uppercase font-bold text-zinc-400 block">
+                          Carton Packaging & Tracking ({f.boxes.length} {f.boxes.length === 1 ? "Box" : "Boxes"})
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                          {f.boxes.map((b) => (
+                            <div
+                              key={b.id}
+                              className="p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs flex flex-col justify-between"
+                            >
+                              <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-white text-[11px]">
+                                <span>📦 Box #{b.boxNumber} of {b.boxTotal || f.boxes!.length}</span>
+                                <span className="uppercase text-[10px] text-zinc-500 font-semibold">{b.carrier}</span>
+                              </div>
+                              <div className="font-mono text-[11px] mt-1 text-zinc-700 dark:text-zinc-300 truncate">
+                                {b.trackingNumber ? (
+                                  b.trackingUrl ? (
+                                    <a
+                                      href={b.trackingUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-500"
+                                    >
+                                      {b.trackingNumber} ↗
+                                    </a>
+                                  ) : (
+                                    b.trackingNumber
+                                  )
+                                ) : (
+                                  <span className="text-zinc-400 text-[10px]">No tracking</span>
+                                )}
+                              </div>
+                              {(b.weightLbs || b.dimensionsInch) && (
+                                <div className="text-[10px] text-zinc-400 mt-1">
+                                  {b.weightLbs ? `${b.weightLbs} lbs` : ""}
+                                  {b.weightLbs && b.dimensionsInch ? " · " : ""}
+                                  {b.dimensionsInch ? b.dimensionsInch : ""}
+                                </div>
                               )}
-                            </span>
-                          )}
+                            </div>
+                          ))}
                         </div>
+                        {f.notes && (
+                          <p className="text-[11px] text-zinc-500 pt-1">
+                            Note: {f.notes}
+                          </p>
+                        )}
                       </div>
-
-                      {f.notes && (
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                         <div>
-                          <span className="text-[10px] uppercase font-bold text-zinc-400 block">Shipment Note</span>
-                          <p className="text-zinc-600 dark:text-zinc-400 mt-0.5">{f.notes}</p>
+                          <span className="text-[10px] uppercase font-bold text-zinc-400 block">Carrier & Tracking</span>
+                          <div className="font-semibold text-zinc-900 dark:text-white mt-0.5">
+                            {f.carrier || "Standard Freight"}
+                            {f.trackingNumber && (
+                              <span className="ml-2 font-mono text-indigo-600 dark:text-indigo-400">
+                                {f.trackingUrl ? (
+                                  <a
+                                    href={f.trackingUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline hover:text-indigo-500"
+                                  >
+                                    {f.trackingNumber} ↗
+                                  </a>
+                                ) : (
+                                  f.trackingNumber
+                                )}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
+
+                        {f.notes && (
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-zinc-400 block">Shipment Note</span>
+                            <p className="text-zinc-600 dark:text-zinc-400 mt-0.5">{f.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Shipment Line Items */}
                     <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
