@@ -59,9 +59,12 @@ const ADMIN_URL = 'https://admin.kselectnetwork.com';
     if (!from7Val || !to7Val) throw new Error('7 Days preset did not populate date values');
 
     // Test "All" Date Preset
-    const allDateBtn = page.locator('button:has-text("All")').first();
+    const allDateBtn = page.locator('div:has(> span:has-text("Date:")) button', { hasText: /^All$/ }).first();
     await allDateBtn.click();
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(500);
+    const fromClearedVal = await fromInput.inputValue();
+    const toClearedVal = await toInput.inputValue();
+    console.log(`All Preset cleared From: "${fromClearedVal}", To: "${toClearedVal}"`);
 
     // 4. Test Status Multi-Select Chips
     console.log('[4/8] Testing Status Multi-Select Chips...');
@@ -128,13 +131,13 @@ const ADMIN_URL = 'https://admin.kselectnetwork.com';
     await addTrackBtn.click();
     await page.waitForTimeout(1000);
 
-    const modalTitle = page.locator('h3:has-text("Manage Shipment Boxes"), h3:has-text("운송장 및 박스 번호")').first();
+    const modalTitle = page.locator('h2:has-text("Edit Shipment Tracking & Packages")').first();
     const isModalVisible = await modalTitle.isVisible();
     console.log('Edit Tracking Modal opened in-place:', isModalVisible);
     if (!isModalVisible) throw new Error('EditTrackingModal failed to open');
 
     // Close Modal
-    const cancelModalBtn = page.locator('button:has-text("Cancel"), button:has-text("취소")').first();
+    const cancelModalBtn = page.locator('.fixed.inset-0 button:has-text("Cancel")').first();
     await cancelModalBtn.click();
     await page.waitForTimeout(500);
     console.log('Closed EditTrackingModal cleanly.');
@@ -152,14 +155,16 @@ const ADMIN_URL = 'https://admin.kselectnetwork.com';
 
     // 8. Test Completed KPI Counter & Filter Synchronization
     console.log('[8/8] Testing Completed KPI Counter & Filter...');
-    const completedKpiCard = page.locator('button:has-text("Completed")');
+    const completedKpiCard = page.locator('button:has(span:has-text("Completed"))').first();
     const kpiText = await completedKpiCard.innerText();
     console.log('Completed KPI card text:', kpiText.replace(/\n/g, ' '));
     if (!kpiText.includes('6')) throw new Error(`Expected Completed KPI to show 6, got: ${kpiText}`);
 
     // Click Completed KPI tab
     await completedKpiCard.click();
-    await page.waitForTimeout(1500);
+    await page.locator('text=Updating queue...').waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
+    await page.locator('text=Filtering...').waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(1000);
     const filteredRowsCount = await page.locator('tbody tr').count();
     console.log(`Completed filtered rows displayed: ${filteredRowsCount}`);
     if (filteredRowsCount !== 6) throw new Error(`Expected 6 rows in Completed filter, got: ${filteredRowsCount}`);
