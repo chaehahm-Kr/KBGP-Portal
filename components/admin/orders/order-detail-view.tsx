@@ -319,17 +319,13 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
                         Shipped: <strong>{it.quantityShipped}</strong>
                       </span>
                       <span className="text-zinc-300">•</span>
-                      <span className={it.quantityRemaining > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-zinc-400"}>
+                      <span className="text-orange-600 font-semibold">
+                        Cancelled: <strong>{it.quantityCancelled}</strong>
+                      </span>
+                      <span className="text-zinc-300">•</span>
+                      <span className={it.quantityRemaining > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-emerald-600 dark:text-emerald-400 font-semibold"}>
                         Remaining: <strong>{it.quantityRemaining}</strong>
                       </span>
-                      {it.quantityCancelled > 0 && (
-                        <>
-                          <span className="text-zinc-300">•</span>
-                          <span className="text-orange-600 font-semibold">
-                            Cancelled: <strong>{it.quantityCancelled}</strong>
-                          </span>
-                        </>
-                      )}
                     </div>
 
                     {it.quantityRemaining > 0 && order.orderStatus !== "cancelled" && (

@@ -11,6 +11,15 @@ interface BillDetailModalProps {
   onPayBill: (bill: RetailerBillDetail) => void;
 }
 
+function formatDateOnly(dateStr?: string | null): string {
+  if (!dateStr) return "—";
+  const [y, m, d] = dateStr.split("T")[0].split("-").map(Number);
+  if (y && m && d) {
+    return new Date(y, m - 1, d).toLocaleDateString();
+  }
+  return new Date(dateStr).toLocaleDateString();
+}
+
 export function BillDetailModal({
   invoiceId,
   isOpen,
@@ -99,7 +108,7 @@ export function BillDetailModal({
             </div>
             {bill && (
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                Order #{bill.order_number} · Issued on {new Date(bill.invoice_date).toLocaleDateString()}
+                Order #{bill.order_number} · Issued on {formatDateOnly(bill.invoice_date)}
               </p>
             )}
           </div>
@@ -127,7 +136,7 @@ export function BillDetailModal({
               <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-200 dark:border-zinc-800">
                 <span className="text-[10px] uppercase font-bold text-zinc-400">Due Date</span>
                 <p className="text-sm font-bold text-zinc-900 dark:text-white mt-0.5">
-                  {new Date(bill.due_date).toLocaleDateString()}
+                  {formatDateOnly(bill.due_date)}
                 </p>
               </div>
 

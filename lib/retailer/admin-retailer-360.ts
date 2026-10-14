@@ -149,6 +149,8 @@ export interface Retailer360OrderItem {
     lineTotal: number;
     quantityShipped: number;
     quantityDelivered: number;
+    quantityCancelled: number;
+    quantityRemaining: number;
   }>;
   fulfillments: Array<{
     id: string;
@@ -835,7 +837,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
       let qtyShipped = 0;
       let qtyDelivered = 0;
       oFulfillments
-        .filter((f) => f.status !== "cancelled")
+        .filter((f) => f.status === "shipped" || f.status === "delivered")
         .forEach((f) => {
           f.items.forEach((fit: any) => {
             if (fit.orderItemId === it.id) {
@@ -845,6 +847,10 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
           });
         });
 
+      const qOrdered = Number(it.quantity || 0);
+      const qCancelled = Number(it.quantity_cancelled || (o.order_status === "cancelled" ? qOrdered : 0));
+      const qRemaining = Math.max(0, qOrdered - qtyShipped - qCancelled);
+
       return {
         id: it.id,
         productId: it.product_id,
@@ -852,21 +858,24 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
         productNameEn: p.name_en || null,
         brandName: p.brands?.name || "K SELECT Brand",
         sku,
-        quantity: Number(it.quantity || 0),
+        quantity: qOrdered,
         unitWholesalePrice: Number(it.unit_wholesale_price || 0),
         lineTotal: Number(it.line_total || 0),
         quantityShipped: qtyShipped,
         quantityDelivered: qtyDelivered,
+        quantityCancelled: qCancelled,
+        quantityRemaining: qRemaining,
       };
     });
 
     const totalOrderedUnits = items.reduce((s: number, i: any) => s + i.quantity, 0);
     const totalShippedUnits = items.reduce((s: number, i: any) => s + i.quantityShipped, 0);
+    const totalCancelledUnits = items.reduce((s: number, i: any) => s + i.quantityCancelled, 0);
     const authoritativeStatus = computeAuthoritativeOrderStatus(
       o.order_status,
       totalOrderedUnits,
       totalShippedUnits,
-      0
+      totalCancelledUnits
     );
 
     return {

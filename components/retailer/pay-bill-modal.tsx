@@ -13,6 +13,15 @@ interface PayBillModalProps {
   onSuccess?: () => void;
 }
 
+function formatDateOnly(dateStr?: string | null): string {
+  if (!dateStr) return "—";
+  const [y, m, d] = dateStr.split("T")[0].split("-").map(Number);
+  if (y && m && d) {
+    return new Date(y, m - 1, d).toLocaleDateString();
+  }
+  return new Date(dateStr).toLocaleDateString();
+}
+
 export function PayBillModal({
   bill,
   effectivePolicy,
@@ -104,7 +113,7 @@ export function PayBillModal({
               Pay Bill {bill.invoice_number}
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              Order #{bill.order_number} · Due {new Date(bill.due_date).toLocaleDateString()}
+              Order #{bill.order_number} · Due {formatDateOnly(bill.due_date)}
             </p>
           </div>
           <button

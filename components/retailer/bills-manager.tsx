@@ -149,10 +149,20 @@ export function RetailerBillsManager({
     }
   };
 
+  const formatDateOnly = (dateStr?: string | null) => {
+    if (!dateStr) return "—";
+    const [y, m, d] = dateStr.split("T")[0].split("-").map(Number);
+    if (y && m && d) {
+      return new Date(y, m - 1, d).toLocaleDateString();
+    }
+    return new Date(dateStr).toLocaleDateString();
+  };
+
   const formatDueRelative = (dueDateStr: string, arStatus: string) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const dueDate = new Date(dueDateStr);
+    const [y, m, d] = dueDateStr.split("T")[0].split("-").map(Number);
+    const dueDate = y && m && d ? new Date(y, m - 1, d) : new Date(dueDateStr);
     dueDate.setHours(0, 0, 0, 0);
 
     const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -472,7 +482,7 @@ export function RetailerBillsManager({
 
                       {/* Issue Date (Independent Column) */}
                       <td className="py-3.5 px-3 text-zinc-600 dark:text-zinc-400 font-medium">
-                        {new Date(inv.invoice_date).toLocaleDateString()}
+                        {formatDateOnly(inv.invoice_date)}
                       </td>
 
                       {/* Order # */}
@@ -488,7 +498,7 @@ export function RetailerBillsManager({
                       {/* Due Date */}
                       <td className="py-3.5 px-3">
                         <p className="font-semibold text-zinc-900 dark:text-white">
-                          {new Date(inv.due_date).toLocaleDateString()}
+                          {formatDateOnly(inv.due_date)}
                         </p>
                         <p
                           className={`text-[10px] font-medium ${
@@ -588,7 +598,7 @@ export function RetailerBillsManager({
                           {inv.invoice_number}
                         </span>
                         <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                          Issued {new Date(inv.invoice_date).toLocaleDateString()} · Order #{inv.order_number}
+                          Issued {formatDateOnly(inv.invoice_date)} · Order #{inv.order_number}
                         </p>
                       </div>
                     </div>
@@ -599,7 +609,7 @@ export function RetailerBillsManager({
                     <div>
                       <span className="text-[10px] text-zinc-400 uppercase font-bold">Due Date</span>
                       <p className="font-semibold text-zinc-900 dark:text-white mt-0.5">
-                        {new Date(inv.due_date).toLocaleDateString()}
+                        {formatDateOnly(inv.due_date)}
                       </p>
                     </div>
 

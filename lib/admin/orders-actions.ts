@@ -347,13 +347,12 @@ export async function getAdminRetailerOrderDetailAction(
         const fItem = (f.retailer_order_fulfillment_items || []).find((fi: any) => fi.order_item_id === it.id);
         return sum + Number(fItem?.quantity_shipped || 0);
       }, 0);
+    const hasFulfillments = (rawFulfillments || []).length > 0;
+    const isLegacyShipped = ["shipped", "delivered"].includes((o.order_status || "").toLowerCase());
     const qtyShipped = Number(
-      it.quantity_shipped ||
-        (fulfilledShipped > 0
-          ? fulfilledShipped
-          : ["shipped", "delivered"].includes(o.order_status)
-          ? qtyOrdered
-          : 0)
+      hasFulfillments
+        ? fulfilledShipped
+        : (it.quantity_shipped || (isLegacyShipped ? qtyOrdered : 0))
     );
     const qtyCancelled = Number(
       it.quantity_cancelled || (["cancelled"].includes(o.order_status) ? qtyOrdered : 0)
@@ -621,19 +620,21 @@ export async function adminCreateShipmentWithPackagesAction(params: {
         }))
       );
 
-      // Update quantity_shipped on retailer_order_items
-      for (const it of validItems) {
-        const { data: curItem } = await adminClient
-          .from("retailer_order_items")
-          .select("quantity_shipped")
-          .eq("id", it.orderItemId)
-          .single();
+      // Update quantity_shipped on retailer_order_items ONLY when actually marked as shipped (confirmed dispatch)
+      if (isShipped) {
+        for (const it of validItems) {
+          const { data: curItem } = await adminClient
+            .from("retailer_order_items")
+            .select("quantity_shipped")
+            .eq("id", it.orderItemId)
+            .single();
 
-        const curShipped = Number(curItem?.quantity_shipped || 0);
-        await adminClient
-          .from("retailer_order_items")
-          .update({ quantity_shipped: curShipped + it.quantityShipped })
-          .eq("id", it.orderItemId);
+          const curShipped = Number(curItem?.quantity_shipped || 0);
+          await adminClient
+            .from("retailer_order_items")
+            .update({ quantity_shipped: curShipped + it.quantityShipped })
+            .eq("id", it.orderItemId);
+        }
       }
     }
 
@@ -679,7 +680,12 @@ export async function adminCreateShipmentWithPackagesAction(params: {
       const nextStatus = detail?.totalRemainingUnits === 0 ? "shipped" : "partially_shipped";
       await adminClient
         .from("retailer_orders")
-        .update({ order_status: nextStatus, updated_at: new Date().toISOString() })
+        .update({
+          order_status: nextStatus,
+          total_shipped_units: detail?.totalShippedUnits || 0,
+          total_remaining_units: detail?.totalRemainingUnits || 0,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", params.orderId);
 
       // Phase B3: Issue authoritative dispatch invoice upon confirmed dispatch

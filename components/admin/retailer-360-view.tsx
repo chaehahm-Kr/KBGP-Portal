@@ -1574,7 +1574,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                       </div>
                       {(() => {
                         const orderRemainingUnits = (order.items || []).reduce(
-                          (sum, it) => sum + Math.max(0, Number(it.quantity || 0) - Number(it.quantityShipped || 0)),
+                          (sum, it) => sum + (it.quantityRemaining !== undefined ? it.quantityRemaining : Math.max(0, Number(it.quantity || 0) - Number(it.quantityShipped || 0))),
                           0
                         );
                         const isTerminal = ["shipped", "delivered", "cancelled"].includes(
@@ -1607,9 +1607,10 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                       <thead className="text-[10px] text-zinc-400 font-bold uppercase border-b border-zinc-100 dark:border-zinc-800">
                         <tr>
                           <th className="py-2">Product / SKU</th>
-                          <th className="py-2 text-right">Qty Ordered</th>
+                          <th className="py-2 text-right">Ordered</th>
                           <th className="py-2 text-right">Shipped</th>
-                          <th className="py-2 text-right">Delivered</th>
+                          <th className="py-2 text-right">Cancelled</th>
+                          <th className="py-2 text-right">Remaining</th>
                           <th className="py-2 text-right">Wholesale Price</th>
                           <th className="py-2 text-right">Total</th>
                         </tr>
@@ -1626,8 +1627,11 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                               </span>
                             </td>
                             <td className="py-2 text-right font-bold">{item.quantity}</td>
-                            <td className="py-2 text-right text-sky-600 font-semibold">{item.quantityShipped}</td>
-                            <td className="py-2 text-right text-emerald-600 font-bold">{item.quantityDelivered}</td>
+                            <td className="py-2 text-right text-indigo-600 dark:text-indigo-400 font-semibold">{item.quantityShipped}</td>
+                            <td className="py-2 text-right text-orange-600 font-semibold">{item.quantityCancelled || 0}</td>
+                            <td className={`py-2 text-right font-bold ${item.quantityRemaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                              {item.quantityRemaining}
+                            </td>
                             <td className="py-2 text-right font-mono text-zinc-500">{formatCurrency(item.unitWholesalePrice)}</td>
                             <td className="py-2 text-right font-mono font-bold text-zinc-900 dark:text-white">{formatCurrency(item.lineTotal)}</td>
                           </tr>

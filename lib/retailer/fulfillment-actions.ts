@@ -310,7 +310,7 @@ export async function adminMarkFulfillmentShippedAction(params: {
 
     const { data: fulfillment, error: fulErr } = await adminClient
       .from("retailer_order_fulfillments")
-      .select("id, order_id, company_id, status")
+      .select("id, order_id, company_id, status, carrier, tracking_number, tracking_url")
       .eq("id", params.fulfillmentId)
       .maybeSingle();
 
@@ -324,22 +324,54 @@ export async function adminMarkFulfillmentShippedAction(params: {
 
     const shippedTime = params.shippedAt || new Date().toISOString();
 
+    const updatePayload: Record<string, any> = {
+      status: "shipped",
+      shipped_at: shippedTime,
+      shipped_by: session.userId,
+      updated_at: new Date().toISOString(),
+    };
+    if (params.carrier !== undefined) {
+      updatePayload.carrier = params.carrier?.trim() || null;
+    }
+    if (params.trackingNumber !== undefined) {
+      updatePayload.tracking_number = params.trackingNumber?.trim() || null;
+    }
+    if (params.trackingUrl !== undefined) {
+      updatePayload.tracking_url = params.trackingUrl?.trim() || null;
+    }
+    if (params.notes !== undefined) {
+      updatePayload.notes = params.notes?.trim() || null;
+    }
+
     const { error: updateErr } = await adminClient
       .from("retailer_order_fulfillments")
-      .update({
-        status: "shipped",
-        carrier: params.carrier?.trim() || null,
-        tracking_number: params.trackingNumber?.trim() || null,
-        tracking_url: params.trackingUrl?.trim() || null,
-        shipped_at: shippedTime,
-        shipped_by: session.userId,
-        notes: params.notes?.trim() || null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", params.fulfillmentId);
 
     if (updateErr) {
       return { success: false, error: "Failed to update shipment status to shipped." };
+    }
+
+    // Increment quantity_shipped on retailer_order_items for this confirmed fulfillment
+    const { data: fItems } = await adminClient
+      .from("retailer_order_fulfillment_items")
+      .select("order_item_id, quantity_shipped")
+      .eq("fulfillment_id", params.fulfillmentId);
+
+    if (fItems && fItems.length > 0) {
+      for (const fi of fItems) {
+        if (!fi.order_item_id || !fi.quantity_shipped) continue;
+        const { data: curItem } = await adminClient
+          .from("retailer_order_items")
+          .select("quantity_shipped")
+          .eq("id", fi.order_item_id)
+          .single();
+        const curShipped = Number(curItem?.quantity_shipped || 0);
+        await adminClient
+          .from("retailer_order_items")
+          .update({ quantity_shipped: curShipped + Number(fi.quantity_shipped) })
+          .eq("id", fi.order_item_id);
+      }
     }
 
     // Phase B1: Calculate Partially Shipped using actual shipped units vs ordered units
@@ -372,7 +404,12 @@ export async function adminMarkFulfillmentShippedAction(params: {
 
     await adminClient
       .from("retailer_orders")
-      .update({ order_status: nextOrderStatus, updated_at: new Date().toISOString() })
+      .update({
+        order_status: nextOrderStatus,
+        total_shipped_units: totalShipped,
+        total_remaining_units: Math.max(0, totalOrdered - totalShipped),
+        updated_at: new Date().toISOString()
+      })
       .eq("id", fulfillment.order_id);
 
     // Phase B3: Authoritative Dispatch-Based Invoicing
@@ -390,6 +427,23 @@ export async function adminMarkFulfillmentShippedAction(params: {
           updated_at: new Date().toISOString(),
         })
         .eq("id", params.fulfillmentId);
+
+      // Rollback item shipped quantities
+      if (fItems && fItems.length > 0) {
+        for (const fi of fItems) {
+          if (!fi.order_item_id || !fi.quantity_shipped) continue;
+          const { data: curItem } = await adminClient
+            .from("retailer_order_items")
+            .select("quantity_shipped")
+            .eq("id", fi.order_item_id)
+            .single();
+          const curShipped = Number(curItem?.quantity_shipped || 0);
+          await adminClient
+            .from("retailer_order_items")
+            .update({ quantity_shipped: Math.max(0, curShipped - Number(fi.quantity_shipped)) })
+            .eq("id", fi.order_item_id);
+        }
+      }
 
       // Rollback order status
       await adminClient
