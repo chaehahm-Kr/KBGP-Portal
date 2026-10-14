@@ -25,31 +25,31 @@ export default async function AdminHomePage() {
         return {
           label: "신규 접수",
           className:
-            "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800",
+            "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800",
         };
       case "processing":
         return {
           label: "처리 중",
           className:
-            "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800",
+            "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800",
         };
       case "partially_shipped":
         return {
           label: "부분 출고",
           className:
-            "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800",
+            "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800",
         };
       case "shipped":
         return {
           label: "출고 완료",
           className:
-            "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800",
+            "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800",
         };
       case "delivered":
         return {
           label: "배송 완료",
           className:
-            "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800",
+            "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800",
         };
       case "cancelled":
         return {
@@ -60,7 +60,57 @@ export default async function AdminHomePage() {
       default:
         return {
           label: status,
-          className: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+          className:
+            "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700",
+        };
+    }
+  };
+
+  // Helper for Application Status Badge
+  const getApplicationStatusBadge = (status: string) => {
+    switch (status) {
+      case "submitted":
+        return {
+          label: APPLICATION_STATUS_LABEL[status as ApplicationStatus] || "신규 접수",
+          className:
+            "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800",
+        };
+      case "assigned":
+      case "under_review":
+      case "re_review":
+        return {
+          label: APPLICATION_STATUS_LABEL[status as ApplicationStatus] || "심사 중",
+          className:
+            "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800",
+        };
+      case "info_requested":
+      case "on_hold":
+        return {
+          label: APPLICATION_STATUS_LABEL[status as ApplicationStatus] || "보완 대기",
+          className:
+            "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800",
+        };
+      case "approved":
+      case "partial_approved":
+      case "onboarding":
+      case "onboarded":
+        return {
+          label: APPLICATION_STATUS_LABEL[status as ApplicationStatus] || "승인 완료",
+          className:
+            "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800",
+        };
+      case "rejected":
+      case "cancelled":
+        return {
+          label: APPLICATION_STATUS_LABEL[status as ApplicationStatus] || "반려/취소",
+          className:
+            "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700",
+        };
+      default:
+        return {
+          label: APPLICATION_STATUS_LABEL[status as ApplicationStatus] || status,
+          className:
+            "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700",
         };
     }
   };
@@ -311,34 +361,39 @@ export default async function AdminHomePage() {
                   return (
                     <div
                       key={action.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border border-zinc-150 bg-zinc-50/60 hover:bg-zinc-50 hover:border-zinc-250 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:border-zinc-700 transition-colors"
+                      className="p-2.5 rounded-lg border border-zinc-150 bg-zinc-50/60 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/40 transition-colors"
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${pBadge.className}`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${pBadge.className}`}>
                             {pBadge.label}
+                          </span>
+                          <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            Admin Action Required
                           </span>
                           <h3 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
                             {action.title}
                           </h3>
                         </div>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
+                        <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-zinc-200/60 dark:border-zinc-800">
+                          {action.count !== undefined && (
+                            <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                              {action.count}건
+                            </span>
+                          )}
+                          <Link
+                            href={action.actionUrl}
+                            className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline shrink-0"
+                          >
+                            {action.actionLabel}
+                          </Link>
+                        </div>
+                      </div>
+                      {action.description && (
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 pl-0.5 line-clamp-1">
                           {action.description}
                         </p>
-                      </div>
-                      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-zinc-200/60 dark:border-zinc-800">
-                        {action.count !== undefined && (
-                          <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                            {action.count}건
-                          </span>
-                        )}
-                        <Link
-                          href={action.actionUrl}
-                          className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline"
-                        >
-                          {action.actionLabel}
-                        </Link>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
@@ -360,45 +415,65 @@ export default async function AdminHomePage() {
             <div className="grid grid-cols-3 gap-2.5">
               <Link
                 href="/admin/sales/orders?status=submitted"
-                className="p-3 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 hover:border-amber-300 transition-colors"
+                className="p-3 rounded-lg bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/70 dark:border-blue-900/40 hover:border-blue-300 transition-colors"
               >
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 block">
                   신규 접수
                 </span>
-                <div className="text-xl font-black text-amber-700 dark:text-amber-300 mt-0.5">
+                <div className="text-xl font-black text-blue-900 dark:text-blue-100 mt-0.5">
                   {metrics.activeOrdersSummary.newOrders}건
                 </div>
-                <span className="text-[10px] text-amber-600/70 block mt-0.5">New Orders</span>
+                <span className="text-[10px] text-blue-600/70 dark:text-blue-400/70 block mt-0.5">New Orders</span>
               </Link>
 
               <Link
                 href="/admin/sales/orders?quickFilter=ready"
-                className="p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 hover:border-blue-300 transition-colors"
+                className="p-3 rounded-lg bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-200/70 dark:border-indigo-900/40 hover:border-indigo-300 transition-colors"
               >
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 block">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 block">
                   출고 준비
                 </span>
-                <div className="text-xl font-black text-blue-700 dark:text-blue-300 mt-0.5">
+                <div className="text-xl font-black text-indigo-900 dark:text-indigo-100 mt-0.5">
                   {metrics.activeOrdersSummary.readyToProcess}건
                 </div>
-                <span className="text-[10px] text-blue-600/70 block mt-0.5">Ready to Ship</span>
+                <span className="text-[10px] text-indigo-600/70 dark:text-indigo-400/70 block mt-0.5">Ready to Ship</span>
               </Link>
 
               <Link
                 href="/admin/sales/orders?quickFilter=tracking_missing"
                 className={`p-3 rounded-lg border transition-colors ${
                   metrics.activeOrdersSummary.trackingMissing > 0
-                    ? "bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40"
+                    ? "bg-amber-50/60 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800"
                     : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-150 dark:border-zinc-800"
                 }`}
               >
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 block">
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-wider block ${
+                    metrics.activeOrdersSummary.trackingMissing > 0
+                      ? "text-amber-700 dark:text-amber-300"
+                      : "text-zinc-500 dark:text-zinc-400"
+                  }`}
+                >
                   송장 미등록
                 </span>
-                <div className="text-xl font-black text-rose-700 dark:text-rose-300 mt-0.5">
+                <div
+                  className={`text-xl font-black mt-0.5 ${
+                    metrics.activeOrdersSummary.trackingMissing > 0
+                      ? "text-amber-800 dark:text-amber-200"
+                      : "text-zinc-800 dark:text-zinc-200"
+                  }`}
+                >
                   {metrics.activeOrdersSummary.trackingMissing}건
                 </div>
-                <span className="text-[10px] text-rose-600/70 block mt-0.5">Tracking Needed</span>
+                <span
+                  className={`text-[10px] block mt-0.5 ${
+                    metrics.activeOrdersSummary.trackingMissing > 0
+                      ? "text-amber-600/80 dark:text-amber-400/80"
+                      : "text-zinc-400"
+                  }`}
+                >
+                  Tracking Needed
+                </span>
               </Link>
             </div>
 
@@ -465,39 +540,39 @@ export default async function AdminHomePage() {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
                 <thead>
-                  <tr className="border-b border-zinc-100 font-bold text-zinc-950 dark:border-zinc-800 dark:text-white">
-                    <th className="py-2">주문번호</th>
-                    <th className="py-2">발주처 / 매장</th>
-                    <th className="py-2">상태</th>
-                    <th className="py-2 text-right">금액</th>
-                    <th className="py-2 text-right">일시</th>
+                  <tr className="border-b border-zinc-200/80 dark:border-zinc-800 font-bold text-zinc-800 dark:text-zinc-200 h-9">
+                    <th className="py-2 pl-0">주문번호</th>
+                    <th className="py-2 px-2">발주처 / 매장</th>
+                    <th className="py-2 px-2">상태</th>
+                    <th className="py-2 px-2 text-right">금액</th>
+                    <th className="py-2 pr-0 text-right">접수일</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
                   {metrics.recentOrders.slice(0, 5).map((ord) => {
                     const badge = getOrderStatusBadge(ord.orderStatus);
                     return (
-                      <tr key={ord.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
-                        <td className="py-2.5 font-semibold text-zinc-950 dark:text-white">
+                      <tr key={ord.id} className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/40 transition-colors">
+                        <td className="py-2.5 pl-0 font-semibold text-zinc-950 dark:text-white">
                           <Link href="/admin/sales/orders" className="hover:underline">
                             {ord.orderNumber}
                           </Link>
                         </td>
-                        <td className="py-2.5">
-                          <div className="font-medium text-zinc-800 dark:text-zinc-200 truncate max-w-[120px]">
+                        <td className="py-2.5 px-2">
+                          <div className="font-medium text-zinc-800 dark:text-zinc-200 truncate max-w-[130px]">
                             {ord.companyName}
                           </div>
-                          <div className="text-[10px] text-zinc-400 truncate max-w-[120px]">{ord.storeName}</div>
+                          <div className="text-[10px] text-zinc-400 truncate max-w-[130px]">{ord.storeName}</div>
                         </td>
-                        <td className="py-2.5">
-                          <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-semibold ${badge.className}`}>
+                        <td className="py-2.5 px-2">
+                          <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}>
                             {badge.label}
                           </span>
                         </td>
-                        <td className="py-2.5 text-right font-semibold text-zinc-900 dark:text-white">
+                        <td className="py-2.5 px-2 text-right font-semibold text-zinc-900 dark:text-white">
                           ${Number(ord.totalAmount || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td className="py-2.5 text-right text-[10px]">
+                        <td className="py-2.5 pr-0 text-right text-[11px] text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
                           {formatEasternDate(ord.createdAt)}
                         </td>
                       </tr>
@@ -562,43 +637,45 @@ export default async function AdminHomePage() {
                   return (
                     <div
                       key={action.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border border-zinc-150 bg-zinc-50/60 hover:bg-zinc-50 hover:border-zinc-250 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:border-zinc-700 transition-colors"
+                      className="p-2.5 rounded-lg border border-zinc-150 bg-zinc-50/60 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/40 transition-colors"
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${pBadge.className}`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${pBadge.className}`}>
                             {pBadge.label}
                           </span>
                           <span
-                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                            className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold ${
                               isWaitingForBrand
-                                ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
-                                : "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
                             }`}
                           >
-                            {isWaitingForBrand ? "Waiting for Brand" : "Admin Action"}
+                            {isWaitingForBrand ? "Waiting for Brand" : "Admin Action Required"}
                           </span>
                           <h3 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
                             {action.title}
                           </h3>
                         </div>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
+                        <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-zinc-200/60 dark:border-zinc-800">
+                          {action.count !== undefined && (
+                            <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                              {action.count}건
+                            </span>
+                          )}
+                          <Link
+                            href={action.actionUrl}
+                            className="text-xs font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 hover:underline shrink-0"
+                          >
+                            {action.actionLabel}
+                          </Link>
+                        </div>
+                      </div>
+                      {action.description && (
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 pl-0.5 line-clamp-1">
                           {action.description}
                         </p>
-                      </div>
-                      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-zinc-200/60 dark:border-zinc-800">
-                        {action.count !== undefined && (
-                          <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                            {action.count}건
-                          </span>
-                        )}
-                        <Link
-                          href={action.actionUrl}
-                          className="text-xs font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 hover:underline"
-                        >
-                          {action.actionLabel}
-                        </Link>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
@@ -620,28 +697,28 @@ export default async function AdminHomePage() {
             <div className="grid grid-cols-3 gap-2.5">
               <Link
                 href="/admin/applications?status=submitted"
-                className="p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 hover:border-blue-300 transition-colors"
+                className="p-3 rounded-lg bg-purple-50/40 dark:bg-purple-950/20 border border-purple-200/70 dark:border-purple-900/40 hover:border-purple-300 transition-colors"
               >
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 block">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300 block">
                   관리자 심사 대기
                 </span>
-                <div className="text-xl font-black text-blue-700 dark:text-blue-300 mt-0.5">
+                <div className="text-xl font-black text-purple-900 dark:text-purple-100 mt-0.5">
                   {metrics.brandOps.pendingAdminReviewCount}건
                 </div>
-                <span className="text-[10px] text-blue-600/70 block mt-0.5">Admin Review</span>
+                <span className="text-[10px] text-purple-600/70 dark:text-purple-400/70 block mt-0.5">Admin Review</span>
               </Link>
 
               <Link
                 href="/admin/partner-inquiries"
-                className="p-3 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40 hover:border-indigo-300 transition-colors"
+                className="p-3 rounded-lg bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-200/70 dark:border-indigo-900/40 hover:border-indigo-300 transition-colors"
               >
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 block">
                   미확인 파트너 문의
                 </span>
-                <div className="text-xl font-black text-indigo-700 dark:text-indigo-300 mt-0.5">
+                <div className="text-xl font-black text-indigo-900 dark:text-indigo-100 mt-0.5">
                   {metrics.brandOps.openPartnerInquiriesCount}건
                 </div>
-                <span className="text-[10px] text-indigo-600/70 block mt-0.5">Partner Inquiries</span>
+                <span className="text-[10px] text-indigo-600/70 dark:text-indigo-400/70 block mt-0.5">Partner Inquiries</span>
               </Link>
 
               <Link
@@ -721,41 +798,48 @@ export default async function AdminHomePage() {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
                 <thead>
-                  <tr className="border-b border-zinc-100 font-bold text-zinc-950 dark:border-zinc-800 dark:text-white">
-                    <th className="py-2">신청번호</th>
-                    <th className="py-2">회사명</th>
-                    <th className="py-2">상태</th>
-                    <th className="py-2">접수일</th>
-                    <th className="py-2 text-right">심사</th>
+                  <tr className="border-b border-zinc-200/80 dark:border-zinc-800 font-bold text-zinc-800 dark:text-zinc-200 h-9">
+                    <th className="py-2 pl-0">신청번호</th>
+                    <th className="py-2 px-2">회사명</th>
+                    <th className="py-2 px-2">상태</th>
+                    <th className="py-2 px-2">접수일</th>
+                    <th className="py-2 pr-0 text-right">심사</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900">
-                  {metrics.recentApplications.slice(0, 5).map((app) => (
-                    <tr key={app.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
-                      <td className="py-2.5 font-semibold text-zinc-950 dark:text-white">
-                        {app.applicationNumber}
-                      </td>
-                      <td className="py-2.5 font-medium text-zinc-800 dark:text-zinc-200 truncate max-w-[130px]">
-                        {app.companyName}
-                      </td>
-                      <td className="py-2.5">
-                        <span className="inline-block rounded bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                          {APPLICATION_STATUS_LABEL[app.status as ApplicationStatus] || app.status}
-                        </span>
-                      </td>
-                      <td className="py-2.5 text-[10px]">
-                        {formatEasternDate(app.submittedAt || app.createdAt)}
-                      </td>
-                      <td className="py-2.5 text-right">
-                        <Link
-                          href={`/admin/applications/${app.id}`}
-                          className="font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 hover:underline"
-                        >
-                          심사 →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                  {metrics.recentApplications.slice(0, 5).map((app) => {
+                    const badge = getApplicationStatusBadge(app.status);
+                    return (
+                      <tr key={app.id} className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/40 transition-colors">
+                        <td className="py-2.5 pl-0 font-semibold text-zinc-950 dark:text-white">
+                          <Link href={`/admin/applications/${app.id}`} className="hover:underline">
+                            {app.applicationNumber}
+                          </Link>
+                        </td>
+                        <td className="py-2.5 px-2">
+                          <div className="font-medium text-zinc-800 dark:text-zinc-200 truncate max-w-[130px]">
+                            {app.companyName}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-2">
+                          <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-[11px] text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+                          {formatEasternDate(app.submittedAt || app.createdAt)}
+                        </td>
+                        <td className="py-2.5 pr-0 text-right">
+                          <Link
+                            href={`/admin/applications/${app.id}`}
+                            className="text-xs font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 hover:underline"
+                          >
+                            심사 →
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {metrics.recentApplications.length === 0 && (
                     <tr>
                       <td colSpan={5} className="py-6 text-center text-zinc-400 text-xs">
