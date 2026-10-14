@@ -455,7 +455,16 @@ export function InvoicesReceivablesManager({
 
                       {/* Balance Due */}
                       <td className="py-3 px-4 text-right font-bold text-zinc-900 dark:text-white whitespace-nowrap">
-                        ${inv.balance_due.toFixed(2)}
+                        {inv.ar_status === "VOID" || inv.invoice_status === "void" || inv.invoice_status === "cancelled" ? (
+                          <div className="flex flex-col items-end">
+                            <span className="text-zinc-500 dark:text-zinc-400">$0.00</span>
+                            <span className="text-[10px] font-normal text-zinc-400 line-through">
+                              Orig. ${inv.total_amount.toFixed(2)}
+                            </span>
+                          </div>
+                        ) : (
+                          `$${inv.balance_due.toFixed(2)}`
+                        )}
                       </td>
 
                       {/* AR Status */}
@@ -829,7 +838,16 @@ export function InvoicesReceivablesManager({
                       )}
                       <div className="flex justify-between font-black text-sm text-indigo-600 dark:text-indigo-400 pt-1 border-t border-dashed border-zinc-200 dark:border-zinc-800">
                         <span>Balance Due:</span>
-                        <span>${Number(selectedInvoiceDetail.balance_due || 0).toFixed(2)}</span>
+                        {selectedInvoiceDetail.ar_status === "VOID" || selectedInvoiceDetail.invoice_status === "void" || selectedInvoiceDetail.invoice_status === "cancelled" ? (
+                          <span className="inline-flex items-center gap-2">
+                            <span className="text-zinc-500 dark:text-zinc-400">$0.00</span>
+                            <span className="text-xs font-normal text-zinc-400 line-through">
+                              (Orig. ${Number(selectedInvoiceDetail.total_amount || 0).toFixed(2)})
+                            </span>
+                          </span>
+                        ) : (
+                          <span>${Number(selectedInvoiceDetail.balance_due || 0).toFixed(2)}</span>
+                        )}
                       </div>
                     </div>
                   </div>

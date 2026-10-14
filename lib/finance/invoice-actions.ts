@@ -139,8 +139,9 @@ export async function getAdminInvoicesAction(filters?: {
     }
 
     const formattedInvoices: RetailerInvoice[] = (data || []).map((row: any) => {
-      const balanceDue = Number(row.balance_due || 0);
       const invoiceStatus = row.invoice_status || "open";
+      const isVoid = invoiceStatus === "void" || invoiceStatus === "cancelled";
+      const balanceDue = isVoid ? 0 : Number(row.balance_due || 0);
       const arStatus = computeARStatus({
         balance_due: balanceDue,
         due_date: row.due_date,
@@ -287,8 +288,11 @@ export async function getAdminInvoiceDetailAction(invoiceId: string) {
       .or(`invoice_id.eq.${invoiceId},order_id.eq.${inv.order_id}`)
       .order("created_at", { ascending: false });
 
+    const isVoid = inv.invoice_status === "void" || inv.invoice_status === "cancelled";
+    const balanceDue = isVoid ? 0 : Number(inv.balance_due || 0);
+
     const arStatus = computeARStatus({
-      balance_due: Number(inv.balance_due || 0),
+      balance_due: balanceDue,
       due_date: inv.due_date,
       invoice_status: inv.invoice_status,
     });
@@ -297,6 +301,7 @@ export async function getAdminInvoiceDetailAction(invoiceId: string) {
       success: true,
       invoice: {
         ...inv,
+        balance_due: balanceDue,
         ar_status: arStatus,
         items: items || [],
         payments: payments || [],
