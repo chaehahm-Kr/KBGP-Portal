@@ -14,7 +14,7 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
   const [statusFilter, setStatusFilter] = useState("all");
   const [termsFilter, setTermsFilter] = useState("all");
   const [operationalFilter, setOperationalFilter] = useState("all");
-  const [sortBy, setSortBy] = useState<"name_asc" | "name_desc" | "stores_desc" | "orders_desc" | "lifetime_desc" | "ar_desc">("name_asc");
+  const [sortBy, setSortBy] = useState<"name_asc" | "name_desc" | "stores_desc" | "orders_desc" | "total_ordered_desc" | "ar_desc">("name_asc");
 
   // Filtering & Sorting
   const filtered = useMemo(() => {
@@ -78,8 +78,8 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
             return b.storesCount - a.storesCount;
           case "orders_desc":
             return b.openOrdersCount - a.openOrdersCount;
-          case "lifetime_desc":
-            return b.lifetimeOrderValue - a.lifetimeOrderValue;
+          case "total_ordered_desc":
+            return b.totalOrdered - a.totalOrdered;
           case "ar_desc":
             return b.openAR - a.openAR;
           case "name_asc":
@@ -180,7 +180,7 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
                 <option value="name_desc">Company (Z-A)</option>
                 <option value="stores_desc">Stores (High-Low)</option>
                 <option value="orders_desc">Open Orders (High-Low)</option>
-                <option value="lifetime_desc">Lifetime Order Value (High-Low)</option>
+                <option value="total_ordered_desc">Total Ordered (High-Low)</option>
                 <option value="ar_desc">Open AR (High-Low)</option>
               </select>
             </div>
@@ -303,12 +303,12 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
               <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-950/60 font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-[10px] whitespace-nowrap">
                 <th className="py-3 px-3 text-left min-w-[170px]">Retailer</th>
                 <th className="py-3 px-3 text-left min-w-[85px]">Status</th>
+                <th className="py-3 px-3 text-right min-w-[110px]">Total Ordered</th>
                 <th className="py-3 px-3 text-center min-w-[55px]">Stores</th>
                 <th className="py-3 px-3 text-center min-w-[60px]">Users</th>
                 <th className="py-3 px-3 text-left min-w-[80px]">Terms</th>
                 <th className="py-3 px-3 text-right min-w-[95px]">Credit Limit</th>
                 <th className="py-3 px-3 text-left min-w-[115px]">Orders</th>
-                <th className="py-3 px-3 text-right min-w-[130px]">Lifetime Order Value</th>
                 <th className="py-3 px-3 text-right min-w-[125px]">Open AR</th>
                 <th className="py-3 px-3 text-center min-w-[65px]">Products</th>
                 <th className="py-3 px-3 text-left min-w-[95px]">Training</th>
@@ -415,7 +415,18 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
                         </span>
                       </td>
 
-                      {/* COLUMN 3: STORES */}
+                      {/* COLUMN 3: TOTAL ORDERED */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono tabular-nums text-xs">
+                        <Link
+                          href={`/admin/retailers/${ret.id}?tab=orders`}
+                          className="font-bold text-zinc-800 dark:text-zinc-200 hover:text-indigo-600 dark:hover:text-indigo-400 inline-block transition-colors"
+                          title="Cumulative net merchandise ordered, including test orders."
+                        >
+                          ${ret.totalOrdered.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </Link>
+                      </td>
+
+                      {/* COLUMN 4: STORES */}
                       <td className="py-2.5 px-3 text-center whitespace-nowrap tabular-nums">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=stores`}
@@ -426,7 +437,7 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
                         </Link>
                       </td>
 
-                      {/* COLUMN 4: USERS */}
+                      {/* COLUMN 5: USERS */}
                       <td className="py-2.5 px-3 text-center whitespace-nowrap tabular-nums">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=users`}
@@ -442,7 +453,7 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
                         </Link>
                       </td>
 
-                      {/* COLUMN 5: TERMS */}
+                      {/* COLUMN 6: TERMS */}
                       <td className="py-2.5 px-3 whitespace-nowrap text-left">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=payments`}
@@ -455,7 +466,7 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
                         </Link>
                       </td>
 
-                      {/* COLUMN 6: CREDIT LIMIT */}
+                      {/* COLUMN 7: CREDIT LIMIT */}
                       <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono tabular-nums text-xs">
                         {isNetTerms && ret.creditLimit > 0 ? (
                           <span className="font-bold text-zinc-800 dark:text-zinc-200">
@@ -466,7 +477,7 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
                         )}
                       </td>
 
-                      {/* COLUMN 7: ORDERS */}
+                      {/* COLUMN 8: ORDERS */}
                       <td className="py-2.5 px-3 whitespace-nowrap text-left text-xs">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=orders`}
@@ -484,17 +495,6 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
                           ) : (
                             <span className="text-zinc-400 font-normal">—</span>
                           )}
-                        </Link>
-                      </td>
-
-                      {/* COLUMN 8: LIFETIME ORDER VALUE */}
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono tabular-nums text-xs">
-                        <Link
-                          href={`/admin/retailers/${ret.id}?tab=orders`}
-                          className="font-bold text-zinc-800 dark:text-zinc-200 hover:text-indigo-600 dark:hover:text-indigo-400 inline-block transition-colors"
-                          title="Commercial Lifetime Wholesale Order Value (excluding test & cancelled orders)"
-                        >
-                          ${ret.lifetimeOrderValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </Link>
                       </td>
 

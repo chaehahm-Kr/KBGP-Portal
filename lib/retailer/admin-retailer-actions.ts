@@ -50,6 +50,7 @@ export interface AdminRetailerListItem {
   // Group 4: Orders & AR
   openOrdersCount: number;
   readyToShipCount: number;
+  totalOrdered: number;
   lifetimeOrderValue: number;
   openAR: number;
   hasPastDue: boolean;
@@ -176,7 +177,7 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
   let invitationCounts: Record<string, number> = {};
   let userCounts: Record<string, number> = {};
   const ordersMap: Record<string, { openCount: number; readyCount: number; totalCount: number }> = {};
-  const lifetimeOrderValueMap: Record<string, number> = {};
+  const totalOrderedMap: Record<string, number> = {};
   const arMap: Record<string, { openAR: number; pastDueCount: number; pastDueAmount: number; hasPastDue: boolean }> = {};
   const assortmentMap: Record<string, Set<string>> = {};
   const weeklyChecksMap: Record<string, Set<string>> = {};
@@ -250,7 +251,7 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
       }
     });
 
-    // Map operational orders & Lifetime Order Value
+    // Map operational orders & Total Ordered (cumulative net merchandise order value, including TEST orders)
     (ordersRes.data || []).forEach((o: any) => {
       if (!ordersMap[o.company_id]) {
         ordersMap[o.company_id] = { openCount: 0, readyCount: 0, totalCount: 0 };
@@ -266,9 +267,10 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
         ordersMap[o.company_id].readyCount += 1;
       }
 
-      // Commercial Lifetime Order Value:
-      // Cumulative valid wholesale merchandise order value, strictly excluding cancelled orders and test orders
-      if (stat !== "cancelled" && !o.is_test) {
+      // Total Ordered (Retailer cumulative order activity metric):
+      // Cumulative NET MERCHANDISE VALUE of all valid Retailer orders recorded for the company,
+      // including TEST orders. Strictly excludes cancelled merchandise value and fully cancelled orders.
+      if (stat !== "cancelled") {
         let orderMerchVal = 0;
         if (Array.isArray(o.retailer_order_items) && o.retailer_order_items.length > 0) {
           orderMerchVal = o.retailer_order_items.reduce((sum: number, it: any) => {
@@ -278,7 +280,7 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
         } else {
           orderMerchVal = Math.max(0, Number(o.subtotal_amount || o.total_amount || 0) - Number(o.refund_amount || 0));
         }
-        lifetimeOrderValueMap[o.company_id] = (lifetimeOrderValueMap[o.company_id] || 0) + orderMerchVal;
+        totalOrderedMap[o.company_id] = (totalOrderedMap[o.company_id] || 0) + orderMerchVal;
       }
     });
 
@@ -359,7 +361,8 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
       // Group 4: Orders & AR
       openOrdersCount: ord.openCount,
       readyToShipCount: ord.readyCount,
-      lifetimeOrderValue: Math.round((lifetimeOrderValueMap[comp.id] || 0) * 100) / 100,
+      totalOrdered: Math.round((totalOrderedMap[comp.id] || 0) * 100) / 100,
+      lifetimeOrderValue: Math.round((totalOrderedMap[comp.id] || 0) * 100) / 100,
       openAR: Math.round(ar.openAR * 100) / 100,
       hasPastDue: ar.hasPastDue,
       pastDueCount: ar.pastDueCount,
