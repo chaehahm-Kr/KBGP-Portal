@@ -462,6 +462,7 @@ export async function getAdminRetailerOrderDetailAction(
     couponCode: o.coupon_code || null,
     taxAmount: Number(o.tax_amount || 0),
     shippingAmount: Number(o.shipping_amount || 0),
+    processingFee: Number(o.processing_fee || 0),
     totalSkusCount: Number(o.total_skus_count || items.length || 0),
     totalOrderedUnits,
     totalShippedUnits,
@@ -516,12 +517,20 @@ export async function adminCreateShipmentWithPackagesAction(params: {
 
     const { data: order, error: orderErr } = await adminClient
       .from("retailer_orders")
-      .select("id, company_id, store_id, order_status")
+      .select("id, company_id, store_id, order_status, cancellation_requested")
       .eq("id", params.orderId)
       .maybeSingle();
 
     if (orderErr || !order) {
       return { success: false, error: "Order not found." };
+    }
+
+    // Guard: Prevent shipment creation if cancellation request is currently pending review
+    if (order.cancellation_requested) {
+      return {
+        success: false,
+        error: "Cannot create shipment: A cancellation request is currently pending Admin review for this order. Please resolve the cancellation request before creating shipments.",
+      };
     }
 
     // Guard: Prevent shipment creation if order is terminal (shipped, delivered, or cancelled)

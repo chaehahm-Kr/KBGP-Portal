@@ -126,6 +126,7 @@ export interface AdminRetailerOrderSummary {
   cancellationRequested: boolean;
   refundAmount: number;
   refundStatus: string;
+  processingFee?: number;
   isTest: boolean;
   createdAt: string;
   updatedAt: string;

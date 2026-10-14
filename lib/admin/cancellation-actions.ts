@@ -229,6 +229,11 @@ export async function adminApproveCancellationRequestAction(payload: ApproveCanc
       }
     }
 
+    if (orderItems.length === 0 && Number(order.total_remaining_units || 0) > 0) {
+      // Header-only order units (e.g. legacy or checkout snapshot order)
+      totalNewlyCancelledUnits = Number(order.total_remaining_units);
+    }
+
     if (totalNewlyCancelledUnits === 0 && order.total_remaining_units > 0) {
       return {
         success: false,
@@ -243,9 +248,15 @@ export async function adminApproveCancellationRequestAction(payload: ApproveCanc
       .eq("order_id", order.id);
 
     const allDbItems = updatedDbItems || [];
-    const newTotalOrdered = allDbItems.reduce((sum: number, it: any) => sum + Number(it.quantity || 0), 0) || order.total_ordered_units;
-    const newTotalShipped = allDbItems.reduce((sum: number, it: any) => sum + Number(it.quantity_shipped || 0), 0);
-    const newTotalCancelled = allDbItems.reduce((sum: number, it: any) => sum + Number(it.quantity_cancelled || 0), 0);
+    const newTotalOrdered = allDbItems.length > 0
+      ? allDbItems.reduce((sum: number, it: any) => sum + Number(it.quantity || 0), 0)
+      : Number(order.total_ordered_units || 0);
+    const newTotalShipped = allDbItems.length > 0
+      ? allDbItems.reduce((sum: number, it: any) => sum + Number(it.quantity_shipped || 0), 0)
+      : Number(order.total_shipped_units || 0);
+    const newTotalCancelled = allDbItems.length > 0
+      ? allDbItems.reduce((sum: number, it: any) => sum + Number(it.quantity_cancelled || 0), 0)
+      : Math.min(newTotalOrdered, Number(order.total_cancelled_units || 0) + totalNewlyCancelledUnits);
     const newTotalRemaining = Math.max(0, newTotalOrdered - newTotalShipped - newTotalCancelled);
 
     // Compute canonical Order Status using authoritative utility
@@ -352,7 +363,7 @@ export async function adminApproveCancellationRequestAction(payload: ApproveCanc
       if (finalRefundAmount > 0) {
         await adminClient.from("retailer_order_refund_records").insert({
           order_id: order.id,
-          cancellation_request_id: request.id,
+          cancellation_request_id: request?.id || null,
           company_id: order.company_id,
           payment_id: payments?.[0]?.id || null,
           merchandise_amount: Math.round(cancelledMerchandiseBasis * 100) / 100,

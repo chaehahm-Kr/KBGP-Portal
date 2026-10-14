@@ -134,18 +134,62 @@ export function CancellationRequestReviewCard({
         </div>
       )}
 
+      {/* Pre-B3 / Un-Dispatched Invoice Discrepancy Alert */}
+      {(() => {
+        const unDispatchedInvoices = (order.invoices || []).filter(
+          (inv) => !inv.fulfillmentId && !["void", "cancelled"].includes((inv.invoiceStatus || "").toLowerCase())
+        );
+        if (unDispatchedInvoices.length === 0) return null;
+
+        return (
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-300 text-xs space-y-1">
+            <div className="flex items-center gap-1.5 font-bold">
+              <span>⚠️</span>
+              <span>Pre-B3 / Un-Dispatched Invoice Discrepancy Flagged</span>
+            </div>
+            <p className="text-[11px] text-amber-800 dark:text-amber-400">
+              {unDispatchedInvoices.length} active invoice(s) exist on this order without an associated confirmed dispatch record (e.g. Invoice #{unDispatchedInvoices.map((i) => i.invoiceNumber).join(", ")} totaling ${unDispatchedInvoices.reduce((sum, i) => sum + i.totalAmount, 0).toFixed(2)}). Approving cancellation will cancel remaining unshipped units. Pre-B3 invoices should be reviewed and reconciled in the Invoices section according to accounting guidelines.
+            </p>
+          </div>
+        );
+      })()}
+
       {/* Request Details & Financial Impact Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
         <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/80 border border-orange-100 dark:border-zinc-800 space-y-1">
           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
             Retailer Reason
           </span>
-          <p className="font-semibold text-zinc-900 dark:text-white">
+          <p className="font-semibold text-zinc-900 dark:text-white truncate">
             {order.cancellationNotes || "No detailed notes provided"}
           </p>
           <p className="text-[10px] text-zinc-500">
             Remaining to cancel: <strong>{order.totalRemainingUnits} units</strong>
           </p>
+        </div>
+
+        <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/80 border border-orange-100 dark:border-zinc-800 space-y-1">
+          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+            Payment & Refund Impact
+          </span>
+          {(() => {
+            const isPaid = (order.paymentStatus || "").toLowerCase() === "paid";
+            const actualCollected = isPaid ? order.totalAmount : 0.00;
+            const refundDue = isPaid ? Math.max(0, actualCollected - (order.processingFee || 0)) : 0.00;
+
+            return (
+              <>
+                <p className={`font-bold ${isPaid ? "text-amber-600 dark:text-amber-400" : "text-zinc-700 dark:text-zinc-300"}`}>
+                  {isPaid ? `+$${refundDue.toFixed(2)} Refund Due` : "$0.00 Refund (Unpaid)"}
+                </p>
+                <p className="text-[10px] text-zinc-500">
+                  {isPaid
+                    ? `Collected $${actualCollected.toFixed(2)} (Fee retained: $${(order.processingFee || 0).toFixed(2)})`
+                    : `Payment status: ${order.paymentStatus.toUpperCase()} (No funds collected)`}
+                </p>
+              </>
+            );
+          })()}
         </div>
 
         <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/80 border border-orange-100 dark:border-zinc-800 space-y-1">
@@ -167,10 +211,10 @@ export function CancellationRequestReviewCard({
             Dispatched Invoices (B3)
           </span>
           <p className="font-bold text-indigo-600 dark:text-indigo-400">
-            {order.invoices.length} Active Invoice(s) Intact
+            {order.invoices.length} Active Invoice(s)
           </p>
           <p className="text-[10px] text-zinc-500">
-            Existing invoices for shipped items remain 100% valid
+            {(order.shipments || []).length} confirmed dispatch(es) intact
           </p>
         </div>
       </div>

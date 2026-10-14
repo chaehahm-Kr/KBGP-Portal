@@ -159,13 +159,23 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
 
           {order.totalRemainingUnits > 0 &&
             !["cancelled", "shipped", "delivered"].includes(order.orderStatus.toLowerCase()) && (
-            <button
-              type="button"
-              onClick={() => setShowShipModal(true)}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:opacity-90 transition-opacity shadow-xs"
-            >
-              + Create Shipment ({order.totalRemainingUnits} units left)
-            </button>
+            order.cancellationRequested ? (
+              <span
+                title="Shipment creation is on hold while a cancellation request is pending review"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1.5 cursor-not-allowed shadow-2xs"
+              >
+                <span>⏸</span>
+                <span>Fulfillment Hold (Cancellation Requested)</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowShipModal(true)}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:opacity-90 transition-opacity shadow-xs"
+              >
+                + Create Shipment ({order.totalRemainingUnits} units left)
+              </button>
+            )
           )}
 
           {order.orderStatus === "submitted" && (

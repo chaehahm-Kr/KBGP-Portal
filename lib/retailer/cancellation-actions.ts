@@ -106,7 +106,7 @@ export async function retailerDirectCancelOrderAction(payload: DirectCancelPaylo
     if (fulfillments && fulfillments.length > 0) {
       return {
         success: false,
-        error: "Cannot directly cancel: Warehouse fulfillment has already been initiated for this order.",
+        error: "Cannot directly cancel: Warehouse fulfillment has already been initiated for this order. Please submit a cancellation request for Admin review.",
       };
     }
 
@@ -120,7 +120,22 @@ export async function retailerDirectCancelOrderAction(payload: DirectCancelPaylo
     if (invoices && invoices.length > 0) {
       return {
         success: false,
-        error: "Cannot directly cancel: An active invoice has already been issued for this order.",
+        error: "Cannot directly cancel: An active invoice has already been issued for this order. Please submit a cancellation request for Admin review.",
+      };
+    }
+
+    // Guard: Verify no collected payments exist
+    const { data: payments } = await adminClient
+      .from("retailer_order_payments")
+      .select("id, amount, status")
+      .eq("order_id", order.id)
+      .eq("status", "paid");
+
+    const totalPaid = (payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+    if (totalPaid > 0) {
+      return {
+        success: false,
+        error: "Cannot directly cancel: A collected payment exists for this order. Please submit a cancellation request so Admin can review and process your refund.",
       };
     }
 
@@ -172,41 +187,15 @@ export async function retailerDirectCancelOrderAction(payload: DirectCancelPaylo
       updated_at: now,
     });
 
-    // 5. Check if prepaid funds exist (Card/ACH)
-    const { data: payments } = await adminClient
-      .from("retailer_order_payments")
-      .select("id, amount, status")
-      .eq("order_id", order.id)
-      .eq("status", "paid");
-
-    const totalPaid = (payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-
-    if (totalPaid > 0) {
-      // Create Refund Due obligation for full collected payment
-      await adminClient.from("retailer_order_refund_records").insert({
-        order_id: order.id,
-        company_id: order.company_id,
-        merchandise_amount: Number(order.subtotal_amount || 0),
-        shipping_amount: Number(order.shipping_amount || 0),
-        tax_amount: Number(order.tax_amount || 0),
-        fee_amount: 0.00,
-        total_refund_amount: totalPaid,
-        refund_status: "due",
-        provider: "manual",
-        notes: "Refund due from direct cancellation of prepaid Submitted order.",
-        created_at: now,
+    // 5. Clean direct cancellation: No collected payments exist ($0 collected -> $0 refund)
+    await adminClient
+      .from("retailer_orders")
+      .update({
+        refund_amount: 0.0,
+        refund_status: "none",
         updated_at: now,
-      });
-
-      await adminClient
-        .from("retailer_orders")
-        .update({
-          refund_amount: totalPaid,
-          refund_status: "due",
-          updated_at: now,
-        })
-        .eq("id", order.id);
-    }
+      })
+      .eq("id", order.id);
 
     revalidatePath("/orders");
     revalidatePath(`/orders/${order.id}`);
@@ -274,11 +263,11 @@ export async function retailerSubmitCancellationRequestAction(payload: RequestCa
 
     const currentStatus = (order.order_status || "").toLowerCase();
 
-    // Guard: Order status must be Processing or Partially Shipped
-    if (!["processing", "partially_shipped"].includes(currentStatus)) {
+    // Guard: Order status must be Submitted, Processing, or Partially Shipped
+    if (!["submitted", "processing", "partially_shipped"].includes(currentStatus)) {
       return {
         success: false,
-        error: `Cancellation requests can only be submitted for 'Processing' or 'Partially Shipped' orders. Current status is '${order.order_status}'.`,
+        error: `Cancellation requests can only be submitted for orders in 'Submitted', 'Processing', or 'Partially Shipped' status. Current status is '${order.order_status}'.`,
       };
     }
 
@@ -344,8 +333,14 @@ export async function retailerSubmitCancellationRequestAction(payload: RequestCa
       }
     }
 
-    if (requestItems.length === 0) {
-      return { success: false, error: "There are no remaining unshipped units available to cancel." };
+    if (items.length > 0) {
+      if (requestItems.length === 0) {
+        return { success: false, error: "There are no remaining unshipped units available to cancel." };
+      }
+    } else {
+      if (Number(order.total_remaining_units || 0) <= 0) {
+        return { success: false, error: "There are no remaining unshipped units available to cancel." };
+      }
     }
 
     const now = new Date().toISOString();
@@ -373,24 +368,26 @@ export async function retailerSubmitCancellationRequestAction(payload: RequestCa
       return { success: false, error: "Failed to submit cancellation request." };
     }
 
-    // 3. Insert Request Items
-    const itemsToInsert = requestItems.map((ri) => ({
-      request_id: newReq.id,
-      order_item_id: ri.orderItemId,
-      quantity_requested: ri.quantityRequested,
-      quantity_approved: 0,
-      quantity_rejected: 0,
-      created_at: now,
-    }));
+    // 3. Insert Request Items if line items exist
+    if (requestItems.length > 0) {
+      const itemsToInsert = requestItems.map((ri) => ({
+        request_id: newReq.id,
+        order_item_id: ri.orderItemId,
+        quantity_requested: ri.quantityRequested,
+        quantity_approved: 0,
+        quantity_rejected: 0,
+        created_at: now,
+      }));
 
-    const { error: itemsErr } = await adminClient
-      .from("retailer_order_cancellation_request_items")
-      .insert(itemsToInsert);
+      const { error: itemsErr } = await adminClient
+        .from("retailer_order_cancellation_request_items")
+        .insert(itemsToInsert);
 
-    if (itemsErr) {
-      console.error("Insert cancellation request items failed:", itemsErr);
-      await adminClient.from("retailer_order_cancellation_requests").delete().eq("id", newReq.id);
-      return { success: false, error: "Failed to record cancellation request items." };
+      if (itemsErr) {
+        console.error("Insert cancellation request items failed:", itemsErr);
+        await adminClient.from("retailer_order_cancellation_requests").delete().eq("id", newReq.id);
+        return { success: false, error: "Failed to record cancellation request items." };
+      }
     }
 
     // 4. Update order header flag

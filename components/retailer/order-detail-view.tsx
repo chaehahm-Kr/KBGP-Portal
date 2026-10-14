@@ -162,58 +162,82 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
         <div className="flex flex-wrap items-center gap-2">
           {getStatusBadge(order.orderStatus)}
 
-          {/* Direct Cancel for Submitted Orders */}
-          {order.orderStatus.toLowerCase() === "submitted" && (
-            <button
-              type="button"
-              onClick={() => {
-                setCancelModalMode("direct_cancel");
-                setCancelModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-400 border border-rose-500/30 transition-colors"
-            >
-              <span>✕</span>
-              <span>Cancel Order</span>
-            </button>
-          )}
+          {/* Cancellation Actions */}
+          {(() => {
+            const statusLower = order.orderStatus.toLowerCase();
+            if (["cancelled", "shipped", "delivered"].includes(statusLower)) {
+              return null;
+            }
 
-          {/* Request Cancellation for Processing Orders */}
-          {order.orderStatus.toLowerCase() === "processing" && !order.cancellationRequested && (
-            <button
-              type="button"
-              onClick={() => {
-                setCancelModalMode("request_cancel");
-                setCancelModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/30 transition-colors"
-            >
-              <span>⚠️</span>
-              <span>Request Cancellation</span>
-            </button>
-          )}
+            if (order.cancellationRequested) {
+              return (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                  <span className="animate-pulse">⚠️</span>
+                  <span>Cancellation Under Review</span>
+                </span>
+              );
+            }
 
-          {/* Cancel Remaining for Partially Shipped Orders */}
-          {order.orderStatus.toLowerCase() === "partially_shipped" &&
-            !order.cancellationRequested &&
-            order.totalRemainingUnits > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setCancelModalMode("request_cancel");
-                  setCancelModalOpen(true);
-                }}
-                className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/30 transition-colors"
-              >
-                <span>⚠️</span>
-                <span>Cancel Remaining Units</span>
-              </button>
-            )}
+            const hasActiveInvoices = (order.invoices || []).some(
+              (inv) => !["void", "cancelled"].includes((inv.invoiceStatus || "").toLowerCase())
+            );
+            const hasCollectedPayment = (order.paymentStatus || "").toLowerCase() === "paid";
+            const isDirectEligible =
+              statusLower === "submitted" &&
+              !hasActiveInvoices &&
+              !hasCollectedPayment &&
+              (order.fulfillments || []).length === 0;
 
-          {Boolean(order.cancellationRequested) && (
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/30">
-              Cancellation In Review
-            </span>
-          )}
+            if (statusLower === "submitted") {
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCancelModalMode(isDirectEligible ? "direct_cancel" : "request_cancel");
+                    setCancelModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-400 border border-rose-500/30 transition-colors"
+                >
+                  <span>✕</span>
+                  <span>{isDirectEligible ? "Cancel Order" : "Request Cancellation"}</span>
+                </button>
+              );
+            }
+
+            if (statusLower === "processing") {
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCancelModalMode("request_cancel");
+                    setCancelModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/30 transition-colors"
+                >
+                  <span>⚠️</span>
+                  <span>Request Cancellation</span>
+                </button>
+              );
+            }
+
+            if (statusLower === "partially_shipped" && order.totalRemainingUnits > 0) {
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCancelModalMode("request_cancel");
+                    setCancelModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/30 transition-colors"
+                >
+                  <span>⚠️</span>
+                  <span>Cancel Remaining Units</span>
+                </button>
+              );
+            }
+
+            return null;
+          })()}
 
           <Link
             href={`/support?new=1&category=order_delivery&order_id=${order.id}&store_id=${order.storeId || ""}&title=${encodeURIComponent(`[Order #${order.orderNumber}] Order & Delivery Inquiry`)}`}

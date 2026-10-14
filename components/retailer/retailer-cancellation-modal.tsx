@@ -55,7 +55,11 @@ export function RetailerCancellationModal({
 
   if (!isOpen) return null;
 
-  const isDirect = mode === "direct_cancel";
+  const hasActiveInvoices = (order.invoices || []).some(
+    (inv) => !["void", "cancelled"].includes((inv.invoiceStatus || "").toLowerCase())
+  );
+  const hasCollectedPayment = (order.paymentStatus || "").toLowerCase() === "paid";
+  const isDirect = mode === "direct_cancel" && !hasActiveInvoices && !hasCollectedPayment;
 
   const handleQtyChange = (itemId: string, max: number, val: number) => {
     const clamped = Math.max(0, Math.min(max, val));
@@ -68,7 +72,7 @@ export function RetailerCancellationModal({
 
     startTransition(async () => {
       if (isDirect) {
-        // Direct cancellation for Submitted orders
+        // Direct cancellation for Submitted orders without invoices or collected payments
         const res = await retailerDirectCancelOrderAction({
           orderId: order.id,
           reasonCategory,
@@ -80,9 +84,9 @@ export function RetailerCancellationModal({
           return;
         }
       } else {
-        // Cancellation request for Processing or Partially Shipped orders
+        // Cancellation request for orders with active invoices, collected payments, or in processing
         const itemsPayload =
-          requestType === "partial"
+          requestType === "partial" && order.items.length > 0
             ? Object.entries(itemQuantities)
                 .filter(([_, qty]) => qty > 0)
                 .map(([orderItemId, quantityToCancel]) => ({
@@ -91,7 +95,7 @@ export function RetailerCancellationModal({
                 }))
             : undefined;
 
-        if (requestType === "partial" && (!itemsPayload || itemsPayload.length === 0)) {
+        if (requestType === "partial" && order.items.length > 0 && (!itemsPayload || itemsPayload.length === 0)) {
           setError("Please specify at least 1 unit to cancel.");
           return;
         }
@@ -152,45 +156,61 @@ export function RetailerCancellationModal({
             <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 space-y-1">
               <p className="font-semibold">Direct Cancellation Notice</p>
               <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                Because this order has not yet been processed by the warehouse, you may cancel it immediately. Any Net Terms credit line reservation will be released instantly.
+                Because this order has not yet been processed by the warehouse and has no active invoice or collected payment, you may cancel it immediately. Any Net Terms credit line reservation will be released instantly.
               </p>
             </div>
           ) : (
             <div className="space-y-3">
-              <label className="block font-semibold text-zinc-700 dark:text-zinc-300">
-                Cancellation Scope:
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRequestType("full")}
-                  className={`p-3 rounded-xl border text-left font-medium transition-all ${
-                    requestType === "full"
-                      ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-600"
-                      : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                  }`}
-                >
-                  <div className="font-bold">Cancel Remaining Units</div>
-                  <div className="text-[10px] text-zinc-400 mt-0.5">
-                    Request to cancel all {order.totalRemainingUnits} remaining units
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setRequestType("partial")}
-                  className={`p-3 rounded-xl border text-left font-medium transition-all ${
-                    requestType === "partial"
-                      ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-600"
-                      : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                  }`}
-                >
-                  <div className="font-bold">Specific Items Only</div>
-                  <div className="text-[10px] text-zinc-400 mt-0.5">
-                    Select quantities line by line
-                  </div>
-                </button>
+              <div className="p-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-300 space-y-1">
+                <p className="font-semibold">Cancellation Review Notice</p>
+                <p className="text-[11px] text-amber-800 dark:text-amber-400">
+                  Your cancellation request will be submitted for customer operations review.
+                  {hasActiveInvoices
+                    ? " This order has an associated active invoice requiring financial reconciliation before voiding."
+                    : hasCollectedPayment
+                    ? " If a payment has been collected, any eligible refund will be reviewed and processed separately upon approval."
+                    : " Unshipped quantities will be placed on temporary fulfillment hold while under review."}
+                </p>
               </div>
+
+              {order.items.length > 0 && (
+                <>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300">
+                    Cancellation Scope:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRequestType("full")}
+                      className={`p-3 rounded-xl border text-left font-medium transition-all ${
+                        requestType === "full"
+                          ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-600"
+                          : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                      }`}
+                    >
+                      <div className="font-bold">Cancel Remaining Units</div>
+                      <div className="text-[10px] text-zinc-400 mt-0.5">
+                        Request to cancel all {order.totalRemainingUnits} remaining units
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setRequestType("partial")}
+                      className={`p-3 rounded-xl border text-left font-medium transition-all ${
+                        requestType === "partial"
+                          ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-600"
+                          : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                      }`}
+                    >
+                      <div className="font-bold">Specific Items Only</div>
+                      <div className="text-[10px] text-zinc-400 mt-0.5">
+                        Select quantities line by line
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
 
               {requestType === "partial" && (
                 <div className="max-h-48 overflow-y-auto space-y-2 pr-1 border border-zinc-100 dark:border-zinc-800 rounded-xl p-2 bg-zinc-50/50 dark:bg-zinc-800/30">
