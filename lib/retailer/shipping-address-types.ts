@@ -67,6 +67,7 @@ export interface StoreShippingOption {
   phone: string | null;
   managerName?: string | null;
   isEligible: boolean;
+  isExplicitDefault?: boolean;
 }
 
 export interface ResolvedDefaultShippingDestination {

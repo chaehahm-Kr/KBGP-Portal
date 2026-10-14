@@ -174,6 +174,7 @@ export interface SubmitOrderPayload {
     phone?: string;
     deliveryNotes?: string;
     saveToAddressBook?: boolean;
+    setAsDefault?: boolean;
   };
   paymentMethod?: RetailerPaymentMethod;
   notes?: string;
@@ -355,9 +356,16 @@ export async function submitRetailerOrder(
       };
     }
 
-    // 2. Validate Payment Eligibility & Terms via Authoritative Policy
+    // 2. Validate Payment Eligibility & Terms via Authoritative Policy (Explicit Payment Selection Required)
+    if (!payload.paymentMethod) {
+      return {
+        success: false,
+        error: "Please select an authorized payment method before submitting your order.",
+      };
+    }
+
     const policy = await resolveEffectivePaymentPolicy(companyId);
-    let chosenPaymentMethod: RetailerPaymentMethod = payload.paymentMethod || "card";
+    const chosenPaymentMethod: RetailerPaymentMethod = payload.paymentMethod;
 
     // Validate that the chosen payment method is allowed for this retailer
     if (chosenPaymentMethod === "terms") {
@@ -382,7 +390,10 @@ export async function submitRetailerOrder(
         };
       }
     } else {
-      chosenPaymentMethod = "card";
+      return {
+        success: false,
+        error: "Invalid or unsupported payment method selected.",
+      };
     }
 
     // Determine effective payment terms and due date
@@ -457,9 +468,28 @@ export async function submitRetailerOrder(
       resolvedPhone = c.phone?.trim() || null;
       destinationLabel = c.label?.trim() || "Custom Delivery Address";
 
-      // If user checked "Save this address for future orders", persist it safely
-      if (c.saveToAddressBook) {
+      // If user checked "Save this address for future orders" or "Set as Default", persist it safely
+      if (c.saveToAddressBook || c.setAsDefault) {
         try {
+          const isDefault = Boolean(c.setAsDefault);
+          if (isDefault) {
+            // Unset previous defaults on saved addresses
+            await adminClient
+              .from("retailer_shipping_addresses")
+              .update({ is_default: false })
+              .eq("company_id", companyId);
+
+            // Clear company store default to preserve strict mutual exclusivity
+            try {
+              await adminClient
+                .from("companies")
+                .update({ default_shipping_store_id: null })
+                .eq("id", companyId);
+            } catch (clearErr) {
+              console.warn("Could not clear default_shipping_store_id:", clearErr);
+            }
+          }
+
           const { data: savedRow } = await adminClient
             .from("retailer_shipping_addresses")
             .insert({
@@ -475,7 +505,7 @@ export async function submitRetailerOrder(
               country: resolvedCountry,
               phone: resolvedPhone,
               delivery_notes: c.deliveryNotes?.trim() || null,
-              is_default: false,
+              is_default: isDefault,
               is_active: true,
             })
             .select("id")
@@ -484,8 +514,13 @@ export async function submitRetailerOrder(
           if (savedRow?.id) {
             resolvedSavedAddressId = savedRow.id;
           }
+
+          revalidatePath("/retailer/settings/shipping");
+          revalidatePath("/settings/shipping");
+          revalidatePath("/retailer/checkout");
+          revalidatePath("/checkout");
         } catch (saveErr) {
-          console.warn("Could not save one-time address to address book:", saveErr);
+          console.warn("Could not save new address to address book:", saveErr);
         }
       }
     } else {

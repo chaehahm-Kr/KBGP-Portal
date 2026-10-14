@@ -15,6 +15,8 @@ import {
   deleteRetailerShippingAddressAction,
   setDefaultRetailerShippingAddressAction,
   unsetDefaultRetailerShippingAddressAction,
+  setDefaultStoreShippingAction,
+  unsetDefaultStoreShippingAction,
 } from "@/lib/retailer/shipping-address-actions";
 
 interface ShippingSettingsViewProps {
@@ -31,6 +33,7 @@ export function RetailerShippingSettingsView({
   companyName,
 }: ShippingSettingsViewProps) {
   const [addresses, setAddresses] = useState<RetailerShippingAddress[]>(initialAddresses);
+  const [storesList, setStoresList] = useState<StoreShippingOption[]>(stores);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<RetailerShippingAddress | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -118,6 +121,9 @@ export function RetailerShippingSettingsView({
               return a;
             })
           );
+          if (isDefault) {
+            setStoresList((prev) => prev.map((s) => ({ ...s, isExplicitDefault: false })));
+          }
           setSuccessMsg("Shipping address updated successfully.");
           setIsModalOpen(false);
           setTimeout(() => setSuccessMsg(null), 3000);
@@ -145,6 +151,9 @@ export function RetailerShippingSettingsView({
             const nextList = isDefault ? prev.map((a) => ({ ...a, isDefault: false })) : [...prev];
             return [res.data!, ...nextList];
           });
+          if (isDefault) {
+            setStoresList((prev) => prev.map((s) => ({ ...s, isExplicitDefault: false })));
+          }
           setSuccessMsg("Shipping address added successfully.");
           setIsModalOpen(false);
           setTimeout(() => setSuccessMsg(null), 3000);
@@ -165,8 +174,17 @@ export function RetailerShippingSettingsView({
             isDefault: a.id === id,
           }))
         );
-        setSuccessMsg("Default address updated.");
+        setStoresList((prev) =>
+          prev.map((s) => ({
+            ...s,
+            isExplicitDefault: false,
+          }))
+        );
+        setSuccessMsg("Default shipping address updated.");
         setTimeout(() => setSuccessMsg(null), 2500);
+      } else {
+        setErrorMsg(res.error || "Failed to update default address.");
+        setTimeout(() => setErrorMsg(null), 3000);
       }
     });
   };
@@ -183,6 +201,53 @@ export function RetailerShippingSettingsView({
         );
         setSuccessMsg("Default address unset. Store address will now serve as default shipping destination.");
         setTimeout(() => setSuccessMsg(null), 3000);
+      } else {
+        setErrorMsg(res.error || "Failed to unset default address.");
+        setTimeout(() => setErrorMsg(null), 3000);
+      }
+    });
+  };
+
+  const handleSetStoreDefault = (storeId: string) => {
+    startTransition(async () => {
+      const res = await setDefaultStoreShippingAction(storeId);
+      if (res.success) {
+        setStoresList((prev) =>
+          prev.map((s) => ({
+            ...s,
+            isExplicitDefault: s.id === storeId,
+          }))
+        );
+        setAddresses((prev) =>
+          prev.map((a) => ({
+            ...a,
+            isDefault: false,
+          }))
+        );
+        setSuccessMsg("Store set as default shipping destination.");
+        setTimeout(() => setSuccessMsg(null), 3000);
+      } else {
+        setErrorMsg(res.error || "Failed to set store as default destination.");
+        setTimeout(() => setErrorMsg(null), 4000);
+      }
+    });
+  };
+
+  const handleUnsetStoreDefault = () => {
+    startTransition(async () => {
+      const res = await unsetDefaultStoreShippingAction();
+      if (res.success) {
+        setStoresList((prev) =>
+          prev.map((s) => ({
+            ...s,
+            isExplicitDefault: false,
+          }))
+        );
+        setSuccessMsg("Default store unset. Deterministic store fallback will apply.");
+        setTimeout(() => setSuccessMsg(null), 3000);
+      } else {
+        setErrorMsg(res.error || "Failed to unset default store.");
+        setTimeout(() => setErrorMsg(null), 4000);
       }
     });
   };
@@ -199,11 +264,35 @@ export function RetailerShippingSettingsView({
     });
   };
 
-  // Authoritative default destination resolution in client view
+  // Authoritative default destination resolution in client view:
+  // Rule 1A: Explicit store default
+  // Rule 1B: Explicit saved address default
+  // Rule 2: Deterministic store fallback
+  // Rule 3: Initial default destination
+  const explicitStoreDefault = storesList.find((s) => s.isExplicitDefault && s.isEligible);
   const activeSavedDefault = addresses.find((a) => a.isDefault && a.isActive !== false);
-  const firstEligibleStore = stores.find((s) => s.isEligible);
+  const firstEligibleStore = storesList.find((s) => s.isEligible);
 
   const activeDefault: ResolvedDefaultShippingDestination | null = React.useMemo(() => {
+    if (explicitStoreDefault) {
+      return {
+        type: "store",
+        id: explicitStoreDefault.id,
+        name: explicitStoreDefault.name,
+        recipientName: explicitStoreDefault.managerName || explicitStoreDefault.name,
+        attentionName: null,
+        addressLine1: explicitStoreDefault.address!,
+        addressLine2: null,
+        city: explicitStoreDefault.city!,
+        state: explicitStoreDefault.state!,
+        zip: explicitStoreDefault.zip!,
+        country: "US",
+        phone: explicitStoreDefault.phone,
+        deliveryNotes: null,
+        isExplicitDefault: true,
+        isStoreFallback: false,
+      };
+    }
     if (activeSavedDefault) {
       return {
         type: "saved_address",
@@ -243,7 +332,7 @@ export function RetailerShippingSettingsView({
       };
     }
     return initialDefaultDestination;
-  }, [activeSavedDefault, firstEligibleStore, initialDefaultDestination]);
+  }, [explicitStoreDefault, activeSavedDefault, firstEligibleStore, initialDefaultDestination]);
 
   return (
     <div className="space-y-8 max-w-5xl">
@@ -259,7 +348,7 @@ export function RetailerShippingSettingsView({
             Shipping Addresses & Destinations
           </h1>
           <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Manage reusable warehouse, distribution center, or office shipping addresses for wholesale order dispatch.
+            Manage reusable warehouse, distribution center, or store shipping destinations for wholesale order dispatch.
           </p>
         </div>
 
@@ -273,6 +362,12 @@ export function RetailerShippingSettingsView({
       </div>
 
       {/* Notifications */}
+      {errorMsg && (
+        <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-800 dark:text-rose-300 flex items-center gap-2">
+          <span>⚠️</span>
+          <span>{errorMsg}</span>
+        </div>
+      )}
       {successMsg && (
         <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
           <span>✓</span>
@@ -291,7 +386,11 @@ export function RetailerShippingSettingsView({
           </div>
           {activeDefault && (
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800">
-              {activeDefault.isExplicitDefault ? "🏢 Configured Default (Saved Address)" : "🏬 Registered Store Fallback"}
+              {activeDefault.isExplicitDefault
+                ? activeDefault.type === "store"
+                  ? "🏬 Configured Default (Store Location)"
+                  : "🏢 Configured Default (Saved Address)"
+                : "🏬 Registered Store Fallback"}
             </span>
           )}
         </div>
@@ -317,8 +416,10 @@ export function RetailerShippingSettingsView({
             )}
             <p className="text-[11px] text-zinc-400 dark:text-zinc-500 pt-1 border-t border-zinc-100 dark:border-zinc-800/80">
               {activeDefault.isStoreFallback
-                ? "No custom warehouse address is configured as default. Wholesale orders will automatically default to this registered store location unless selected otherwise at Checkout."
-                : "This saved address is configured as your primary shipping destination for wholesale purchase orders."}
+                ? "No custom default shipping destination is explicitly configured. Wholesale orders will automatically default to this registered store location unless selected otherwise at Checkout."
+                : activeDefault.type === "store"
+                ? "This registered store location is configured as your company's primary default shipping destination for wholesale purchase orders."
+                : "This saved address is configured as your company's primary default shipping destination for wholesale purchase orders."}
             </p>
           </div>
         ) : (
@@ -332,32 +433,41 @@ export function RetailerShippingSettingsView({
       </div>
 
       {/* SECTION 1: Registered Store Locations */}
-      {stores.length > 0 && (
+      {storesList.length > 0 && (
         <div className="space-y-4">
           <div>
             <h2 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
               <span>🏬 Registered Store Locations</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-semibold">
-                {stores.length}
+                {storesList.length}
               </span>
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              Physical retail locations registered under your account. Available as verified shipping destinations at Checkout.
+              Physical retail locations registered under your account. Any store with a complete street address can be designated as the Default Shipping Address.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {stores.map((store) => {
+            {storesList.map((store) => {
+              const isExplicitStoreDefault = Boolean(
+                activeDefault?.type === "store" &&
+                activeDefault.id === store.id &&
+                activeDefault.isExplicitDefault
+              );
               const isCurrentFallbackDefault = Boolean(
-                activeDefault?.isStoreFallback && activeDefault.id === store.id
+                activeDefault?.type === "store" &&
+                activeDefault.id === store.id &&
+                activeDefault.isStoreFallback
               );
 
               return (
                 <div
                   key={store.id}
                   className={`p-5 rounded-2xl border transition-all bg-white dark:bg-zinc-900 shadow-xs space-y-3 ${
-                    isCurrentFallbackDefault
-                      ? "border-indigo-600/50 dark:border-indigo-500/50 ring-2 ring-indigo-500/10"
+                    isExplicitStoreDefault
+                      ? "border-indigo-600 dark:border-indigo-500 ring-2 ring-indigo-500/20"
+                      : isCurrentFallbackDefault
+                      ? "border-indigo-600/50 dark:border-indigo-500/50 ring-1 ring-indigo-500/10"
                       : "border-zinc-200 dark:border-zinc-800"
                   }`}
                 >
@@ -369,9 +479,14 @@ export function RetailerShippingSettingsView({
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
                         🏬 Store Location
                       </span>
-                      {isCurrentFallbackDefault && (
+                      {isExplicitStoreDefault && (
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                          Default Shipping Destination (Fallback)
+                          Default Shipping Address
+                        </span>
+                      )}
+                      {!isExplicitStoreDefault && isCurrentFallbackDefault && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50/70 text-indigo-700/80 dark:bg-indigo-950/70 dark:text-indigo-300/80 border border-indigo-200/60 dark:border-indigo-800/60">
+                          Default Shipping Address (Fallback)
                         </span>
                       )}
                     </div>
@@ -400,13 +515,33 @@ export function RetailerShippingSettingsView({
                   </div>
 
                   <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs">
-                    {isCurrentFallbackDefault ? (
-                      <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold">
-                        ✓ Active Default Destination
-                      </span>
+                    {isExplicitStoreDefault ? (
+                      <div className="flex items-center gap-3">
+                        <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold">
+                          ✓ Active Default Address
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleUnsetStoreDefault}
+                          disabled={isPending}
+                          className="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 cursor-pointer underline"
+                          title="Unset explicit default to revert to deterministic fallback"
+                        >
+                          Unset Default
+                        </button>
+                      </div>
+                    ) : store.isEligible ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSetStoreDefault(store.id)}
+                        disabled={isPending}
+                        className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                      >
+                        Set as Default
+                      </button>
                     ) : (
-                      <span className="text-[11px] text-zinc-400">
-                        Available as destination at Checkout
+                      <span className="text-[11px] text-amber-600 dark:text-amber-400 italic">
+                        Ineligible (Address incomplete)
                       </span>
                     )}
                     <span className="text-[10px] text-zinc-400 font-mono">Store Master</span>

@@ -77,7 +77,7 @@ export function RetailerCheckoutView({
   // Explicit shipping destination confirmation - STARTS UNCHECKED!
   const [isShippingConfirmed, setIsShippingConfirmed] = useState(false);
 
-  // Custom / One-Time Address form state
+  // Custom / Add Shipping Address form state
   const [customRecipient, setCustomRecipient] = useState(companyName || "");
   const [customAttention, setCustomAttention] = useState("");
   const [customAddress1, setCustomAddress1] = useState("");
@@ -88,6 +88,7 @@ export function RetailerCheckoutView({
   const [customPhone, setCustomPhone] = useState("");
   const [customNotes, setCustomNotes] = useState("");
   const [saveCustomAddress, setSaveCustomAddress] = useState(false);
+  const [setCustomAddressAsDefault, setSetCustomAddressAsDefault] = useState(false);
 
   // Reset shipping confirmation whenever any destination field changes
   useEffect(() => {
@@ -105,6 +106,8 @@ export function RetailerCheckoutView({
     customZip,
     customPhone,
     customNotes,
+    saveCustomAddress,
+    setCustomAddressAsDefault,
   ]);
   const [customLabel, setCustomLabel] = useState("");
 
@@ -164,16 +167,9 @@ export function RetailerCheckoutView({
   const discountAmount = promoEvaluation?.totalDiscount || 0;
   const effectiveTotal = Math.max(0, subtotal - discountAmount);
 
-  // Default payment method: Prioritize Card, then ACH, then Terms (Never auto-default to Terms)
-  const defaultMethod: RetailerPaymentMethod =
-    paymentEligibility.availableMethods.find((m) => m.id === "card" && !m.disabled)?.id ||
-    paymentEligibility.availableMethods.find((m) => m.id === "ach" && !m.disabled)?.id ||
-    paymentEligibility.availableMethods.find((m) => !m.disabled)?.id ||
-    paymentEligibility.availableMethods[0]?.id ||
-    "card";
-
+  // Fresh Checkout entry must NOT silently preselect any payment method (Rule 2)
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
-    useState<RetailerPaymentMethod>(defaultMethod);
+    useState<RetailerPaymentMethod | null>(null);
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -233,7 +229,7 @@ export function RetailerCheckoutView({
         [customCity, customState, customZip].filter(Boolean).join(" "),
       ].filter(Boolean);
       return {
-        title: customLabel ? `One-Time: ${customLabel}` : "One-Time Shipping Address",
+        title: customLabel ? `Shipping: ${customLabel}` : "New Shipping Address",
         addressText: parts.join(", ") || "Address entry in progress",
         phone: customPhone,
         deliveryNotes: customNotes,
@@ -256,18 +252,27 @@ export function RetailerCheckoutView({
     customLabel,
   ]);
 
-  const currentMethodObj = paymentEligibility.availableMethods.find(
-    (m) => m.id === selectedPaymentMethod
-  );
+  const currentMethodObj = selectedPaymentMethod
+    ? paymentEligibility.availableMethods.find((m) => m.id === selectedPaymentMethod)
+    : null;
 
-  const processingFeeResult = calculateProcessingFee({
-    paymentMethod: selectedPaymentMethod,
-    chargeBase: effectiveTotal,
-    effectivePolicy: paymentEligibility.effectivePolicy,
-  });
+  const processingFeeResult = selectedPaymentMethod
+    ? calculateProcessingFee({
+        paymentMethod: selectedPaymentMethod,
+        chargeBase: effectiveTotal,
+        effectivePolicy: paymentEligibility.effectivePolicy,
+      })
+    : {
+        feeAmount: 0,
+        feeType: "none" as const,
+        feeRate: 0,
+        feeSource: "default" as const,
+        disclosureLabel: "Pending Selection",
+        estimatedFeeText: "—",
+      };
 
   const finalPayableTotal = Number(
-    (effectiveTotal + processingFeeResult.feeAmount).toFixed(2)
+    (effectiveTotal + (selectedPaymentMethod ? processingFeeResult.feeAmount : 0)).toFixed(2)
   );
 
   // Authoritative Available Credit Check
@@ -314,6 +319,11 @@ export function RetailerCheckoutView({
       return;
     }
 
+    if (!selectedPaymentMethod) {
+      setSubmitError("Please select an authorized payment method before submitting your order.");
+      return;
+    }
+
     if (isExceedingCreditLimit) {
       setSubmitError(
         `Your available credit line ($${availableCredit.toLocaleString("en-US", {
@@ -348,6 +358,7 @@ export function RetailerCheckoutView({
                 deliveryNotes: customNotes.trim() || undefined,
                 label: customLabel.trim() || undefined,
                 saveToAddressBook: saveCustomAddress,
+                setAsDefault: setCustomAddressAsDefault,
               }
             : undefined,
         paymentMethod: selectedPaymentMethod,
@@ -563,7 +574,7 @@ export function RetailerCheckoutView({
                     : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
                 }`}
               >
-                ➕ One-Time Address
+                ➕ Add Shipping Address
               </button>
             </div>
 
@@ -595,7 +606,7 @@ export function RetailerCheckoutView({
                       onClick={() => setDestinationType("custom_address")}
                       className="font-bold underline text-xs"
                     >
-                      Enter One-Time Address →
+                      Add Shipping Address →
                     </button>
                   </div>
                 ) : null}
@@ -694,7 +705,7 @@ export function RetailerCheckoutView({
                         onClick={() => setDestinationType("custom_address")}
                         className="px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 font-bold text-xs"
                       >
-                        Enter One-Time Address
+                        Add Shipping Address
                       </button>
                       <Link
                         href="/settings/shipping"
@@ -709,7 +720,7 @@ export function RetailerCheckoutView({
               </div>
             )}
 
-            {/* Option C: One-Time Custom Shipping Address */}
+            {/* Option C: Add Shipping Address */}
             {destinationType === "custom_address" && (
               <div className="space-y-3 pt-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -838,25 +849,61 @@ export function RetailerCheckoutView({
                   </div>
                 </div>
 
-                {/* Auto-save to address book checkbox */}
-                <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-zinc-800 dark:text-zinc-200">
-                    <input
-                      type="checkbox"
-                      checked={saveCustomAddress}
-                      onChange={(e) => setSaveCustomAddress(e.target.checked)}
-                      className="h-4 w-4 rounded text-indigo-600 border-zinc-300 focus:ring-indigo-500"
-                    />
-                    <span>Save this address to Address Book for future orders</span>
-                  </label>
+                {/* Save to address book & Set as default checkboxes */}
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 space-y-3">
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-zinc-800 dark:text-zinc-200 select-none">
+                      <input
+                        type="checkbox"
+                        checked={saveCustomAddress}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSaveCustomAddress(checked);
+                          if (!checked) {
+                            setSetCustomAddressAsDefault(false);
+                          }
+                        }}
+                        className="h-4 w-4 rounded text-indigo-600 border-zinc-300 focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <span>Save this address to Address Book for future orders</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-zinc-800 dark:text-zinc-200 select-none">
+                      <input
+                        type="checkbox"
+                        checked={setCustomAddressAsDefault}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSetCustomAddressAsDefault(checked);
+                          if (checked) {
+                            setSaveCustomAddress(true);
+                          }
+                        }}
+                        className="h-4 w-4 rounded text-indigo-600 border-zinc-300 focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <span>Set as Default Shipping Address</span>
+                    </label>
+                  </div>
+
+                  {setCustomAddressAsDefault && (
+                    <p className="text-[11px] text-indigo-600 dark:text-indigo-400 bg-indigo-50/70 dark:bg-indigo-950/40 p-2 rounded-lg border border-indigo-100 dark:border-indigo-900/60 leading-tight">
+                      ℹ️ Default addresses are saved to your Address Book for future orders and will supersede previous defaults.
+                    </p>
+                  )}
+
                   {saveCustomAddress && (
-                    <input
-                      type="text"
-                      placeholder="Address Label (e.g. East Distribution Hub, Secaucus Warehouse)"
-                      value={customLabel}
-                      onChange={(e) => setCustomLabel(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                    />
+                    <div className="pt-1 border-t border-zinc-200/60 dark:border-zinc-700/60 space-y-1">
+                      <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">
+                        Address Book Label (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. East Distribution Hub, Secaucus Warehouse"
+                        value={customLabel}
+                        onChange={(e) => setCustomLabel(e.target.value)}
+                        className="w-full px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      />
+                    </div>
                   )}
                 </div>
               </div>
@@ -1140,8 +1187,8 @@ export function RetailerCheckoutView({
               </div>
               <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
                 <span>Selected Method:</span>
-                <span className="font-semibold text-zinc-900 dark:text-white">
-                  {currentMethodObj?.label || "Credit / Debit Card"}
+                <span className={`font-semibold ${selectedPaymentMethod ? "text-zinc-900 dark:text-white" : "text-amber-600 dark:text-amber-400"}`}>
+                  {selectedPaymentMethod ? currentMethodObj?.label : "Choose in Section 2"}
                 </span>
               </div>
               <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
@@ -1173,17 +1220,21 @@ export function RetailerCheckoutView({
                 <div className="flex items-center gap-1.5">
                   <span>Processing Fee:</span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium border border-zinc-200/60 dark:border-zinc-700">
-                    {processingFeeResult.disclosureLabel}
+                    {selectedPaymentMethod ? processingFeeResult.disclosureLabel : "Pending selection"}
                   </span>
                 </div>
                 <span className={`font-semibold text-xs ${
-                  processingFeeResult.feeAmount > 0
+                  !selectedPaymentMethod
+                    ? "text-zinc-400 dark:text-zinc-500"
+                    : processingFeeResult.feeAmount > 0
                     ? "text-zinc-900 dark:text-white"
                     : "text-zinc-400 dark:text-zinc-500"
                 }`}>
-                  {processingFeeResult.feeAmount > 0
-                    ? `+$${processingFeeResult.feeAmount.toFixed(2)}`
-                    : "$0.00"}
+                  {selectedPaymentMethod
+                    ? processingFeeResult.feeAmount > 0
+                      ? `+$${processingFeeResult.feeAmount.toFixed(2)}`
+                      : "$0.00"
+                    : "—"}
                 </span>
               </div>
 
@@ -1200,7 +1251,9 @@ export function RetailerCheckoutView({
             <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex justify-between items-baseline">
               <div>
                 <div className="text-xs font-bold text-zinc-900 dark:text-white">Total Amount</div>
-                <div className="text-[10px] text-zinc-400">Authoritative B2B Total</div>
+                <div className="text-[10px] text-zinc-400">
+                  {selectedPaymentMethod ? "Authoritative B2B Total" : "Subtotal (Fee pending selection)"}
+                </div>
               </div>
               <div className="text-2xl font-black text-zinc-900 dark:text-white">
                 ${finalPayableTotal.toFixed(2)}
@@ -1223,7 +1276,7 @@ export function RetailerCheckoutView({
             <div className="pt-2 space-y-3">
               <button
                 type="submit"
-                disabled={isSubmitting || items.length === 0 || isExceedingCreditLimit || !isShippingConfirmed}
+                disabled={isSubmitting || items.length === 0 || isExceedingCreditLimit || !isShippingConfirmed || !selectedPaymentMethod}
                 className="w-full py-4 px-6 rounded-xl font-bold text-sm bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
@@ -1234,6 +1287,10 @@ export function RetailerCheckoutView({
                 ) : !isShippingConfirmed ? (
                   <>
                     <span>Confirm Shipping Address to Submit</span>
+                  </>
+                ) : !selectedPaymentMethod ? (
+                  <>
+                    <span>Select Payment Method to Submit</span>
                   </>
                 ) : (
                   <>
@@ -1246,6 +1303,12 @@ export function RetailerCheckoutView({
               {!isShippingConfirmed && items.length > 0 && (
                 <p className="text-[11px] text-center text-amber-600 dark:text-amber-400 font-medium">
                   Please review and check &ldquo;Ship to This Address&rdquo; above to enable order submission.
+                </p>
+              )}
+
+              {isShippingConfirmed && !selectedPaymentMethod && items.length > 0 && (
+                <p className="text-[11px] text-center text-amber-600 dark:text-amber-400 font-medium">
+                  Please select an authorized payment method in Section 2 to enable order submission.
                 </p>
               )}
 
