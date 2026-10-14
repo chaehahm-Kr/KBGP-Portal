@@ -113,7 +113,11 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
               <div>
                 <span className="text-zinc-400">Target Margin: </span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                  {product.estimatedGrossMargin}%
+                  {product.msrp > 0 && product.wholesalePrice > 0
+                    ? `${Math.round(((product.msrp - product.wholesalePrice) / product.msrp) * 100)}%`
+                    : product.estimatedGrossMargin > 0
+                    ? `${product.estimatedGrossMargin}%`
+                    : "—"}
                 </span>
               </div>
             </div>
@@ -158,23 +162,27 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
           <div>
             <span className="text-[10px] uppercase font-bold text-zinc-400">Company Movement</span>
             <div className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">
-              {product.estimatedMovement} units
+              {product.movementStatus === "no_data" ? "—" : `${product.estimatedMovement} units`}
             </div>
-            <span className="text-[10px] text-zinc-400">Across usable periods</span>
+            <span className="text-[10px] text-zinc-400">
+              {product.movementStatus === "no_data" ? "No check submitted" : "Across usable periods"}
+            </span>
           </div>
 
           <div>
             <span className="text-[10px] uppercase font-bold text-zinc-400">Avg. Velocity</span>
             <div className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">
-              {product.averageWeeklyMovement} / wk
+              {product.averageWeeklyMovement > 0 ? `${product.averageWeeklyMovement} / wk` : "—"}
             </div>
-            <span className="text-[10px] text-zinc-400">{product.usableWeeksCount} report intervals</span>
+            <span className="text-[10px] text-zinc-400">
+              {product.usableWeeksCount > 0 ? `${product.usableWeeksCount} report intervals` : "No velocity data"}
+            </span>
           </div>
 
           <div>
             <span className="text-[10px] uppercase font-bold text-zinc-400">Reported Stock</span>
             <div className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">
-              {product.totalReportedRemaining} units
+              {product.totalReportedRemaining !== null ? `${product.totalReportedRemaining} units` : "Not Reported"}
             </div>
             <span className="text-[10px] text-zinc-400">
               {product.approxWeeksOfSupply !== null ? `${product.approxWeeksOfSupply} wks supply` : "Supply N/A"}
@@ -186,10 +194,18 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
               Suggested Reorder
             </span>
             <div className="text-lg font-extrabold text-purple-700 dark:text-purple-300 mt-0.5">
-              {product.suggestedReorderQty > 0 ? `${product.suggestedReorderQty} units` : "0 (Healthy)"}
+              {product.suggestedReorderQty > 0
+                ? `${product.suggestedReorderQty} units`
+                : product.movementStatus === "no_data"
+                ? "—"
+                : "0 (Healthy)"}
             </div>
             <span className="text-[10px] text-purple-600/80 dark:text-purple-400/80">
-              Rounded to pack of {product.cartonPackQty}
+              {product.suggestedReorderQty > 0
+                ? `Rounded to pack of ${product.cartonPackQty}`
+                : product.movementStatus === "no_data"
+                ? "Requires weekly check counts"
+                : `Pack of ${product.cartonPackQty}`}
             </span>
           </div>
         </div>
@@ -236,14 +252,14 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
                     </td>
 
                     <td className="py-3 px-3 text-right font-semibold text-zinc-900 dark:text-zinc-100">
-                      {sb.latestReportedRemaining !== null ? `${sb.latestReportedRemaining} units` : "—"}
+                      {sb.latestReportedRemaining !== null ? `${sb.latestReportedRemaining} units` : "Not Reported"}
                     </td>
 
                     <td className="py-3 px-3 text-right font-bold text-zinc-900 dark:text-white">
                       {sb.movementStatus === "baseline"
                         ? "Baseline"
                         : sb.movementStatus === "no_data"
-                        ? "No Count"
+                        ? "—"
                         : `${sb.estimatedMovement} units`}
                     </td>
 

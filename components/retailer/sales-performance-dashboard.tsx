@@ -400,9 +400,9 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                       <td className="py-3.5 px-3 text-right whitespace-nowrap">
                         <div className="font-bold text-zinc-900 dark:text-white">
                           {p.movementStatus === "baseline" ? (
-                            <span className="text-zinc-400 text-xs">Baseline</span>
+                            <span className="text-zinc-400 text-xs font-normal">Baseline</span>
                           ) : p.movementStatus === "no_data" ? (
-                            <span className="text-zinc-400 text-xs">No Count</span>
+                            <span className="text-zinc-400 text-xs font-normal">—</span>
                           ) : (
                             `${p.estimatedMovement} units`
                           )}
@@ -417,9 +417,17 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                       {/* Reported Remaining Stock */}
                       <td className="py-3.5 px-3 text-right whitespace-nowrap">
                         <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                          {p.totalReportedRemaining} units
+                          {p.totalReportedRemaining !== null ? (
+                            `${p.totalReportedRemaining} units`
+                          ) : (
+                            <span className="text-zinc-400 font-normal">Not Reported</span>
+                          )}
                         </div>
-                        <div className="text-[10px] text-zinc-400">Across {p.storesBreakdown.length} store(s)</div>
+                        <div className="text-[10px] text-zinc-400">
+                          {p.totalReportedRemaining !== null
+                            ? `Across ${p.storesBreakdown.length} store(s)`
+                            : "Pending first check"}
+                        </div>
                       </td>
 
                       {/* Velocity & Weeks of Supply */}
@@ -439,17 +447,27 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                         <>
                           <td className="py-3.5 px-3 text-right whitespace-nowrap">
                             <div className="font-bold text-zinc-900 dark:text-white">
-                              ${p.estimatedRetailSales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {p.movementStatus === "no_data" ? (
+                                <span className="text-zinc-400 text-xs font-normal">—</span>
+                              ) : (
+                                `$${p.estimatedRetailSales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              )}
                             </div>
-                            <div className="text-[10px] text-zinc-400">@ ${p.msrp.toFixed(2)} SRP</div>
+                            <div className="text-[10px] text-zinc-400">
+                              {p.movementStatus === "no_data" ? "No sales data" : `@ $${p.msrp.toFixed(2)} SRP`}
+                            </div>
                           </td>
 
                           <td className="py-3.5 px-3 text-right whitespace-nowrap">
                             <div className="font-bold text-emerald-600 dark:text-emerald-400">
-                              +${p.estimatedGrossProfit.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {p.movementStatus === "no_data" ? (
+                                <span className="text-zinc-400 text-xs font-normal">—</span>
+                              ) : (
+                                `+$${p.estimatedGrossProfit.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              )}
                             </div>
                             <div className="text-[10px] text-emerald-600/75 dark:text-emerald-400/75">
-                              {p.estimatedGrossMargin}% margin
+                              {p.movementStatus === "no_data" ? "—" : `${p.estimatedGrossMargin}% margin`}
                             </div>
                           </td>
                         </>
@@ -533,7 +551,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                       {p.movementStatus === "baseline"
                         ? "Baseline Count"
                         : p.movementStatus === "no_data"
-                        ? "No Count"
+                        ? "—"
                         : `${p.estimatedMovement} units`}
                     </div>
                   </div>
@@ -541,14 +559,14 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                   <div>
                     <span className="text-[10px] text-zinc-400 uppercase font-semibold">Reported Stock</span>
                     <div className="font-bold text-zinc-900 dark:text-white mt-0.5">
-                      {p.totalReportedRemaining} units
+                      {p.totalReportedRemaining !== null ? `${p.totalReportedRemaining} units` : "Not Reported"}
                     </div>
                   </div>
 
                   <div>
                     <span className="text-[10px] text-zinc-400 uppercase font-semibold">Weeks Supply</span>
                     <div className="font-semibold text-zinc-900 dark:text-zinc-200 mt-0.5">
-                      {p.approxWeeksOfSupply !== null ? `${p.approxWeeksOfSupply} wks` : "N/A"}
+                      {p.approxWeeksOfSupply !== null ? `${p.approxWeeksOfSupply} wks` : "—"}
                     </div>
                   </div>
 
@@ -556,7 +574,9 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                     <div>
                       <span className="text-[10px] text-zinc-400 uppercase font-semibold">Est. Gross Profit</span>
                       <div className="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                        +${p.estimatedGrossProfit.toFixed(2)} ({p.estimatedGrossMargin}%)
+                        {p.movementStatus === "no_data"
+                          ? "—"
+                          : `+$${p.estimatedGrossProfit.toFixed(2)} (${p.estimatedGrossMargin}%)`}
                       </div>
                     </div>
                   )}
@@ -627,7 +647,7 @@ function MovementStatusBadge({ status }: { status: MovementStatus }) {
     default:
       return (
         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-          No Counts
+          Pending Check
         </span>
       );
   }
@@ -663,7 +683,7 @@ function ReorderSignalBadge({ signal, qty }: { signal: ReorderSignal; qty: numbe
     default:
       return (
         <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-          📊 Early Data
+          📊 Insufficient Data
         </span>
       );
   }

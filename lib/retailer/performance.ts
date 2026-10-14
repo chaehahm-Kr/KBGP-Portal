@@ -42,7 +42,7 @@ export interface ProductPerformanceItem {
   priceBasisLabel: string;
   
   // Movement & Stock
-  totalReportedRemaining: number;
+  totalReportedRemaining: number | null;
   estimatedMovement: number;
   movementStatus: MovementStatus;
   provisionalMovement: number;
@@ -240,11 +240,44 @@ export async function getRetailerPerformanceData(
   (rawProducts || []).forEach((p) => productMap.set(p.id, p));
 
   // 5. Fetch Store Assortment (retailer_store_products) to know eligible products
-  const { data: storeProductRows } = await adminClient
+  let storeProductQuery = adminClient
     .from("retailer_store_products")
     .select("store_id, product_id, is_active")
     .eq("company_id", companyId)
     .eq("is_active", true);
+
+  if (activeStoreIds.length > 0) {
+    storeProductQuery = storeProductQuery.in("store_id", activeStoreIds);
+  }
+
+  const { data: storeProductRows, error: spError } = await storeProductQuery;
+  if (spError) {
+    console.error("Error fetching retailer_store_products for performance:", spError);
+  }
+
+  // 6. Fetch Ordered Products from valid non-draft orders for this company & active stores
+  let orderItemsQuery = adminClient
+    .from("retailer_order_items")
+    .select(`
+      product_id,
+      retailer_orders!inner (
+        id,
+        company_id,
+        store_id,
+        order_status
+      )
+    `)
+    .eq("retailer_orders.company_id", companyId)
+    .neq("retailer_orders.order_status", "draft");
+
+  if (activeStoreIds.length > 0) {
+    orderItemsQuery = orderItemsQuery.in("retailer_orders.store_id", activeStoreIds);
+  }
+
+  const { data: orderItemRows, error: orderItemsError } = await orderItemsQuery;
+  if (orderItemsError) {
+    console.error("Error fetching ordered items for performance inclusion:", orderItemsError);
+  }
 
   // Group check items by product and store
   // Structure: ProductId -> StoreId -> Array of submitted check item snapshots sorted chronologically
@@ -263,11 +296,36 @@ export async function getRetailerPerformanceData(
 
   const productStoreSnapshots = new Map<string, Map<string, CheckItemSnapshot[]>>();
 
+  // Track which stores are associated with each product (assortment, check, or order)
+  const productAssociatedStoreIds = new Map<string, Set<string>>();
+  const addProductStoreAssociation = (
+    productId: string | null | undefined,
+    storeId: string | null | undefined
+  ) => {
+    if (!productId) return;
+    if (!productAssociatedStoreIds.has(productId)) {
+      productAssociatedStoreIds.set(productId, new Set());
+    }
+    if (storeId) {
+      productAssociatedStoreIds.get(productId)!.add(storeId);
+    }
+  };
+
+  // 1. Assortment associations
+  (storeProductRows || []).forEach((sp) => {
+    if (activeStoreIds.includes(sp.store_id)) {
+      addProductStoreAssociation(sp.product_id, sp.store_id);
+    }
+  });
+
+  // 2. Weekly check associations
   submittedChecks.forEach((check) => {
     const items = (check.retailer_weekly_check_items as any[]) || [];
     items.forEach((item) => {
       if (!item.is_counted) return;
       const pId = item.product_id;
+      addProductStoreAssociation(pId, check.store_id);
+
       if (!productStoreSnapshots.has(pId)) {
         productStoreSnapshots.set(pId, new Map());
       }
@@ -290,16 +348,22 @@ export async function getRetailerPerformanceData(
     });
   });
 
-  // Collect all eligible product IDs (either in store assortment or with check snapshots)
-  const allProductIds = new Set<string>();
-  (storeProductRows || []).forEach((sp) => {
-    if (activeStoreIds.includes(sp.store_id)) {
-      allProductIds.add(sp.product_id);
+  // 3. Ordered SKU associations
+  (orderItemRows || []).forEach((row: any) => {
+    const pId = row.product_id;
+    const sId = row.retailer_orders?.store_id;
+    if (sId && activeStoreIds.includes(sId)) {
+      addProductStoreAssociation(pId, sId);
+    } else if (!sId) {
+      // Legacy order without store association: preserve product in company view
+      addProductStoreAssociation(pId, null);
     }
   });
-  productStoreSnapshots.forEach((_, pId) => allProductIds.add(pId));
 
-  // 6. Process Performance Metrics per Product
+  // Collect all eligible product IDs (union of assortment, checks, and orders)
+  const allProductIds = Array.from(productAssociatedStoreIds.keys());
+
+  // 7. Process Performance Metrics per Product
   const productPerformanceList: ProductPerformanceItem[] = [];
 
   for (const productId of Array.from(allProductIds)) {
@@ -329,7 +393,7 @@ export async function getRetailerPerformanceData(
     if (curation?.wholesale_price && Number(curation.wholesale_price) > 0) {
       wholesalePrice = Number(curation.wholesale_price);
     }
-    const isOrderable = wholesalePrice > 0;
+    const isOrderable = wholesalePrice > 0 && rawProd.status === "selling";
 
     let msrp = 0;
     if (curation?.suggest_retail_price && Number(curation.suggest_retail_price) > 0) {
@@ -371,8 +435,16 @@ export async function getRetailerPerformanceData(
     let isAllBaseline = true;
     let hasTaggedPriceSnapshot = false;
 
-    // Process each accessible store for this product
-    for (const store of stores.filter((s) => activeStoreIds.includes(s.id))) {
+    // Filter target stores: only include stores associated with this product
+    const associatedStores = productAssociatedStoreIds.get(productId) || new Set<string>();
+    const targetStores = stores.filter(
+      (s) =>
+        activeStoreIds.includes(s.id) &&
+        (associatedStores.size === 0 || associatedStores.has(s.id))
+    );
+
+    // Process each relevant store for this product
+    for (const store of targetStores) {
       const snapshots = storeSnapMap.get(store.id) || [];
       if (snapshots.length === 0) {
         storeBreakdowns.push({
@@ -506,8 +578,9 @@ export async function getRetailerPerformanceData(
         : 0;
 
     // Reorder Calculations
+    const totalReportedRemaining: number | null = hasAnyCount ? companyTotalRemaining : null;
     const targetQty = Math.ceil(averageWeeklyMovement * TARGET_WEEKS_OF_SUPPLY);
-    const rawReorderNeed = Math.max(0, targetQty - companyTotalRemaining);
+    const rawReorderNeed = hasAnyCount ? Math.max(0, targetQty - (totalReportedRemaining ?? 0)) : 0;
 
     // Round UP to valid MOQ / Case Pack Multiple
     let suggestedReorderQty = 0;
@@ -556,7 +629,7 @@ export async function getRetailerPerformanceData(
       wholesalePrice,
       msrp,
       priceBasisLabel,
-      totalReportedRemaining: companyTotalRemaining,
+      totalReportedRemaining,
       estimatedMovement: companyTotalMovement,
       movementStatus: companyMovementStatus,
       provisionalMovement: companyProvisionalMovement,
@@ -580,12 +653,15 @@ export async function getRetailerPerformanceData(
     });
   }
 
-  // Sort by Estimated Movement DESC, then Suggested Reorder DESC
+  // Sort by Estimated Movement DESC, then Suggested Reorder DESC, then Product Name ASC
   productPerformanceList.sort((a, b) => {
     if (b.estimatedMovement !== a.estimatedMovement) {
       return b.estimatedMovement - a.estimatedMovement;
     }
-    return b.suggestedReorderQty - a.suggestedReorderQty;
+    if (b.suggestedReorderQty !== a.suggestedReorderQty) {
+      return b.suggestedReorderQty - a.suggestedReorderQty;
+    }
+    return (a.productName || "").localeCompare(b.productName || "");
   });
 
   // 7. Calculate Top Summary KPIs
