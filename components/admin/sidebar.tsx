@@ -32,12 +32,22 @@ import {
 
 import type { AdminUnreadCounts } from "@/lib/notifications/admin-read-state";
 
+export interface SidebarStaffPermissions {
+  canAccessFinance?: boolean;
+  canAccessExecutiveKPIs?: boolean;
+  canAccessRetail?: boolean;
+  canAccessBrand?: boolean;
+  canManageStaff?: boolean;
+  isSuperAdmin?: boolean;
+}
+
 interface SidebarProps {
   isCollapsed: boolean;
   toggleCollapse: () => void;
   pendingInquiriesCount?: number;
   pendingApplicationsCount?: number;
   unreadCounts?: AdminUnreadCounts;
+  permissions?: SidebarStaffPermissions;
 }
 
 interface SubItem {
@@ -138,6 +148,7 @@ export default function Sidebar({
     totalFinance: 0,
     totalProducts: 0,
   },
+  permissions,
 }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -339,6 +350,27 @@ export default function Sidebar({
     },
   ];
 
+  const filteredMenuItems = useMemo(() => {
+    return menuItems.filter((item) => {
+      if (!permissions) return true;
+      if (permissions.isSuperAdmin) return true;
+
+      if (item.name === "Finance" && permissions.canAccessFinance === false) {
+        return false;
+      }
+      if (item.name === "Retail Network" && permissions.canAccessRetail === false) {
+        return false;
+      }
+      if (item.name === "Applications" && permissions.canAccessBrand === false) {
+        return false;
+      }
+      if (item.name === "Users & Permissions" && permissions.canManageStaff === false) {
+        return false;
+      }
+      return true;
+    });
+  }, [menuItems, permissions]);
+
   const handleToggleExpand = (name: string) => {
     if (isCollapsed) {
       toggleCollapse(); // Expand sidebar if collapsed
@@ -353,8 +385,8 @@ export default function Sidebar({
 
   // Compute the single best-matching active href across all items
   const bestActiveHref = useMemo(
-    () => getBestActiveHref(menuItems, pathname, searchParams),
-    [pathname, searchParams]
+    () => getBestActiveHref(filteredMenuItems, pathname, searchParams),
+    [filteredMenuItems, pathname, searchParams]
   );
 
   const isSubItemActive = (sub: SubItem): boolean => {
@@ -404,7 +436,7 @@ export default function Sidebar({
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-1 select-none scrollbar-thin">
-        {menuItems.map((item) => {
+        {filteredMenuItems.map((item) => {
           const isActive = isMenuItemActive(item);
           const hasSubItems = !!item.subItems;
           const isExpanded = expandedMenus[item.name] && !isCollapsed;

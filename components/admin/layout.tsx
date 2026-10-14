@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { usePathname } from "next/navigation";
-import Sidebar from "./sidebar";
+import Sidebar, { type SidebarStaffPermissions } from "./sidebar";
 import Header from "./header";
 
 import type { AdminUnreadCounts } from "@/lib/notifications/admin-read-state";
@@ -12,6 +12,7 @@ interface AdminLayoutProps {
   pendingInquiriesCount?: number;
   pendingApplicationsCount?: number;
   unreadCounts?: AdminUnreadCounts;
+  permissions?: SidebarStaffPermissions;
 }
 
 export default function AdminLayout({
@@ -19,6 +20,7 @@ export default function AdminLayout({
   pendingInquiriesCount = 0,
   pendingApplicationsCount = 0,
   unreadCounts,
+  permissions,
 }: AdminLayoutProps) {
   const pathname = usePathname();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -57,6 +59,7 @@ export default function AdminLayout({
         pendingInquiriesCount={pendingInquiriesCount}
         pendingApplicationsCount={pendingApplicationsCount}
         unreadCounts={unreadCounts}
+        permissions={permissions}
       />
 
       {/* Main Content Area */}

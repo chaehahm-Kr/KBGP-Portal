@@ -4,6 +4,7 @@ import AdminLayout from "@/components/admin/layout";
 import { getPendingPartnerInquiriesCount } from "@/lib/inquiry/actions";
 import { getPendingApplicationsCount } from "@/lib/application/actions";
 import { getAdminUnreadCounts } from "@/lib/notifications/admin-read-state";
+import { getAdminStaffContext } from "@/lib/auth/dal";
 
 export const dynamic = "force-dynamic";
 
@@ -29,16 +30,30 @@ export default async function AdminPageLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [pendingInquiriesCount, pendingApplicationsCount, unreadCounts] = await Promise.all([
+  const [pendingInquiriesCount, pendingApplicationsCount, unreadCounts, staff] = await Promise.all([
     getPendingPartnerInquiriesCount(),
     getPendingApplicationsCount(),
     getAdminUnreadCounts(),
+    getAdminStaffContext().catch(() => null),
   ]);
+
+  const permissions = staff
+    ? {
+        canAccessFinance: staff.canAccessFinance,
+        canAccessExecutiveKPIs: staff.canAccessExecutiveKPIs,
+        canAccessRetail: staff.hasPermission("retail", "view"),
+        canAccessBrand: staff.hasPermission("applications", "view") || staff.hasPermission("products", "view"),
+        canManageStaff: staff.canManageStaff,
+        isSuperAdmin: staff.isSuperAdmin,
+      }
+    : undefined;
+
   return (
     <AdminLayout
       pendingInquiriesCount={pendingInquiriesCount}
       pendingApplicationsCount={pendingApplicationsCount}
       unreadCounts={unreadCounts}
+      permissions={permissions}
     >
       {children}
     </AdminLayout>

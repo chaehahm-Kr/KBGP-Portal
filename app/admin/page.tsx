@@ -182,52 +182,86 @@ export default async function AdminHomePage() {
       {/* 2. Common Executive Overview (Full Width — 4 Authoritative Production KPIs) */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* KPI 1: Retail Order Value — MTD */}
-        <Link
-          href="/admin/sales/orders"
-          className="group block rounded-xl border border-zinc-200 bg-white p-5 shadow-xs transition-all hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-              Retail Order Value — MTD
-            </span>
-            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 group-hover:underline">
-              Orders →
-            </span>
+        {metrics.permissions.canAccessExecutiveKPIs ? (
+          <Link
+            href="/admin/sales/orders"
+            className="group block rounded-xl border border-zinc-200 bg-white p-5 shadow-xs transition-all hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                Retail Order Value — MTD
+              </span>
+              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 group-hover:underline">
+                Orders →
+              </span>
+            </div>
+            <div className="mt-2 text-2xl font-black text-zinc-900 dark:text-white">
+              ${metrics.retailOrderValueMTD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span>당월 확정 도매 발주액</span>
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                {metrics.retailOrdersMTDCount}건 확정 (취소·테스트 제외)
+              </span>
+            </div>
+          </Link>
+        ) : (
+          <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                Retail Order Value — MTD
+              </span>
+              <span className="text-[10px] font-medium text-zinc-400">접근 제한</span>
+            </div>
+            <div className="mt-2 text-lg font-bold text-zinc-400 dark:text-zinc-500">
+              — — —
+            </div>
+            <div className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+              경영진 / Super Admin 전용 지표
+            </div>
           </div>
-          <div className="mt-2 text-2xl font-black text-zinc-900 dark:text-white">
-            ${metrics.retailOrderValueMTD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
-            <span>당월 확정 도매 발주액</span>
-            <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-              {metrics.retailOrdersMTDCount}건 확정 (취소 제외)
-            </span>
-          </div>
-        </Link>
+        )}
 
         {/* KPI 2: Total Open AR */}
-        <Link
-          href="/admin/finance/receivables"
-          className="group block rounded-xl border border-zinc-200 bg-white p-5 shadow-xs transition-all hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-              Total Open AR (외상매출)
-            </span>
-            <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 group-hover:underline">
-              Finance →
-            </span>
+        {metrics.permissions.canAccessFinance ? (
+          <Link
+            href="/admin/finance/receivables"
+            className="group block rounded-xl border border-zinc-200 bg-white p-5 shadow-xs transition-all hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                Total Open AR (외상매출)
+              </span>
+              <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 group-hover:underline">
+                Finance →
+              </span>
+            </div>
+            <div className="mt-2 text-2xl font-black text-zinc-900 dark:text-white">
+              ${metrics.openAR.totalOpenAR.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span>미수금 잔액</span>
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                {metrics.openAR.openInvoiceCount}건 진행 중
+              </span>
+            </div>
+          </Link>
+        ) : (
+          <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                Total Open AR (외상매출)
+              </span>
+              <span className="text-[10px] font-medium text-zinc-400">접근 제한</span>
+            </div>
+            <div className="mt-2 text-lg font-bold text-zinc-400 dark:text-zinc-500">
+              — — —
+            </div>
+            <div className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+              Finance 회계 담당자 전용 지표
+            </div>
           </div>
-          <div className="mt-2 text-2xl font-black text-zinc-900 dark:text-white">
-            ${metrics.openAR.totalOpenAR.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
-            <span>미수금 잔액</span>
-            <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-              {metrics.openAR.openInvoiceCount}건 진행 중 (연체 $0.00)
-            </span>
-          </div>
-        </Link>
+        )}
 
         {/* KPI 3: Active Orders (Ready to Ship) */}
         <Link
@@ -855,7 +889,8 @@ export default async function AdminHomePage() {
       </div>
 
       {/* 5. Common Finance & Credit Control (Full Width — Exception-Oriented Layout below the Two Business Columns) */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+      {metrics.permissions.canAccessFinance && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4">
           <div>
             <div className="flex items-center gap-2">
@@ -950,6 +985,7 @@ export default async function AdminHomePage() {
           </Link>
         </div>
       </div>
+      )}
     </div>
   );
 }
