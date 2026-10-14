@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { AdminRetailerListItem } from "@/lib/retailer/admin-retailer-actions";
+import { WeeklyCheckTooltip } from "@/components/admin/weekly-check-tooltip";
 
 interface RetailersListProps {
   initialRetailers: AdminRetailerListItem[];
@@ -538,31 +539,14 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
 
                       {/* COLUMN 12: WEEKLY CHECK */}
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        <Link
-                          href={`/admin/retailers/${ret.id}?tab=performance`}
-                          className="text-[11px] hover:underline inline-block font-medium"
-                          title={
-                            ret.eligibleStoresCount > 0
-                              ? `Current Reporting Week (${ret.currentReportingWeek || "Current"}): ${ret.reportingStoresCount} Submitted, ${ret.inProgressStoresCount ?? 0} In Progress, ${ret.notStartedStoresCount ?? Math.max(0, ret.eligibleStoresCount - ret.reportingStoresCount)} Not Started`
-                              : "No stores registered"
-                          }
-                        >
-                          {ret.eligibleStoresCount > 0 ? (
-                            <span
-                              className={
-                                ret.reportingStoresCount === ret.eligibleStoresCount
-                                  ? "text-emerald-600 dark:text-emerald-400 font-bold"
-                                  : ret.reportingStoresCount > 0 || (ret.inProgressStoresCount ?? 0) > 0
-                                  ? "text-amber-600 dark:text-amber-400 font-bold"
-                                  : "text-zinc-500 dark:text-zinc-400 font-medium"
-                              }
-                            >
-                              {ret.reportingStoresCount}/{ret.eligibleStoresCount}
-                            </span>
-                          ) : (
-                            <span className="text-zinc-400 font-normal">—</span>
-                          )}
-                        </Link>
+                        <WeeklyCheckTooltip
+                          companyId={ret.id}
+                          reportingWeek={ret.currentReportingWeek}
+                          eligibleStoresCount={ret.eligibleStoresCount}
+                          reportingStoresCount={ret.reportingStoresCount}
+                          inProgressStoresCount={ret.inProgressStoresCount ?? 0}
+                          notStartedStoresCount={ret.notStartedStoresCount}
+                        />
                       </td>
 
                       {/* COLUMN 13: ATTENTION */}

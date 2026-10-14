@@ -41,7 +41,7 @@ function SafeThumbnail({
 
 export function RetailerWeeklyCheckDetailView({ session }: WeeklyCheckDetailViewProps) {
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 w-full max-w-7xl">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-4">
         <div>

@@ -99,6 +99,7 @@ export function WeeklyCheckScannerModal({
   const [inputQty, setInputQty] = useState<number>(0);
   const [inputNotes, setInputNotes] = useState<string>("");
   const [isAlreadyCounted, setIsAlreadyCounted] = useState(false);
+  const [isNoteExpanded, setIsNoteExpanded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -245,6 +246,7 @@ export function WeeklyCheckScannerModal({
         setInputQty(countVal);
         setInputNotes(notesVal);
         setIsAlreadyCounted(isCounted);
+        setIsNoteExpanded(Boolean(notesVal && notesVal.trim().length > 0));
         setScanStatus("product_found");
         setShowProductDrawer(false);
 
@@ -272,6 +274,7 @@ export function WeeklyCheckScannerModal({
     setMatchedItem(null);
     setInputQty(0);
     setInputNotes("");
+    setIsNoteExpanded(false);
     setSaveError(null);
     setScanStatus("scanning");
   }, []);
@@ -351,6 +354,7 @@ export function WeeklyCheckScannerModal({
     setInputQty(countVal);
     setInputNotes(notesVal);
     setIsAlreadyCounted(isCounted);
+    setIsNoteExpanded(Boolean(notesVal && notesVal.trim().length > 0));
     setScanStatus("product_found");
     setShowProductDrawer(false);
 
@@ -855,11 +859,18 @@ export function WeeklyCheckScannerModal({
                   type="number"
                   inputMode="numeric"
                   pattern="[0-9]*"
+                  enterKeyHint="done"
                   min={0}
                   value={inputQty}
                   onChange={(e) => {
                     const v = parseInt(e.target.value, 10);
                     setInputQty(isNaN(v) ? 0 : Math.max(0, v));
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      (e.target as HTMLElement).blur();
+                    }
                   }}
                   className="w-28 h-14 text-center text-3xl font-extrabold bg-zinc-900 border-2 border-indigo-500 rounded-2xl text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/30"
                 />
@@ -887,14 +898,54 @@ export function WeeklyCheckScannerModal({
                 0 — Out of Stock
               </button>
 
-              {/* Optional Item Note */}
-              <input
-                type="text"
-                placeholder="Optional note (e.g., tester bottle, 1 damaged)"
-                value={inputNotes}
-                onChange={(e) => setInputNotes(e.target.value)}
-                className="w-full text-xs px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
-              />
+              {/* Optional Item Note: Opt-in only, collapsed by default unless note exists */}
+              {!isNoteExpanded ? (
+                <div className="flex items-center justify-center pt-0.5">
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setIsNoteExpanded(true)}
+                    className="text-xs font-semibold text-zinc-400 hover:text-zinc-200 flex items-center gap-1.5 py-1 px-3 rounded-lg hover:bg-zinc-900/60 transition-colors cursor-pointer"
+                  >
+                    <span className="text-sm font-bold text-indigo-400">+</span>
+                    <span>
+                      {inputNotes && inputNotes.trim().length > 0
+                        ? "Edit Note (Optional)"
+                        : "Add Note (Optional)"}
+                    </span>
+                    {inputNotes && inputNotes.trim().length > 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block ml-0.5" />
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1.5 animate-in fade-in duration-150 pt-0.5">
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400 px-0.5">
+                    <span className="font-semibold">Adjustment Note (Optional)</span>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setIsNoteExpanded(false)}
+                      className="text-zinc-500 hover:text-zinc-300 text-[10px] cursor-pointer"
+                    >
+                      Hide Note
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Optional note (e.g., tester bottle, 1 damaged)"
+                    value={inputNotes}
+                    onChange={(e) => setInputNotes(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        (e.target as HTMLElement).blur();
+                      }
+                    }}
+                    className="w-full text-xs px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              )}
 
               {/* Server Save Error Alert */}
               {saveError && (

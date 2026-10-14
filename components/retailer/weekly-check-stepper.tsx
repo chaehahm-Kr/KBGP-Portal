@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition, useMemo } from "react";
+import React, { useState, useTransition, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { WeeklyCheckSession, getWeeklyCheckPath } from "@/lib/retailer/weekly-check-types";
@@ -71,6 +71,7 @@ export function RetailerWeeklyCheckStepper({ session, initialOpenScanner = false
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState<"all" | "uncounted">("all");
   const [isReviewMode, setIsReviewMode] = useState(false);
+  const [isNoteExpanded, setIsNoteExpanded] = useState(false);
   const [checkNotes, setCheckNotes] = useState(session.notes || "");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -119,6 +120,13 @@ export function RetailerWeeklyCheckStepper({ session, initialOpenScanner = false
   const currentCountState = activeItem
     ? counts[activeItem.productId] || { remainingQty: 0, isCounted: false, notes: "" }
     : { remainingQty: 0, isCounted: false, notes: "" };
+
+  useEffect(() => {
+    if (activeItem) {
+      const savedNote = counts[activeItem.productId]?.notes;
+      setIsNoteExpanded(Boolean(savedNote && savedNote.trim().length > 0));
+    }
+  }, [activeItem?.productId]);
 
   const handleUpdateQty = (productId: string, newQty: number) => {
     const validQty = Math.max(0, isNaN(newQty) ? 0 : newQty);
@@ -261,7 +269,7 @@ export function RetailerWeeklyCheckStepper({ session, initialOpenScanner = false
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 w-full max-w-7xl">
       {/* Top Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
         <div>
@@ -450,9 +458,16 @@ export function RetailerWeeklyCheckStepper({ session, initialOpenScanner = false
                         type="number"
                         inputMode="numeric"
                         pattern="[0-9]*"
+                        enterKeyHint="done"
                         min={0}
                         value={currentCountState.remainingQty}
                         onChange={(e) => handleUpdateQty(activeItem.productId, parseInt(e.target.value, 10))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            (e.target as HTMLElement).blur();
+                          }
+                        }}
                         className="w-24 sm:w-32 h-12 text-center text-2xl font-bold bg-white dark:bg-zinc-900 border-2 border-indigo-500 dark:border-indigo-400 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/20 shadow-xs"
                       />
 
@@ -482,15 +497,55 @@ export function RetailerWeeklyCheckStepper({ session, initialOpenScanner = false
                     </button>
                   </div>
 
-                  {/* Optional Notes Input */}
-                  <div className="pt-2">
-                    <input
-                      type="text"
-                      placeholder="Optional adjustment note (e.g. 1 damaged, tester bottle, etc.)"
-                      value={currentCountState.notes}
-                      onChange={(e) => handleUpdateNotes(activeItem.productId, e.target.value)}
-                      className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                  {/* Optional Notes Input: Opt-in only, collapsed by default unless note exists */}
+                  <div className="pt-1">
+                    {!isNoteExpanded ? (
+                      <div className="flex items-center justify-start">
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          onClick={() => setIsNoteExpanded(true)}
+                          className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1.5 py-1 px-2.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                        >
+                          <span className="text-sm font-bold text-indigo-500">+</span>
+                          <span>
+                            {currentCountState.notes && currentCountState.notes.trim().length > 0
+                              ? "Edit Note (Optional)"
+                              : "Add Note (Optional)"}
+                          </span>
+                          {currentCountState.notes && currentCountState.notes.trim().length > 0 && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block ml-0.5" />
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 animate-in fade-in duration-150">
+                        <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 px-0.5">
+                          <span className="font-semibold">Adjustment Note (Optional)</span>
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            onClick={() => setIsNoteExpanded(false)}
+                            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-[10px] cursor-pointer"
+                          >
+                            Hide Note
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Optional adjustment note (e.g. 1 damaged, tester bottle, etc.)"
+                          value={currentCountState.notes}
+                          onChange={(e) => handleUpdateNotes(activeItem.productId, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              (e.target as HTMLElement).blur();
+                            }
+                          }}
+                          className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
