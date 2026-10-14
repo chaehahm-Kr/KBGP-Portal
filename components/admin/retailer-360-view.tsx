@@ -289,6 +289,12 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
   const [fulfillmentQuantities, setFulfillmentQuantities] = useState<Record<string, number>>({});
   const [fulfillmentError, setFulfillmentError] = useState("");
 
+  // Orders & Fulfillment Accordion & Pagination State
+  const paramOrderId = searchParams.get("orderId") || searchParams.get("order");
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(paramOrderId || null);
+  const [ordersPage, setOrdersPage] = useState<number>(1);
+  const ORDERS_PER_PAGE = 20;
+
   // Performance Store Filter
   const [perfStoreFilter, setPerfStoreFilter] = useState<string>("all");
 
@@ -1634,71 +1640,37 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
       {activeTab === "orders" && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-              Retailer Orders & Shipment Dispatch ({data.orders.length})
-            </h3>
+            <div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+                Retailer Orders & Shipment Dispatch ({data.orders.length})
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                Compact view with collapsed order details and on-demand inspection.
+              </p>
+            </div>
             <Link
               href={`/admin/sales/orders?companyId=${data.company.id}`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition-colors self-start sm:self-auto"
             >
               <span>Open in Order Processing Workspace</span>
               <span>→</span>
             </Link>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {data.orders.length > 0 ? (
-              data.orders.map((order) => (
-                <div
-                  key={order.id}
-                  className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Link
-                          href={`/admin/sales/orders/${order.id}`}
-                          className="font-mono text-sm font-black text-zinc-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-colors"
-                        >
-                          #{order.orderNumber}
-                        </Link>
-                        <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
-                          order.orderStatus === "partially_shipped"
-                            ? "bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
-                            : order.orderStatus === "shipped"
-                            ? "bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800"
-                            : order.orderStatus === "processing"
-                            ? "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
-                            : order.orderStatus === "cancelled"
-                            ? "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
-                            : order.orderStatus === "partially_cancelled"
-                            ? "bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800"
-                            : "bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
-                        }`}>
-                          {order.orderStatus.replace("_", " ")}
-                        </span>
-                        <span className="rounded bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold">
-                          {order.paymentStatus}
-                        </span>
-                        {order.isTest && (
-                          <span className="rounded bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.2 text-[9px] font-bold">
-                            TEST
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-zinc-500 mt-0.5">
-                        Store: <strong>🏪 {order.storeName}</strong> · Ordered: {formatDate(order.createdAt)} · Payment: {order.paymentTerms}
-                      </p>
-                    </div>
+              (() => {
+                const totalOrderPages = Math.max(1, Math.ceil(data.orders.length / ORDERS_PER_PAGE));
+                const currentPage = Math.min(ordersPage, totalOrderPages);
+                const pagedOrders = data.orders.slice((currentPage - 1) * ORDERS_PER_PAGE, currentPage * ORDERS_PER_PAGE);
 
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <span className="text-[10px] text-zinc-400 block">Total Amount</span>
-                        <span className="font-mono text-base font-black text-zinc-900 dark:text-white">
-                          {formatCurrency(order.totalAmount)}
-                        </span>
-                      </div>
-                      {(() => {
+                return (
+                  <>
+                    <div className="space-y-3">
+                      {pagedOrders.map((order) => {
+                        const isExpanded = expandedOrderId === order.id;
+                        const totalOrderedUnits = (order.items || []).reduce((sum, it) => sum + (it.quantity || 0), 0);
+                        const totalShippedUnits = (order.items || []).reduce((sum, it) => sum + (it.quantityShipped || 0), 0);
                         const orderRemainingUnits = (order.items || []).reduce(
                           (sum, it) => sum + (it.quantityRemaining !== undefined ? it.quantityRemaining : Math.max(0, Number(it.quantity || 0) - Number(it.quantityShipped || 0))),
                           0
@@ -1709,147 +1681,274 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                         const canCreateShipment = !isTerminal && orderRemainingUnits > 0;
 
                         return (
-                          <div className="flex items-center gap-2">
-                            {canCreateShipment ? (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenFulfillmentModal(order)}
-                                className="rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 transition-colors shadow-2xs cursor-pointer"
-                              >
-                                + Create Shipment
-                              </button>
-                            ) : (
-                              <span className="rounded-xl bg-zinc-100 dark:bg-zinc-800/80 px-3 py-1.5 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 border border-zinc-200 dark:border-zinc-700/60">
-                                {order.orderStatus.toLowerCase() === "cancelled"
-                                  ? "Cancelled"
-                                  : "Fully Dispatched"}
-                              </span>
+                          <div
+                            key={order.id}
+                            className={`rounded-2xl border transition-all ${
+                              isExpanded
+                                ? "border-indigo-200 dark:border-indigo-800 bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-indigo-500/20"
+                                : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 shadow-2xs"
+                            } overflow-hidden`}
+                          >
+                            {/* Order Summary Row (Always visible) */}
+                            <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-zinc-900">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Link
+                                    href={`/admin/sales/orders/${order.id}`}
+                                    className="font-mono text-sm font-black text-zinc-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-colors"
+                                  >
+                                    #{order.orderNumber}
+                                  </Link>
+                                  <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                    order.orderStatus === "partially_shipped"
+                                      ? "bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
+                                      : order.orderStatus === "shipped"
+                                      ? "bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800"
+                                      : order.orderStatus === "processing"
+                                      ? "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                                      : order.orderStatus === "cancelled"
+                                      ? "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                                      : order.orderStatus === "partially_cancelled"
+                                      ? "bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800"
+                                      : "bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                                  }`}>
+                                    {order.orderStatus.replace(/_/g, " ")}
+                                  </span>
+                                  <span className="rounded bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 px-2 py-0.5 text-[10px] font-bold capitalize">
+                                    {order.paymentStatus}
+                                  </span>
+                                  {order.isTest && (
+                                    <span className="rounded bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.2 text-[9px] font-bold">
+                                      TEST
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 flex-wrap text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                                  <span>Store: <strong>🏪 {order.storeName}</strong></span>
+                                  <span>·</span>
+                                  <span>Ordered: {formatDate(order.createdAt)}</span>
+                                  <span>·</span>
+                                  <span>Terms: {order.paymentTerms || "Standard"}</span>
+                                  <span>·</span>
+                                  <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                                    Fulfillment: {
+                                      order.orderStatus === "cancelled" ? (
+                                        <span className="text-zinc-400">Cancelled</span>
+                                      ) : order.orderStatus === "shipped" || order.orderStatus === "delivered" ? (
+                                        <span className="text-purple-600 dark:text-purple-400 font-semibold">Fully Shipped ({totalShippedUnits} units)</span>
+                                      ) : order.fulfillments.length > 0 ? (
+                                        <span className="text-sky-600 dark:text-sky-400 font-semibold">{order.fulfillments.length} {order.fulfillments.length === 1 ? 'Dispatch' : 'Dispatches'} · {totalShippedUnits}/{totalOrderedUnits} Units</span>
+                                      ) : (
+                                        <span className="text-amber-600 dark:text-amber-400 font-semibold">Pending ({totalOrderedUnits} units)</span>
+                                      )
+                                    }
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3 shrink-0">
+                                <div className="text-right">
+                                  <span className="text-[10px] text-zinc-400 block">Total</span>
+                                  <span className="font-mono text-sm font-black text-zinc-900 dark:text-white">
+                                    {formatCurrency(order.totalAmount)}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  {canCreateShipment ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenFulfillmentModal(order)}
+                                      className="rounded-lg bg-zinc-900 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 transition-colors shadow-2xs cursor-pointer"
+                                    >
+                                      + Create Shipment
+                                    </button>
+                                  ) : (
+                                    <span className="rounded-lg bg-zinc-100 dark:bg-zinc-800/80 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 border border-zinc-200 dark:border-zinc-700/60">
+                                      {order.orderStatus.toLowerCase() === "cancelled"
+                                        ? "Cancelled"
+                                        : "Fully Dispatched"}
+                                    </span>
+                                  )}
+
+                                  <Link
+                                    href={`/admin/sales/orders/${order.id}`}
+                                    className="rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 px-2.5 py-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-colors"
+                                  >
+                                    Process ↗
+                                  </Link>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedOrderId((prev) => (prev === order.id ? null : order.id))}
+                                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold border transition-colors cursor-pointer ${
+                                      isExpanded
+                                        ? "bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/60 dark:border-indigo-800 dark:text-indigo-300"
+                                        : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                                    }`}
+                                    title={isExpanded ? "Collapse Order Details" : "Expand Order Details"}
+                                  >
+                                    <span>{isExpanded ? "Hide Details" : "Details"}</span>
+                                    <span className="text-[10px]">{isExpanded ? "▲" : "▼"}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Expanded Section: Line Items & Fulfillments */}
+                            {isExpanded && (
+                              <div className="p-5 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-950/40 space-y-4">
+                                {/* Order Items Table */}
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left text-xs">
+                                    <thead className="text-[10px] text-zinc-400 font-bold uppercase border-b border-zinc-200 dark:border-zinc-800">
+                                      <tr>
+                                        <th className="py-2">Product / SKU</th>
+                                        <th className="py-2 text-right">Ordered</th>
+                                        <th className="py-2 text-right">Shipped</th>
+                                        <th className="py-2 text-right">Cancelled</th>
+                                        <th className="py-2 text-right">Remaining</th>
+                                        <th className="py-2 text-right">Wholesale Price</th>
+                                        <th className="py-2 text-right">Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                                      {order.items.map((item) => (
+                                        <tr key={item.id}>
+                                          <td className="py-2">
+                                            <span className="font-semibold text-zinc-800 dark:text-zinc-200 block">
+                                              {item.productName}
+                                            </span>
+                                            <span className="font-mono text-[10px] text-zinc-400">
+                                              {item.sku}
+                                            </span>
+                                          </td>
+                                          <td className="py-2 text-right font-bold">{item.quantity}</td>
+                                          <td className="py-2 text-right text-indigo-600 dark:text-indigo-400 font-semibold">{item.quantityShipped}</td>
+                                          <td className="py-2 text-right text-orange-600 font-semibold">{item.quantityCancelled || 0}</td>
+                                          <td className={`py-2 text-right font-bold ${item.quantityRemaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                                            {item.quantityRemaining}
+                                          </td>
+                                          <td className="py-2 text-right font-mono text-zinc-500">{formatCurrency(item.unitWholesalePrice)}</td>
+                                          <td className="py-2 text-right font-mono font-bold text-zinc-900 dark:text-white">{formatCurrency(item.lineTotal)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+
+                                {/* Shipments List if any */}
+                                {order.fulfillments.length > 0 && (
+                                  <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+                                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                                      Fulfillment Packages ({order.fulfillments.length})
+                                    </span>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                      {order.fulfillments.map((ful) => (
+                                        <div
+                                          key={ful.id}
+                                          className="rounded-xl border border-zinc-200/80 bg-zinc-50/60 p-3 text-xs dark:border-zinc-800 dark:bg-zinc-800/40 flex items-center justify-between"
+                                        >
+                                          <div>
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                                #{ful.fulfillmentNumber}
+                                              </span>
+                                              <span className="rounded bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.2 text-[9px] font-bold">
+                                                {ful.status}
+                                              </span>
+                                            </div>
+                                            <p className="text-[10px] text-zinc-500 mt-0.5">
+                                              {ful.boxes && ful.boxes.length > 0
+                                                ? `${ful.boxes.length} ${ful.boxes.length === 1 ? "Box" : "Boxes"} · `
+                                                : ""}
+                                              {ful.carrier} · {ful.trackingNumber ? `Tracking: ${ful.trackingNumber}` : "No tracking"}
+                                            </p>
+                                          </div>
+
+                                          <div className="flex items-center gap-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => setEditingFulfillment({
+                                                id: ful.id,
+                                                fulfillmentNumber: ful.fulfillmentNumber,
+                                                orderNumber: order.orderNumber,
+                                                boxes: ful.boxes || [],
+                                                notes: ful.notes,
+                                              })}
+                                              className="rounded-lg bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-2 py-1 text-[10px] font-bold hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors cursor-pointer"
+                                            >
+                                              ✏️ Edit Tracking
+                                            </button>
+                                            {ful.status === "processing" && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleConfirmDispatch(ful.id)}
+                                                className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-indigo-700 transition-colors shadow-2xs cursor-pointer"
+                                              >
+                                                Confirm Dispatch
+                                              </button>
+                                            )}
+                                            {ful.status === "shipped" && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleMarkDelivered(ful.id)}
+                                                className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer"
+                                              >
+                                                Confirm Delivery
+                                              </button>
+                                            )}
+                                            {ful.status === "delivered" && (
+                                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                ✓ Delivered
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             )}
-                            <Link
-                              href={`/admin/sales/orders/${order.id}`}
-                              className="rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 px-3 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-colors"
-                            >
-                              Process ↗
-                            </Link>
                           </div>
                         );
-                      })()}
+                      })}
                     </div>
-                  </div>
 
-                  {/* Order Items Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="text-[10px] text-zinc-400 font-bold uppercase border-b border-zinc-100 dark:border-zinc-800">
-                        <tr>
-                          <th className="py-2">Product / SKU</th>
-                          <th className="py-2 text-right">Ordered</th>
-                          <th className="py-2 text-right">Shipped</th>
-                          <th className="py-2 text-right">Cancelled</th>
-                          <th className="py-2 text-right">Remaining</th>
-                          <th className="py-2 text-right">Wholesale Price</th>
-                          <th className="py-2 text-right">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-                        {order.items.map((item) => (
-                          <tr key={item.id}>
-                            <td className="py-2">
-                              <span className="font-semibold text-zinc-800 dark:text-zinc-200 block">
-                                {item.productName}
-                              </span>
-                              <span className="font-mono text-[10px] text-zinc-400">
-                                {item.sku}
-                              </span>
-                            </td>
-                            <td className="py-2 text-right font-bold">{item.quantity}</td>
-                            <td className="py-2 text-right text-indigo-600 dark:text-indigo-400 font-semibold">{item.quantityShipped}</td>
-                            <td className="py-2 text-right text-orange-600 font-semibold">{item.quantityCancelled || 0}</td>
-                            <td className={`py-2 text-right font-bold ${item.quantityRemaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-                              {item.quantityRemaining}
-                            </td>
-                            <td className="py-2 text-right font-mono text-zinc-500">{formatCurrency(item.unitWholesalePrice)}</td>
-                            <td className="py-2 text-right font-mono font-bold text-zinc-900 dark:text-white">{formatCurrency(item.lineTotal)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Shipments List if any */}
-                  {order.fulfillments.length > 0 && (
-                    <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                        Fulfillment Packages ({order.fulfillments.length})
-                      </span>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {order.fulfillments.map((ful) => (
-                          <div
-                            key={ful.id}
-                            className="rounded-xl border border-zinc-200/80 bg-zinc-50/60 p-3 text-xs dark:border-zinc-800 dark:bg-zinc-800/40 flex items-center justify-between"
+                    {/* Scalable Orders Pagination Bar */}
+                    {totalOrderPages > 1 && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3 py-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                          Showing orders <strong className="text-zinc-900 dark:text-white font-semibold">{((currentPage - 1) * ORDERS_PER_PAGE) + 1}–{Math.min(currentPage * ORDERS_PER_PAGE, data.orders.length)}</strong> of <strong className="text-zinc-900 dark:text-white font-semibold">{data.orders.length}</strong>
+                        </span>
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <button
+                            type="button"
+                            disabled={currentPage === 1}
+                            onClick={() => setOrdersPage((p) => Math.max(1, p - 1))}
+                            className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                           >
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                                  #{ful.fulfillmentNumber}
-                                </span>
-                                <span className="rounded bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.2 text-[9px] font-bold">
-                                  {ful.status}
-                                </span>
-                              </div>
-                              <p className="text-[10px] text-zinc-500 mt-0.5">
-                                {ful.boxes && ful.boxes.length > 0
-                                  ? `${ful.boxes.length} ${ful.boxes.length === 1 ? "Box" : "Boxes"} · `
-                                  : ""}
-                                {ful.carrier} · {ful.trackingNumber ? `Tracking: ${ful.trackingNumber}` : "No tracking"}
-                              </p>
-                            </div>
-
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setEditingFulfillment({
-                                  id: ful.id,
-                                  fulfillmentNumber: ful.fulfillmentNumber,
-                                  orderNumber: order.orderNumber,
-                                  boxes: ful.boxes || [],
-                                  notes: ful.notes,
-                                })}
-                                className="rounded-lg bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-2 py-1 text-[10px] font-bold hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors cursor-pointer"
-                              >
-                                ✏️ Edit Tracking
-                              </button>
-                              {ful.status === "processing" && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleConfirmDispatch(ful.id)}
-                                  className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-indigo-700 transition-colors shadow-2xs cursor-pointer"
-                                >
-                                  Confirm Dispatch
-                                </button>
-                              )}
-                              {ful.status === "shipped" && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleMarkDelivered(ful.id)}
-                                  className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer"
-                                >
-                                  Confirm Delivery
-                                </button>
-                              )}
-                              {ful.status === "delivered" && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  ✓ Delivered
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                            ← Previous
+                          </button>
+                          <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 px-1">
+                            Page {currentPage} of {totalOrderPages}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={currentPage === totalOrderPages}
+                            onClick={() => setOrdersPage((p) => Math.min(totalOrderPages, p + 1))}
+                            className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          >
+                            Next →
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))
+                    )}
+                  </>
+                );
+              })()
             ) : (
               <div className="p-12 text-center text-xs text-zinc-400 dark:text-zinc-500 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800">
                 No orders placed by this retailer yet.

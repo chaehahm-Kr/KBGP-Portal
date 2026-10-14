@@ -291,25 +291,31 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
         )}
       </div>
 
-      {/* Retailer Table: Seven Approved Grouped Columns */}
+      {/* Retailer Table: 13 Single-Line Columns */}
       <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-950/60 font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-4 min-w-[200px]">Retailer</th>
-                <th className="py-3 px-4 min-w-[130px]">Network</th>
-                <th className="py-3 px-4 min-w-[140px]">Commercial</th>
-                <th className="py-3 px-4 min-w-[160px]">Orders & AR</th>
-                <th className="py-3 px-4 min-w-[150px]">Products & Training</th>
-                <th className="py-3 px-4 min-w-[150px]">Operations</th>
-                <th className="py-3 px-4 text-right min-w-[100px]">Actions</th>
+              <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-950/60 font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-[10px] whitespace-nowrap">
+                <th className="py-3 px-3 min-w-[180px]">Retailer</th>
+                <th className="py-3 px-3 min-w-[95px]">Status</th>
+                <th className="py-3 px-3 text-center min-w-[65px]">Stores</th>
+                <th className="py-3 px-3 text-center min-w-[75px]">Users</th>
+                <th className="py-3 px-3 min-w-[85px]">Terms</th>
+                <th className="py-3 px-3 text-right min-w-[100px]">Credit Limit</th>
+                <th className="py-3 px-3 min-w-[125px]">Orders</th>
+                <th className="py-3 px-3 text-right min-w-[105px]">Open AR</th>
+                <th className="py-3 px-3 text-center min-w-[75px]">Products</th>
+                <th className="py-3 px-3 min-w-[100px]">Training</th>
+                <th className="py-3 px-3 text-center min-w-[95px]">Weekly Check</th>
+                <th className="py-3 px-3 text-center min-w-[80px]">Attention</th>
+                <th className="py-3 px-3 text-right min-w-[90px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-zinc-400 dark:text-zinc-500 text-xs">
+                  <td colSpan={13} className="py-16 text-center text-zinc-400 dark:text-zinc-500 text-xs">
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
                         No retailer companies match your search or filter criteria.
@@ -334,6 +340,8 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                       ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
                       : ret.status === "pending_approval"
                       ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                      : ret.status === "suspended"
+                      ? "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200 dark:border-rose-800"
                       : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700";
 
                   const isNetTerms = ret.approvedTerms !== "prepaid";
@@ -345,183 +353,179 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                       className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors group"
                     >
                       {/* COLUMN 1: RETAILER */}
-                      <td className="py-3 px-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Link
-                              href={`/admin/retailers/${ret.id}`}
-                              className="font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 text-xs transition-colors"
-                            >
-                              {ret.name}
-                            </Link>
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.2 text-[9px] font-bold border capitalize ${statusClass}`}
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
-                              {ret.status.replace(/_/g, " ")}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono">
-                            {ret.companyCode && (
-                              <span className="font-semibold text-zinc-500 dark:text-zinc-400">
-                                {ret.companyCode}
-                              </span>
-                            )}
-                            {ret.companyCode && ret.businessRegistrationNumber && <span>·</span>}
-                            {ret.businessRegistrationNumber ? (
-                              <span>Tax ID: {ret.businessRegistrationNumber}</span>
-                            ) : (
-                              <span className="italic">No Tax ID</span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* COLUMN 2: NETWORK */}
-                      <td className="py-3 px-4">
-                        <div className="space-y-0.5">
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
                           <Link
-                            href={`/admin/retailers/${ret.id}?tab=stores`}
-                            className="font-bold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors inline-block"
-                            title="View Retailer Store Locations"
+                            href={`/admin/retailers/${ret.id}`}
+                            className="font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 text-xs transition-colors"
                           >
-                            {ret.storesCount} {ret.storesCount === 1 ? "Store" : "Stores"}
+                            {ret.name}
                           </Link>
-                          <div className="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                            <Link
-                              href={`/admin/retailers/${ret.id}?tab=users`}
-                              className="hover:underline"
-                              title="View Team Members"
-                            >
-                              {ret.usersCount} Active Users
-                            </Link>
-                            {ret.pendingInvitesCount > 0 && (
-                              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                                · {ret.pendingInvitesCount} Pending
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* COLUMN 3: COMMERCIAL */}
-                      <td className="py-3 px-4">
-                        <div className="space-y-0.5">
-                          <Link
-                            href={`/admin/retailers/${ret.id}?tab=payments`}
-                            className="inline-block"
-                            title="View Commercial Terms & Billing Profile"
-                          >
-                            <span className="inline-block px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-mono font-bold text-zinc-800 dark:text-zinc-200 border border-zinc-200/80 dark:border-zinc-700 text-[10px]">
-                              {formattedTermsName}
+                          {ret.companyCode && (
+                            <span className="text-[10px] text-zinc-400 font-mono font-medium">
+                              ({ret.companyCode})
                             </span>
-                          </Link>
-                          {ret.creditLimit > 0 ? (
-                            <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                              Limit:{" "}
-                              <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">
-                                ${ret.creditLimit.toLocaleString()}
-                              </span>
-                            </p>
-                          ) : (
-                            <p className="text-[10px] text-zinc-400">Prepaid (Card / ACH)</p>
                           )}
                         </div>
                       </td>
 
-                      {/* COLUMN 4: ORDERS & AR */}
-                      <td className="py-3 px-4">
-                        <div className="space-y-0.5">
-                          <Link
-                            href={`/admin/retailers/${ret.id}?tab=orders`}
-                            className="text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium inline-block text-[11px]"
-                            title="View Orders & Fulfillment"
-                          >
-                            <span className="font-bold">Open: {ret.openOrdersCount}</span>
-                            <span className="text-zinc-400"> · </span>
-                            <span className={ret.readyToShipCount > 0 ? "font-bold text-blue-600 dark:text-blue-400" : "text-zinc-500"}>
-                              Ready: {ret.readyToShipCount}
+                      {/* COLUMN 2: STATUS */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold border capitalize ${statusClass}`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
+                          {ret.status.replace(/_/g, " ")}
+                        </span>
+                      </td>
+
+                      {/* COLUMN 3: STORES */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <Link
+                          href={`/admin/retailers/${ret.id}?tab=stores`}
+                          className="font-bold text-xs text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors inline-block"
+                          title="View Retailer Store Locations"
+                        >
+                          {ret.storesCount}
+                        </Link>
+                      </td>
+
+                      {/* COLUMN 4: USERS */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <Link
+                          href={`/admin/retailers/${ret.id}?tab=users`}
+                          className="font-bold text-xs text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors inline-flex items-center justify-center gap-1"
+                          title="View Team Members"
+                        >
+                          <span>{ret.usersCount}</span>
+                          {ret.pendingInvitesCount > 0 && (
+                            <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400" title={`${ret.pendingInvitesCount} Pending Invitation(s)`}>
+                              (+{ret.pendingInvitesCount})
                             </span>
-                          </Link>
-                          <div className="flex items-center gap-1.5">
-                            <Link
-                              href={`/admin/retailers/${ret.id}?tab=payments`}
-                              className="font-mono text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 hover:underline"
-                              title="View Invoices & Receivables"
-                            >
-                              AR: ${ret.openAR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </Link>
-                            {ret.hasPastDue && (
-                              <span className="rounded bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 px-1 py-0.2 text-[9px] font-bold border border-rose-200 dark:border-rose-800">
-                                Past Due
-                              </span>
-                            )}
-                          </div>
-                        </div>
+                          )}
+                        </Link>
                       </td>
 
-                      {/* COLUMN 5: PRODUCTS & TRAINING */}
-                      <td className="py-3 px-4">
-                        <div className="space-y-0.5">
-                          <Link
-                            href={`/admin/retailers/${ret.id}?tab=stores`}
-                            className="font-bold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 inline-block text-[11px]"
-                            title="Assortment SKUs assigned across stores"
-                          >
-                            {ret.distinctAssortment > 0 ? `${ret.distinctAssortment} Products` : "0 Products"}
-                          </Link>
-                          <Link
-                            href={`/admin/retailers/${ret.id}?tab=training`}
-                            className="block text-[10px] text-zinc-400 dark:text-zinc-500 hover:underline"
-                            title="Product Training Coverage Status"
-                          >
-                            {ret.trainingStatusText}
-                          </Link>
-                        </div>
+                      {/* COLUMN 5: TERMS */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <Link
+                          href={`/admin/retailers/${ret.id}?tab=payments`}
+                          className="inline-block"
+                          title="View Commercial Terms"
+                        >
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-mono font-bold text-zinc-800 dark:text-zinc-200 border border-zinc-200/80 dark:border-zinc-700 text-[10px]">
+                            {formattedTermsName}
+                          </span>
+                        </Link>
                       </td>
 
-                      {/* COLUMN 6: OPERATIONS */}
-                      <td className="py-3 px-4">
-                        <div className="space-y-0.5">
-                          <Link
-                            href={`/admin/retailers/${ret.id}?tab=performance`}
-                            className="text-[11px] text-zinc-800 dark:text-zinc-200 hover:underline block"
-                            title="Weekly Inventory Check Submission Status"
-                          >
-                            {ret.eligibleStoresCount > 0 ? (
-                              <span>
-                                Weekly Check:{" "}
-                                <strong className={ret.reportingStoresCount === 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}>
-                                  {ret.reportingStoresCount}/{ret.eligibleStoresCount} Stores
-                                </strong>
-                              </span>
-                            ) : (
-                              <span className="text-zinc-400">Weekly Check: —</span>
-                            )}
-                          </Link>
-                          <Link
-                            href={`/admin/retailers/${ret.id}?tab=overview`}
-                            className="inline-block"
-                            title="Operational Action Center"
-                          >
-                            {ret.attentionCount > 0 ? (
-                              <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.2 text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
-                                <span>⚠️</span> Attention: {ret.attentionCount}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-zinc-400">
-                                0 Issues
-                              </span>
-                            )}
-                          </Link>
-                        </div>
+                      {/* COLUMN 6: CREDIT LIMIT */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono text-xs">
+                        {isNetTerms && ret.creditLimit > 0 ? (
+                          <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                            ${ret.creditLimit.toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400 font-normal">—</span>
+                        )}
                       </td>
 
-                      {/* COLUMN 7: ACTIONS */}
-                      <td className="py-3 px-4 text-right">
+                      {/* COLUMN 7: ORDERS */}
+                      <td className="py-2.5 px-3 whitespace-nowrap text-xs">
+                        <Link
+                          href={`/admin/retailers/${ret.id}?tab=orders`}
+                          className="hover:text-indigo-600 dark:hover:text-indigo-400 inline-block text-[11px]"
+                          title="View Orders & Fulfillment"
+                        >
+                          {ret.openOrdersCount > 0 || ret.readyToShipCount > 0 ? (
+                            <span>
+                              <span className="font-bold text-zinc-900 dark:text-white">Open {ret.openOrdersCount}</span>
+                              <span className="text-zinc-400"> · </span>
+                              <span className={ret.readyToShipCount > 0 ? "font-bold text-blue-600 dark:text-blue-400" : "text-zinc-500"}>
+                                Ready {ret.readyToShipCount}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-zinc-400 font-normal">—</span>
+                          )}
+                        </Link>
+                      </td>
+
+                      {/* COLUMN 8: OPEN AR */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <Link
+                          href={`/admin/retailers/${ret.id}?tab=payments`}
+                          className="font-mono text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 hover:underline inline-flex items-center justify-end gap-1"
+                          title="View Invoices & Receivables"
+                        >
+                          {ret.hasPastDue && (
+                            <span title="Past Due Invoices" className="text-rose-600 text-xs">⚠️</span>
+                          )}
+                          <span>${ret.openAR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </Link>
+                      </td>
+
+                      {/* COLUMN 9: PRODUCTS */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <Link
+                          href={`/admin/retailers/${ret.id}?tab=stores`}
+                          className="font-bold text-xs text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors inline-block"
+                          title="Assortment SKUs assigned across stores"
+                        >
+                          {ret.distinctAssortment}
+                        </Link>
+                      </td>
+
+                      {/* COLUMN 10: TRAINING */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <Link
+                          href={`/admin/retailers/${ret.id}?tab=training`}
+                          className="text-[11px] text-zinc-500 dark:text-zinc-400 hover:underline inline-block"
+                          title="Product Training Coverage Status"
+                        >
+                          {ret.trainingStatusText || "Not Tracked"}
+                        </Link>
+                      </td>
+
+                      {/* COLUMN 11: WEEKLY CHECK */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <Link
+                          href={`/admin/retailers/${ret.id}?tab=performance`}
+                          className="text-[11px] hover:underline inline-block font-medium"
+                          title="Weekly Inventory Check Submission Status"
+                        >
+                          {ret.eligibleStoresCount > 0 ? (
+                            <span className={ret.reportingStoresCount === 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-emerald-600 dark:text-emerald-400 font-bold"}>
+                              {ret.reportingStoresCount}/{ret.eligibleStoresCount}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-400 font-normal">—</span>
+                          )}
+                        </Link>
+                      </td>
+
+                      {/* COLUMN 12: ATTENTION */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <Link
+                          href={`/admin/retailers/${ret.id}?tab=overview`}
+                          className="inline-block"
+                          title="Operational Action Center"
+                        >
+                          {ret.attentionCount > 0 ? (
+                            <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                              ⚠️ {ret.attentionCount}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-zinc-400 font-normal">0</span>
+                          )}
+                        </Link>
+                      </td>
+
+                      {/* COLUMN 13: ACTIONS */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
                         <Link
                           href={`/admin/retailers/${ret.id}`}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-[11px] font-bold text-zinc-700 dark:text-zinc-200 transition-colors shadow-2xs"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-[11px] font-bold text-zinc-700 dark:text-zinc-200 transition-colors shadow-2xs"
                         >
                           Manage <span>→</span>
                         </Link>
