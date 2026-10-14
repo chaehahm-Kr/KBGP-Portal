@@ -73,7 +73,10 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
   const adminClient = createAdminClient();
 
   // Fetch all companies with type 'retailer' or having a retailer_profile
-  const { data: companies, error } = await adminClient
+  // Note: explicit constraint 'stores!stores_company_id_fkey' is required because companies also has
+  // 'default_shipping_store_id' FK pointing to stores(id).
+  let companies: any[] = [];
+  const primaryRes = await adminClient
     .from("companies")
     .select(`
       id,
@@ -96,7 +99,7 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
         internal_note,
         updated_at
       ),
-      stores (
+      stores:stores!stores_company_id_fkey (
         id,
         name,
         city,
@@ -106,12 +109,69 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
     `)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Error fetching admin retailers:", error);
-    return [];
+  if (primaryRes.error) {
+    console.error("Primary admin retailers query failed:", primaryRes.error);
+    // Resilient Fallback: Query companies and stores independently to ensure company records are NEVER lost
+    const fallbackRes = await adminClient
+      .from("companies")
+      .select(`
+        id,
+        name,
+        company_code,
+        business_registration_number,
+        country,
+        contact_name,
+        status,
+        created_at,
+        retailer_profiles (
+          status,
+          payment_terms,
+          approved_terms,
+          terms_status,
+          terms_enabled,
+          tax_exempt_status,
+          resale_certificate_number,
+          credit_limit,
+          internal_note,
+          updated_at
+        )
+      `)
+      .order("created_at", { ascending: false });
+
+    if (fallbackRes.error) {
+      console.error("Critical fallback admin retailers query failed:", fallbackRes.error);
+      throw new Error(`Failed to load retailer companies from database: ${fallbackRes.error.message}`);
+    }
+
+    companies = fallbackRes.data || [];
+
+    // Query stores independently for these companies
+    const compIds = companies.map((c) => c.id);
+    if (compIds.length > 0) {
+      const { data: storeRows, error: storeErr } = await adminClient
+        .from("stores")
+        .select("id, name, city, state, status, company_id")
+        .in("company_id", compIds);
+
+      if (storeErr) {
+        console.warn("Fallback stores query warning:", storeErr);
+      }
+
+      const storeMap: Record<string, any[]> = {};
+      (storeRows || []).forEach((s) => {
+        if (!storeMap[s.company_id]) storeMap[s.company_id] = [];
+        storeMap[s.company_id].push(s);
+      });
+
+      companies.forEach((c) => {
+        c.stores = storeMap[c.id] || [];
+      });
+    }
+  } else {
+    companies = primaryRes.data || [];
   }
 
-  const companyIds = (companies || []).map((c) => c.id);
+  const companyIds = companies.map((c) => c.id);
 
   let invitationCounts: Record<string, number> = {};
   let userCounts: Record<string, number> = {};
@@ -134,11 +194,13 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
         .from("retailer_invitations")
         .select("company_id")
         .in("company_id", companyIds)
-        .eq("status", "pending"),
+        .eq("status", "pending")
+        .then((r) => r, (err) => { console.error("Invitations query error:", err); return { data: null, error: err }; }),
       adminClient
         .from("company_users")
         .select("company_id, status")
-        .in("company_id", companyIds),
+        .in("company_id", companyIds)
+        .then((r) => r, (err) => { console.error("Company users query error:", err); return { data: null, error: err }; }),
       adminClient
         .from("retailer_orders")
         .select(`
@@ -155,21 +217,25 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
             unit_wholesale_price
           )
         `)
-        .in("company_id", companyIds),
+        .in("company_id", companyIds)
+        .then((r) => r, (err) => { console.error("Retailer orders query error:", err); return { data: null, error: err }; }),
       adminClient
         .from("retailer_invoices")
         .select("id, retailer_company_id, balance_due, due_date, invoice_status")
         .in("retailer_company_id", companyIds)
-        .not("invoice_status", "in", '("void","cancelled")'),
+        .not("invoice_status", "in", '("void","cancelled")')
+        .then((r) => r, (err) => { console.error("Retailer invoices query error:", err); return { data: null, error: err }; }),
       adminClient
         .from("retailer_store_products")
         .select("company_id, product_id, is_active")
         .in("company_id", companyIds)
-        .eq("is_active", true),
+        .eq("is_active", true)
+        .then((r) => r, (err) => { console.error("Store products query error:", err); return { data: null, error: err }; }),
       adminClient
         .from("retailer_weekly_checks")
         .select("company_id, store_id, status")
-        .in("company_id", companyIds),
+        .in("company_id", companyIds)
+        .then((r) => r, (err) => { console.error("Weekly checks query error:", err); return { data: null, error: err }; }),
     ]);
 
     // Map invitations

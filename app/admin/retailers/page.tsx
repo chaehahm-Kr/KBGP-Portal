@@ -13,7 +13,14 @@ export const metadata: Metadata = {
 
 export default async function AdminRetailersPage() {
   await verifyAdminSession();
-  const retailers = await getAdminRetailersList();
+  let retailers: any[] = [];
+  let loadError: string | null = null;
+  try {
+    retailers = await getAdminRetailersList();
+  } catch (err: any) {
+    console.error("AdminRetailersPage error:", err);
+    loadError = err.message || "Failed to load retailer partner organizations.";
+  }
 
   return (
     <div className="space-y-6 w-full">
@@ -45,7 +52,7 @@ export default async function AdminRetailersPage() {
       </div>
 
       {/* Retailers List */}
-      <RetailersList initialRetailers={retailers} />
+      <RetailersList initialRetailers={retailers} loadError={loadError} />
     </div>
   );
 }

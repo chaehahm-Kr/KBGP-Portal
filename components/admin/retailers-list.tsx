@@ -6,9 +6,10 @@ import { AdminRetailerListItem } from "@/lib/retailer/admin-retailer-actions";
 
 interface RetailersListProps {
   initialRetailers: AdminRetailerListItem[];
+  loadError?: string | null;
 }
 
-export function RetailersList({ initialRetailers }: RetailersListProps) {
+export function RetailersList({ initialRetailers, loadError }: RetailersListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [termsFilter, setTermsFilter] = useState("all");
@@ -317,7 +318,37 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-              {filtered.length === 0 ? (
+              {loadError ? (
+                <tr>
+                  <td colSpan={14} className="py-16 text-center text-zinc-500 dark:text-zinc-400 text-xs">
+                    <div className="max-w-md mx-auto space-y-2 p-6 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20">
+                      <div className="text-2xl">⚠️</div>
+                      <p className="text-sm font-bold text-rose-800 dark:text-rose-300">
+                        Retailer Data Failed to Load
+                      </p>
+                      <p className="text-xs text-rose-600 dark:text-rose-400">
+                        {loadError}
+                      </p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        An operational error occurred while retrieving retailer organizations. Please refresh the page or contact engineering support.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : initialRetailers.length === 0 ? (
+                <tr>
+                  <td colSpan={14} className="py-16 text-center text-zinc-400 dark:text-zinc-500 text-xs">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
+                        No retailer partner organizations currently exist in the network.
+                      </p>
+                      <p className="text-zinc-400 text-xs">
+                        Use the button above to onboard your first retailer partner.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={14} className="py-16 text-center text-zinc-400 dark:text-zinc-500 text-xs">
                     <div className="space-y-1">
