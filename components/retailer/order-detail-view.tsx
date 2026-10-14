@@ -699,12 +699,30 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
                       </span>
                     </div>
                     <div className="text-right">
-                      <span className="font-bold text-zinc-900 dark:text-white">
-                        ${inv.balanceDue.toFixed(2)}
-                      </span>
-                      <span className="text-[10px] uppercase font-bold block text-indigo-600 dark:text-indigo-400">
-                        {inv.invoiceStatus}
-                      </span>
+                      {["void", "cancelled"].includes((inv.invoiceStatus || "").toLowerCase()) ? (
+                        <div className="flex flex-col items-end">
+                          <span className="font-bold text-zinc-500 dark:text-zinc-400">
+                            $0.00
+                          </span>
+                          {Number(inv.totalAmount || 0) > 0 && (
+                            <span className="line-through text-[10px] text-zinc-400 font-normal">
+                              Orig. ${Number(inv.totalAmount).toFixed(2)}
+                            </span>
+                          )}
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 mt-0.5">
+                            Void
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="font-bold text-zinc-900 dark:text-white">
+                            ${inv.balanceDue.toFixed(2)}
+                          </span>
+                          <span className="text-[10px] uppercase font-bold block text-indigo-600 dark:text-indigo-400">
+                            {inv.invoiceStatus}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}

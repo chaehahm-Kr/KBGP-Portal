@@ -486,10 +486,17 @@ export async function voidInvoiceAction(invoiceId: string, reason?: string) {
     await verifyAdminSession();
     const adminClient = createAdminClient();
 
+    const { data: inv } = await adminClient
+      .from("retailer_invoices")
+      .select("id, order_id, retailer_company_id")
+      .eq("id", invoiceId)
+      .maybeSingle();
+
     const { error } = await adminClient
       .from("retailer_invoices")
       .update({
         invoice_status: "void",
+        balance_due: 0.00,
         voided_at: new Date().toISOString(),
         notes: reason ? `[VOIDED: ${reason}]` : undefined,
       })
@@ -500,7 +507,20 @@ export async function voidInvoiceAction(invoiceId: string, reason?: string) {
     }
 
     revalidatePath("/admin/finance/receivables");
+    revalidatePath("/admin/sales/orders");
     revalidatePath("/admin");
+    revalidatePath("/bills");
+    revalidatePath("/retailer/bills");
+    revalidatePath("/orders");
+    revalidatePath("/retailer/orders");
+    if (inv?.order_id) {
+      revalidatePath(`/orders/${inv.order_id}`);
+      revalidatePath(`/retailer/orders/${inv.order_id}`);
+      revalidatePath(`/admin/sales/orders/${inv.order_id}`);
+    }
+    if (inv?.retailer_company_id) {
+      revalidatePath(`/admin/retailers/${inv.retailer_company_id}`);
+    }
 
     return { success: true };
   } catch (err: any) {

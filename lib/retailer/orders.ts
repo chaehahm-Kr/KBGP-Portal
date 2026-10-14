@@ -1241,7 +1241,10 @@ export async function getRetailerOrders(
         adminClient.from("retailer_order_items").select("order_id, quantity, quantity_shipped, quantity_cancelled").in("order_id", orderIds),
         adminClient.from("retailer_order_packages").select("*").in("order_id", orderIds).order("box_number", { ascending: true }),
         adminClient.from("retailer_invoices").select("id, order_id, invoice_number, invoice_status, payment_status, total_amount, amount_paid, balance_due, due_date").in("order_id", orderIds),
-        adminClient.from("retailer_order_fulfillments").select("id, order_id, fulfillment_number, carrier, tracking_number, tracking_url, status, box_count").in("order_id", orderIds).order("created_at", { ascending: true }),
+        adminClient.from("retailer_order_fulfillments").select(`
+          id, order_id, fulfillment_number, carrier, tracking_number, tracking_url, status, box_count,
+          retailer_order_fulfillment_items ( order_item_id, quantity_shipped, quantity_delivered )
+        `).in("order_id", orderIds).order("created_at", { ascending: true }),
         adminClient.from("retailer_order_payments").select("id, order_id, payment_method, status, amount, fee_amount, created_at").in("order_id", orderIds),
       ]);
 
@@ -1293,6 +1296,7 @@ export async function getRetailerOrders(
             trackingUrl: resolveCarrierTrackingUrl(f.carrier, f.tracking_number, f.tracking_url),
             status: f.status,
             boxCount: Number(f.box_count || 0),
+            items: f.retailer_order_fulfillment_items || [],
           });
           fulfillmentsMap.set(f.order_id, arr);
         });
@@ -1329,18 +1333,35 @@ export async function getRetailerOrders(
       }
 
       const oItems = itemsMap.get(o.id) || [];
+      const fuls = fulfillmentsMap.get(o.id) || [];
+
+      // Authoritative shipped calculation: confirmed dispatches only (status in 'shipped', 'delivered')
+      const confirmedFulfillments = fuls.filter((f) => f.status === "shipped" || f.status === "delivered");
+      const confirmedShippedFromFulfillments = confirmedFulfillments.reduce((sum, f) => {
+        return sum + (f.items || []).reduce((iSum: number, it: any) => iSum + Number(it.quantity_shipped || 0), 0);
+      }, 0);
+
       const totalOrderedUnits = oItems.length > 0 
         ? oItems.reduce((acc, it) => acc + Number(it.quantity || 0), 0)
         : Number(o.total_ordered_units || o.total_items_count || 0);
-      const totalShippedUnits = oItems.length > 0
-        ? oItems.reduce((acc, it) => acc + Number(it.quantity_shipped || 0), 0)
-        : Number(o.total_shipped_units || (['shipped', 'delivered'].includes(o.order_status) ? totalOrderedUnits : 0));
+
       const totalCancelledUnits = oItems.length > 0
         ? oItems.reduce((acc, it) => acc + Number(it.quantity_cancelled || 0), 0)
-        : Number(o.total_cancelled_units || (o.order_status === 'cancelled' ? totalOrderedUnits : 0));
+        : Number(o.total_cancelled_units || (o.order_status === "cancelled" ? totalOrderedUnits : 0));
+
+      const oItemsShipped = oItems.reduce((acc, it) => acc + Number(it.quantity_shipped || 0), 0);
+      const isLegacyShipped = ["shipped", "delivered"].includes((o.order_status || "").toLowerCase());
+
+      const totalShippedUnits = fuls.length > 0
+        ? confirmedShippedFromFulfillments
+        : Math.max(
+            oItemsShipped,
+            Number(o.total_shipped_units || 0),
+            isLegacyShipped ? Math.max(0, totalOrderedUnits - totalCancelledUnits) : 0
+          );
+
       const totalRemainingUnits = Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits);
       const pkgs = packagesMap.get(o.id) || [];
-      const fuls = fulfillmentsMap.get(o.id) || [];
       // Box count comes strictly from package records; do NOT fabricate box counts or assume 1 Dispatch = 1 Box
       const boxCount = pkgs.length;
       const invs = invoicesMap.get(o.id) || [];
@@ -1491,6 +1512,14 @@ export async function getRetailerOrderDetail(
         total_amount,
         total_items_count,
         total_skus_count,
+        total_ordered_units,
+        total_shipped_units,
+        total_cancelled_units,
+        total_remaining_units,
+        cancellation_requested,
+        cancellation_notes,
+        refund_amount,
+        refund_status,
         shipping_address,
         shipping_city,
         shipping_state,
@@ -1514,10 +1543,14 @@ export async function getRetailerOrderDetail(
           unit_wholesale_price,
           unit_msrp,
           quantity,
+          quantity_shipped,
+          quantity_cancelled,
           case_pack_qty,
           line_total,
           discount_amount,
-          is_bogo_free
+          is_bogo_free,
+          cancellation_reason,
+          cancelled_at
         )
       `)
       .eq("company_id", companyId);
@@ -1553,6 +1586,14 @@ export async function getRetailerOrderDetail(
           total_amount,
           total_items_count,
           total_skus_count,
+          total_ordered_units,
+          total_shipped_units,
+          total_cancelled_units,
+          total_remaining_units,
+          cancellation_requested,
+          cancellation_notes,
+          refund_amount,
+          refund_status,
           shipping_address,
           shipping_city,
           shipping_state,
@@ -1576,10 +1617,14 @@ export async function getRetailerOrderDetail(
             unit_wholesale_price,
             unit_msrp,
             quantity,
+            quantity_shipped,
+            quantity_cancelled,
             case_pack_qty,
             line_total,
             discount_amount,
-            is_bogo_free
+            is_bogo_free,
+            cancellation_reason,
+            cancelled_at
           )
         `)
         .eq("company_id", companyId);
@@ -1622,7 +1667,7 @@ export async function getRetailerOrderDetail(
       getOrderPayments(order.id),
       getOrderFulfillments(order.id),
       adminClient.from("retailer_order_packages").select("*").eq("order_id", order.id).order("box_number", { ascending: true }),
-      adminClient.from("retailer_invoices").select("id, invoice_number, invoice_status, payment_status, balance_due, due_date").eq("order_id", order.id),
+      adminClient.from("retailer_invoices").select("id, invoice_number, invoice_status, payment_status, total_amount, amount_paid, balance_due, due_date").eq("order_id", order.id),
     ]);
 
     const packages = (rawPackagesRes.data || []).map((p: any) => ({
@@ -1634,21 +1679,27 @@ export async function getRetailerOrderDetail(
       trackingUrl: resolveCarrierTrackingUrl(p.carrier, p.tracking_number, p.tracking_url),
     }));
 
-    const invoices = (rawInvoicesRes.data || []).map((inv: any) => ({
-      id: inv.id,
-      invoiceNumber: inv.invoice_number,
-      invoiceStatus: inv.invoice_status,
-      paymentStatus: inv.payment_status,
-      balanceDue: Number(inv.balance_due || 0),
-      dueDate: inv.due_date,
-    }));
+    const invoices = (rawInvoicesRes.data || []).map((inv: any) => {
+      const isVoid = ["void", "cancelled"].includes((inv.invoice_status || "").toLowerCase());
+      const rawBal = Number(inv.balance_due || 0);
+      return {
+        id: inv.id,
+        invoiceNumber: inv.invoice_number,
+        invoiceStatus: inv.invoice_status,
+        paymentStatus: inv.payment_status,
+        totalAmount: Number(inv.total_amount || 0),
+        amountPaid: Number(inv.amount_paid || 0),
+        balanceDue: isVoid ? 0.0 : rawBal,
+        dueDate: inv.due_date,
+      };
+    });
 
     // Calculate line-item cumulative shipped and delivered quantities
     const lineShippedMap = new Map<string, number>();
     const lineDeliveredMap = new Map<string, number>();
 
     fulfillments
-      .filter((f) => f.status !== "cancelled")
+      .filter((f) => f.status === "shipped" || f.status === "delivered")
       .forEach((f) => {
         f.items.forEach((it) => {
           const s = lineShippedMap.get(it.orderItemId) || 0;
@@ -1662,7 +1713,11 @@ export async function getRetailerOrderDetail(
     const rawItems = (order.retailer_order_items as any[]) || [];
     const items: RetailerOrderItemDetail[] = rawItems.map((item) => {
       const qOrdered = Number(item.quantity || 0);
-      const qShipped = lineShippedMap.get(item.id) || Number(item.quantity_shipped || 0);
+      const isLegacyShipped = ["shipped", "delivered"].includes((order.order_status || "").toLowerCase());
+      const hasFulfillments = fulfillments.length > 0;
+      const qShipped = hasFulfillments
+        ? (lineShippedMap.get(item.id) || 0)
+        : Number(item.quantity_shipped || (isLegacyShipped ? qOrdered : 0));
       const qCancelled = Number(item.quantity_cancelled || 0);
       const qRemaining = Math.max(0, qOrdered - qShipped - qCancelled);
 
@@ -1687,10 +1742,22 @@ export async function getRetailerOrderDetail(
       };
     });
 
-    const totalOrderedUnits = items.reduce((acc, it) => acc + it.quantity, 0);
-    const totalShippedUnits = items.reduce((acc, it) => acc + (it.quantityShipped || 0), 0);
-    const totalCancelledUnits = items.reduce((acc, it) => acc + (it.quantityCancelled || 0), 0);
-    const totalRemainingUnits = Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits);
+    const totalOrderedUnits = items.length > 0
+      ? items.reduce((acc, it) => acc + it.quantity, 0)
+      : Number(order.total_ordered_units || order.total_items_count || 0);
+
+    const totalShippedUnits = items.length > 0
+      ? items.reduce((acc, it) => acc + (it.quantityShipped || 0), 0)
+      : Number(order.total_shipped_units || 0);
+
+    const totalCancelledUnits = items.length > 0 && items.some((it) => (it.quantityCancelled || 0) > 0)
+      ? items.reduce((acc, it) => acc + (it.quantityCancelled || 0), 0)
+      : Number(order.total_cancelled_units || (order.order_status === "cancelled" ? totalOrderedUnits : 0));
+
+    const totalRemainingUnits = items.length > 0
+      ? Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits)
+      : Number(order.total_remaining_units ?? Math.max(0, totalOrderedUnits - totalShippedUnits - totalCancelledUnits));
+
     // Box count comes strictly from package records; do NOT fabricate box counts or assume 1 Dispatch = 1 Box
     const boxCount = packages.length;
 

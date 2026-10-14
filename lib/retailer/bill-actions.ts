@@ -63,9 +63,30 @@ export async function getRetailerBillsAction(): Promise<{
       return { success: false, error: invErr.message };
     }
 
+    // Batch query dispatch-specific invoice items to accurately count SKUs per invoice
+    const invoiceIds = (invoiceRows || []).map((r: any) => r.id);
+    const invoiceSkuCounts: Record<string, number> = {};
+    if (invoiceIds.length > 0) {
+      const { data: invItemRows } = await adminClient
+        .from("retailer_invoice_items")
+        .select("invoice_id, sku")
+        .in("invoice_id", invoiceIds);
+
+      if (invItemRows && invItemRows.length > 0) {
+        const skuSets: Record<string, Set<string>> = {};
+        for (const it of invItemRows) {
+          if (!skuSets[it.invoice_id]) skuSets[it.invoice_id] = new Set();
+          if (it.sku) skuSets[it.invoice_id].add(it.sku);
+        }
+        for (const iid in skuSets) {
+          invoiceSkuCounts[iid] = skuSets[iid].size;
+        }
+      }
+    }
+
     // In case any historical order record has null/0 total_skus_count, fetch fallback counts in single batch query (avoiding N+1)
     const missingOrderIds = (invoiceRows || [])
-      .filter((r: any) => !r.retailer_orders?.total_skus_count && r.order_id)
+      .filter((r: any) => !invoiceSkuCounts[r.id] && !r.retailer_orders?.total_skus_count && r.order_id)
       .map((r: any) => r.order_id);
 
     const fallbackSkuCounts: Record<string, number> = {};
@@ -88,7 +109,9 @@ export async function getRetailerBillsAction(): Promise<{
     }
 
     const bills: RetailerBillSummary[] = (invoiceRows || []).map((row: any) => {
-      const balanceDue = Number(row.balance_due || 0);
+      const isVoidOrCancelled = ["void", "cancelled"].includes((row.invoice_status || "").toLowerCase());
+      const rawBalance = Number(row.balance_due || 0);
+      const balanceDue = isVoidOrCancelled ? 0.0 : rawBalance;
       const invoiceStatus = row.invoice_status || "open";
       const arStatus = computeARStatus({
         balance_due: balanceDue,
@@ -97,7 +120,7 @@ export async function getRetailerBillsAction(): Promise<{
       });
 
       const totalSkus = Number(
-        row.retailer_orders?.total_skus_count || fallbackSkuCounts[row.order_id] || 1
+        invoiceSkuCounts[row.id] || row.retailer_orders?.total_skus_count || fallbackSkuCounts[row.order_id] || 1
       );
 
       return {
@@ -184,11 +207,22 @@ export async function getRetailerBillDetailAction(invoiceId: string): Promise<{
       return { success: false, error: "Access denied: Bill does not belong to your account." };
     }
 
-    // 2. Fetch order items
-    const { data: items } = await adminClient
-      .from("retailer_order_items")
+    // 2. Fetch dispatch-specific invoice items from retailer_invoice_items, with fallback to retailer_order_items for legacy
+    const { data: invItems } = await adminClient
+      .from("retailer_invoice_items")
       .select("id, product_name, sku, brand_name, quantity, unit_wholesale_price, line_total")
-      .eq("order_id", inv.order_id);
+      .eq("invoice_id", invoiceId);
+
+    let effectiveItems: any[] = [];
+    if (invItems && invItems.length > 0) {
+      effectiveItems = invItems;
+    } else {
+      const { data: orderItems } = await adminClient
+        .from("retailer_order_items")
+        .select("id, product_name, sku, brand_name, quantity, unit_wholesale_price, line_total")
+        .eq("order_id", inv.order_id);
+      effectiveItems = orderItems || [];
+    }
 
     // 3. Fetch payment history
     const { data: payments } = await adminClient
@@ -207,7 +241,9 @@ export async function getRetailerBillDetailAction(invoiceId: string): Promise<{
     // 5. Fetch effective payment policy for live fee preview
     const effectivePolicy = await resolveEffectivePaymentPolicy(companyId);
 
-    const balanceDue = Number(inv.balance_due || 0);
+    const isVoidOrCancelled = ["void", "cancelled"].includes((inv.invoice_status || "").toLowerCase());
+    const rawBalance = Number(inv.balance_due || 0);
+    const balanceDue = isVoidOrCancelled ? 0.0 : rawBalance;
     const invoiceStatus = inv.invoice_status || "open";
     const arStatus = computeARStatus({
       balance_due: balanceDue,
@@ -225,7 +261,7 @@ export async function getRetailerBillDetailAction(invoiceId: string): Promise<{
       due_date: inv.due_date,
       terms_days: inv.terms_days,
       terms_name: inv.terms_name,
-      total_skus_count: (inv.retailer_orders as any)?.total_skus_count ?? (items?.length || 1),
+      total_skus_count: effectiveItems.length > 0 ? effectiveItems.length : ((inv.retailer_orders as any)?.total_skus_count ?? 1),
       subtotal: Number(inv.subtotal || 0),
       discount_total: Number(inv.discount_total || 0),
       processing_fee: Number(inv.processing_fee || 0),
@@ -249,12 +285,12 @@ export async function getRetailerBillDetailAction(invoiceId: string): Promise<{
         state: comp?.state,
         zip_code: comp?.zip_code,
       },
-      line_items: (items || []).map((item: any) => ({
+      line_items: effectiveItems.map((item: any) => ({
         id: item.id,
         product_name: item.product_name,
         sku: item.sku,
         variant_name: item.brand_name,
-        quantity: item.quantity,
+        quantity: Number(item.quantity || 0),
         unit_price: Number(item.unit_wholesale_price || 0),
         total_price: Number(item.line_total || 0),
       })),

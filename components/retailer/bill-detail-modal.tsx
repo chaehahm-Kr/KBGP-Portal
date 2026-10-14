@@ -45,7 +45,14 @@ export function BillDetailModal({
 
   if (!isOpen) return null;
 
-  const getStatusBadge = (arStatus: string) => {
+  const getStatusBadge = (arStatus: string, invoiceStatus?: string) => {
+    if (arStatus === "VOID" || invoiceStatus === "void" || invoiceStatus === "cancelled") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border border-zinc-500/20">
+          Void
+        </span>
+      );
+    }
     switch (arStatus) {
       case "PAST_DUE":
         return (
@@ -88,7 +95,7 @@ export function BillDetailModal({
               <h2 className="text-xl font-bold text-zinc-900 dark:text-white">
                 {bill ? bill.invoice_number : "Loading Bill..."}
               </h2>
-              {bill && getStatusBadge(bill.ar_status)}
+              {bill && getStatusBadge(bill.ar_status, bill.invoice_status)}
             </div>
             {bill && (
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
@@ -249,7 +256,7 @@ export function BillDetailModal({
                   <span>Balance Due</span>
                   <div className="text-right">
                     <span className="line-through text-xs text-zinc-400 mr-1.5 font-normal">
-                      Orig. ${bill.balance_due.toFixed(2)}
+                      Orig. ${bill.total_amount.toFixed(2)}
                     </span>
                     <span className="font-extrabold text-zinc-700 dark:text-zinc-300">$0.00</span>
                     <span className="block text-[10px] text-zinc-400 font-normal">Voided obligation</span>

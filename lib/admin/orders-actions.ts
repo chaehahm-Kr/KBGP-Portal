@@ -433,7 +433,7 @@ export async function getAdminRetailerOrderDetailAction(
     dueDate: inv.due_date,
     totalAmount: Number(inv.total_amount || 0),
     amountPaid: Number(inv.amount_paid || 0),
-    balanceDue: Number(inv.balance_due || 0),
+    balanceDue: ["void", "cancelled"].includes((inv.invoice_status || "").toLowerCase()) ? 0.0 : Number(inv.balance_due || 0),
     invoiceStatus: inv.invoice_status,
     paymentStatus: inv.payment_status,
     termsName: inv.terms_name || "Net 30",
