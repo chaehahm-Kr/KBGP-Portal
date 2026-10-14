@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Retailer360Data,
   Retailer360OrderItem,
@@ -61,6 +61,7 @@ type TabKey =
   | "cases";
 
 export function Retailer360View({ data, canImpersonate = true }: Retailer360ViewProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const validTabs: TabKey[] = ["overview", "stores", "users", "orders", "payments", "performance", "training", "protection", "cases"];
   const paramTab = searchParams.get("tab") as TabKey;
@@ -74,6 +75,15 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
       setActiveTab(currentTab);
     }
   }, [searchParams]);
+
+  const handleSelectTab = (key: TabKey) => {
+    setActiveTab(key);
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.set("tab", key);
+      router.push(`/admin/retailers/${data.company.id}?${params.toString()}`, { scroll: false });
+    }
+  };
 
   const [isPending, startTransition] = useTransition();
   const [impersonateMember, setImpersonateMember] = useState<Retailer360MemberItem | null>(null);
@@ -691,15 +701,15 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
   const primaryOwner = data.members.find((m) => m.role === "owner") || data.members[0];
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+    <div className="space-y-6 pb-16 w-full">
       {/* Top Breadcrumb & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <Link href="/admin/retailers" className="hover:text-zinc-900 dark:hover:text-white transition-colors">
+          <Link href="/admin/retailers" className="hover:text-zinc-900 dark:hover:text-white font-medium transition-colors">
             ← Retailers List
           </Link>
-          <span>/</span>
-          <span className="font-bold text-zinc-900 dark:text-white truncate max-w-[200px]">
+          <span className="text-zinc-300 dark:text-zinc-700">/</span>
+          <span className="font-bold text-zinc-900 dark:text-white truncate max-w-[220px]">
             {data.company.name}
           </span>
           <span className="rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 text-[10px] font-bold">
@@ -707,83 +717,85 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={handleOpenCompanyModal}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 transition-colors shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 transition-colors shadow-2xs cursor-pointer"
           >
-            ✏️ Edit Organization
+            <span>✏️</span>
+            <span>Edit Organization</span>
           </button>
           <button
             type="button"
-            onClick={() => {
-              setActiveTab("orders");
-            }}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 transition-colors shadow-2xs cursor-pointer"
+            onClick={() => handleSelectTab("orders")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 transition-colors shadow-2xs cursor-pointer"
           >
-            📦 Orders ({data.orders.length})
+            <span>📦</span>
+            <span>Orders ({data.orders.length})</span>
           </button>
           <button
             type="button"
             onClick={() => setShowInviteModal(true)}
-            className="rounded-xl bg-zinc-900 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors shadow-2xs cursor-pointer"
           >
-            + Invite Team Member
+            <span>➕</span>
+            <span>Invite Team Member</span>
           </button>
         </div>
       </div>
 
       {/* 1. Company Identity Header */}
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-xl font-black text-zinc-900 dark:text-white tracking-tight">
+      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-2xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="space-y-3 min-w-0 flex-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-white tracking-tight truncate">
                 {data.company.name}
               </h1>
               <span
-                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
                   data.profile.status === "active"
                     ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
                     : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
                 }`}
               >
-                ● {data.profile.status}
+                <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                {data.profile.status}
               </span>
               {data.profile.terms_enabled ? (
                 <span className="rounded-md bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2 py-0.5 text-[10px] font-bold">
                   💳 {data.profile.approved_terms || "Net Terms"} (${data.profile.credit_limit?.toLocaleString()})
                 </span>
               ) : (
-                <span className="rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 px-2 py-0.5 text-[10px] font-semibold">
+                <span className="rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 px-2 py-0.5 text-[10px] font-semibold border border-zinc-200 dark:border-zinc-700">
                   Prepaid Card
                 </span>
               )}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-6 gap-y-1.5 text-xs text-zinc-600 dark:text-zinc-400 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs">
               <div>
-                <span className="text-zinc-400 block text-[10px]">Company Code</span>
-                <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">
+                <span className="text-zinc-400 block text-[10px] font-semibold uppercase tracking-wider">Company Code</span>
+                <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200 text-xs">
                   {data.company.companyCode || "Not assigned"}
                 </span>
               </div>
               <div>
-                <span className="text-zinc-400 block text-[10px]">Business Registration / Tax ID</span>
-                <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">
+                <span className="text-zinc-400 block text-[10px] font-semibold uppercase tracking-wider">Tax ID / Reg No.</span>
+                <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200 text-xs">
                   {data.company.businessRegistrationNumber || "Not recorded"}
                 </span>
               </div>
               <div>
-                <span className="text-zinc-400 block text-[10px]">Company HQ Address</span>
-                <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate block" title={data.company.formattedHqAddress || "Not recorded"}>
+                <span className="text-zinc-400 block text-[10px] font-semibold uppercase tracking-wider">HQ Address</span>
+                <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate block text-xs" title={data.company.formattedHqAddress || "Not recorded"}>
                   {data.company.formattedHqAddress || "Not recorded"}
                 </span>
               </div>
               <div>
-                <span className="text-zinc-400 block text-[10px]">Primary Contact</span>
-                <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate block">
+                <span className="text-zinc-400 block text-[10px] font-semibold uppercase tracking-wider">Primary Contact</span>
+                <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate block text-xs">
                   {data.company.contactName
                     ? `${data.company.contactName}${data.company.contactPhone ? ` (${data.company.contactPhone})` : ""}`
                     : primaryOwner
@@ -792,8 +804,8 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 </span>
               </div>
               <div>
-                <span className="text-zinc-400 block text-[10px]">Country & Region</span>
-                <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                <span className="text-zinc-400 block text-[10px] font-semibold uppercase tracking-wider">Country & Region</span>
+                <span className="font-medium text-zinc-800 dark:text-zinc-200 text-xs">
                   🇺🇸 {data.company.country}
                 </span>
               </div>
@@ -801,28 +813,28 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
           </div>
 
           {/* Quick Metrics Badges */}
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
-            <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/60 p-3 text-center min-w-[90px]">
-              <span className="text-[10px] text-zinc-400 font-semibold block">Stores</span>
-              <span className="text-base font-black text-zinc-900 dark:text-white">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:items-center gap-2 shrink-0">
+            <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/40 p-2.5 text-center min-w-[85px]">
+              <span className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider block">Stores</span>
+              <span className="text-base font-black text-zinc-900 dark:text-white mt-0.5 block">
                 {data.stores.length}
               </span>
             </div>
-            <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/60 p-3 text-center min-w-[90px]">
-              <span className="text-[10px] text-zinc-400 font-semibold block">Team</span>
-              <span className="text-base font-black text-zinc-900 dark:text-white">
+            <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/40 p-2.5 text-center min-w-[85px]">
+              <span className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider block">Team</span>
+              <span className="text-base font-black text-zinc-900 dark:text-white mt-0.5 block">
                 {data.members.length}
               </span>
             </div>
-            <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/60 p-3 text-center min-w-[90px]">
-              <span className="text-[10px] text-zinc-400 font-semibold block">Coverage</span>
-              <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
+            <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/40 p-2.5 text-center min-w-[85px]">
+              <span className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider block">Coverage</span>
+              <span className="text-base font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block">
                 {data.metrics.reportingCoveragePercent}%
               </span>
             </div>
-            <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/60 p-3 text-center min-w-[90px]">
-              <span className="text-[10px] text-zinc-400 font-semibold block">Open Cases</span>
-              <span className={`text-base font-black ${data.metrics.openSupportCasesCount > 0 ? "text-rose-600" : "text-zinc-700 dark:text-zinc-300"}`}>
+            <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/40 p-2.5 text-center min-w-[85px]">
+              <span className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider block">Open Cases</span>
+              <span className={`text-base font-black mt-0.5 block ${data.metrics.openSupportCasesCount > 0 ? "text-rose-600 dark:text-rose-400" : "text-zinc-700 dark:text-zinc-300"}`}>
                 {data.metrics.openSupportCasesCount}
               </span>
             </div>
@@ -830,17 +842,20 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
         </div>
       </div>
 
-      {/* 2. Needs Attention Action Center (Exceptions Banner) */}
+      {/* 2. Needs Attention Action Center (Compact Severity Alerts) */}
       {data.needsAttention.length > 0 && (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-5 dark:border-rose-900/50 dark:bg-rose-950/20 space-y-3">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 shadow-2xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-zinc-100 dark:border-zinc-800">
             <div className="flex items-center gap-2">
-              <span className="text-base">🚨</span>
-              <h2 className="text-xs font-bold text-rose-900 dark:text-rose-300 uppercase tracking-wider">
-                Needs Attention ({data.needsAttention.length} Items)
+              <span className="text-sm">⚠️</span>
+              <h2 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+                Needs Attention
               </h2>
+              <span className="rounded-full bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 px-2 py-0.2 text-[10px] font-bold">
+                {data.needsAttention.length}
+              </span>
             </div>
-            <span className="text-[10px] font-semibold text-rose-700 dark:text-rose-400">
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
               Operational exceptions requiring admin review
             </span>
           </div>
@@ -849,35 +864,35 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
             {data.needsAttention.map((item) => (
               <div
                 key={item.id}
-                className="rounded-xl border border-rose-200/80 bg-white p-3.5 shadow-2xs dark:border-rose-900/60 dark:bg-zinc-900 flex flex-col justify-between"
+                className="rounded-lg border border-rose-200/70 bg-rose-50/20 p-3 shadow-2xs dark:border-rose-900/40 dark:bg-rose-950/10 flex flex-col justify-between hover:border-rose-300 dark:hover:border-rose-800 transition-colors"
               >
                 <div>
-                  <div className="flex items-start justify-between gap-2 mb-1">
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
                     <span className="text-xs font-bold text-zinc-900 dark:text-white leading-snug">
                       {item.title}
                     </span>
-                    <span className="rounded bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 px-1.5 py-0.2 text-[9px] font-bold shrink-0">
+                    <span className="rounded bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 px-1.5 py-0.5 text-[9px] font-bold shrink-0 border border-rose-200/60 dark:border-rose-800/60">
                       {item.badge}
                     </span>
                   </div>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2">
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 line-clamp-2">
                     {item.description}
                   </p>
                 </div>
 
-                <div className="pt-2 mt-2 border-t border-zinc-100 dark:border-zinc-800 flex justify-end">
+                <div className="pt-2 mt-2 border-t border-rose-100 dark:border-rose-950/50 flex justify-end">
                   {item.href.startsWith("#") ? (
                     <button
                       type="button"
-                      onClick={() => setActiveTab(item.href.replace("#", "") as TabKey)}
-                      className="text-[10px] font-bold text-rose-700 dark:text-rose-400 hover:underline cursor-pointer"
+                      onClick={() => handleSelectTab(item.href.replace("#", "") as TabKey)}
+                      className="text-[11px] font-bold text-rose-700 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 hover:underline cursor-pointer"
                     >
                       Resolve in 360° →
                     </button>
                   ) : (
                     <Link
                       href={item.href}
-                      className="text-[10px] font-bold text-rose-700 dark:text-rose-400 hover:underline"
+                      className="text-[11px] font-bold text-rose-700 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 hover:underline"
                     >
                       Open Action Module →
                     </Link>
@@ -889,47 +904,60 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
         </div>
       )}
 
-      {/* 3. Tab Navigation */}
-      <div className="border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto">
-        <nav className="flex space-x-1 sm:space-x-2">
-          {[
-            { key: "overview", label: "Overview", icon: "📊", badge: null },
-            { key: "stores", label: "Stores", icon: "🏪", badge: data.stores.length },
-            { key: "users", label: "Users & Team", icon: "👥", badge: data.members.length },
-            { key: "orders", label: "Orders & Fulfillment", icon: "📦", badge: data.orders.length },
-            { key: "payments", label: "Payments & Terms", icon: "💳", badge: null },
-            { key: "performance", label: "Performance & Check", icon: "📈", badge: `${data.metrics.reportingCoveragePercent}%` },
-            { key: "training", label: "Training", icon: "🎓", badge: `${data.training.overallCompletionPercent}%` },
-            { key: "protection", label: "90-Day Protection", icon: "🛡️", badge: data.protections.length },
-            { key: "cases", label: "Support Cases", icon: "💬", badge: data.cases.length },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key as TabKey)}
-              className={`flex items-center gap-1.5 py-3 px-3.5 text-xs font-bold whitespace-nowrap border-b-2 transition-all cursor-pointer ${
-                activeTab === tab.key
-                  ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
-                  : "border-transparent text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
-              }`}
-            >
-              <span>{tab.icon}</span>
-              <span>{tab.label}</span>
-              {tab.badge !== null && (
-                <span
-                  className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[9px] font-mono ${
-                    activeTab === tab.key
-                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                      : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+      {/* 3. Section Navigation & Tab Contents (Vertical Section Layout) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] xl:grid-cols-[240px_1fr] gap-6 items-start">
+        {/* Left Column: Vertical Section Navigation */}
+        <aside className="sticky top-20 z-10 w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2 shadow-2xs">
+          <div className="px-2.5 py-1.5 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider hidden lg:block">
+            Retailer 360° Sections
+          </div>
+          <nav className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-col gap-1">
+            {[
+              { key: "overview", label: "Overview", icon: "📊", badge: null },
+              { key: "stores", label: "Stores", icon: "🏪", badge: data.stores.length },
+              { key: "users", label: "Users & Team", icon: "👥", badge: data.members.length },
+              { key: "orders", label: "Orders & Fulfillment", icon: "📦", badge: data.orders.length },
+              { key: "payments", label: "Payments & Terms", icon: "💳", badge: null },
+              { key: "performance", label: "Performance & Check", icon: "📈", badge: `${data.metrics.reportingCoveragePercent}%` },
+              { key: "training", label: "Training", icon: "🎓", badge: `${data.training.overallCompletionPercent}%` },
+              { key: "protection", label: "90-Day Protection", icon: "🛡️", badge: data.protections.length },
+              { key: "cases", label: "Support Cases", icon: "💬", badge: data.cases.length },
+            ].map((tab) => {
+              const isActive = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => handleSelectTab(tab.key as TabKey)}
+                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer text-left ${
+                    isActive
+                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs font-bold"
+                      : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-zinc-200"
                   }`}
                 >
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
-      </div>
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="shrink-0 text-sm">{tab.icon}</span>
+                    <span className="truncate">{tab.label}</span>
+                  </div>
+                  {tab.badge !== null && tab.badge !== undefined && (
+                    <span
+                      className={`ml-auto text-[10px] font-mono px-1.5 py-0.2 rounded-full shrink-0 font-bold ${
+                        isActive
+                          ? "bg-zinc-800 text-zinc-100 dark:bg-zinc-200 dark:text-zinc-900"
+                          : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* Right Column: Tab Content */}
+        <div className="min-w-0 flex-1 space-y-6">
 
       {/* 4. Tab Contents */}
 
@@ -950,29 +978,29 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
 
           {/* Real Metrics Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
               <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Submitted Order Value</span>
-              <p className="text-xl font-black text-zinc-900 dark:text-white mt-1 font-mono">
+              <p className="text-lg font-black text-zinc-900 dark:text-white mt-1 font-mono">
                 {formatCurrency(data.metrics.submittedOrderValue)}
               </p>
               <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
-                {data.metrics.submittedOrdersCount} orders (Gross, not settled revenue)
+                {data.metrics.submittedOrdersCount} orders (Gross)
               </span>
             </div>
 
-            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
               <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Est. Unpaid Order Value</span>
-              <p className={`text-xl font-black mt-1 font-mono ${data.metrics.estimatedUnpaidOrderValue > 0 ? "text-amber-600" : "text-zinc-900 dark:text-white"}`}>
+              <p className={`text-lg font-black mt-1 font-mono ${data.metrics.estimatedUnpaidOrderValue > 0 ? "text-amber-600 dark:text-amber-400" : "text-zinc-900 dark:text-white"}`}>
                 {formatCurrency(data.metrics.estimatedUnpaidOrderValue)}
               </p>
               <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
-                Pending/unpaid orders (Not an A/R ledger)
+                Pending/unpaid orders
               </span>
             </div>
 
-            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
               <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Delivered Units</span>
-              <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+              <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1 font-mono">
                 {data.metrics.totalDeliveredUnits.toLocaleString()}
               </p>
               <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
@@ -980,9 +1008,9 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
               </span>
             </div>
 
-            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
               <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Store Locations</span>
-              <p className="text-xl font-black text-zinc-900 dark:text-white mt-1">
+              <p className="text-lg font-black text-zinc-900 dark:text-white mt-1 font-mono">
                 {data.metrics.totalStoresCount}
               </p>
               <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
@@ -990,9 +1018,9 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
               </span>
             </div>
 
-            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
               <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Weekly Coverage</span>
-              <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+              <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1 font-mono">
                 {data.metrics.reportingCoveragePercent}%
               </p>
               <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
@@ -1000,21 +1028,21 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
               </span>
             </div>
 
-            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
               <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Reorder Signals</span>
-              <p className="text-xl font-black text-amber-600 mt-1">
+              <p className={`text-lg font-black mt-1 font-mono ${data.metrics.productsNeedingReorderCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-zinc-900 dark:text-white"}`}>
                 {data.metrics.productsNeedingReorderCount}
               </p>
               <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
-                SKUs with weeks of supply &lt; 2
+                SKUs with supply &lt; 2 wks
               </span>
             </div>
           </div>
 
           {/* Quick Snapshot Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
             {/* Commercial Terms Summary */}
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
+            <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
                   <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
@@ -1022,40 +1050,40 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                   </span>
                   <button
                     type="button"
-                    onClick={() => setActiveTab("payments")}
-                    className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                    onClick={() => handleSelectTab("payments")}
+                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                   >
                     Edit Terms →
                   </button>
                 </div>
 
                 <div className="space-y-2 text-xs pt-2">
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Approved Terms:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Approved Terms:</span>
                     <span className="font-bold text-zinc-900 dark:text-white">
                       {formatApprovedTermsDisplay(data.profile.approved_terms || data.profile.payment_terms)}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Terms Status:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Terms Status:</span>
                     <span className="font-semibold text-zinc-800 dark:text-zinc-200">
                       {formatTermsStatusDisplay(data.profile.terms_status)}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Approved Credit Limit:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Approved Credit Limit:</span>
                     <span className="font-mono font-bold text-zinc-900 dark:text-white">
                       {formatCurrency(data.profile.credit_limit)}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Terms Capacity:</span>
-                    <span className="text-zinc-500 font-medium text-[11px] text-right">
-                      Subject to commercial review
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Terms Capacity:</span>
+                    <span className="text-zinc-500 dark:text-zinc-400 font-medium text-[11px] text-right">
+                      Subject to review
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Card / ACH Ready:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Card / ACH Ready:</span>
                     <span className="font-semibold text-zinc-800 dark:text-zinc-200">
                       Card: {data.profile.payment_method_card_enabled ? "Yes" : "No"} · ACH: {data.profile.payment_method_ach_enabled ? "Yes" : "No"}
                     </span>
@@ -1069,7 +1097,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
             </div>
 
             {/* Order Payment Breakdown */}
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
+            <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
                   <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
@@ -1077,35 +1105,35 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                   </span>
                   <button
                     type="button"
-                    onClick={() => setActiveTab("orders")}
-                    className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                    onClick={() => handleSelectTab("orders")}
+                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                   >
                     View Orders →
                   </button>
                 </div>
 
                 <div className="space-y-2 text-xs pt-2">
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Paid Orders:</span>
-                    <span className="font-mono font-bold text-emerald-600">
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Paid Orders:</span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
                       {formatCurrency(data.metrics.paymentBreakdown.paidAmount)} ({data.metrics.paymentBreakdown.paidCount})
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Pending / Processing:</span>
-                    <span className="font-mono font-medium text-amber-600">
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Pending / Processing:</span>
+                    <span className="font-mono font-medium text-amber-600 dark:text-amber-400">
                       {formatCurrency(data.metrics.paymentBreakdown.pendingAmount)} ({data.metrics.paymentBreakdown.pendingCount})
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Unpaid (Net Terms):</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Unpaid (Net Terms):</span>
                     <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">
                       {formatCurrency(data.metrics.paymentBreakdown.unpaidAmount)} ({data.metrics.paymentBreakdown.unpaidCount})
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Failed / Declined:</span>
-                    <span className="font-mono font-medium text-rose-600">
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Failed / Declined:</span>
+                    <span className="font-mono font-medium text-rose-600 dark:text-rose-400">
                       {formatCurrency(data.metrics.paymentBreakdown.failedAmount)} ({data.metrics.paymentBreakdown.failedCount})
                     </span>
                   </div>
@@ -1118,7 +1146,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
             </div>
 
             {/* Performance Quick Summary */}
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
+            <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
                   <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
@@ -1126,28 +1154,28 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                   </span>
                   <button
                     type="button"
-                    onClick={() => setActiveTab("performance")}
-                    className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                    onClick={() => handleSelectTab("performance")}
+                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                   >
                     View Details →
                   </button>
                 </div>
 
                 <div className="space-y-2 text-xs pt-2">
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Total Units Movement:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Total Units Movement:</span>
                     <span className="font-bold text-zinc-900 dark:text-white">
                       {data.performance.estimatedMovement.toLocaleString()} units
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Estimated Retail Sales:</span>
-                    <span className="font-bold text-emerald-600">
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Estimated Retail Sales:</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                       {formatCurrency(data.performance.estimatedRetailSales)}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Estimated Gross Margin:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Estimated Gross Margin:</span>
                     <span className="font-bold text-zinc-900 dark:text-white">
                       {data.performance.estimatedGrossMargin}%
                     </span>
@@ -1161,7 +1189,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
             </div>
 
             {/* 90-Day Protection & Cases Summary */}
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
+            <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
                   <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
@@ -1169,28 +1197,28 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                   </span>
                   <button
                     type="button"
-                    onClick={() => setActiveTab("protection")}
-                    className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                    onClick={() => handleSelectTab("protection")}
+                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                   >
                     Manage →
                   </button>
                 </div>
 
                 <div className="space-y-2 text-xs pt-2">
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Active 90-Day Trials:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Active 90-Day Trials:</span>
                     <span className="font-bold text-zinc-900 dark:text-white">
                       {data.metrics.activeProtectionTrialsCount} products
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Reviews Pending Action:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Reviews Pending Action:</span>
                     <span className={data.metrics.protectionReviewsActionCount > 0 ? "text-rose-600 font-bold" : "text-zinc-400"}>
                       {data.metrics.protectionReviewsActionCount}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Support Tickets Open:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 dark:text-zinc-400">Support Tickets Open:</span>
                     <span className={data.metrics.openSupportCasesCount > 0 ? "text-amber-600 font-bold" : "text-zinc-400"}>
                       {data.metrics.openSupportCasesCount}
                     </span>
@@ -2974,6 +3002,8 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
           </div>
         </div>
       )}
+        </div>
+      </div>
 
       {/* MODAL: ADD STORE */}
       {showAddStoreModal && (
