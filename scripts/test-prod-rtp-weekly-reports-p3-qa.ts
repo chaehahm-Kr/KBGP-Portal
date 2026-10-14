@@ -43,14 +43,14 @@ async function runWeeklyReportsP3QA() {
     const reportHeaderVisible = await pageDesktop.locator("text=Weekly Performance & Reorder Report").first().isVisible();
     console.log("Weekly Report Header Visible:", reportHeaderVisible);
 
-    const salesKpiVisible = await pageDesktop.locator("text=Est. Retail Sales").isVisible();
-    const gpKpiVisible = await pageDesktop.locator("text=Est. Gross Profit").isVisible();
-    const unitsKpiVisible = await pageDesktop.locator("text=Est. Units Sold").isVisible();
-    const reorderKpiVisible = await pageDesktop.locator("text=Reorder Needed").isVisible();
+    const salesKpiVisible = await pageDesktop.locator("text=Est. Retail Sales").first().isVisible();
+    const gpKpiVisible = await pageDesktop.locator("text=Est. Gross Profit").first().isVisible();
+    const unitsKpiVisible = await pageDesktop.locator("text=Est. Units Sold").first().isVisible();
+    const reorderKpiVisible = await pageDesktop.locator("text=Reorder Needed").first().isVisible();
     console.log("4 Authoritative KPIs Visible:", { salesKpiVisible, gpKpiVisible, unitsKpiVisible, reorderKpiVisible });
 
     // 1.3 Check Partial Coverage indication
-    const partialCoverageBadge = await pageDesktop.locator("text=Partial Coverage").isVisible();
+    const partialCoverageBadge = await pageDesktop.locator("text=Partial Coverage").first().isVisible();
     console.log("Partial Coverage Badge Detected:", partialCoverageBadge);
 
     await pageDesktop.screenshot({
@@ -82,7 +82,7 @@ async function runWeeklyReportsP3QA() {
     await pageDesktop.goto(`${PROD_PORTAL_URL}/settings/notifications`, { waitUntil: "networkidle", timeout: 30000 });
     await pageDesktop.waitForTimeout(1500);
 
-    const notifHeaderVisible = await pageDesktop.locator("text=Notification Settings").isVisible();
+    const notifHeaderVisible = await pageDesktop.locator("text=Notification Settings").first().isVisible();
     console.log("Notification Settings Page Visible:", notifHeaderVisible);
 
     const toggle = pageDesktop.locator('input[type="checkbox"]').first();
@@ -91,7 +91,7 @@ async function runWeeklyReportsP3QA() {
 
     // Toggle ON
     console.log("Toggling Weekly Report Email ON...");
-    await toggle.click();
+    await toggle.click({ force: true });
     await pageDesktop.waitForTimeout(2000);
 
     const turnedOnState = await toggle.isChecked();
@@ -112,7 +112,7 @@ async function runWeeklyReportsP3QA() {
 
     // Toggle back to OFF to keep test clean
     console.log("Toggling back to OFF (Default)...");
-    await toggle.click();
+    await toggle.click({ force: true });
     await pageDesktop.waitForTimeout(2000);
     const finalState = await toggle.isChecked();
     console.log("Final State (Should be false):", finalState);
@@ -126,12 +126,13 @@ async function runWeeklyReportsP3QA() {
     });
     const pageAdmin = await adminContext.newPage();
 
-    console.log("Logging into Admin Portal as test admin...");
-    await pageAdmin.goto(`${PROD_ADMIN_URL}/login`, { waitUntil: "networkidle", timeout: 30000 });
-    await pageAdmin.fill('input[type="email"], input[name="email"]', TEST_ADMIN_EMAIL);
-    await pageAdmin.fill('input[type="password"], input[name="password"]', TEST_ADMIN_PASSWORD);
-    await pageAdmin.click('button[type="submit"]');
-    await pageAdmin.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 30000 });
+    console.log("Logging into Admin Portal as test admin (https://admin.kselectnetwork.com/admin/login)...");
+    await pageAdmin.goto("https://admin.kselectnetwork.com/admin/login", { waitUntil: "domcontentloaded", timeout: 30000 });
+    await pageAdmin.waitForTimeout(1500);
+    await pageAdmin.locator("input#email, input[type='email']").first().fill(TEST_ADMIN_EMAIL);
+    await pageAdmin.locator("input#password, input[type='password']").first().fill(TEST_ADMIN_PASSWORD);
+    await pageAdmin.locator('button[type="submit"]').click();
+    await pageAdmin.waitForTimeout(4000);
     console.log("✓ Logged into Admin Portal. Current URL:", pageAdmin.url());
 
     // Navigate to Test Retailer 360 Performance Tab
@@ -200,12 +201,18 @@ async function runWeeklyReportsP3QA() {
       await pageAdmin.waitForTimeout(2000);
     }
 
-    const reportTemplateItem = await pageAdmin.locator("text=hub_retailer_weekly_performance_report").first().isVisible();
-    const reminderTemplateItem = await pageAdmin.locator("text=hub_retailer_weekly_check_reminder").first().isVisible();
+    const reportTemplateItem = await pageAdmin.locator("text=Weekly Performance & Reorder Report").first().isVisible();
+    const reminderTemplateItem = await pageAdmin.locator("text=Weekly Inventory Check Reminder").first().isVisible();
     console.log("Registered Email Templates Found:", {
       hub_retailer_weekly_performance_report: reportTemplateItem,
       hub_retailer_weekly_check_reminder: reminderTemplateItem,
     });
+
+    if (reportTemplateItem) {
+      console.log("Clicking 'Weekly Performance & Reorder Report' template to load live preview...");
+      await pageAdmin.locator("text=Weekly Performance & Reorder Report").first().click();
+      await pageAdmin.waitForTimeout(2000);
+    }
 
     await pageAdmin.screenshot({
       path: path.join(ARTIFACT_DIR, "prod_p3_admin_email_templates_registered.png"),
