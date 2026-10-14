@@ -6,21 +6,28 @@ import {
   RetailerShippingAddress,
   CreateShippingAddressInput,
   UpdateShippingAddressInput,
+  StoreShippingOption,
+  ResolvedDefaultShippingDestination,
 } from "@/lib/retailer/shipping-address-types";
 import {
   createRetailerShippingAddressAction,
   updateRetailerShippingAddressAction,
   deleteRetailerShippingAddressAction,
   setDefaultRetailerShippingAddressAction,
+  unsetDefaultRetailerShippingAddressAction,
 } from "@/lib/retailer/shipping-address-actions";
 
 interface ShippingSettingsViewProps {
   initialAddresses: RetailerShippingAddress[];
+  stores?: StoreShippingOption[];
+  initialDefaultDestination?: ResolvedDefaultShippingDestination | null;
   companyName: string;
 }
 
 export function RetailerShippingSettingsView({
   initialAddresses,
+  stores = [],
+  initialDefaultDestination = null,
   companyName,
 }: ShippingSettingsViewProps) {
   const [addresses, setAddresses] = useState<RetailerShippingAddress[]>(initialAddresses);
@@ -164,6 +171,22 @@ export function RetailerShippingSettingsView({
     });
   };
 
+  const handleUnsetDefault = (id: string) => {
+    startTransition(async () => {
+      const res = await unsetDefaultRetailerShippingAddressAction(id);
+      if (res.success) {
+        setAddresses((prev) =>
+          prev.map((a) => ({
+            ...a,
+            isDefault: a.id === id ? false : a.isDefault,
+          }))
+        );
+        setSuccessMsg("Default address unset. Store address will now serve as default shipping destination.");
+        setTimeout(() => setSuccessMsg(null), 3000);
+      }
+    });
+  };
+
   const handleDelete = (id: string) => {
     if (!confirm("Are you sure you want to remove this shipping address?")) return;
     startTransition(async () => {
@@ -176,8 +199,54 @@ export function RetailerShippingSettingsView({
     });
   };
 
+  // Authoritative default destination resolution in client view
+  const activeSavedDefault = addresses.find((a) => a.isDefault && a.isActive !== false);
+  const firstEligibleStore = stores.find((s) => s.isEligible);
+
+  const activeDefault: ResolvedDefaultShippingDestination | null = React.useMemo(() => {
+    if (activeSavedDefault) {
+      return {
+        type: "saved_address",
+        id: activeSavedDefault.id,
+        name: activeSavedDefault.label,
+        recipientName: activeSavedDefault.recipientName,
+        attentionName: activeSavedDefault.attentionName,
+        addressLine1: activeSavedDefault.addressLine1,
+        addressLine2: activeSavedDefault.addressLine2,
+        city: activeSavedDefault.city,
+        state: activeSavedDefault.state,
+        zip: activeSavedDefault.zip,
+        country: activeSavedDefault.country || "US",
+        phone: activeSavedDefault.phone,
+        deliveryNotes: activeSavedDefault.deliveryNotes,
+        isExplicitDefault: true,
+        isStoreFallback: false,
+      };
+    }
+    if (firstEligibleStore) {
+      return {
+        type: "store",
+        id: firstEligibleStore.id,
+        name: firstEligibleStore.name,
+        recipientName: firstEligibleStore.managerName || firstEligibleStore.name,
+        attentionName: null,
+        addressLine1: firstEligibleStore.address!,
+        addressLine2: null,
+        city: firstEligibleStore.city!,
+        state: firstEligibleStore.state!,
+        zip: firstEligibleStore.zip!,
+        country: "US",
+        phone: firstEligibleStore.phone,
+        deliveryNotes: null,
+        isExplicitDefault: false,
+        isStoreFallback: true,
+      };
+    }
+    return initialDefaultDestination;
+  }, [activeSavedDefault, firstEligibleStore, initialDefaultDestination]);
+
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-8 max-w-5xl">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
         <div>
@@ -211,115 +280,287 @@ export function RetailerShippingSettingsView({
         </div>
       )}
 
-      {/* Address Cards Grid */}
-      {addresses.length === 0 ? (
-        <div className="py-16 px-6 text-center rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 space-y-4">
-          <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 flex items-center justify-center text-xl mx-auto">
-            📍
+      {/* Active Default Shipping Destination Callout Banner */}
+      <div className="rounded-2xl border border-indigo-100 dark:border-indigo-950/80 bg-gradient-to-r from-indigo-50/70 via-white to-zinc-50 dark:from-indigo-950/30 dark:via-zinc-900 dark:to-zinc-900/60 p-5 shadow-xs space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-base">📍</span>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-200">
+              Active Default Shipping Destination
+            </h2>
           </div>
+          {activeDefault && (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800">
+              {activeDefault.isExplicitDefault ? "🏢 Configured Default (Saved Address)" : "🏬 Registered Store Fallback"}
+            </span>
+          )}
+        </div>
+
+        {activeDefault ? (
+          <div className="text-xs space-y-1.5 text-zinc-700 dark:text-zinc-300">
+            <div className="font-bold text-sm text-zinc-900 dark:text-white flex items-center gap-2">
+              <span>{activeDefault.type === "store" ? "🏬" : "🏢"}</span>
+              <span>{activeDefault.name}</span>
+              {activeDefault.recipientName && (
+                <span className="text-xs text-zinc-500 font-normal">
+                  (Recipient: {activeDefault.recipientName})
+                </span>
+              )}
+            </div>
+            <p className="text-zinc-600 dark:text-zinc-300">
+              {activeDefault.addressLine1}
+              {activeDefault.addressLine2 ? `, ${activeDefault.addressLine2}` : ""}
+              , {activeDefault.city}, {activeDefault.state} {activeDefault.zip}
+            </p>
+            {activeDefault.phone && (
+              <p className="text-zinc-500 text-[11px]">📞 {activeDefault.phone}</p>
+            )}
+            <p className="text-[11px] text-zinc-400 dark:text-zinc-500 pt-1 border-t border-zinc-100 dark:border-zinc-800/80">
+              {activeDefault.isStoreFallback
+                ? "No custom warehouse address is configured as default. Wholesale orders will automatically default to this registered store location unless selected otherwise at Checkout."
+                : "This saved address is configured as your primary shipping destination for wholesale purchase orders."}
+            </p>
+          </div>
+        ) : (
+          <div className="text-xs text-amber-700 dark:text-amber-300 space-y-1">
+            <p className="font-semibold">⚠️ No Default Shipping Destination Configured</p>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              Please ensure at least one store has a valid street address on file, or add a custom warehouse address below.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 1: Registered Store Locations */}
+      {stores.length > 0 && (
+        <div className="space-y-4">
           <div>
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-              No saved shipping addresses yet
-            </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md mx-auto mt-1">
-              Add your company&apos;s warehouses, centralized distribution centers, or customer fulfillment points. You can select them directly during Checkout.
+            <h2 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+              <span>🏬 Registered Store Locations</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-semibold">
+                {stores.length}
+              </span>
+            </h2>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+              Physical retail locations registered under your account. Available as verified shipping destinations at Checkout.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {stores.map((store) => {
+              const isCurrentFallbackDefault = Boolean(
+                activeDefault?.isStoreFallback && activeDefault.id === store.id
+              );
+
+              return (
+                <div
+                  key={store.id}
+                  className={`p-5 rounded-2xl border transition-all bg-white dark:bg-zinc-900 shadow-xs space-y-3 ${
+                    isCurrentFallbackDefault
+                      ? "border-indigo-600/50 dark:border-indigo-500/50 ring-2 ring-indigo-500/10"
+                      : "border-zinc-200 dark:border-zinc-800"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-sm text-zinc-900 dark:text-white">
+                        {store.name}
+                      </h3>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                        🏬 Store Location
+                      </span>
+                      {isCurrentFallbackDefault && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                          Default Shipping Destination (Fallback)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
+                    {store.address ? (
+                      <>
+                        <p className="text-zinc-700 dark:text-zinc-300 font-medium">
+                          {store.address}
+                        </p>
+                        <p className="text-zinc-700 dark:text-zinc-300">
+                          {[store.city, store.state, store.zip].filter(Boolean).join(", ")}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-amber-600 dark:text-amber-400 italic font-medium">
+                        Street address pending in store master
+                      </p>
+                    )}
+                    {store.phone && (
+                      <p className="text-zinc-500 dark:text-zinc-400 text-[11px]">
+                        📞 {store.phone}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs">
+                    {isCurrentFallbackDefault ? (
+                      <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold">
+                        ✓ Active Default Destination
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-zinc-400">
+                        Available as destination at Checkout
+                      </span>
+                    )}
+                    <span className="text-[10px] text-zinc-400 font-mono">Store Master</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 2: Saved Warehouse & Distribution Addresses */}
+      <div className="space-y-4 pt-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+              <span>🏢 Saved Warehouse & Distribution Addresses</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-semibold">
+                {addresses.length}
+              </span>
+            </h2>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+              Custom delivery locations, central warehouses, or third-party logistics points for wholesale order fulfillment.
             </p>
           </div>
           <button
             type="button"
             onClick={openCreateModal}
-            className="px-4 py-2 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 text-xs font-bold hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer shadow-xs inline-flex items-center gap-1.5"
+            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline self-start sm:self-auto cursor-pointer"
           >
-            + Add First Shipping Address
+            + Add Warehouse Address
           </button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {addresses.map((addr) => (
-            <div
-              key={addr.id}
-              className={`p-5 rounded-2xl border transition-all bg-white dark:bg-zinc-900 shadow-xs space-y-3 ${
-                addr.isDefault
-                  ? "border-indigo-600/50 dark:border-indigo-500/50 ring-2 ring-indigo-500/10"
-                  : "border-zinc-200 dark:border-zinc-800"
-              }`}
+
+        {addresses.length === 0 ? (
+          <div className="p-8 text-center rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 space-y-3">
+            <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 flex items-center justify-center text-lg mx-auto">
+              🏢
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+                No custom warehouse addresses saved yet
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-lg mx-auto">
+                Orders currently default to your registered store address ({activeDefault?.name || "Registered Store Location"}). If you receive freight or pallets at a central warehouse, cross-dock, or office, add it here for reusable one-click selection at Checkout.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="px-4 py-2 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 text-xs font-bold hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer shadow-xs inline-flex items-center gap-1.5"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-bold text-sm text-zinc-900 dark:text-white">
-                    {addr.label}
-                  </h3>
-                  {addr.isDefault && (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                      Default Destination
+              + Add Warehouse Address
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {addresses.map((addr) => (
+              <div
+                key={addr.id}
+                className={`p-5 rounded-2xl border transition-all bg-white dark:bg-zinc-900 shadow-xs space-y-3 ${
+                  addr.isDefault
+                    ? "border-indigo-600/50 dark:border-indigo-500/50 ring-2 ring-indigo-500/10"
+                    : "border-zinc-200 dark:border-zinc-800"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-sm text-zinc-900 dark:text-white">
+                      {addr.label}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                      🏢 Saved Warehouse
                     </span>
+                    {addr.isDefault && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                        Default Shipping Destination
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-400">
+                    {addr.country}
+                  </span>
+                </div>
+
+                <div className="text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
+                  <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+                    {addr.recipientName} {addr.attentionName ? `(Attn: ${addr.attentionName})` : ""}
+                  </p>
+                  <p className="text-zinc-700 dark:text-zinc-300">
+                    {addr.addressLine1}
+                    {addr.addressLine2 ? `, ${addr.addressLine2}` : ""}
+                  </p>
+                  <p className="text-zinc-700 dark:text-zinc-300">
+                    {addr.city}, {addr.state} {addr.zip}
+                  </p>
+                  {addr.phone && (
+                    <p className="text-zinc-500 dark:text-zinc-400 text-[11px]">
+                      📞 {addr.phone}
+                    </p>
+                  )}
+                  {addr.deliveryNotes && (
+                    <p className="text-[11px] text-zinc-400 italic pt-1.5 border-t border-zinc-100 dark:border-zinc-800/80">
+                      Note: {addr.deliveryNotes}
+                    </p>
                   )}
                 </div>
-                <span className="text-[10px] font-mono text-zinc-400">
-                  {addr.country}
-                </span>
-              </div>
 
-              <div className="text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
-                <p className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  {addr.recipientName} {addr.attentionName ? `(Attn: ${addr.attentionName})` : ""}
-                </p>
-                <p className="text-zinc-700 dark:text-zinc-300">
-                  {addr.addressLine1}
-                  {addr.addressLine2 ? `, ${addr.addressLine2}` : ""}
-                </p>
-                <p className="text-zinc-700 dark:text-zinc-300">
-                  {addr.city}, {addr.state} {addr.zip}
-                </p>
-                {addr.phone && (
-                  <p className="text-zinc-500 dark:text-zinc-400 text-[11px]">
-                    📞 {addr.phone}
-                  </p>
-                )}
-                {addr.deliveryNotes && (
-                  <p className="text-[11px] text-zinc-400 italic pt-1.5 border-t border-zinc-100 dark:border-zinc-800/80">
-                    Note: {addr.deliveryNotes}
-                  </p>
-                )}
-              </div>
+                <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs">
+                  {!addr.isDefault ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSetDefault(addr.id)}
+                      disabled={isPending}
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                    >
+                      Set as Default
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleUnsetDefault(addr.id)}
+                      disabled={isPending}
+                      className="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 cursor-pointer"
+                      title="Unset default to use store address fallback"
+                    >
+                      Unset Default
+                    </button>
+                  )}
 
-              <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs">
-                {!addr.isDefault ? (
-                  <button
-                    type="button"
-                    onClick={() => handleSetDefault(addr.id)}
-                    disabled={isPending}
-                    className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
-                  >
-                    Set as Default
-                  </button>
-                ) : (
-                  <span className="text-[11px] text-zinc-400 font-medium">Default Address</span>
-                )}
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => openEditModal(addr)}
-                    disabled={isPending}
-                    className="font-bold text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white cursor-pointer"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(addr.id)}
-                    disabled={isPending}
-                    className="font-bold text-red-600 dark:text-red-400 hover:text-red-700 cursor-pointer"
-                  >
-                    Remove
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(addr)}
+                      disabled={isPending}
+                      className="font-bold text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(addr.id)}
+                      disabled={isPending}
+                      className="font-bold text-red-600 dark:text-red-400 hover:text-red-700 cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Modal for Add / Edit Address */}
       {isModalOpen && (

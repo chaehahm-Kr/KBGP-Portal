@@ -16,6 +16,7 @@ import { CartItemImage } from "@/components/retailer/cart-item-image";
 import type {
   RetailerShippingAddress,
   ShippingDestinationType,
+  ResolvedDefaultShippingDestination,
 } from "@/lib/retailer/shipping-address-types";
 
 interface StoreOption {
@@ -34,6 +35,7 @@ interface CheckoutViewProps {
   paymentEligibility: RetailerPaymentEligibility;
   stores: StoreOption[];
   savedAddresses?: RetailerShippingAddress[];
+  defaultDestination?: ResolvedDefaultShippingDestination | null;
 }
 
 export function RetailerCheckoutView({
@@ -42,25 +44,38 @@ export function RetailerCheckoutView({
   paymentEligibility,
   stores,
   savedAddresses = [],
+  defaultDestination = null,
 }: CheckoutViewProps) {
   const { items, subtotal, totalUnits, totalSkus, couponCode, clearCart, isLoading, syncItemThumbnails } = useCart();
 
   // 1. Destination Delivery States (Store, Saved Shipping Address, One-Time Address)
+  // Preselect authoritative default destination if resolved
   const [destinationType, setDestinationType] = useState<ShippingDestinationType>(() => {
+    if (defaultDestination?.type === "saved_address") return "saved_address";
+    if (defaultDestination?.type === "store") return "store";
     if (stores && stores.length > 0) return "store";
     if (savedAddresses && savedAddresses.length > 0) return "saved_address";
     return "custom_address";
   });
 
   const [selectedStoreId, setSelectedStoreId] = useState<string>(() => {
+    if (defaultDestination?.type === "store" && defaultDestination.id) {
+      return defaultDestination.id;
+    }
     return stores.length > 0 ? stores[0].id : "";
   });
 
   const [selectedSavedAddressId, setSelectedSavedAddressId] = useState<string>(() => {
+    if (defaultDestination?.type === "saved_address" && defaultDestination.id) {
+      return defaultDestination.id;
+    }
     if (!savedAddresses || savedAddresses.length === 0) return "";
     const defaultAddr = savedAddresses.find((a) => a.isDefault);
     return defaultAddr ? defaultAddr.id : savedAddresses[0].id;
   });
+
+  // Explicit shipping destination confirmation - STARTS UNCHECKED!
+  const [isShippingConfirmed, setIsShippingConfirmed] = useState(false);
 
   // Custom / One-Time Address form state
   const [customRecipient, setCustomRecipient] = useState(companyName || "");
@@ -73,6 +88,24 @@ export function RetailerCheckoutView({
   const [customPhone, setCustomPhone] = useState("");
   const [customNotes, setCustomNotes] = useState("");
   const [saveCustomAddress, setSaveCustomAddress] = useState(false);
+
+  // Reset shipping confirmation whenever any destination field changes
+  useEffect(() => {
+    setIsShippingConfirmed(false);
+  }, [
+    destinationType,
+    selectedStoreId,
+    selectedSavedAddressId,
+    customRecipient,
+    customAttention,
+    customAddress1,
+    customAddress2,
+    customCity,
+    customState,
+    customZip,
+    customPhone,
+    customNotes,
+  ]);
   const [customLabel, setCustomLabel] = useState("");
 
   const [promoEvaluation, setPromoEvaluation] = useState<EvaluatePromotionResult | null>(null);
@@ -276,6 +309,11 @@ export function RetailerCheckoutView({
       }
     }
 
+    if (!isShippingConfirmed) {
+      setSubmitError("Please confirm your shipping destination by checking 'Ship to This Address' before submitting your order.");
+      return;
+    }
+
     if (isExceedingCreditLimit) {
       setSubmitError(
         `Your available credit line ($${availableCredit.toLocaleString("en-US", {
@@ -292,6 +330,7 @@ export function RetailerCheckoutView({
     try {
       const result = await submitRetailerOrder({
         destinationType,
+        isShippingConfirmed: true,
         storeId: destinationType === "store" ? selectedStoreId || undefined : undefined,
         savedAddressId: destinationType === "saved_address" ? selectedSavedAddressId || undefined : undefined,
         customShippingAddress:
@@ -836,6 +875,41 @@ export function RetailerCheckoutView({
                 className="w-full px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
             </div>
+
+            {/* Explicit Shipping Destination Confirmation Checkbox */}
+            <div
+              className={`p-4 rounded-xl border transition-all ${
+                isShippingConfirmed
+                  ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800"
+                  : "bg-amber-50/60 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/80 ring-1 ring-amber-400/20"
+              }`}
+            >
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isShippingConfirmed}
+                  onChange={(e) => setIsShippingConfirmed(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <div className="space-y-0.5">
+                  <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <span>Ship to This Address</span>
+                    {isShippingConfirmed ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-200/80 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
+                        ✓ Confirmed
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-200/80 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                        Action Required
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-normal">
+                    I confirm this is the correct shipping destination for this order.
+                  </p>
+                </div>
+              </label>
+            </div>
           </div>
 
           {/* 2. Payment Method & Terms Selection */}
@@ -1149,13 +1223,17 @@ export function RetailerCheckoutView({
             <div className="pt-2 space-y-3">
               <button
                 type="submit"
-                disabled={isSubmitting || items.length === 0 || isExceedingCreditLimit}
+                disabled={isSubmitting || items.length === 0 || isExceedingCreditLimit || !isShippingConfirmed}
                 className="w-full py-4 px-6 rounded-xl font-bold text-sm bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>
                     <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                     <span>Submitting Order...</span>
+                  </>
+                ) : !isShippingConfirmed ? (
+                  <>
+                    <span>Confirm Shipping Address to Submit</span>
                   </>
                 ) : (
                   <>
@@ -1164,6 +1242,12 @@ export function RetailerCheckoutView({
                   </>
                 )}
               </button>
+
+              {!isShippingConfirmed && items.length > 0 && (
+                <p className="text-[11px] text-center text-amber-600 dark:text-amber-400 font-medium">
+                  Please review and check &ldquo;Ship to This Address&rdquo; above to enable order submission.
+                </p>
+              )}
 
               <p className="text-[11px] text-center text-zinc-400 dark:text-zinc-500 leading-tight">
                 By submitting, you confirm authorization to place wholesale purchase orders on behalf of {companyName}.

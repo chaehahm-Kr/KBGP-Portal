@@ -8,8 +8,13 @@ import { type RetailerPurchaseAllowance } from "@/lib/retailer/purchase-limits";
 import { evaluateCartPromotionsAction } from "@/lib/retailer/promotion-actions";
 import { type EvaluatePromotionResult } from "@/lib/retailer/promotion-types";
 import { CartItemImage } from "@/components/retailer/cart-item-image";
+import type { ResolvedDefaultShippingDestination } from "@/lib/retailer/shipping-address-types";
 
-export function RetailerCartView() {
+interface CartViewProps {
+  defaultShippingDestination?: ResolvedDefaultShippingDestination | null;
+}
+
+export function RetailerCartView({ defaultShippingDestination }: CartViewProps = {}) {
   const {
     items,
     subtotal,
@@ -465,6 +470,61 @@ export function RetailerCartView() {
 
         {/* Right: Order Summary (4 cols on lg) */}
         <div className="lg:col-span-4 space-y-4 sticky top-20">
+          {/* Default Shipping Address Informational Summary Card */}
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 sm:p-5 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                <span>📍</span>
+                <span>Default Shipping Address</span>
+              </span>
+              {defaultShippingDestination && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  {defaultShippingDestination.isStoreFallback ? "Store Default" : "Default"}
+                </span>
+              )}
+            </div>
+
+            {defaultShippingDestination ? (
+              <div className="text-xs space-y-1 text-zinc-600 dark:text-zinc-300">
+                <div className="font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                  <span>{defaultShippingDestination.type === "store" ? "🏬" : "🏢"}</span>
+                  <span className="truncate">{defaultShippingDestination.name}</span>
+                </div>
+                {defaultShippingDestination.recipientName && (
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Recipient: {defaultShippingDestination.recipientName}
+                  </p>
+                )}
+                <p className="text-[11px] text-zinc-700 dark:text-zinc-300">
+                  {defaultShippingDestination.addressLine1}
+                  {defaultShippingDestination.addressLine2 ? `, ${defaultShippingDestination.addressLine2}` : ""}
+                </p>
+                <p className="text-[11px] text-zinc-700 dark:text-zinc-300">
+                  {defaultShippingDestination.city}, {defaultShippingDestination.state} {defaultShippingDestination.zip}
+                </p>
+                <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-[11px]">
+                  <span className="text-zinc-400">Change or confirm at Checkout</span>
+                  <Link
+                    href="/settings/shipping"
+                    className="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+                  >
+                    Manage ↗
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <span>ℹ️</span>
+                  <span>Shipping address required at Checkout.</span>
+                </p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  You can select a destination or add a new shipping address during checkout.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950 p-6 shadow-xs space-y-5">
             <h2 className="text-base font-bold text-zinc-900 dark:text-white border-b border-zinc-200 dark:border-zinc-800 pb-3">
               Order Summary

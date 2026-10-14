@@ -7,6 +7,9 @@ import type {
   RetailerShippingAddress,
   CreateShippingAddressInput,
   UpdateShippingAddressInput,
+  ResolvedDefaultShippingDestination,
+  StoreShippingOption,
+  RetailerShippingDestinationsResult,
 } from "./shipping-address-types";
 
 function mapRowToAddress(row: any): RetailerShippingAddress {
@@ -29,6 +32,15 @@ function mapRowToAddress(row: any): RetailerShippingAddress {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function revalidateShippingPaths() {
+  revalidatePath("/retailer/settings/shipping");
+  revalidatePath("/settings/shipping");
+  revalidatePath("/retailer/checkout");
+  revalidatePath("/checkout");
+  revalidatePath("/retailer/cart");
+  revalidatePath("/cart");
 }
 
 /**
@@ -129,8 +141,7 @@ export async function createRetailerShippingAddressAction(
       return { success: false, error: error.message };
     }
 
-    revalidatePath("/retailer/settings/shipping");
-    revalidatePath("/retailer/checkout");
+    revalidateShippingPaths();
 
     return {
       success: true,
@@ -198,8 +209,7 @@ export async function updateRetailerShippingAddressAction(
       return { success: false, error: error.message };
     }
 
-    revalidatePath("/retailer/settings/shipping");
-    revalidatePath("/retailer/checkout");
+    revalidateShippingPaths();
 
     return {
       success: true,
@@ -237,8 +247,7 @@ export async function deleteRetailerShippingAddressAction(
       return { success: false, error: error.message };
     }
 
-    revalidatePath("/retailer/settings/shipping");
-    revalidatePath("/retailer/checkout");
+    revalidateShippingPaths();
 
     return { success: true };
   } catch (err: any) {
@@ -280,8 +289,7 @@ export async function setDefaultRetailerShippingAddressAction(
       return { success: false, error: error.message };
     }
 
-    revalidatePath("/retailer/settings/shipping");
-    revalidatePath("/retailer/checkout");
+    revalidateShippingPaths();
 
     return { success: true };
   } catch (err: any) {
@@ -328,3 +336,228 @@ export async function adminGetRetailerShippingAddressesAction(
     return { success: false, data: [], error: err.message };
   }
 }
+
+/**
+ * Unset a saved shipping address as default, allowing Rule 2 store fallback to take effect.
+ */
+export async function unsetDefaultRetailerShippingAddressAction(
+  id: string
+): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const userContext = await getRetailerUserContext();
+    if (!userContext.companyId) {
+      return { success: false, error: "No organization associated with this account." };
+    }
+
+    const adminClient = createAdminClient();
+    const { error } = await adminClient
+      .from("retailer_shipping_addresses")
+      .update({ is_default: false, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("company_id", userContext.companyId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/retailer/settings/shipping");
+    revalidatePath("/retailer/checkout");
+    revalidatePath("/checkout");
+    revalidatePath("/retailer/cart");
+    revalidatePath("/cart");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("unsetDefaultRetailerShippingAddressAction error:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Authoritative Server Resolver for Company Default Shipping Destination:
+ * - Rule 1: Configured default saved address from retailer_shipping_addresses (is_default = true, is_active = true) with complete valid address.
+ * - Rule 2: If no configured default exists, fallback deterministically to first eligible registered Store (status = 'active', complete address/city/state/zip), ordered by name ASC.
+ * - Rule 3: If no eligible store/address exists, returns null.
+ */
+export async function resolveCompanyDefaultShippingDestination(
+  companyId: string,
+  client?: any
+): Promise<ResolvedDefaultShippingDestination | null> {
+  const adminClient = client || createAdminClient();
+
+  // Rule 1: Saved address explicit default
+  try {
+    const { data: defaultSaved } = await adminClient
+      .from("retailer_shipping_addresses")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .eq("is_default", true)
+      .maybeSingle();
+
+    if (
+      defaultSaved &&
+      defaultSaved.address_line1?.trim() &&
+      defaultSaved.city?.trim() &&
+      defaultSaved.state?.trim() &&
+      defaultSaved.zip?.trim()
+    ) {
+      return {
+        type: "saved_address",
+        id: defaultSaved.id,
+        name: defaultSaved.label,
+        recipientName: defaultSaved.recipient_name,
+        attentionName: defaultSaved.attention_name || null,
+        addressLine1: defaultSaved.address_line1.trim(),
+        addressLine2: defaultSaved.address_line2?.trim() || null,
+        city: defaultSaved.city.trim(),
+        state: defaultSaved.state.trim().toUpperCase(),
+        zip: defaultSaved.zip.trim(),
+        country: defaultSaved.country?.trim() || "US",
+        phone: defaultSaved.phone?.trim() || null,
+        deliveryNotes: defaultSaved.delivery_notes?.trim() || null,
+        isExplicitDefault: true,
+        isStoreFallback: false,
+      };
+    }
+  } catch (err) {
+    console.warn("Could not query default saved address:", err);
+  }
+
+  // Rule 2: Deterministic store fallback
+  try {
+    const { data: storeRows } = await adminClient
+      .from("stores")
+      .select("id, name, address, city, state, zip, phone, manager_name, status")
+      .eq("company_id", companyId)
+      .eq("status", "active")
+      .order("name", { ascending: true });
+
+    if (storeRows && storeRows.length > 0) {
+      const eligibleStore = storeRows.find(
+        (s: any) =>
+          s.address?.trim() &&
+          s.city?.trim() &&
+          s.state?.trim() &&
+          s.zip?.trim()
+      );
+
+      if (eligibleStore) {
+        return {
+          type: "store",
+          id: eligibleStore.id,
+          name: eligibleStore.name,
+          recipientName: eligibleStore.manager_name || eligibleStore.name,
+          attentionName: null,
+          addressLine1: eligibleStore.address.trim(),
+          addressLine2: null,
+          city: eligibleStore.city.trim(),
+          state: eligibleStore.state.trim().toUpperCase(),
+          zip: eligibleStore.zip.trim(),
+          country: "US",
+          phone: eligibleStore.phone || null,
+          deliveryNotes: null,
+          isExplicitDefault: false,
+          isStoreFallback: true,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("Could not query store fallback:", err);
+  }
+
+  // Rule 3: No default shipping destination available
+  return null;
+}
+
+/**
+ * Fetches all saved shipping addresses, registered stores, and the resolved default destination
+ * for the authenticated retailer's company.
+ */
+export async function getRetailerShippingDestinationsAction(): Promise<{
+  success: boolean;
+  data: RetailerShippingDestinationsResult;
+  error?: string;
+}> {
+  try {
+    const userContext = await getRetailerUserContext();
+    if (!userContext.companyId) {
+      return {
+        success: false,
+        data: { savedAddresses: [], stores: [], defaultDestination: null },
+        error: "No organization associated with this account.",
+      };
+    }
+
+    const companyId = userContext.companyId;
+    const adminClient = createAdminClient();
+
+    // 1. Fetch saved addresses
+    let savedAddresses: RetailerShippingAddress[] = [];
+    const { data: addressRows, error: addressErr } = await adminClient
+      .from("retailer_shipping_addresses")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (!addressErr && addressRows) {
+      savedAddresses = addressRows.map(mapRowToAddress);
+    }
+
+    // 2. Fetch stores
+    let stores: StoreShippingOption[] = [];
+    const { data: storeRows, error: storeErr } = await adminClient
+      .from("stores")
+      .select("id, name, address, city, state, zip, phone, manager_name, status")
+      .eq("company_id", companyId)
+      .eq("status", "active")
+      .order("name", { ascending: true });
+
+    if (!storeErr && storeRows) {
+      stores = storeRows.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        address: s.address || null,
+        city: s.city || null,
+        state: s.state || null,
+        zip: s.zip || null,
+        phone: s.phone || null,
+        managerName: s.manager_name || null,
+        isEligible: Boolean(
+          s.address?.trim() &&
+          s.city?.trim() &&
+          s.state?.trim() &&
+          s.zip?.trim()
+        ),
+      }));
+    }
+
+    // 3. Authoritatively resolve default destination
+    const defaultDestination = await resolveCompanyDefaultShippingDestination(
+      companyId,
+      adminClient
+    );
+
+    return {
+      success: true,
+      data: {
+        savedAddresses,
+        stores,
+        defaultDestination,
+      },
+    };
+  } catch (err: any) {
+    console.error("getRetailerShippingDestinationsAction error:", err);
+    return {
+      success: false,
+      data: { savedAddresses: [], stores: [], defaultDestination: null },
+      error: err.message,
+    };
+  }
+}
+

@@ -56,3 +56,40 @@ export interface OrderShippingSnapshot {
   phone?: string | null;
   deliveryNotes?: string | null;
 }
+
+export interface StoreShippingOption {
+  id: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  phone: string | null;
+  managerName?: string | null;
+  isEligible: boolean;
+}
+
+export interface ResolvedDefaultShippingDestination {
+  type: "saved_address" | "store";
+  id: string;
+  name: string;
+  recipientName: string;
+  attentionName?: string | null;
+  addressLine1: string;
+  addressLine2?: string | null;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+  phone?: string | null;
+  deliveryNotes?: string | null;
+  isExplicitDefault: boolean;
+  isStoreFallback: boolean;
+}
+
+export interface RetailerShippingDestinationsResult {
+  savedAddresses: RetailerShippingAddress[];
+  stores: StoreShippingOption[];
+  defaultDestination: ResolvedDefaultShippingDestination | null;
+}
+

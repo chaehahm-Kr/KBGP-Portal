@@ -4,6 +4,7 @@ import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RetailerCheckoutView } from "@/components/retailer/checkout-view";
 import { getRetailerPaymentEligibility } from "@/lib/retailer/payment-actions";
+import { resolveCompanyDefaultShippingDestination } from "@/lib/retailer/shipping-address-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,12 @@ export default async function RetailerCheckoutPage() {
     }
   }
 
+  // 5. Authoritatively resolve default shipping destination
+  let defaultDestination = null;
+  if (companyId) {
+    defaultDestination = await resolveCompanyDefaultShippingDestination(companyId, adminClient);
+  }
+
   return (
     <RetailerCheckoutView
       companyName={companyName}
@@ -101,6 +108,7 @@ export default async function RetailerCheckoutPage() {
       paymentEligibility={paymentEligibility}
       stores={stores}
       savedAddresses={savedAddresses}
+      defaultDestination={defaultDestination}
     />
   );
 }

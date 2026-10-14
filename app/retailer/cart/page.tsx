@@ -1,6 +1,7 @@
 import React from "react";
 import type { Metadata } from "next";
-import { verifyRetailerSession } from "@/lib/auth/dal";
+import { verifyRetailerSession, getRetailerUserContext } from "@/lib/auth/dal";
+import { resolveCompanyDefaultShippingDestination } from "@/lib/retailer/shipping-address-actions";
 import { RetailerCartView } from "@/components/retailer/cart-view";
 
 export const dynamic = "force-dynamic";
@@ -12,5 +13,11 @@ export const metadata: Metadata = {
 
 export default async function RetailerCartPage() {
   await verifyRetailerSession();
-  return <RetailerCartView />;
+  const userContext = await getRetailerUserContext();
+  let defaultShippingDestination = null;
+  if (userContext.companyId) {
+    defaultShippingDestination = await resolveCompanyDefaultShippingDestination(userContext.companyId);
+  }
+
+  return <RetailerCartView defaultShippingDestination={defaultShippingDestination} />;
 }

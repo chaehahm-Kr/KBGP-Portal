@@ -160,6 +160,7 @@ export interface SubmitOrderPayload {
   storeId?: string;
   savedAddressId?: string;
   destinationType?: "store" | "saved_address" | "custom_address";
+  isShippingConfirmed?: boolean;
   customShippingAddress?: {
     label?: string;
     recipientName: string;
@@ -309,6 +310,13 @@ export async function submitRetailerOrder(
 
     if (!payload.items || payload.items.length === 0) {
       return { success: false, error: "Order cart cannot be empty." };
+    }
+
+    if (!payload.isShippingConfirmed) {
+      return {
+        success: false,
+        error: "Please explicitly confirm the shipping destination before submitting your order.",
+      };
     }
 
     // 1. Fetch Company & Retailer Profile
