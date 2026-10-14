@@ -521,7 +521,8 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
     low: 3,
   };
   priorityActions.sort((a, b) => priorityWeights[a.priority] - priorityWeights[b.priority]);
-  const boundedPriorityActions = priorityActions.slice(0, 7);
+  // unconstrained for two-column domain action queues
+  const boundedPriorityActions = priorityActions;
 
   return {
     retailOrderValueMTD: Math.round(retailOrderValueMTD * 100) / 100,

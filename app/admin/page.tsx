@@ -95,29 +95,17 @@ export default async function AdminHomePage() {
     }
   };
 
-  // Helper for Domain Tag
-  const getDomainTag = (domain: ActionDomain) => {
-    switch (domain) {
-      case "hub":
-        return {
-          label: "K SELECT HUB",
-          className:
-            "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-900/50",
-        };
-      case "network":
-        return {
-          label: "K SELECT NETWORK",
-          className:
-            "bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-900/50",
-        };
-      case "finance":
-        return {
-          label: "Finance",
-          className:
-            "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700",
-        };
-    }
-  };
+  // Critical Actions (Company-wide urgent exceptions)
+  const criticalActions = metrics.priorityActions.filter((a) => a.priority === "critical");
+
+  // Domain-specific action queues (top 3-5 items each, excluding critical actions promoted to strip)
+  const hubActions = metrics.priorityActions
+    .filter((a) => a.domain === "hub" && a.priority !== "critical")
+    .slice(0, 5);
+
+  const networkActions = metrics.priorityActions
+    .filter((a) => a.domain === "network" && a.priority !== "critical")
+    .slice(0, 5);
 
   const formattedFreshness = `Production Data · As of ${formatEasternDateTime(metrics.generatedAt)} EDT`;
 
@@ -141,7 +129,7 @@ export default async function AdminHomePage() {
         </div>
       </div>
 
-      {/* 2. Top 4 Executive KPI Strip (100% Authoritative Production DB) */}
+      {/* 2. Common Executive Overview (Full Width — 4 Authoritative Production KPIs) */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* KPI 1: Retail Order Value — MTD */}
         <Link
@@ -240,399 +228,555 @@ export default async function AdminHomePage() {
         </Link>
       </div>
 
-      {/* 3. Priority Action Center (State-driven Operational Queue) */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4">
-          <div>
+      {/* 3. Common Critical Action Strip (Full Width — Conditional: Hidden when 0 verified critical exceptions) */}
+      {criticalActions.length > 0 && (
+        <div className="rounded-xl border border-rose-300 bg-rose-50/70 p-4 shadow-xs dark:border-rose-900/60 dark:bg-rose-950/40">
+          <div className="flex items-center justify-between border-b border-rose-200 dark:border-rose-900/60 pb-2 mb-3">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
-                우선 조치 과제 (Priority Action Center)
+              <span className="h-2.5 w-2.5 rounded-full bg-rose-600 animate-pulse shrink-0" />
+              <h2 className="text-xs font-bold text-rose-950 dark:text-rose-100 uppercase tracking-wider">
+                긴급 조치 과제 (Critical Actions) — 전사 즉시 대응 요망
               </h2>
-              {metrics.priorityActions.length > 0 ? (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                  {metrics.priorityActions.length}건 활성 조치
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                  정상 운영
-                </span>
-              )}
             </div>
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-              실제 데이터베이스 미결 레코드 기반 실시간 운영 조치 큐 (우선순위 자동 정렬)
-            </p>
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-200 text-rose-800 dark:bg-rose-900 dark:text-rose-200">
+              {criticalActions.length}건 긴급
+            </span>
           </div>
-          <div className="text-[11px] text-zinc-400 self-start sm:self-auto">
-            정렬 기준: Critical → High → Medium → Low
-          </div>
-        </div>
-
-        {metrics.priorityActions.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {metrics.priorityActions.map((action) => {
-              const pBadge = getPriorityBadge(action.priority);
-              const dTag = getDomainTag(action.domain);
-              return (
-                <div
-                  key={action.id}
-                  className="flex flex-col justify-between rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-4 transition-all hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:border-zinc-700 dark:hover:bg-zinc-800/70"
-                >
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${pBadge.className}`}>
-                        {pBadge.label}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${dTag.className}`}>
-                        {dTag.label}
-                      </span>
-                    </div>
-                    <h3 className="text-xs font-bold text-zinc-900 dark:text-white leading-snug">
-                      {action.title}
-                    </h3>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
-                      {action.description}
-                    </p>
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-zinc-200/60 dark:border-zinc-800/80 flex items-center justify-between">
-                    <span className="text-[10px] font-semibold text-zinc-400">
-                      {action.count !== undefined ? `${action.count}건 대상` : action.amount !== undefined ? `$${action.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "조치 대기"}
-                    </span>
-                    <Link
-                      href={action.actionUrl}
-                      className="inline-flex items-center text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline cursor-pointer"
-                    >
-                      {action.actionLabel}
-                    </Link>
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {criticalActions.map((action) => (
+              <div
+                key={action.id}
+                className="flex items-center justify-between p-3 rounded-lg bg-white/80 dark:bg-zinc-900/80 border border-rose-200 dark:border-rose-900/50"
+              >
+                <div>
+                  <h3 className="text-xs font-bold text-rose-950 dark:text-rose-200">{action.title}</h3>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">{action.description}</p>
                 </div>
-              );
-            })}
+                <Link
+                  href={action.actionUrl}
+                  className="ml-3 shrink-0 px-3 py-1 rounded text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white"
+                >
+                  {action.actionLabel}
+                </Link>
+              </div>
+            ))}
           </div>
-        ) : (
-          <div className="py-8 text-center rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800">
-            <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
-              현재 조치가 필요한 긴급 작업이 없습니다.
-            </span>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">
-              모든 발주, 출고 및 신청서 심사가 정상적으로 처리되었습니다.
-            </p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* 4. Business Section 1: K SELECT HUB (Retail Operations) — Subtle Blue Accent */}
-      <div className="rounded-xl border border-blue-200/70 bg-white p-5 shadow-xs dark:border-blue-900/40 dark:bg-zinc-900">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-blue-100/60 dark:border-blue-950 pb-3 mb-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
-                K SELECT HUB · Retail Operations (리테일 발주 및 배송)
-              </h2>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-900/50">
-                HUB Retail
+      {/* 4. Two-Column Business Operations Layout (Desktop: 50/50 Side-by-Side, Mobile: Stacked) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {/* ========================================================
+            LEFT COLUMN: K SELECT HUB (Retail Operations) — Subtle Blue Accent
+            ======================================================== */}
+        <div className="rounded-xl border border-blue-200/80 bg-white p-5 shadow-xs dark:border-blue-900/40 dark:bg-zinc-900 space-y-6">
+          {/* Column Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-blue-100/70 dark:border-blue-950 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  K SELECT HUB
+                </span>
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+                  리테일 운영 관제 (Retail Operations)
+                </h2>
+              </div>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                Orders, Fulfillment & Retail Stores
+              </p>
+            </div>
+            <Link
+              href="/admin/sales/orders"
+              className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline shrink-0"
+            >
+              Order Processing 바로가기 →
+            </Link>
+          </div>
+
+          {/* Subsection A: Retail Action Queue (Top 3-5 Authoritative Records) */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                리테일 조치 과제 (Retail Actions)
+              </span>
+              <span className="text-[10px] font-semibold text-zinc-400">
+                {hubActions.length > 0 ? `${hubActions.length}건 대기` : "조치 과제 없음"}
               </span>
             </div>
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-              리테일러 주문 파이프라인, 출고 지시 및 패키징 박스 운송장 상태
-            </p>
+
+            {hubActions.length > 0 ? (
+              <div className="space-y-2">
+                {hubActions.map((action) => {
+                  const pBadge = getPriorityBadge(action.priority);
+                  return (
+                    <div
+                      key={action.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border border-zinc-150 bg-zinc-50/60 hover:bg-zinc-50 hover:border-zinc-250 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:border-zinc-700 transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${pBadge.className}`}>
+                            {pBadge.label}
+                          </span>
+                          <h3 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                            {action.title}
+                          </h3>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
+                          {action.description}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-zinc-200/60 dark:border-zinc-800">
+                        {action.count !== undefined && (
+                          <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                            {action.count}건
+                          </span>
+                        )}
+                        <Link
+                          href={action.actionUrl}
+                          className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline"
+                        >
+                          {action.actionLabel}
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-4 text-center rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 text-xs text-zinc-400">
+                현재 지연 또는 보류된 리테일 조치 과제가 없습니다.
+              </div>
+            )}
           </div>
-          <Link
-            href="/admin/sales/orders"
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline shrink-0"
-          >
-            Order Processing 바로가기 →
-          </Link>
-        </div>
 
-        {/* Actionable Counters Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Link
-            href="/admin/sales/orders?status=submitted"
-            className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-amber-300 transition-colors"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">신규 주문 (New)</span>
-            <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-              {metrics.activeOrdersSummary.newOrders}건
-            </div>
-            <span className="text-[10px] text-zinc-400 block mt-0.5">주문 확인 필요</span>
-          </Link>
-
-          <Link
-            href="/admin/sales/orders?quickFilter=ready"
-            className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-blue-300 transition-colors"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">출고 준비 (Ready)</span>
-            <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-              {metrics.activeOrdersSummary.readyToProcess}건
-            </div>
-            <span className="text-[10px] text-zinc-400 block mt-0.5">즉시 패키징 가능</span>
-          </Link>
-
-          <Link
-            href="/admin/sales/orders?quickFilter=tracking_missing"
-            className={`p-3 rounded-lg border transition-colors ${
-              metrics.activeOrdersSummary.trackingMissing > 0
-                ? "bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40"
-                : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-150 dark:border-zinc-800"
-            }`}
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">송장 등록 필요</span>
-            <div className="text-lg font-black text-amber-600 dark:text-amber-400 mt-1">
-              {metrics.activeOrdersSummary.trackingMissing}건
-            </div>
-            <span className="text-[10px] text-zinc-400 block mt-0.5">Tracking 누락</span>
-          </Link>
-
-          <Link
-            href="/admin/sales/orders?status=processing"
-            className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-indigo-300 transition-colors"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">처리 중 (Processing)</span>
-            <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-              {metrics.activeOrdersSummary.processing}건
-            </div>
-            <span className="text-[10px] text-zinc-400 block mt-0.5">피킹/검수 진행</span>
-          </Link>
-
-          <Link
-            href="/admin/sales/orders?status=partially_shipped"
-            className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">부분 출고</span>
-            <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-              {metrics.activeOrdersSummary.partiallyShipped}건
-            </div>
-            <span className="text-[10px] text-zinc-400 block mt-0.5">잔여 출고 대기</span>
-          </Link>
-
-          <Link
-            href="/admin/sales/orders?quickFilter=on_hold"
-            className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">출고 보류 (Hold)</span>
-            <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-              {metrics.activeOrdersSummary.onHold}건
-            </div>
-            <span className="text-[10px] text-zinc-400 block mt-0.5">취소/주소 보류</span>
-          </Link>
-
-          <Link
-            href="/admin/sales/orders?status=submitted,processing,partially_shipped"
-            className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">3일 이상 미완료</span>
-            <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-              {metrics.activeOrdersSummary.open3PlusDays}건
-            </div>
-            <span className="text-[10px] text-zinc-400 block mt-0.5">Aging 지연 점검</span>
-          </Link>
-
-          <div className="p-3 rounded-lg bg-zinc-50/50 dark:bg-zinc-800/40 border border-zinc-150 dark:border-zinc-800 opacity-80">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">완료 주문 (Completed)</span>
-            <div className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1">
-              {metrics.activeOrdersSummary.completed}건
-            </div>
-            <span className="text-[10px] text-zinc-400 block mt-0.5">배송/취소 종결</span>
-          </div>
-        </div>
-
-        {/* Compact Retail Order Volume Contextual Strip (Replacing large redundant chart) */}
-        <div className="mt-4 pt-3 border-t border-blue-50 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-              Retail Order Value · 2026년 10월 MTD:
+          {/* Subsection B: Retail KPI Summary (2-Tier Hierarchy: Primary 3 Cards + Secondary 5 Compact Tiles) */}
+          <div className="space-y-3 pt-2">
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+              주문 및 물류 파이프라인 (Order & Dispatch Pipeline)
             </span>
-            <span className="font-bold text-zinc-900 dark:text-white">
-              ${metrics.retailOrderValueMTD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <span className="text-[11px] text-zinc-400">
-              ({metrics.retailOrdersMTDCount}건 확정 · 발주일자 기준 · 취소 제외)
-            </span>
-          </div>
-          <div className="text-[11px] text-zinc-400 flex items-center gap-1.5">
-            <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
-            <span>데이터 신뢰성 정책 준수 (100% 확정 DB 레코드 기준 집계)</span>
-          </div>
-        </div>
-      </div>
 
-      {/* 5. Business Section 2: K SELECT NETWORK (Brand & Product Operations) — Subtle Purple Accent */}
-      <div className="rounded-xl border border-purple-200/70 bg-white p-5 shadow-xs dark:border-purple-900/40 dark:bg-zinc-900">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-purple-100/60 dark:border-purple-950 pb-3 mb-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
-                K SELECT NETWORK · Brand & Product Operations (브랜드 및 제품)
-              </h2>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-900/50">
-                Brand Network
+            {/* Tier 1: Primary Operational Signals */}
+            <div className="grid grid-cols-3 gap-2.5">
+              <Link
+                href="/admin/sales/orders?status=submitted"
+                className="p-3 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 hover:border-amber-300 transition-colors"
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
+                  신규 접수
+                </span>
+                <div className="text-xl font-black text-amber-700 dark:text-amber-300 mt-0.5">
+                  {metrics.activeOrdersSummary.newOrders}건
+                </div>
+                <span className="text-[10px] text-amber-600/70 block mt-0.5">New Orders</span>
+              </Link>
+
+              <Link
+                href="/admin/sales/orders?quickFilter=ready"
+                className="p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 hover:border-blue-300 transition-colors"
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 block">
+                  출고 준비
+                </span>
+                <div className="text-xl font-black text-blue-700 dark:text-blue-300 mt-0.5">
+                  {metrics.activeOrdersSummary.readyToProcess}건
+                </div>
+                <span className="text-[10px] text-blue-600/70 block mt-0.5">Ready to Ship</span>
+              </Link>
+
+              <Link
+                href="/admin/sales/orders?quickFilter=tracking_missing"
+                className={`p-3 rounded-lg border transition-colors ${
+                  metrics.activeOrdersSummary.trackingMissing > 0
+                    ? "bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40"
+                    : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-150 dark:border-zinc-800"
+                }`}
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 block">
+                  송장 미등록
+                </span>
+                <div className="text-xl font-black text-rose-700 dark:text-rose-300 mt-0.5">
+                  {metrics.activeOrdersSummary.trackingMissing}건
+                </div>
+                <span className="text-[10px] text-rose-600/70 block mt-0.5">Tracking Needed</span>
+              </Link>
+            </div>
+
+            {/* Tier 2: Secondary Informational Metrics (Compact Row) */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
+              <Link
+                href="/admin/sales/orders?status=processing"
+                className="p-2 rounded bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-indigo-300 transition-colors"
+              >
+                <span className="text-[9px] font-semibold text-zinc-400 block">처리 중</span>
+                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{metrics.activeOrdersSummary.processing}건</span>
+              </Link>
+              <Link
+                href="/admin/sales/orders?status=partially_shipped"
+                className="p-2 rounded bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
+              >
+                <span className="text-[9px] font-semibold text-zinc-400 block">부분 출고</span>
+                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{metrics.activeOrdersSummary.partiallyShipped}건</span>
+              </Link>
+              <Link
+                href="/admin/sales/orders?quickFilter=on_hold"
+                className="p-2 rounded bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
+              >
+                <span className="text-[9px] font-semibold text-zinc-400 block">출고 보류</span>
+                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{metrics.activeOrdersSummary.onHold}건</span>
+              </Link>
+              <Link
+                href="/admin/sales/orders?status=submitted,processing,partially_shipped"
+                className="p-2 rounded bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
+              >
+                <span className="text-[9px] font-semibold text-zinc-400 block">3일+ 미결</span>
+                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{metrics.activeOrdersSummary.open3PlusDays}건</span>
+              </Link>
+              <Link
+                href="/admin/sales/orders?status=delivered"
+                className="p-2 rounded bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors col-span-2 sm:col-span-1"
+              >
+                <span className="text-[9px] font-semibold text-zinc-400 block">완료 주문</span>
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{metrics.activeOrdersSummary.completed}건</span>
+              </Link>
+            </div>
+
+            {/* Context Note */}
+            <div className="pt-2 text-[10px] text-zinc-400 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800/80">
+              <span>October 2026 · Order Date Basis · Cancelled Excluded</span>
+              <span className="font-semibold text-zinc-600 dark:text-zinc-400">Total {metrics.activeOrdersSummary.total}건</span>
+            </div>
+          </div>
+
+          {/* Subsection C: Recent Retail Orders (Moved inside HUB column) */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                최근 리테일 발주 (Recent Orders)
               </span>
+              <Link
+                href="/admin/sales/orders"
+                className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline"
+              >
+                전체 주문 보기 →
+              </Link>
             </div>
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-              브랜드 입점 신청 심사, 파트너십 및 제품 카탈로그·물류 규격 통합 관리
-            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
+                <thead>
+                  <tr className="border-b border-zinc-100 font-bold text-zinc-950 dark:border-zinc-800 dark:text-white">
+                    <th className="py-2">주문번호</th>
+                    <th className="py-2">발주처 / 매장</th>
+                    <th className="py-2">상태</th>
+                    <th className="py-2 text-right">금액</th>
+                    <th className="py-2 text-right">일시</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900">
+                  {metrics.recentOrders.slice(0, 5).map((ord) => {
+                    const badge = getOrderStatusBadge(ord.orderStatus);
+                    return (
+                      <tr key={ord.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
+                        <td className="py-2.5 font-semibold text-zinc-950 dark:text-white">
+                          <Link href="/admin/sales/orders" className="hover:underline">
+                            {ord.orderNumber}
+                          </Link>
+                        </td>
+                        <td className="py-2.5">
+                          <div className="font-medium text-zinc-800 dark:text-zinc-200 truncate max-w-[120px]">
+                            {ord.companyName}
+                          </div>
+                          <div className="text-[10px] text-zinc-400 truncate max-w-[120px]">{ord.storeName}</div>
+                        </td>
+                        <td className="py-2.5">
+                          <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-semibold ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-right font-semibold text-zinc-900 dark:text-white">
+                          ${Number(ord.totalAmount || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-2.5 text-right text-[10px]">
+                          {formatEasternDate(ord.createdAt)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {metrics.recentOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-center text-zinc-400 text-xs">
+                        접수된 리테일러 발주가 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <Link
-            href="/admin/applications"
-            className="text-xs font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 hover:underline shrink-0"
-          >
-            신청서 관리 바로가기 →
-          </Link>
         </div>
 
-        {/* Group A: Brand Partnerships & Applications */}
-        <div className="mb-4">
-          <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
-            입점 신청 및 파트너사 현황 (Brand Applications & Partnerships)
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <Link
-              href="/admin/applications?status=submitted"
-              className="p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 hover:border-blue-300 transition-colors"
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">관리자 심사 대기</span>
-              <div className="text-lg font-black text-blue-700 dark:text-blue-300 mt-1">
-                {metrics.brandOps.pendingAdminReviewCount}건
+        {/* ========================================================
+            RIGHT COLUMN: K SELECT NETWORK (Brand & Product Operations) — Subtle Purple Accent
+            ======================================================== */}
+        <div className="rounded-xl border border-purple-200/80 bg-white p-5 shadow-xs dark:border-purple-900/40 dark:bg-zinc-900 space-y-6">
+          {/* Column Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-purple-100/70 dark:border-purple-950 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                  K SELECT NETWORK
+                </span>
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+                  브랜드 및 제품 관제 (Brand & Product Operations)
+                </h2>
               </div>
-              <span className="text-[10px] text-blue-600/70 block mt-0.5">Admin Action</span>
-            </Link>
-
-            <Link
-              href="/admin/applications?status=info_requested"
-              className="p-3 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 hover:border-amber-300 transition-colors"
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">보완 자료 회신 대기</span>
-              <div className="text-lg font-black text-amber-700 dark:text-amber-300 mt-1">
-                {metrics.brandOps.waitingForBrandCount}건
-              </div>
-              <span className="text-[10px] text-amber-600/70 block mt-0.5">Waiting for Brand</span>
-            </Link>
-
-            <Link
-              href="/admin/partner-inquiries"
-              className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">오픈 파트너 문의</span>
-              <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-                {metrics.brandOps.openPartnerInquiriesCount}건
-              </div>
-              <span className="text-[10px] text-zinc-400 block mt-0.5">미응대 문의</span>
-            </Link>
-
-            <Link
-              href="/admin/brands"
-              className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">등록 브랜드</span>
-              <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-                {metrics.brandOps.totalBrands}개
-              </div>
-              <span className="text-[10px] text-zinc-400 block mt-0.5">파트너 브랜드</span>
-            </Link>
-
-            <Link
-              href="/admin/companies"
-              className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">활성 입점사</span>
-              <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-                {metrics.brandOps.activeCompanies}개사
-              </div>
-              <span className="text-[10px] text-zinc-400 block mt-0.5">전체 {metrics.brandOps.totalCompanies}개사</span>
-            </Link>
-
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                Applications, Onboarding & Curation
+              </p>
+            </div>
             <Link
               href="/admin/applications"
-              className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
+              className="text-xs font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 hover:underline shrink-0"
             >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">전체 접수 신청서</span>
-              <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-                {metrics.brandOps.totalNonDraftApplications}건
-              </div>
-              <span className="text-[10px] text-zinc-400 block mt-0.5">승인 {metrics.brandOps.approvedApplicationsCount}건</span>
+              신청서 관리 바로가기 →
             </Link>
           </div>
-        </div>
 
-        {/* Group B: Product Catalog & Logistics Specifications (Grouped under Brand Operations) */}
-        <div className="pt-3 border-t border-purple-50 dark:border-zinc-800">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-              제품 카탈로그 및 물류 규격 (Product Catalog & Logistics Specs)
+          {/* Subsection A: Brand Action Queue (Top 3-5 Authoritative Records) */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                브랜드 조치 과제 (Brand Actions)
+              </span>
+              <span className="text-[10px] font-semibold text-zinc-400">
+                {networkActions.length > 0 ? `${networkActions.length}건 대기` : "조치 과제 없음"}
+              </span>
+            </div>
+
+            {networkActions.length > 0 ? (
+              <div className="space-y-2">
+                {networkActions.map((action) => {
+                  const pBadge = getPriorityBadge(action.priority);
+                  const isWaitingForBrand = action.id === "low-waiting-for-brand";
+                  return (
+                    <div
+                      key={action.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border border-zinc-150 bg-zinc-50/60 hover:bg-zinc-50 hover:border-zinc-250 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:border-zinc-700 transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${pBadge.className}`}>
+                            {pBadge.label}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                              isWaitingForBrand
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                                : "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+                            }`}
+                          >
+                            {isWaitingForBrand ? "Waiting for Brand" : "Admin Action"}
+                          </span>
+                          <h3 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                            {action.title}
+                          </h3>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
+                          {action.description}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-zinc-200/60 dark:border-zinc-800">
+                        {action.count !== undefined && (
+                          <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                            {action.count}건
+                          </span>
+                        )}
+                        <Link
+                          href={action.actionUrl}
+                          className="text-xs font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 hover:underline"
+                        >
+                          {action.actionLabel}
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-4 text-center rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 text-xs text-zinc-400">
+                현재 대기 중인 브랜드 조치 과제가 없습니다.
+              </div>
+            )}
+          </div>
+
+          {/* Subsection B: Brand & Product KPI Summary (2-Tier Hierarchy: Primary 3 Cards + Secondary 5 Compact Tiles) */}
+          <div className="space-y-3 pt-2">
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+              파트너십 및 카탈로그 현황 (Partnerships & Catalog)
             </span>
-            <Link
-              href="/admin/products/trading"
-              className="text-xs font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 hover:underline"
-            >
-              Trading Products 바로가기 →
-            </Link>
+
+            {/* Tier 1: Primary Operational Signals */}
+            <div className="grid grid-cols-3 gap-2.5">
+              <Link
+                href="/admin/applications?status=submitted"
+                className="p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 hover:border-blue-300 transition-colors"
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 block">
+                  관리자 심사 대기
+                </span>
+                <div className="text-xl font-black text-blue-700 dark:text-blue-300 mt-0.5">
+                  {metrics.brandOps.pendingAdminReviewCount}건
+                </div>
+                <span className="text-[10px] text-blue-600/70 block mt-0.5">Admin Review</span>
+              </Link>
+
+              <Link
+                href="/admin/partner-inquiries"
+                className="p-3 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40 hover:border-indigo-300 transition-colors"
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block">
+                  미확인 파트너 문의
+                </span>
+                <div className="text-xl font-black text-indigo-700 dark:text-indigo-300 mt-0.5">
+                  {metrics.brandOps.openPartnerInquiriesCount}건
+                </div>
+                <span className="text-[10px] text-indigo-600/70 block mt-0.5">Partner Inquiries</span>
+              </Link>
+
+              <Link
+                href="/admin/products"
+                className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 block">
+                  카탈로그 미검토
+                </span>
+                <div className="text-xl font-black text-zinc-800 dark:text-zinc-200 mt-0.5">
+                  {metrics.catalogSummary.unreviewed}개
+                </div>
+                <span className="text-[10px] text-zinc-400 block mt-0.5">Selection Review</span>
+              </Link>
+            </div>
+
+            {/* Tier 2: Secondary Informational Metrics (Compact Row) */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
+              <Link
+                href="/admin/applications?status=info_requested"
+                className="p-2 rounded bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-amber-300 transition-colors"
+              >
+                <span className="text-[9px] font-semibold text-zinc-400 block">보완 대기</span>
+                <span className="text-xs font-bold text-amber-600 dark:text-amber-400">{metrics.brandOps.waitingForBrandCount}건</span>
+              </Link>
+              <Link
+                href="/admin/brands"
+                className="p-2 rounded bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
+              >
+                <span className="text-[9px] font-semibold text-zinc-400 block">등록 브랜드</span>
+                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{metrics.brandOps.totalBrands}개</span>
+              </Link>
+              <Link
+                href="/admin/products/trading"
+                className="p-2 rounded bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-purple-300 transition-colors"
+              >
+                <span className="text-[9px] font-semibold text-zinc-400 block">거래 활성</span>
+                <span className="text-xs font-bold text-purple-700 dark:text-purple-300">{metrics.catalogSummary.activeTrading}개</span>
+              </Link>
+              <Link
+                href="/admin/products"
+                className="p-2 rounded bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-emerald-300 transition-colors"
+              >
+                <span className="text-[9px] font-semibold text-zinc-400 block">HUB 노출</span>
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{metrics.catalogSummary.hubPublished}개</span>
+              </Link>
+              <Link
+                href="/admin/products"
+                className="p-2 rounded bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-amber-300 transition-colors col-span-2 sm:col-span-1"
+              >
+                <span className="text-[9px] font-semibold text-zinc-400 block">규격 누락</span>
+                <span className="text-xs font-bold text-amber-600 dark:text-amber-400">{metrics.catalogSummary.missingRequiredSpecs}개</span>
+              </Link>
+            </div>
+
+            {/* Context Note */}
+            <div className="pt-2 text-[10px] text-zinc-400 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800/80">
+              <span>Catalog Grouped under Brand & Product Operations</span>
+              <span className="font-semibold text-zinc-600 dark:text-zinc-400">Total {metrics.catalogSummary.totalProducts}개 제품</span>
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <Link
-              href="/admin/products/trading"
-              className="p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 hover:border-blue-300 transition-colors"
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">거래 대상 (Active)</span>
-              <div className="text-lg font-black text-blue-700 dark:text-blue-300 mt-1">
-                {metrics.catalogSummary.activeTrading}개
-              </div>
-              <span className="text-[10px] text-blue-600/70 block mt-0.5">Trading Active</span>
-            </Link>
 
-            <Link
-              href="/admin/products/trading"
-              className="p-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 hover:border-emerald-300 transition-colors"
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">HUB 공개 (Published)</span>
-              <div className="text-lg font-black text-emerald-700 dark:text-emerald-300 mt-1">
-                {metrics.catalogSummary.hubPublished}개
-              </div>
-              <span className="text-[10px] text-emerald-600/70 block mt-0.5">리테일러 구매 가능</span>
-            </Link>
+          {/* Subsection C: Recent Brand Applications (Moved inside NETWORK column) */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                최근 브랜드 신청 (Recent Applications)
+              </span>
+              <Link
+                href="/admin/applications"
+                className="text-xs font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 hover:underline"
+              >
+                전체 신청서 보기 →
+              </Link>
+            </div>
 
-            <Link
-              href="/admin/products"
-              className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors"
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">입점 미검토 제품</span>
-              <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-                {metrics.catalogSummary.unreviewed}개
-              </div>
-              <span className="text-[10px] text-zinc-400 block mt-0.5">선정 심사 대기</span>
-            </Link>
-
-            <Link
-              href="/admin/products"
-              className="p-3 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 hover:border-amber-300 transition-colors"
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">물류 스펙 미기입</span>
-              <div className="text-lg font-black text-amber-700 dark:text-amber-300 mt-1">
-                {metrics.catalogSummary.missingRequiredSpecs}개
-              </div>
-              <span className="text-[10px] text-amber-600/70 block mt-0.5">CBM/무게 미입력</span>
-            </Link>
-
-            <Link
-              href="/admin/products"
-              className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-150 dark:border-zinc-800 hover:border-zinc-300 transition-colors col-span-2 sm:col-span-1"
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">전체 등록 카탈로그</span>
-              <div className="text-lg font-black text-zinc-900 dark:text-white mt-1">
-                {metrics.catalogSummary.totalProducts}개
-              </div>
-              <span className="text-[10px] text-zinc-400 block mt-0.5">DB 등록 전체 품목</span>
-            </Link>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
+                <thead>
+                  <tr className="border-b border-zinc-100 font-bold text-zinc-950 dark:border-zinc-800 dark:text-white">
+                    <th className="py-2">신청번호</th>
+                    <th className="py-2">회사명</th>
+                    <th className="py-2">상태</th>
+                    <th className="py-2">접수일</th>
+                    <th className="py-2 text-right">심사</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900">
+                  {metrics.recentApplications.slice(0, 5).map((app) => (
+                    <tr key={app.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
+                      <td className="py-2.5 font-semibold text-zinc-950 dark:text-white">
+                        {app.applicationNumber}
+                      </td>
+                      <td className="py-2.5 font-medium text-zinc-800 dark:text-zinc-200 truncate max-w-[130px]">
+                        {app.companyName}
+                      </td>
+                      <td className="py-2.5">
+                        <span className="inline-block rounded bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                          {APPLICATION_STATUS_LABEL[app.status as ApplicationStatus] || app.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-[10px]">
+                        {formatEasternDate(app.submittedAt || app.createdAt)}
+                      </td>
+                      <td className="py-2.5 text-right">
+                        <Link
+                          href={`/admin/applications/${app.id}`}
+                          className="font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 hover:underline"
+                        >
+                          심사 →
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                  {metrics.recentApplications.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-center text-zinc-400 text-xs">
+                        대기 중인 브랜드 신청서가 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 6. Business Section 3: Finance & Credit Control (Neutral with Meaningful Risk Colors) */}
+      {/* 5. Common Finance & Credit Control (Full Width — Exception-Oriented Layout below the Two Business Columns) */}
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4">
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
-                Finance & Credit Control (외상매출 및 정산 관리)
+                재무 및 채권 관리 (Finance & Accounts Receivable)
               </h2>
               {metrics.openAR.pastDueAmount > 0 ? (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-900">
@@ -645,14 +789,14 @@ export default async function AdminHomePage() {
               )}
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-              Net Terms 인보이스 미수금, 연체 위험 관리 및 인보이스 결제 상태
+              B3-R1 출고 기반 인보이스 자동 발행 및 B5 취소 연동 authoritative Finance 데이터
             </p>
           </div>
           <Link
             href="/admin/finance/receivables"
             className="text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 hover:underline shrink-0"
           >
-            Invoices & Receivables 바로가기 →
+            외상매출장(Receivables) 상세 →
           </Link>
         </div>
 
@@ -720,150 +864,6 @@ export default async function AdminHomePage() {
             </div>
             <span className="text-[10px] text-zinc-400 block mt-0.5">주문취소 연동 Void</span>
           </Link>
-        </div>
-      </div>
-
-      {/* 7. Recent Activity Section (Clearly Marked: Recent Orders [HUB] vs Recent Applications [NETWORK]) */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Left Column: Recent Retailer Orders (K SELECT HUB) */}
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
-                최근 리테일러 발주 (Recent Orders)
-              </h2>
-              <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                K SELECT HUB
-              </span>
-            </div>
-            <Link
-              href="/admin/sales/orders"
-              className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-            >
-              전체보기 →
-            </Link>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
-              <thead>
-                <tr className="border-b border-zinc-100 font-bold text-zinc-950 dark:border-zinc-800 dark:text-white">
-                  <th className="py-2.5">주문번호</th>
-                  <th className="py-2.5">발주처 / 매장</th>
-                  <th className="py-2.5">상태</th>
-                  <th className="py-2.5 text-right">금액</th>
-                  <th className="py-2.5 text-right">발주일시</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900">
-                {metrics.recentOrders.map((ord) => {
-                  const badge = getOrderStatusBadge(ord.orderStatus);
-                  return (
-                    <tr key={ord.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
-                      <td className="py-3 font-semibold text-zinc-950 dark:text-white">
-                        <Link href="/admin/sales/orders" className="hover:underline">
-                          {ord.orderNumber}
-                        </Link>
-                      </td>
-                      <td className="py-3">
-                        <div className="font-medium text-zinc-800 dark:text-zinc-200">
-                          {ord.companyName}
-                        </div>
-                        <div className="text-[10px] text-zinc-400">{ord.storeName}</div>
-                      </td>
-                      <td className="py-3">
-                        <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}>
-                          {badge.label}
-                        </span>
-                      </td>
-                      <td className="py-3 text-right font-semibold text-zinc-900 dark:text-white">
-                        ${Number(ord.totalAmount || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-3 text-right text-[11px]">
-                        {formatEasternDate(ord.createdAt)}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {metrics.recentOrders.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-center text-zinc-400">
-                      접수된 리테일러 발주가 없습니다.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Right Column: Recent Brand Applications (K SELECT NETWORK) */}
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
-                최근 입점 신청서 (Recent Applications)
-              </h2>
-              <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
-                K SELECT NETWORK
-              </span>
-            </div>
-            <Link
-              href="/admin/applications"
-              className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-            >
-              전체보기 →
-            </Link>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
-              <thead>
-                <tr className="border-b border-zinc-100 font-bold text-zinc-950 dark:border-zinc-800 dark:text-white">
-                  <th className="py-2.5">신청번호</th>
-                  <th className="py-2.5">회사명</th>
-                  <th className="py-2.5">상태</th>
-                  <th className="py-2.5">신청일</th>
-                  <th className="py-2.5 text-right">관리</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900">
-                {metrics.recentApplications.map((app) => (
-                  <tr key={app.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
-                    <td className="py-3 font-semibold text-zinc-950 dark:text-white">
-                      {app.applicationNumber}
-                    </td>
-                    <td className="py-3 font-medium text-zinc-800 dark:text-zinc-200">
-                      {app.companyName}
-                    </td>
-                    <td className="py-3">
-                      <span className="inline-block rounded bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                        {APPLICATION_STATUS_LABEL[app.status as ApplicationStatus] || app.status}
-                      </span>
-                    </td>
-                    <td className="py-3 text-[11px]">
-                      {formatEasternDate(app.submittedAt || app.createdAt)}
-                    </td>
-                    <td className="py-3 text-right">
-                      <Link
-                        href={`/admin/applications/${app.id}`}
-                        className="font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline"
-                      >
-                        심사하기 →
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-                {metrics.recentApplications.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-center text-zinc-400">
-                      현재 대기중인 신청서가 없습니다.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
         </div>
       </div>
     </div>
