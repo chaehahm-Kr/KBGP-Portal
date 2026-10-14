@@ -2,7 +2,7 @@
 // Phase B6 / ADM-ORDER-PROCESSING-001: Centralized Order Processing Workspace
 "use client";
 
-import React, { useState, useTransition, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
@@ -123,7 +123,7 @@ export function AdminOrdersTable({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
   // Primary Data State
   const [orders, setOrders] = useState<AdminRetailerOrderSummary[]>(initialOrders);
@@ -295,7 +295,8 @@ export function AdminOrdersTable({
       window.history.replaceState(null, "", nextUrl);
     }
 
-    startTransition(async () => {
+    setIsPending(true);
+    (async () => {
       try {
         const activeFilter: AdminOrderFilter = {
           quickFilter: (nextQuickFilter as any) || undefined,
@@ -322,8 +323,10 @@ export function AdminOrdersTable({
         setCurrentPage(nextPage);
       } catch (err) {
         console.error("Failed to query orders:", err);
+      } finally {
+        setIsPending(false);
       }
-    });
+    })();
   };
 
   const handleToggleAllStatuses = () => {
@@ -407,7 +410,8 @@ export function AdminOrdersTable({
       window.history.replaceState(null, "", pathname);
     }
 
-    startTransition(async () => {
+    setIsPending(true);
+    (async () => {
       try {
         const res = await getAdminRetailerOrdersAction({});
         setOrders(res.orders);
@@ -415,8 +419,10 @@ export function AdminOrdersTable({
         setCounters(res.summaryCounters);
       } catch (err) {
         console.error("Failed to reset orders:", err);
+      } finally {
+        setIsPending(false);
       }
-    });
+    })();
   };
 
   const handleSort = (field: "created_at" | "order_number" | "retailer" | "remaining" | "total" | "updated_at" | "days_open") => {
