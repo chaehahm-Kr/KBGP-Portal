@@ -193,6 +193,96 @@ function runTests() {
     assert(calcPartialPrepay.prepaymentAllocationStatus === "partial", "Partial prepay: allocation status is partial");
   }
 
+  // TEST 5: Section 5 Exact Benchmark Scenario (Order 100 units @ $10; Dispatch 1: 60 units, Dispatch 2: 40 units)
+  {
+    // Dispatch 1: 60 units @ $10
+    const d1 = calculateDispatchInvoiceAmounts({
+      fulfillmentItems: [
+        { order_item_id: "item-100", product_id: "prod-100", quantity_shipped: 60 },
+      ],
+      orderItems: [
+        { id: "item-100", product_id: "prod-100", sku: "SKU-BENCH", product_name: "Benchmark Item", quantity: 100, unit_wholesale_price: 10 },
+      ],
+      order: {
+        id: "order-bench",
+        subtotal_amount: 1000,
+        discount_amount: 0,
+        shipping_amount: 0,
+        tax_amount: 0,
+        processing_fee: 0,
+        payment_method: "terms",
+      },
+      hasPriorActiveInvoiceWithShipping: false,
+      hasPriorActiveInvoiceWithFee: false,
+      unallocatedPrepayment: 0,
+    });
+
+    assert(d1.subtotal === 600, "Benchmark Dispatch 1: subtotal is $600", d1.subtotal);
+    assert(d1.totalAmount === 600, "Benchmark Dispatch 1: Invoice #1 = $600", d1.totalAmount);
+    assert(d1.balanceDue === 600, "Benchmark Dispatch 1: Balance due = $600", d1.balanceDue);
+    assert(d1.lines[0].quantityShipped === 60, "Benchmark Dispatch 1: 60 units shipped", d1.lines[0].quantityShipped);
+
+    // Dispatch 2: 40 units @ $10
+    const d2 = calculateDispatchInvoiceAmounts({
+      fulfillmentItems: [
+        { order_item_id: "item-100", product_id: "prod-100", quantity_shipped: 40 },
+      ],
+      orderItems: [
+        { id: "item-100", product_id: "prod-100", sku: "SKU-BENCH", product_name: "Benchmark Item", quantity: 100, unit_wholesale_price: 10 },
+      ],
+      order: {
+        id: "order-bench",
+        subtotal_amount: 1000,
+        discount_amount: 0,
+        shipping_amount: 0,
+        tax_amount: 0,
+        processing_fee: 0,
+        payment_method: "terms",
+      },
+      hasPriorActiveInvoiceWithShipping: true,
+      hasPriorActiveInvoiceWithFee: true,
+      unallocatedPrepayment: 0,
+    });
+
+    assert(d2.subtotal === 400, "Benchmark Dispatch 2: subtotal is $400", d2.subtotal);
+    assert(d2.totalAmount === 400, "Benchmark Dispatch 2: Invoice #2 = $400", d2.totalAmount);
+    assert(d2.balanceDue === 400, "Benchmark Dispatch 2: Balance due = $400", d2.balanceDue);
+    assert(d2.lines[0].quantityShipped === 40, "Benchmark Dispatch 2: 40 units shipped", d2.lines[0].quantityShipped);
+    assert(d1.totalAmount + d2.totalAmount === 1000, "Benchmark Total Invoiced = $1,000 exact match", d1.totalAmount + d2.totalAmount);
+    assert(d1.lines[0].quantityShipped + d2.lines[0].quantityShipped === 100, "Benchmark Total Units Invoiced = 100 exact match");
+  }
+
+  // TEST 6: Card / ACH "Setup Pending" Protection (Unverified Prepayment Is Never Allocated)
+  {
+    const calcPending = calculateDispatchInvoiceAmounts({
+      fulfillmentItems: [
+        { order_item_id: "item-pend", product_id: "prod-pend", quantity_shipped: 10 },
+      ],
+      orderItems: [
+        { id: "item-pend", product_id: "prod-pend", sku: "SKU-PND", product_name: "Pending Item", quantity: 10, unit_wholesale_price: 25 },
+      ],
+      order: {
+        id: "order-pending",
+        subtotal_amount: 250,
+        discount_amount: 0,
+        shipping_amount: 0,
+        tax_amount: 0,
+        processing_fee: 0,
+        payment_method: "card",
+      },
+      hasPriorActiveInvoiceWithShipping: false,
+      hasPriorActiveInvoiceWithFee: false,
+      unallocatedPrepayment: 0, // Setup Pending / Unpaid produces 0 unallocated prepayment
+    });
+
+    assert(calcPending.totalAmount === 250, "Setup Pending: total $250", calcPending.totalAmount);
+    assert(calcPending.allocatedPrepayment === 0, "Setup Pending: prepayment allocated is $0 (NEVER fake Paid)", calcPending.allocatedPrepayment);
+    assert(calcPending.balanceDue === 250, "Setup Pending: balance due remains full $250", calcPending.balanceDue);
+    assert(calcPending.invoiceStatus === "open", "Setup Pending: invoice status is open (NOT paid)", calcPending.invoiceStatus);
+    assert(calcPending.paymentStatus === "unpaid", "Setup Pending: payment status is unpaid (NOT paid)", calcPending.paymentStatus);
+    assert(calcPending.prepaymentAllocationStatus === "none", "Setup Pending: allocation status is none");
+  }
+
   console.log(`\n=== RESULTS: ${passed} passed, ${failed} failed ===`);
   if (failed > 0) {
     process.exit(1);

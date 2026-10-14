@@ -677,7 +677,31 @@ export async function adminCreateShipmentWithPackagesAction(params: {
       const { createDispatchInvoice } = await import("@/lib/finance/dispatch-invoicing");
       const invRes = await createDispatchInvoice(adminClient, newFulfillment.id);
       if (!invRes.success) {
-        console.warn("Notice: Dispatch invoice creation warning:", invRes.error);
+        console.error("Critical: Dispatch invoice creation failed. Rolling back created shipment:", invRes.error);
+        await adminClient.from("retailer_order_packages").delete().eq("fulfillment_id", newFulfillment.id);
+        await adminClient.from("retailer_order_fulfillment_items").delete().eq("fulfillment_id", newFulfillment.id);
+        await adminClient.from("retailer_order_fulfillments").delete().eq("id", newFulfillment.id);
+        for (const it of validItems) {
+          const { data: curItem } = await adminClient
+            .from("retailer_order_items")
+            .select("quantity_shipped")
+            .eq("id", it.orderItemId)
+            .single();
+          const curShipped = Number(curItem?.quantity_shipped || 0);
+          await adminClient
+            .from("retailer_order_items")
+            .update({ quantity_shipped: Math.max(0, curShipped - it.quantityShipped) })
+            .eq("id", it.orderItemId);
+        }
+        await adminClient
+          .from("retailer_orders")
+          .update({ order_status: order.order_status, updated_at: new Date().toISOString() })
+          .eq("id", params.orderId);
+
+        return {
+          success: false,
+          error: `Shipment dispatch aborted: failed to issue required dispatch invoice (${invRes.error}). Shipment creation was rolled back.`,
+        };
       }
     } else {
       await adminClient

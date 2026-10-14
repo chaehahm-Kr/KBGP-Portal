@@ -368,6 +368,30 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {(() => {
+                          const linkedInv = order.invoices?.find(
+                            (inv) => inv.fulfillmentId === sh.id || inv.fulfillmentNumber === sh.fulfillmentNumber
+                          );
+                          if (linkedInv) {
+                            return (
+                              <Link
+                                href={`/admin/finance/invoices/${linkedInv.id}`}
+                                className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:underline flex items-center gap-1"
+                              >
+                                <span>🧾 {linkedInv.invoiceNumber}</span>
+                                <span>(${linkedInv.totalAmount.toFixed(2)})</span>
+                              </Link>
+                            );
+                          }
+                          if (sh.status === "shipped" || sh.status === "delivered") {
+                            return (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                                Uninvoiced Dispatch
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
                         <PackagesPopover packages={sh.packages} orderNumber={order.orderNumber} />
                       </div>
                     </div>
@@ -536,9 +560,15 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
                       >
                         {inv.invoiceNumber}
                       </Link>
-                      <span className="text-[10px] text-zinc-500">
+                      <span className="text-[10px] text-zinc-500 block">
                         Due: {new Date(inv.dueDate).toLocaleDateString()} • {inv.termsName}
+                        {inv.fulfillmentNumber && ` (🚚 ${inv.fulfillmentNumber})`}
                       </span>
+                      {inv.prepaymentAllocatedAmount && inv.prepaymentAllocatedAmount > 0 ? (
+                        <span className="text-[10px] text-indigo-600 dark:text-indigo-400 block font-medium">
+                          Prepayment: -${inv.prepaymentAllocatedAmount.toFixed(2)} | Due: ${inv.balanceDue.toFixed(2)}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="text-right">
                       <span className="font-bold text-zinc-900 dark:text-white">

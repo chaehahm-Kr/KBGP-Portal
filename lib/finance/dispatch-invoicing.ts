@@ -208,6 +208,7 @@ export async function createDispatchInvoice(
   success: boolean;
   invoiceId?: string;
   invoiceNumber?: string;
+  fulfillmentNumber?: string;
   alreadyExists?: boolean;
   error?: string;
 }> {
@@ -458,6 +459,25 @@ export async function createDispatchInvoice(
       invInsertErr = retryRes.error;
     }
 
+    if (invInsertErr && (invInsertErr.code === "23505" || invInsertErr.message?.includes("uq_retailer_invoices_active_fulfillment"))) {
+      const { data: raceInv } = await adminClient
+        .from("retailer_invoices")
+        .select("id, invoice_number")
+        .eq("fulfillment_id", fulfillmentId)
+        .not("invoice_status", "in", '("void","cancelled")')
+        .maybeSingle();
+
+      if (raceInv) {
+        return {
+          success: true,
+          invoiceId: raceInv.id,
+          invoiceNumber: raceInv.invoice_number,
+          fulfillmentNumber: fulfillment.fulfillment_number,
+          alreadyExists: true,
+        };
+      }
+    }
+
     if (invInsertErr || !newInvoice) {
       console.error("Failed to insert dispatch invoice:", invInsertErr);
       return { success: false, error: invInsertErr?.message || "Failed to create invoice." };
@@ -509,6 +529,7 @@ export async function createDispatchInvoice(
       success: true,
       invoiceId: newInvoice.id,
       invoiceNumber: newInvoice.invoice_number,
+      fulfillmentNumber: fulfillment.fulfillment_number,
     };
   } catch (err: any) {
     console.error("createDispatchInvoice exception:", err);

@@ -379,7 +379,28 @@ export async function adminMarkFulfillmentShippedAction(params: {
     const { createDispatchInvoice } = await import("@/lib/finance/dispatch-invoicing");
     const invResult = await createDispatchInvoice(adminClient, params.fulfillmentId);
     if (!invResult.success) {
-      console.warn("Notice: Dispatch invoice creation warning:", invResult.error);
+      console.error("Critical: Dispatch invoice creation failed. Rolling back fulfillment status:", invResult.error);
+      // Rollback fulfillment status to previous
+      await adminClient
+        .from("retailer_order_fulfillments")
+        .update({
+          status: fulfillment.status,
+          shipped_at: null,
+          shipped_by: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", params.fulfillmentId);
+
+      // Rollback order status
+      await adminClient
+        .from("retailer_orders")
+        .update({ order_status: orderData?.order_status || "processing", updated_at: new Date().toISOString() })
+        .eq("id", fulfillment.order_id);
+
+      return {
+        success: false,
+        error: `Dispatch confirmation aborted: failed to generate required dispatch invoice (${invResult.error}). Shipment was not marked as shipped.`,
+      };
     }
 
     revalidatePath(`/admin/retailers/${fulfillment.company_id}`);
