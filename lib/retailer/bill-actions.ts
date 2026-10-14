@@ -334,17 +334,21 @@ export async function payRetailerBillAction(params: {
       return { success: false, error: "This invoice is already fully paid." };
     }
 
-    // 3. Validate payment amount
-    const payAmount = params.amount !== undefined ? Number(params.amount) : currentBalance;
-    if (isNaN(payAmount) || payAmount <= 0) {
-      return { success: false, error: "Please enter a valid payment amount." };
+    // 3. Enforce full-balance validation (partial payments are strictly rejected)
+    if (params.amount !== undefined) {
+      const passedAmount = Math.round(Number(params.amount) * 100) / 100;
+      const roundedCurrentBalance = Math.round(currentBalance * 100) / 100;
+      if (isNaN(passedAmount) || passedAmount <= 0) {
+        return { success: false, error: "Please enter a valid payment amount." };
+      }
+      if (Math.abs(passedAmount - roundedCurrentBalance) > 0.009) {
+        return {
+          success: false,
+          error: `Partial payments are not permitted. Full invoice balance of $${currentBalance.toFixed(2)} is required.`,
+        };
+      }
     }
-    if (payAmount > currentBalance) {
-      return {
-        success: false,
-        error: `Payment amount ($${payAmount.toFixed(2)}) cannot exceed the balance due ($${currentBalance.toFixed(2)}).`,
-      };
-    }
+    const payAmount = currentBalance;
 
     // 4. Resolve current effective payment policy
     const effectivePolicy = await resolveEffectivePaymentPolicy(companyId);

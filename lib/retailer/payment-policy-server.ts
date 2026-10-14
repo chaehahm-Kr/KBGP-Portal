@@ -233,6 +233,10 @@ export async function resolveEffectivePaymentPolicy(
   let authoritativeArAvailable = true;
   let openArBalance = 0;
   let availableCredit = creditLimit;
+  let unbilledReservation = 0;
+  let totalExposure = 0;
+  let overLimitAmount = 0;
+  let reservedOrdersCount = 0;
   let hasPastDue = false;
   let pastDueAmount = 0;
   let isBlockedByPastDue = false;
@@ -241,6 +245,10 @@ export async function resolveEffectivePaymentPolicy(
     const arStatus = await getRetailerARStatus(companyId);
     openArBalance = arStatus.openAR;
     availableCredit = arStatus.availableCredit;
+    unbilledReservation = arStatus.unbilledReservation ?? 0;
+    totalExposure = arStatus.totalExposure ?? arStatus.openAR;
+    overLimitAmount = arStatus.overLimitAmount ?? 0;
+    reservedOrdersCount = arStatus.reservedOrdersCount ?? 0;
     hasPastDue = arStatus.hasPastDue;
     pastDueAmount = arStatus.pastDueAmount;
     if (pastDueBlocksTerms && hasPastDue) {
@@ -287,7 +295,11 @@ export async function resolveEffectivePaymentPolicy(
       pastDueBlockingEnabled: pastDueBlocksTerms,
       authoritativeArAvailable,
       openArBalance,
+      unbilledReservation,
+      totalExposure,
       availableCredit,
+      overLimitAmount,
+      reservedOrdersCount,
       hasPastDue,
       pastDueAmount,
       isBlockedByPastDue,

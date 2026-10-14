@@ -13,81 +13,27 @@ import {
 
 /**
  * Shared Authoritative Resolver: Computes the live AR Status and Available Credit for a Retailer.
- * Available Credit = Credit Limit - Open AR Balance
- * Can be reused across Checkout, Net Terms Guards, and Admin 360 views.
+ * Available Credit = Credit Limit - Open AR - Unbilled Order Reservation
+ * Reused across Checkout, Net Terms Guards, Bills & Payments, and Admin 360 views.
  */
 export async function getRetailerARStatus(companyId: string): Promise<RetailerARStatus> {
-  const adminClient = createAdminClient();
-
-  // 1. Fetch retailer credit limit from retailer_profiles
-  const { data: profile } = await adminClient
-    .from("retailer_profiles")
-    .select("credit_limit, approved_terms")
-    .eq("company_id", companyId)
-    .maybeSingle();
-
-  const creditLimit = Number(profile?.credit_limit || 0);
-
-  // 2. Fetch active invoices for this retailer
-  const { data: invoices, error } = await adminClient
-    .from("retailer_invoices")
-    .select("id, balance_due, due_date, invoice_status, payment_status")
-    .eq("retailer_company_id", companyId)
-    .not("invoice_status", "in", '("void","cancelled")');
-
-  if (error || !invoices) {
-    return {
-      companyId,
-      openAR: 0,
-      pastDueAmount: 0,
-      dueSoonAmount: 0,
-      openInvoiceCount: 0,
-      pastDueInvoiceCount: 0,
-      hasPastDue: false,
-      creditLimit,
-      availableCredit: creditLimit,
-    };
-  }
-
-  let openAR = 0;
-  let pastDueAmount = 0;
-  let dueSoonAmount = 0;
-  let openInvoiceCount = 0;
-  let pastDueInvoiceCount = 0;
-
-  for (const inv of invoices) {
-    const balance = Number(inv.balance_due || 0);
-    if (balance > 0) {
-      openAR += balance;
-      openInvoiceCount += 1;
-
-      const arStatus = computeARStatus({
-        balance_due: balance,
-        due_date: inv.due_date,
-        invoice_status: inv.invoice_status,
-      });
-
-      if (arStatus === "PAST_DUE") {
-        pastDueAmount += balance;
-        pastDueInvoiceCount += 1;
-      } else if (arStatus === "DUE_SOON") {
-        dueSoonAmount += balance;
-      }
-    }
-  }
-
-  const availableCredit = Math.max(0, creditLimit - openAR);
+  const { getRetailerCreditExposure } = await import("./credit-exposure");
+  const exposure = await getRetailerCreditExposure(companyId);
 
   return {
     companyId,
-    openAR: Math.round(openAR * 100) / 100,
-    pastDueAmount: Math.round(pastDueAmount * 100) / 100,
-    dueSoonAmount: Math.round(dueSoonAmount * 100) / 100,
-    openInvoiceCount,
-    pastDueInvoiceCount,
-    hasPastDue: pastDueInvoiceCount > 0,
-    creditLimit,
-    availableCredit: Math.round(availableCredit * 100) / 100,
+    openAR: exposure.openAR,
+    pastDueAmount: exposure.pastDueAmount,
+    dueSoonAmount: exposure.dueSoonAmount,
+    openInvoiceCount: exposure.openInvoiceCount,
+    pastDueInvoiceCount: exposure.pastDueInvoiceCount,
+    hasPastDue: exposure.hasPastDue,
+    creditLimit: exposure.creditLimit,
+    availableCredit: exposure.availableCredit,
+    unbilledReservation: exposure.unbilledReservation,
+    totalExposure: exposure.totalExposure,
+    overLimitAmount: exposure.overLimitAmount,
+    reservedOrdersCount: exposure.reservedOrdersCount,
   };
 }
 

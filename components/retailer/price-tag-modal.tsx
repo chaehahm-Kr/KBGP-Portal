@@ -4,6 +4,7 @@ import React, { useState, useTransition } from "react";
 import { StoreProductTagItem, calculateDiscountPercent } from "@/lib/retailer/store-pricing-types";
 import { saveStoreProductPriceAction, clearStoreProductPriceAction } from "@/lib/retailer/store-pricing-actions";
 import { PriceTagCard } from "@/components/retailer/price-tag-card";
+import { CalendarDatePicker } from "@/components/shared/calendar-date-picker";
 
 interface PriceTagModalProps {
   item: StoreProductTagItem;
@@ -237,26 +238,20 @@ export function PriceTagModal({
               {/* Sale Dates */}
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div>
-                  <label className="text-[11px] text-zinc-500 font-medium block mb-1">
-                    Sale Start Date
-                  </label>
-                  <input
-                    type="date"
+                  <CalendarDatePicker
+                    label="Sale Start Date"
                     value={saleStartDate}
-                    onChange={(e) => setSaleStartDate(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    maxDate={saleEndDate || undefined}
+                    onChange={(val) => setSaleStartDate(val)}
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] text-zinc-500 font-medium block mb-1">
-                    Sale End Date
-                  </label>
-                  <input
-                    type="date"
+                  <CalendarDatePicker
+                    label="Sale End Date"
                     value={saleEndDate}
-                    onChange={(e) => setSaleEndDate(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    minDate={saleStartDate || undefined}
+                    onChange={(val) => setSaleEndDate(val)}
                   />
                 </div>
               </div>

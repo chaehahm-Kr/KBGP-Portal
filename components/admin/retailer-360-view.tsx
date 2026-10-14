@@ -2263,11 +2263,12 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 </div>
               </div>
 
-              {/* Authoritative Live AR Balance & Available Credit */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
+              {/* Authoritative Live AR Balance & Available Credit (Phase B4 Credit Exposure) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs pt-1">
+                {/* 1. Open AR */}
                 <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Current Open Balance</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Open Invoices (AR)</span>
                     <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
                       (data.arStatus?.openAR || 0) > 0
                         ? (data.arStatus?.hasPastDue
@@ -2277,31 +2278,82 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                     }`}>
                       {(data.arStatus?.openAR || 0) > 0
                         ? `${data.arStatus?.openInvoiceCount || 1} Open Invoice(s)`
-                        : "Authoritative AR Active"}
+                        : "No Open AR"}
                     </span>
                   </div>
                   <p className="font-mono font-bold text-zinc-900 dark:text-white text-base">
                     {formatCurrency(data.arStatus?.openAR ?? 0)}
                   </p>
-                  <p className="text-[10px] text-zinc-400">
+                  <p className="text-[10px] text-zinc-400 truncate">
                     {data.arStatus?.hasPastDue
-                      ? `⚠️ ${formatCurrency(data.arStatus.pastDueAmount)} past due across ${data.arStatus.pastDueInvoiceCount} invoice(s)`
-                      : "Live Accounts Receivable ledger synced from issued invoices"}
+                      ? `⚠️ ${formatCurrency(data.arStatus.pastDueAmount)} past due`
+                      : "Unpaid active issued invoices"}
                   </p>
                 </div>
 
+                {/* 2. Unbilled Order Reservation */}
                 <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Available Credit</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                      Rule Gated
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Unbilled Reservation</span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                      (data.arStatus?.unbilledReservation || 0) > 0
+                        ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                        : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                    }`}>
+                      {(data.arStatus?.reservedOrdersCount || 0) > 0
+                        ? `${data.arStatus?.reservedOrdersCount} Order(s)`
+                        : "None"}
                     </span>
                   </div>
                   <p className="font-mono font-bold text-zinc-900 dark:text-white text-base">
-                    {formatCurrency(Math.max(0, creditLimit - (data.arStatus?.openAR || 0)))}
+                    {formatCurrency(data.arStatus?.unbilledReservation ?? 0)}
                   </p>
-                  <p className="text-[10px] text-zinc-400">
-                    Live calculation: Credit Limit ({formatCurrency(creditLimit)}) − Open AR ({formatCurrency(data.arStatus?.openAR || 0)}).
+                  <p className="text-[10px] text-zinc-400 truncate">
+                    Submitted Net Terms orders awaiting dispatch
+                  </p>
+                </div>
+
+                {/* 3. Total Credit Exposure */}
+                <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Total Exposure</span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                      (data.arStatus?.totalExposure || (data.arStatus?.openAR || 0) + (data.arStatus?.unbilledReservation || 0)) > creditLimit && creditLimit > 0
+                        ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-800"
+                        : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                    }`}>
+                      {(data.arStatus?.totalExposure || (data.arStatus?.openAR || 0) + (data.arStatus?.unbilledReservation || 0)) > creditLimit && creditLimit > 0
+                        ? "Over Limit"
+                        : "AR + Reserved"}
+                    </span>
+                  </div>
+                  <p className="font-mono font-bold text-zinc-900 dark:text-white text-base">
+                    {formatCurrency(data.arStatus?.totalExposure ?? ((data.arStatus?.openAR || 0) + (data.arStatus?.unbilledReservation || 0)))}
+                  </p>
+                  <p className="text-[10px] text-zinc-400 truncate">
+                    Open AR + Unbilled Orders
+                  </p>
+                </div>
+
+                {/* 4. Available Credit */}
+                <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Available Credit</span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                      (data.arStatus?.overLimitAmount || 0) > 0
+                        ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-800"
+                        : "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                    }`}>
+                      {(data.arStatus?.overLimitAmount || 0) > 0
+                        ? `Over: ${formatCurrency(data.arStatus?.overLimitAmount || 0)}`
+                        : "Available"}
+                    </span>
+                  </div>
+                  <p className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-base">
+                    {formatCurrency(data.arStatus?.availableCredit ?? Math.max(0, creditLimit - ((data.arStatus?.totalExposure ?? ((data.arStatus?.openAR || 0) + (data.arStatus?.unbilledReservation || 0))))))}
+                  </p>
+                  <p className="text-[10px] text-zinc-400 truncate">
+                    Credit Limit ({formatCurrency(creditLimit)}) − Total Exposure
                   </p>
                 </div>
               </div>

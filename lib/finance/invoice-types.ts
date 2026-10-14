@@ -63,6 +63,10 @@ export interface RetailerARStatus {
   hasPastDue: boolean;
   creditLimit: number;
   availableCredit: number;
+  unbilledReservation?: number;
+  totalExposure?: number;
+  overLimitAmount?: number;
+  reservedOrdersCount?: number;
 }
 
 export interface GlobalARSummary {

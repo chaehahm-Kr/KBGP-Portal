@@ -176,15 +176,20 @@ export function RetailerBillsManager({
     <div className="space-y-6">
       {/* 1. Top Summary KPI Cards (Rule 4) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Total Due */}
-        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-4 sm:p-5 shadow-xs space-y-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Total Due
-          </span>
-          <div className="text-2xl sm:text-3xl font-extrabold text-zinc-900 dark:text-white">
+        {/* Total Due - Primary Financial KPI */}
+        <div className="rounded-2xl border-2 border-zinc-900 dark:border-white bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 p-4 sm:p-5 shadow-md space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black uppercase tracking-wider text-zinc-300 dark:text-zinc-600">
+              Total Due
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/15 dark:bg-black/10 text-white dark:text-zinc-900 border border-white/20 dark:border-black/15">
+              Primary AR
+            </span>
+          </div>
+          <div className="text-2xl sm:text-3xl font-black tracking-tight text-white dark:text-zinc-950">
             ${summary.openAR.toFixed(2)}
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="text-xs text-zinc-300/90 dark:text-zinc-600 font-medium">
             Across {summary.openInvoiceCount} open bill{summary.openInvoiceCount === 1 ? "" : "s"}
           </p>
         </div>
@@ -264,12 +269,12 @@ export function RetailerBillsManager({
           </p>
         </div>
 
-        {/* Available Credit */}
+        {/* Available Credit - Secondary Metric */}
         <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-4 sm:p-5 shadow-xs space-y-1">
           <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
             Available Credit
           </span>
-          <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
+          <div className="text-2xl sm:text-3xl font-extrabold text-zinc-800 dark:text-zinc-200">
             ${summary.availableCredit.toFixed(2)}
           </div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">

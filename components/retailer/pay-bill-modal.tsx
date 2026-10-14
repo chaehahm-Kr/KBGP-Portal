@@ -20,23 +20,13 @@ export function PayBillModal({
   onClose,
 }: PayBillModalProps) {
   const [isPending, startTransition] = useTransition();
-  const [amountMode, setAmountMode] = useState<"full" | "custom">("full");
-  const [customAmount, setCustomAmount] = useState<string>(bill.balance_due.toFixed(2));
   const [paymentMethod, setPaymentMethod] = useState<"card" | "ach">("card");
   const [statusMessage, setStatusMessage] = useState<{ type: "error" | "info"; text: string } | null>(null);
 
   if (!isOpen) return null;
 
   const balanceDue = Number(bill.balance_due || 0);
-
-  // Resolved base payment amount
-  const parsedCustom = parseFloat(customAmount);
-  const payBase =
-    amountMode === "full"
-      ? balanceDue
-      : !isNaN(parsedCustom) && parsedCustom > 0
-      ? Math.min(balanceDue, parsedCustom)
-      : 0;
+  const payBase = balanceDue;
 
   // Resolve channel policy & live fee calculation
   const cardPolicy = effectivePolicy?.card;
@@ -141,64 +131,19 @@ export function PayBillModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* 1. Payment Amount Selection */}
-          <div className="space-y-2.5">
-            <label className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-              Payment Amount
-            </label>
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setAmountMode("full");
-                  setCustomAmount(balanceDue.toFixed(2));
-                }}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                  amountMode === "full"
-                    ? "border-zinc-900 dark:border-white bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 font-bold shadow-xs"
-                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
-                }`}
-              >
-                <div className="text-xs">Full Balance</div>
-                <div className="text-sm font-extrabold mt-0.5">${balanceDue.toFixed(2)}</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAmountMode("custom")}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                  amountMode === "custom"
-                    ? "border-zinc-900 dark:border-white bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 font-bold shadow-xs"
-                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
-                }`}
-              >
-                <div className="text-xs">Custom Amount</div>
-                <div className="text-xs font-medium opacity-80 mt-0.5">Partial Payment</div>
-              </button>
+          {/* 1. Payment Principal (Full Balance Only) */}
+          <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider block">
+                Payment Principal (Full Invoice Settlement)
+              </span>
+              <span className="text-sm font-extrabold text-zinc-900 dark:text-white">
+                ${balanceDue.toFixed(2)}
+              </span>
             </div>
-
-            {amountMode === "custom" && (
-              <div className="mt-2.5 space-y-1">
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-sm">
-                    $
-                  </span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="1"
-                    max={balanceDue}
-                    value={customAmount}
-                    onChange={(e) => setCustomAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full pl-8 pr-4 py-2.5 text-sm rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-semibold focus:outline-hidden focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white"
-                  />
-                </div>
-                <p className="text-[11px] text-zinc-500">
-                  Maximum partial payment: ${balanceDue.toFixed(2)}
-                </p>
-              </div>
-            )}
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              100% Full Balance
+            </span>
           </div>
 
           {/* 2. Payment Method Selection (No Net Terms - Rule 9) */}

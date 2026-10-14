@@ -22,6 +22,23 @@ interface RetailerHeaderProps {
   storeName: string;
 }
 
+function isSubItemActive(pathname: string, subHref: string): boolean {
+  if (subHref === "/products") {
+    return (
+      pathname === "/products" ||
+      pathname === "/retailer/products" ||
+      ((pathname.startsWith("/products/") || pathname.startsWith("/retailer/products/")) &&
+        !pathname.includes("/saved"))
+    );
+  }
+  return (
+    pathname === subHref ||
+    pathname.startsWith(`${subHref}/`) ||
+    pathname === `/retailer${subHref}` ||
+    pathname.startsWith(`/retailer${subHref}/`)
+  );
+}
+
 export function RetailerHeader({
   userName,
   userEmail,
@@ -35,27 +52,38 @@ export function RetailerHeader({
   const { totalSkus } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const navItems = getNavItemsForRole(role);
+  const navItems = React.useMemo(() => getNavItemsForRole(role), [role]);
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     navItems.forEach((item) => {
       if (item.subItems && item.subItems.length > 0) {
-        const isChildActive = item.subItems.some(
-          (sub) =>
-            pathname === sub.href ||
-            pathname.startsWith(`${sub.href}/`) ||
-            pathname === `/retailer${sub.href}` ||
-            pathname.startsWith(`/retailer${sub.href}/`)
-        );
-        initial[item.key] = isChildActive;
+        initial[item.key] = item.subItems.some((sub) => isSubItemActive(pathname, sub.href));
       }
     });
     return initial;
   });
 
-  const toggleSection = (key: string) => {
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  const prevPathnameRef = React.useRef(pathname);
+  React.useEffect(() => {
+    if (prevPathnameRef.current !== pathname) {
+      prevPathnameRef.current = pathname;
+      navItems.forEach((item) => {
+        if (item.subItems && item.subItems.length > 0) {
+          const isChildActive = item.subItems.some((sub) => isSubItemActive(pathname, sub.href));
+          if (isChildActive) {
+            setOpenSections((prev) => ({ ...prev, [item.key]: true }));
+          }
+        }
+      });
+    }
+  }, [pathname, navItems]);
+
+  const toggleSection = (key: string, isDefaultOpen: boolean) => {
+    setOpenSections((prev) => {
+      const currentlyOpen = prev[key] !== undefined ? prev[key] : isDefaultOpen;
+      return { ...prev, [key]: !currentlyOpen };
+    });
   };
 
   React.useEffect(() => {
@@ -282,24 +310,14 @@ export function RetailerHeader({
                 const translatedName = t.nav[item.key as keyof typeof t.nav] || item.name;
 
                 if (item.subItems && item.subItems.length > 0) {
-                  const isGroupActive = item.subItems.some((sub) =>
-                    sub.href === "/products"
-                      ? pathname === "/products" ||
-                        pathname === "/retailer/products" ||
-                        ((pathname.startsWith("/products/") || pathname.startsWith("/retailer/products/")) &&
-                          !pathname.includes("/saved"))
-                      : pathname === sub.href ||
-                        pathname.startsWith(`${sub.href}/`) ||
-                        pathname === `/retailer${sub.href}` ||
-                        pathname.startsWith(`/retailer${sub.href}/`)
-                  );
-                  const isOpen = openSections[item.key] ?? isGroupActive;
+                  const isGroupActive = item.subItems.some((sub) => isSubItemActive(pathname, sub.href));
+                  const isOpen = openSections[item.key] !== undefined ? openSections[item.key] : isGroupActive;
 
                   return (
                     <div key={item.key} className="space-y-1">
                       <button
                         type="button"
-                        onClick={() => toggleSection(item.key)}
+                        onClick={() => toggleSection(item.key, isOpen)}
                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs transition-all cursor-pointer ${
                           isGroupActive
                             ? "text-zinc-900 dark:text-white font-bold bg-zinc-100/70 dark:bg-zinc-900/70"

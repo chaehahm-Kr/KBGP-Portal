@@ -785,15 +785,16 @@ export async function submitRetailerOrder(
 
     const finalTotalAmount = Number((merchandisePayableSubtotal + feeResult.feeAmount).toFixed(2));
 
-    if (
-      chosenPaymentMethod === "terms" &&
-      policy.terms.creditLimit > 0 &&
-      finalTotalAmount > policy.terms.creditLimit
-    ) {
-      return {
-        success: false,
-        error: `Your available credit is not enough for this order ($${finalTotalAmount.toFixed(2)} exceeds approved credit line $${policy.terms.creditLimit.toLocaleString()}). Please choose Card or ACH.`,
-      };
+    if (chosenPaymentMethod === "terms") {
+      const { getRetailerCreditExposure } = await import("@/lib/finance/credit-exposure");
+      const exposure = await getRetailerCreditExposure(companyId, adminClient);
+
+      if (policy.terms.creditLimit > 0 && finalTotalAmount > exposure.availableCredit) {
+        return {
+          success: false,
+          error: `Your available credit is not enough for this order ($${finalTotalAmount.toFixed(2)} exceeds available credit $${exposure.availableCredit.toFixed(2)}). Total credit exposure is $${exposure.totalExposure.toFixed(2)} against approved credit line $${exposure.creditLimit.toFixed(2)}. Please choose Card or ACH.`,
+        };
+      }
     }
 
     const paymentSnapshot: PaymentMethodSnapshot = {
@@ -940,6 +941,10 @@ export async function submitRetailerOrder(
     }
 
     if (orderErr || !orderRow) {
+      if (orderErr?.message?.includes("INSUFFICIENT_CREDIT")) {
+        const cleanMsg = orderErr.message.replace(/^.*?INSUFFICIENT_CREDIT:\s*/i, "").split("\n")[0];
+        return { success: false, error: cleanMsg };
+      }
       console.error("Order insertion error:", orderErr);
       return { success: false, error: orderErr?.message || "Failed to create order record." };
     }

@@ -48,7 +48,11 @@ export interface ChannelPolicyTerms {
   pastDueBlockingEnabled: boolean;
   authoritativeArAvailable: boolean;
   openArBalance: number | null;
+  unbilledReservation?: number;
+  totalExposure?: number;
   availableCredit: number | null;
+  overLimitAmount?: number;
+  reservedOrdersCount?: number;
   hasPastDue?: boolean;
   pastDueAmount?: number;
   isBlockedByPastDue?: boolean;
