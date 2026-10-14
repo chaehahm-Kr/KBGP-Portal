@@ -50,9 +50,11 @@ export interface AdminRetailerListItem {
   // Group 4: Orders & AR
   openOrdersCount: number;
   readyToShipCount: number;
+  lifetimeOrderValue: number;
   openAR: number;
   hasPastDue: boolean;
   pastDueCount: number;
+  pastDueAmount: number;
   // Group 5: Products & Training
   distinctAssortment: number;
   trainingCompletedCount: number | null;
@@ -114,7 +116,8 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
   let invitationCounts: Record<string, number> = {};
   let userCounts: Record<string, number> = {};
   const ordersMap: Record<string, { openCount: number; readyCount: number; totalCount: number }> = {};
-  const arMap: Record<string, { openAR: number; pastDueCount: number; hasPastDue: boolean }> = {};
+  const lifetimeOrderValueMap: Record<string, number> = {};
+  const arMap: Record<string, { openAR: number; pastDueCount: number; pastDueAmount: number; hasPastDue: boolean }> = {};
   const assortmentMap: Record<string, Set<string>> = {};
   const weeklyChecksMap: Record<string, Set<string>> = {};
 
@@ -138,7 +141,20 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
         .in("company_id", companyIds),
       adminClient
         .from("retailer_orders")
-        .select("id, company_id, order_status, total_amount, is_test")
+        .select(`
+          id,
+          company_id,
+          order_status,
+          total_amount,
+          subtotal_amount,
+          refund_amount,
+          is_test,
+          retailer_order_items (
+            quantity,
+            quantity_cancelled,
+            unit_wholesale_price
+          )
+        `)
         .in("company_id", companyIds),
       adminClient
         .from("retailer_invoices")
@@ -168,7 +184,7 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
       }
     });
 
-    // Map operational orders
+    // Map operational orders & Lifetime Order Value
     (ordersRes.data || []).forEach((o: any) => {
       if (!ordersMap[o.company_id]) {
         ordersMap[o.company_id] = { openCount: 0, readyCount: 0, totalCount: 0 };
@@ -183,20 +199,42 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
       if (["confirmed", "processing", "submitted"].includes(stat)) {
         ordersMap[o.company_id].readyCount += 1;
       }
+
+      // Commercial Lifetime Order Value:
+      // Cumulative valid wholesale merchandise order value, strictly excluding cancelled orders and test orders
+      if (stat !== "cancelled" && !o.is_test) {
+        let orderMerchVal = 0;
+        if (Array.isArray(o.retailer_order_items) && o.retailer_order_items.length > 0) {
+          orderMerchVal = o.retailer_order_items.reduce((sum: number, it: any) => {
+            const validQty = Math.max(0, Number(it.quantity || 0) - Number(it.quantity_cancelled || 0));
+            return sum + validQty * Number(it.unit_wholesale_price || 0);
+          }, 0);
+        } else {
+          orderMerchVal = Math.max(0, Number(o.subtotal_amount || o.total_amount || 0) - Number(o.refund_amount || 0));
+        }
+        lifetimeOrderValueMap[o.company_id] = (lifetimeOrderValueMap[o.company_id] || 0) + orderMerchVal;
+      }
     });
 
-    // Map AR & past due
-    const nowMs = Date.now();
+    // Map AR & past due with Finance-consistent business date evaluation
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     (invoicesRes.data || []).forEach((inv: any) => {
       if (!arMap[inv.retailer_company_id]) {
-        arMap[inv.retailer_company_id] = { openAR: 0, pastDueCount: 0, hasPastDue: false };
+        arMap[inv.retailer_company_id] = { openAR: 0, pastDueCount: 0, pastDueAmount: 0, hasPastDue: false };
       }
       const bal = Math.max(0, Number(inv.balance_due || 0));
       if (bal > 0) {
         arMap[inv.retailer_company_id].openAR += bal;
-        if (inv.due_date && new Date(inv.due_date).getTime() < nowMs) {
-          arMap[inv.retailer_company_id].pastDueCount += 1;
-          arMap[inv.retailer_company_id].hasPastDue = true;
+        if (inv.due_date) {
+          const dueDate = new Date(inv.due_date);
+          dueDate.setHours(0, 0, 0, 0);
+          if (dueDate.getTime() < today.getTime()) {
+            arMap[inv.retailer_company_id].pastDueCount += 1;
+            arMap[inv.retailer_company_id].pastDueAmount += bal;
+            arMap[inv.retailer_company_id].hasPastDue = true;
+          }
         }
       }
     });
@@ -223,7 +261,7 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
 
     const stores = Array.isArray(comp.stores) ? comp.stores : [];
     const ord = ordersMap[comp.id] || { openCount: 0, readyCount: 0, totalCount: 0 };
-    const ar = arMap[comp.id] || { openAR: 0, pastDueCount: 0, hasPastDue: false };
+    const ar = arMap[comp.id] || { openAR: 0, pastDueCount: 0, pastDueAmount: 0, hasPastDue: false };
     const distinctAssortment = assortmentMap[comp.id]?.size || 0;
     const reportingStores = weeklyChecksMap[comp.id]?.size || 0;
 
@@ -255,9 +293,11 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
       // Group 4: Orders & AR
       openOrdersCount: ord.openCount,
       readyToShipCount: ord.readyCount,
+      lifetimeOrderValue: Math.round((lifetimeOrderValueMap[comp.id] || 0) * 100) / 100,
       openAR: Math.round(ar.openAR * 100) / 100,
       hasPastDue: ar.hasPastDue,
       pastDueCount: ar.pastDueCount,
+      pastDueAmount: Math.round(ar.pastDueAmount * 100) / 100,
       // Group 5: Products & Training
       distinctAssortment,
       trainingCompletedCount: null,

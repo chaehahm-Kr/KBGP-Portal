@@ -13,7 +13,7 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [termsFilter, setTermsFilter] = useState("all");
   const [operationalFilter, setOperationalFilter] = useState("all");
-  const [sortBy, setSortBy] = useState<"name_asc" | "name_desc" | "stores_desc" | "orders_desc" | "ar_desc">("name_asc");
+  const [sortBy, setSortBy] = useState<"name_asc" | "name_desc" | "stores_desc" | "orders_desc" | "lifetime_desc" | "ar_desc">("name_asc");
 
   // Filtering & Sorting
   const filtered = useMemo(() => {
@@ -77,6 +77,8 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
             return b.storesCount - a.storesCount;
           case "orders_desc":
             return b.openOrdersCount - a.openOrdersCount;
+          case "lifetime_desc":
+            return b.lifetimeOrderValue - a.lifetimeOrderValue;
           case "ar_desc":
             return b.openAR - a.openAR;
           case "name_asc":
@@ -177,6 +179,7 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                 <option value="name_desc">Company (Z-A)</option>
                 <option value="stores_desc">Stores (High-Low)</option>
                 <option value="orders_desc">Open Orders (High-Low)</option>
+                <option value="lifetime_desc">Lifetime Order Value (High-Low)</option>
                 <option value="ar_desc">Open AR (High-Low)</option>
               </select>
             </div>
@@ -291,31 +294,32 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
         )}
       </div>
 
-      {/* Retailer Table: 13 Single-Line Columns */}
+      {/* Retailer Table: 14 Single-Line Columns */}
       <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-950/60 font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-[10px] whitespace-nowrap">
-                <th className="py-3 px-3 min-w-[180px]">Retailer</th>
-                <th className="py-3 px-3 min-w-[95px]">Status</th>
-                <th className="py-3 px-3 text-center min-w-[65px]">Stores</th>
-                <th className="py-3 px-3 text-center min-w-[75px]">Users</th>
-                <th className="py-3 px-3 min-w-[85px]">Terms</th>
-                <th className="py-3 px-3 text-right min-w-[100px]">Credit Limit</th>
-                <th className="py-3 px-3 min-w-[125px]">Orders</th>
-                <th className="py-3 px-3 text-right min-w-[105px]">Open AR</th>
-                <th className="py-3 px-3 text-center min-w-[75px]">Products</th>
-                <th className="py-3 px-3 min-w-[100px]">Training</th>
-                <th className="py-3 px-3 text-center min-w-[95px]">Weekly Check</th>
-                <th className="py-3 px-3 text-center min-w-[80px]">Attention</th>
-                <th className="py-3 px-3 text-right min-w-[90px]">Actions</th>
+                <th className="py-3 px-3 text-left min-w-[170px]">Retailer</th>
+                <th className="py-3 px-3 text-left min-w-[85px]">Status</th>
+                <th className="py-3 px-3 text-center min-w-[55px]">Stores</th>
+                <th className="py-3 px-3 text-center min-w-[60px]">Users</th>
+                <th className="py-3 px-3 text-left min-w-[80px]">Terms</th>
+                <th className="py-3 px-3 text-right min-w-[95px]">Credit Limit</th>
+                <th className="py-3 px-3 text-left min-w-[115px]">Orders</th>
+                <th className="py-3 px-3 text-right min-w-[130px]">Lifetime Order Value</th>
+                <th className="py-3 px-3 text-right min-w-[125px]">Open AR</th>
+                <th className="py-3 px-3 text-center min-w-[65px]">Products</th>
+                <th className="py-3 px-3 text-left min-w-[95px]">Training</th>
+                <th className="py-3 px-3 text-center min-w-[85px]">Weekly Check</th>
+                <th className="py-3 px-3 text-center min-w-[65px]">Attention</th>
+                <th className="py-3 px-3 text-center min-w-[80px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-16 text-center text-zinc-400 dark:text-zinc-500 text-xs">
+                  <td colSpan={14} className="py-16 text-center text-zinc-400 dark:text-zinc-500 text-xs">
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
                         No retailer companies match your search or filter criteria.
@@ -353,11 +357,12 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                       className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors group"
                     >
                       {/* COLUMN 1: RETAILER */}
-                      <td className="py-2.5 px-3 whitespace-nowrap">
+                      <td className="py-2.5 px-3 whitespace-nowrap text-left">
                         <div className="flex items-center gap-1.5">
                           <Link
                             href={`/admin/retailers/${ret.id}`}
                             className="font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 text-xs transition-colors"
+                            title={ret.name}
                           >
                             {ret.name}
                           </Link>
@@ -370,7 +375,7 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                       </td>
 
                       {/* COLUMN 2: STATUS */}
-                      <td className="py-2.5 px-3 whitespace-nowrap">
+                      <td className="py-2.5 px-3 whitespace-nowrap text-left">
                         <span
                           className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold border capitalize ${statusClass}`}
                         >
@@ -380,7 +385,7 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                       </td>
 
                       {/* COLUMN 3: STORES */}
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap tabular-nums">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=stores`}
                           className="font-bold text-xs text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors inline-block"
@@ -391,7 +396,7 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                       </td>
 
                       {/* COLUMN 4: USERS */}
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap tabular-nums">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=users`}
                           className="font-bold text-xs text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors inline-flex items-center justify-center gap-1"
@@ -407,7 +412,7 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                       </td>
 
                       {/* COLUMN 5: TERMS */}
-                      <td className="py-2.5 px-3 whitespace-nowrap">
+                      <td className="py-2.5 px-3 whitespace-nowrap text-left">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=payments`}
                           className="inline-block"
@@ -420,7 +425,7 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                       </td>
 
                       {/* COLUMN 6: CREDIT LIMIT */}
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono text-xs">
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono tabular-nums text-xs">
                         {isNetTerms && ret.creditLimit > 0 ? (
                           <span className="font-bold text-zinc-800 dark:text-zinc-200">
                             ${ret.creditLimit.toLocaleString()}
@@ -431,7 +436,7 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                       </td>
 
                       {/* COLUMN 7: ORDERS */}
-                      <td className="py-2.5 px-3 whitespace-nowrap text-xs">
+                      <td className="py-2.5 px-3 whitespace-nowrap text-left text-xs">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=orders`}
                           className="hover:text-indigo-600 dark:hover:text-indigo-400 inline-block text-[11px]"
@@ -451,22 +456,35 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                         </Link>
                       </td>
 
-                      {/* COLUMN 8: OPEN AR */}
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                      {/* COLUMN 8: LIFETIME ORDER VALUE */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono tabular-nums text-xs">
                         <Link
-                          href={`/admin/retailers/${ret.id}?tab=payments`}
-                          className="font-mono text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 hover:underline inline-flex items-center justify-end gap-1"
-                          title="View Invoices & Receivables"
+                          href={`/admin/retailers/${ret.id}?tab=orders`}
+                          className="font-bold text-zinc-800 dark:text-zinc-200 hover:text-indigo-600 dark:hover:text-indigo-400 inline-block transition-colors"
+                          title="Commercial Lifetime Wholesale Order Value (excluding test & cancelled orders)"
                         >
-                          {ret.hasPastDue && (
-                            <span title="Past Due Invoices" className="text-rose-600 text-xs">⚠️</span>
-                          )}
-                          <span>${ret.openAR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          ${ret.lifetimeOrderValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </Link>
                       </td>
 
-                      {/* COLUMN 9: PRODUCTS */}
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      {/* COLUMN 9: OPEN AR */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <Link
+                          href={`/admin/retailers/${ret.id}?tab=payments`}
+                          className="font-mono tabular-nums text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 hover:underline inline-flex items-center justify-end gap-1.5"
+                          title={ret.hasPastDue ? `Past Due: $${ret.pastDueAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${ret.pastDueCount} overdue)` : "View Invoices & Receivables"}
+                        >
+                          <span>${ret.openAR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          {ret.hasPastDue && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-400 border border-rose-300 dark:border-rose-800">
+                              Past Due
+                            </span>
+                          )}
+                        </Link>
+                      </td>
+
+                      {/* COLUMN 10: PRODUCTS */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap tabular-nums">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=stores`}
                           className="font-bold text-xs text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors inline-block"
@@ -476,8 +494,8 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                         </Link>
                       </td>
 
-                      {/* COLUMN 10: TRAINING */}
-                      <td className="py-2.5 px-3 whitespace-nowrap">
+                      {/* COLUMN 11: TRAINING */}
+                      <td className="py-2.5 px-3 whitespace-nowrap text-left">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=training`}
                           className="text-[11px] text-zinc-500 dark:text-zinc-400 hover:underline inline-block"
@@ -487,7 +505,7 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                         </Link>
                       </td>
 
-                      {/* COLUMN 11: WEEKLY CHECK */}
+                      {/* COLUMN 12: WEEKLY CHECK */}
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=performance`}
@@ -504,7 +522,7 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                         </Link>
                       </td>
 
-                      {/* COLUMN 12: ATTENTION */}
+                      {/* COLUMN 13: ATTENTION */}
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <Link
                           href={`/admin/retailers/${ret.id}?tab=overview`}
@@ -521,8 +539,8 @@ export function RetailersList({ initialRetailers }: RetailersListProps) {
                         </Link>
                       </td>
 
-                      {/* COLUMN 13: ACTIONS */}
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                      {/* COLUMN 14: ACTIONS */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <Link
                           href={`/admin/retailers/${ret.id}`}
                           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-[11px] font-bold text-zinc-700 dark:text-zinc-200 transition-colors shadow-2xs"
