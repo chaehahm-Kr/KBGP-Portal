@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Retailer360Data,
   Retailer360OrderItem,
@@ -60,7 +61,20 @@ type TabKey =
   | "cases";
 
 export function Retailer360View({ data, canImpersonate = true }: Retailer360ViewProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const searchParams = useSearchParams();
+  const validTabs: TabKey[] = ["overview", "stores", "users", "orders", "payments", "performance", "training", "protection", "cases"];
+  const paramTab = searchParams.get("tab") as TabKey;
+  const initialTab: TabKey = validTabs.includes(paramTab) ? paramTab : "overview";
+
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+
+  useEffect(() => {
+    const currentTab = searchParams.get("tab") as TabKey;
+    if (currentTab && validTabs.includes(currentTab)) {
+      setActiveTab(currentTab);
+    }
+  }, [searchParams]);
+
   const [isPending, startTransition] = useTransition();
   const [impersonateMember, setImpersonateMember] = useState<Retailer360MemberItem | null>(null);
 
