@@ -76,6 +76,21 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get("tab") as TabKey;
+      if (tab && validTabs.includes(tab)) {
+        setActiveTab(tab);
+      } else if (!tab) {
+        setActiveTab("overview");
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const handleSelectTab = (key: TabKey) => {
     setActiveTab(key);
     if (typeof window !== "undefined") {
