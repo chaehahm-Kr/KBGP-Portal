@@ -23,6 +23,23 @@ function formatYMD(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+function formatOrderDate(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+}
+
+function formatActivityDate(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const m = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  const h = String(d.getUTCHours()).padStart(2, "0");
+  const min = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${m}/${day}, ${h}:${min}`;
+}
+
 const STATUS_CHIP_OPTIONS: Array<{
   id: ApprovedOrderStatus;
   label: string;
@@ -267,7 +284,11 @@ export function AdminOrdersTable({
     if (nextPageSize && nextPageSize !== 25) query.set("pageSize", String(nextPageSize));
 
     const qStr = query.toString();
-    router.replace(`${pathname}${qStr ? `?${qStr}` : ""}`, { scroll: false });
+    const nextUrl = `${pathname}${qStr ? `?${qStr}` : ""}`;
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", nextUrl);
+    }
+    router.replace(nextUrl, { scroll: false });
 
     startTransition(async () => {
       const activeFilter: AdminOrderFilter = {
@@ -373,6 +394,9 @@ export function AdminOrdersTable({
     setSortDirection("desc");
     setCurrentPage(1);
 
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", pathname);
+    }
     router.replace(pathname, { scroll: false });
 
     startTransition(async () => {
@@ -1178,21 +1202,12 @@ export function AdminOrdersTable({
                       </td>
 
                       {/* Date & Activity */}
-                      <td className="py-3 px-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
-                        <div className="font-medium text-zinc-900 dark:text-white">
-                          {new Date(ord.createdAt).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
+                      <td className="py-3 px-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap" suppressHydrationWarning>
+                        <div className="font-medium text-zinc-900 dark:text-white" suppressHydrationWarning>
+                          {formatOrderDate(ord.createdAt)}
                         </div>
-                        <span className="text-[10px] text-zinc-400 block">
-                          Act: {new Date(ord.lastActivityAt || ord.updatedAt).toLocaleDateString("en-US", {
-                            month: "numeric",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                        <span className="text-[10px] text-zinc-400 block" suppressHydrationWarning>
+                          Act: {formatActivityDate(ord.lastActivityAt || ord.updatedAt)}
                         </span>
                       </td>
 
