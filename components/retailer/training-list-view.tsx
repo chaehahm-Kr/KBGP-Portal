@@ -249,14 +249,22 @@ export function TrainingListView({
                     </span>
                   </div>
 
-                  {/* Completion badge */}
+                  {/* Completion / Training Status badge */}
                   <div className="absolute top-3 right-3">
                     {product.isCompleted ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-500 text-white shadow-sm">
                         ✓ Completed
                       </span>
+                    ) : product.trainingStatus === "preparing" ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/90 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                        ⏳ Training Preparing
+                      </span>
+                    ) : product.trainingStatus === "unavailable" ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-100 text-zinc-500 dark:bg-zinc-800/90 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                        Training Not Available Yet
+                      </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                         To Learn
                       </span>
                     )}
@@ -288,26 +296,39 @@ export function TrainingListView({
 
                   {/* Action Button */}
                   <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
-                    <Link
-                      href={detailUrl}
-                      className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors ${
-                        product.isCompleted
-                          ? "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200"
-                          : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/20"
-                      }`}
-                    >
-                      {product.isCompleted ? (
-                        <>
-                          <span>Review Training</span>
-                          <span>→</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Start Training (1 min)</span>
-                          <span>→</span>
-                        </>
-                      )}
-                    </Link>
+                    {product.trainingStatus === "unavailable" ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-800/60 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-200 dark:border-zinc-700/60"
+                      >
+                        <span>Training Not Ready</span>
+                      </button>
+                    ) : product.trainingStatus === "preparing" ? (
+                      <Link
+                        href={detailUrl}
+                        className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/80 transition-colors shadow-2xs"
+                      >
+                        <span>Study Guide (Preparing)</span>
+                        <span>→</span>
+                      </Link>
+                    ) : product.isCompleted ? (
+                      <Link
+                        href={detailUrl}
+                        className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 transition-colors"
+                      >
+                        <span>Review Training</span>
+                        <span>→</span>
+                      </Link>
+                    ) : (
+                      <Link
+                        href={detailUrl}
+                        className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/20 transition-colors"
+                      >
+                        <span>Start Training (1 min)</span>
+                        <span>→</span>
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>

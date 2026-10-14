@@ -112,4 +112,9 @@ export interface GroundedTrainingContext {
   shortDescription?: string | null;
   mediaAssetCount: number;
   imageCount: number;
+  primaryImageUrl?: string | null;
+  benefitGraphicUrl?: string | null;
+  infographicUrl?: string | null;
+  lifestyleImageUrl?: string | null;
+  howToGraphicUrl?: string | null;
 }

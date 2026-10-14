@@ -19,6 +19,33 @@ export interface TrainingProductSummary {
   thumbnailUrl: string | null;
   isCompleted: boolean;
   completedAt: string | null;
+  trainingStatus: "published" | "preparing" | "unavailable";
+  trainingStatusLabel: string;
+  canStartTraining: boolean;
+}
+
+export interface EnrichedMediaAsset {
+  id: string;
+  assetType: string;
+  title: string;
+  url: string;
+  thumbnailUrl?: string;
+  status: string;
+}
+
+export interface TrainingQuizQuestion {
+  id?: string;
+  category?: string;
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+export interface CustomerObjection {
+  id: string;
+  objection: string;
+  answer: string;
 }
 
 export interface TrainingProductDetail extends TrainingProductSummary {
@@ -27,9 +54,19 @@ export interface TrainingProductDetail extends TrainingProductSummary {
   keyBenefits: string[];
   howToUse: string;
   keyIngredients: string;
+  pitch15s: string | null;
   sellingPoints: string[];
+  customerObjections: CustomerObjection[];
   importantNotes: string | null;
+  storageHandlingSop: string | null;
+  quizQuestions: TrainingQuizQuestion[];
   videoUrl: string | null;
+  mediaAssets: EnrichedMediaAsset[];
+  benefitGraphicUrl: string | null;
+  infographicUrl: string | null;
+  lifestyleImageUrl: string | null;
+  howToGraphicUrl: string | null;
+  hasVideo: boolean;
   images: Array<{
     id: string;
     url: string;
@@ -49,6 +86,7 @@ export interface TrainingProgressStats {
 
 /**
  * Fetch Store-specific Training Products list for authenticated user
+ * Incorporates the authoritative Union Set (Active Store Products + Valid Orders)
  */
 export async function getRetailerTrainingProducts(filters: {
   storeId?: string;
@@ -81,8 +119,10 @@ export async function getRetailerTrainingProducts(filters: {
       ? filters.storeId
       : stores[0].id;
 
-  // 1. Fetch store assortment from retailer_store_products
-  let productIds: string[] = [];
+  // 1. Fetch store assortment union set (retailer_store_products + valid retailer_orders)
+  const storeAssortmentIds = new Set<string>();
+
+  // A. Active store assortment products
   try {
     const { data: storeProducts } = await adminClient
       .from("retailer_store_products")
@@ -90,12 +130,38 @@ export async function getRetailerTrainingProducts(filters: {
       .eq("store_id", selectedStoreId)
       .eq("is_active", true);
 
-    if (storeProducts && storeProducts.length > 0) {
-      productIds = storeProducts.map((sp) => sp.product_id);
-    }
+    (storeProducts || []).forEach((sp) => {
+      if (sp.product_id) storeAssortmentIds.add(sp.product_id);
+    });
   } catch (err) {
     console.warn("Error fetching store products for training:", err);
   }
+
+  // B. Products from valid non-cancelled orders for this store
+  try {
+    const { data: storeOrders } = await adminClient
+      .from("retailer_orders")
+      .select(`
+        id,
+        order_status,
+        retailer_order_items (
+          product_id
+        )
+      `)
+      .eq("store_id", selectedStoreId)
+      .in("order_status", ["confirmed", "processing", "partially_shipped", "shipped", "delivered"]);
+
+    (storeOrders || []).forEach((order) => {
+      const items = (order.retailer_order_items as any[]) || [];
+      items.forEach((it) => {
+        if (it.product_id) storeAssortmentIds.add(it.product_id);
+      });
+    });
+  } catch (err) {
+    console.warn("Error fetching store orders for training:", err);
+  }
+
+  const productIds = Array.from(storeAssortmentIds);
 
   if (productIds.length === 0) {
     return {
@@ -146,7 +212,22 @@ export async function getRetailerTrainingProducts(filters: {
     };
   }
 
-  // 3. Fetch user's completion progress for these products
+  // 3. Fetch training content rows for all these products
+  const trainingContentMap = new Map<string, any>();
+  try {
+    const { data: tcRows } = await adminClient
+      .from("retailer_product_training_content")
+      .select("*")
+      .in("product_id", productIds);
+
+    if (tcRows) {
+      tcRows.forEach((r) => trainingContentMap.set(r.product_id, r));
+    }
+  } catch {
+    // ignore
+  }
+
+  // 4. Fetch user's completion progress for these products
   const userProgressMap = new Map<string, string>(); // product_id -> completed_at
   try {
     const { data: progressRows } = await adminClient
@@ -164,7 +245,7 @@ export async function getRetailerTrainingProducts(filters: {
     // table might be pending migration or empty
   }
 
-  // 4. Map and sign thumbnail images
+  // 5. Map and sign thumbnail images & determine training status
   const allSummaries: TrainingProductSummary[] = [];
 
   for (const p of rawProducts) {
@@ -199,6 +280,27 @@ export async function getRetailerTrainingProducts(filters: {
     const isCompleted = userProgressMap.has(p.id);
     const completedAt = userProgressMap.get(p.id) || null;
 
+    // Determine Training Status
+    const tc = trainingContentMap.get(p.id);
+    const draftInPrice = info.training_draft;
+
+    let trainingStatus: "published" | "preparing" | "unavailable" = "unavailable";
+    let trainingStatusLabel = "Training Not Available Yet";
+    let canStartTraining = false;
+
+    if (tc && tc.is_published === true && tc.status === "published") {
+      trainingStatus = "published";
+      trainingStatusLabel = "Published";
+      canStartTraining = true;
+    } else if (
+      (tc && (tc.status === "draft" || tc.status === "in_review" || !tc.is_published)) ||
+      draftInPrice
+    ) {
+      trainingStatus = "preparing";
+      trainingStatusLabel = "Training Preparing";
+      canStartTraining = true; // Available for study guide / preview mode
+    }
+
     allSummaries.push({
       id: p.id,
       name: overrides.name?.trim() || p.name,
@@ -213,6 +315,9 @@ export async function getRetailerTrainingProducts(filters: {
       thumbnailUrl,
       isCompleted,
       completedAt,
+      trainingStatus,
+      trainingStatusLabel,
+      canStartTraining,
     });
   }
 
@@ -221,7 +326,7 @@ export async function getRetailerTrainingProducts(filters: {
   const completedCount = allSummaries.filter((p) => p.isCompleted).length;
   const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  // 5. Apply search and status filters
+  // 6. Apply search and status filters
   let filtered = allSummaries;
 
   if (filters.search) {
@@ -252,6 +357,7 @@ export async function getRetailerTrainingProducts(filters: {
 
 /**
  * Fetch detailed training module for a specific product
+ * Enriched with approved Media Assets, 7 structured sections, and Quiz
  */
 export async function getRetailerTrainingDetail(
   productId: string,
@@ -269,6 +375,7 @@ export async function getRetailerTrainingDetail(
       name_en,
       description,
       bullet_points,
+      how_to_use,
       ingredients_text,
       category,
       category_code,
@@ -322,40 +429,83 @@ export async function getRetailerTrainingDetail(
     }
   }
 
-  // 2. Fetch enriched training content from retailer_product_training_content (if available)
+  // 2. Fetch enriched training content from retailer_product_training_content or training_draft
   let trainingSummary = overrides.description || p.description || "Comprehensive K-Beauty product training guide.";
   let targetCustomer: string | null = null;
   let keyBenefits = defaultBulletPoints.filter(Boolean);
-  let howToUse = "Apply as directed on product packaging. Use morning and night for best results.";
+  let howToUse = overrides.how_to_use || (p as any).how_to_use || "Apply as directed on product packaging. Use morning and night for best results.";
   let keyIngredients = p.ingredients_text || "Formulated with premium Korean botanical extracts.";
+  let pitch15s: string | null = "Recommend this clean K-Beauty staple for proven daily skin barrier hydration.";
   let sellingPoints: string[] = [
     "High customer satisfaction and gentle daily formulation",
     "Clean K-Beauty quality with proven consumer demand",
     "Great cross-sell addition to any daily routine"
   ];
+  let customerObjections: CustomerObjection[] = [];
+  let storageHandlingSop: string | null = "Store at room temperature (15–25°C / 59–77°F). Keep away from direct sunlight.";
   let importantNotes: string | null = "For external use only. Store in a cool, dry place away from direct sunlight.";
+  let quizQuestions: TrainingQuizQuestion[] = [];
   let videoUrl: string | null = null;
+  let isPublished = false;
+  let trainingStatus: "published" | "preparing" | "unavailable" = "unavailable";
+  let trainingStatusLabel = "Training Not Available Yet";
 
+  // Check database table first
   try {
     const { data: tc } = await adminClient
       .from("retailer_product_training_content")
       .select("*")
       .eq("product_id", productId)
-      .eq("is_published", true)
       .maybeSingle();
 
     if (tc) {
+      isPublished = tc.is_published ?? (tc.status === "published");
+      trainingStatus = isPublished ? "published" : "preparing";
+      trainingStatusLabel = isPublished ? "Published" : "Training Preparing";
+
       if (tc.training_summary) trainingSummary = tc.training_summary;
       if (tc.target_customer) targetCustomer = tc.target_customer;
       if (Array.isArray(tc.key_benefits) && tc.key_benefits.length > 0) keyBenefits = tc.key_benefits;
       if (tc.how_to_use) howToUse = tc.how_to_use;
       if (tc.key_ingredients) keyIngredients = tc.key_ingredients;
+      if (tc.pitch_15s) pitch15s = tc.pitch_15s;
       if (Array.isArray(tc.selling_points) && tc.selling_points.length > 0) sellingPoints = tc.selling_points;
+      if (Array.isArray(tc.customer_objections) && tc.customer_objections.length > 0) customerObjections = tc.customer_objections;
+      if (tc.storage_handling_sop) storageHandlingSop = tc.storage_handling_sop;
       if (tc.important_notes) importantNotes = tc.important_notes;
+      if (Array.isArray(tc.quiz_questions) && tc.quiz_questions.length > 0) quizQuestions = tc.quiz_questions;
       if (tc.video_url) videoUrl = tc.video_url;
     }
   } catch {
     // training content table might not exist yet; fallbacks used
+  }
+
+  // Check draft in price_additional_info if fields are missing or not published
+  const draft = info.training_draft;
+  if (draft) {
+    if (trainingStatus === "unavailable") {
+      trainingStatus = "preparing";
+      trainingStatusLabel = "Training Preparing";
+    }
+    if (!tcSummaryHasContent(trainingSummary) && draft.productOverview) trainingSummary = draft.productOverview;
+    if ((!targetCustomer || targetCustomer === "") && draft.bestFor) targetCustomer = draft.bestFor;
+    if (keyBenefits.length === 0 && Array.isArray(draft.top3Benefits) && draft.top3Benefits.length > 0) {
+      keyBenefits = draft.top3Benefits;
+    }
+    if ((!howToUse || howToUse.includes("as directed")) && draft.howToUse) howToUse = draft.howToUse;
+    if ((!pitch15s || pitch15s.includes("Recommend this")) && draft.pitch15s) pitch15s = draft.pitch15s;
+    if (sellingPoints.length <= 3 && Array.isArray(draft.sellingPoints) && draft.sellingPoints.length > 0) {
+      sellingPoints = draft.sellingPoints;
+    }
+    if (customerObjections.length === 0 && Array.isArray(draft.customerObjections)) {
+      customerObjections = draft.customerObjections;
+    }
+    if ((!storageHandlingSop || storageHandlingSop.includes("room temperature")) && draft.storageHandlingSop) {
+      storageHandlingSop = draft.storageHandlingSop;
+    }
+    if (quizQuestions.length === 0 && Array.isArray(draft.quizQuestions) && draft.quizQuestions.length > 0) {
+      quizQuestions = draft.quizQuestions;
+    }
   }
 
   // 3. User completion progress
@@ -402,7 +552,65 @@ export async function getRetailerTrainingDetail(
     }
   }
 
-  // 5. Calculate previous/next product in current Store assortment
+  // 5. Query and sign Media Assets (Benefit Graphic, Infographic, Lifestyle Image, How-To Graphic, Videos)
+  const mediaAssets: EnrichedMediaAsset[] = [];
+  let benefitGraphicUrl: string | null = null;
+  let infographicUrl: string | null = null;
+  let lifestyleImageUrl: string | null = null;
+  let howToGraphicUrl: string | null = null;
+  let hasVideo = !!videoUrl;
+
+  try {
+    const { data: dbAssets } = await adminClient
+      .from("product_media_assets")
+      .select("id, asset_type, title, status, storage_path, content_data")
+      .eq("product_id", productId)
+      .in("status", ["approved", "draft"])
+      .order("created_at", { ascending: false });
+
+    if (dbAssets && dbAssets.length > 0) {
+      for (const item of dbAssets) {
+        let signedUrl = "";
+        if (item.storage_path) {
+          try {
+            const { data: sData } = await adminClient.storage
+              .from("company-uploads")
+              .createSignedUrl(item.storage_path, 7200);
+            signedUrl = sData?.signedUrl || "";
+          } catch {
+            // ignore
+          }
+        }
+
+        if (signedUrl) {
+          mediaAssets.push({
+            id: item.id,
+            assetType: item.asset_type,
+            title: item.title,
+            url: signedUrl,
+            status: item.status,
+          });
+
+          if (item.asset_type === "benefit_graphic" && (!benefitGraphicUrl || item.status === "approved")) {
+            benefitGraphicUrl = signedUrl;
+          } else if (item.asset_type === "infographic" && (!infographicUrl || item.status === "approved")) {
+            infographicUrl = signedUrl;
+          } else if (item.asset_type === "lifestyle_image" && (!lifestyleImageUrl || item.status === "approved")) {
+            lifestyleImageUrl = signedUrl;
+          } else if (item.asset_type === "how_to_graphic" && (!howToGraphicUrl || item.status === "approved")) {
+            howToGraphicUrl = signedUrl;
+          } else if (item.asset_type === "product_video" || item.asset_type === "how_to_video") {
+            hasVideo = true;
+            if (!videoUrl) videoUrl = signedUrl;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Error fetching media assets for training detail:", err);
+  }
+
+  // 6. Calculate previous/next product in current Store assortment union set
   const { products: storeProducts } = await getRetailerTrainingProducts({ storeId });
   const currentIndex = storeProducts.findIndex((sp) => sp.id === productId);
   const totalCount = storeProducts.length;
@@ -424,20 +632,37 @@ export async function getRetailerTrainingDetail(
     thumbnailUrl: images[0]?.url || null,
     isCompleted,
     completedAt,
+    trainingStatus,
+    trainingStatusLabel,
+    canStartTraining: trainingStatus !== "unavailable",
     trainingSummary,
     targetCustomer,
     keyBenefits,
     howToUse,
     keyIngredients,
+    pitch15s,
     sellingPoints,
+    customerObjections,
     importantNotes,
+    storageHandlingSop,
+    quizQuestions,
     videoUrl,
+    mediaAssets,
+    benefitGraphicUrl,
+    infographicUrl,
+    lifestyleImageUrl,
+    howToGraphicUrl,
+    hasVideo,
     images,
     prevProductId,
     nextProductId,
     currentIndex: currentIndex >= 0 ? currentIndex + 1 : 1,
     totalCount: totalCount > 0 ? totalCount : 1,
   };
+}
+
+function tcSummaryHasContent(summary: string): boolean {
+  return summary !== "" && !summary.includes("Comprehensive K-Beauty product training guide.");
 }
 
 /**

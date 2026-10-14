@@ -88,7 +88,15 @@ export function TrainingMobilePreview({ module, context }: TrainingMobilePreview
               <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-3 bg-zinc-50 dark:bg-zinc-900 space-y-2.5">
                 <div className="flex items-center gap-3">
                   <div className="w-16 h-16 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-2xl shrink-0 overflow-hidden relative">
-                    🧴
+                    {context.primaryImageUrl ? (
+                      <img
+                        src={context.primaryImageUrl}
+                        alt={context.productName}
+                        className="w-full h-full object-contain p-1"
+                      />
+                    ) : (
+                      <span>🧴</span>
+                    )}
                   </div>
                   <div>
                     <span className="text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block">
@@ -104,16 +112,42 @@ export function TrainingMobilePreview({ module, context }: TrainingMobilePreview
                 </div>
 
                 {/* 1. Overview */}
-                <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-800 text-[11px] text-zinc-700 dark:text-zinc-300 leading-relaxed font-medium">
-                  {module.productOverview || "No overview provided."}
+                <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-800 text-[11px] text-zinc-700 dark:text-zinc-300 leading-relaxed font-medium space-y-2">
+                  <p>{module.productOverview || "No overview provided."}</p>
+                  {context.infographicUrl && (
+                    <div className="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800">
+                      <img
+                        src={context.infographicUrl}
+                        alt="Product Infographic"
+                        className="w-full h-auto object-cover max-h-48"
+                      />
+                      <div className="px-2 py-1 text-[9px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-t border-zinc-200 dark:border-zinc-700">
+                        📊 Product Infographic
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* 2. Top 3 Benefits Card */}
-              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-3.5 bg-white dark:bg-zinc-900 space-y-2">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-3.5 bg-white dark:bg-zinc-900 space-y-2.5">
                 <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
                   <span>✨</span> Top 3 Benefits
                 </span>
+
+                {context.benefitGraphicUrl && (
+                  <div className="rounded-xl overflow-hidden border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/30">
+                    <img
+                      src={context.benefitGraphicUrl}
+                      alt="Benefit Graphic"
+                      className="w-full h-auto object-cover max-h-48"
+                    />
+                    <div className="px-2 py-1 text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-t border-indigo-100 dark:border-indigo-900/60">
+                      ✨ Approved Benefit Graphic
+                    </div>
+                  </div>
+                )}
+
                 <ul className="space-y-1.5">
                   {module.top3Benefits.map((b, i) => (
                     <li key={i} className="flex items-start gap-2 text-[11px] leading-relaxed">
@@ -125,20 +159,48 @@ export function TrainingMobilePreview({ module, context }: TrainingMobilePreview
               </div>
 
               {/* 3. Best For Card */}
-              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-3.5 bg-zinc-50 dark:bg-zinc-900 space-y-1.5">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-3.5 bg-zinc-50 dark:bg-zinc-900 space-y-2">
                 <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
                   <span>🎯</span> Best For / Target Customer
                 </span>
+
+                {context.lifestyleImageUrl && (
+                  <div className="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-white">
+                    <img
+                      src={context.lifestyleImageUrl}
+                      alt="Lifestyle Image"
+                      className="w-full h-auto object-cover max-h-48"
+                    />
+                    <div className="px-2 py-1 text-[9px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-t border-zinc-200 dark:border-zinc-700">
+                      📸 In-Context Lifestyle
+                    </div>
+                  </div>
+                )}
+
                 <p className="text-[11px] text-zinc-800 dark:text-zinc-200 leading-relaxed font-medium">
                   {module.bestFor}
                 </p>
               </div>
 
               {/* 4. How To Use Card */}
-              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-3.5 bg-white dark:bg-zinc-900 space-y-1.5">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-3.5 bg-white dark:bg-zinc-900 space-y-2">
                 <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                   <span>🧴</span> How to Use
                 </span>
+
+                {context.howToGraphicUrl && (
+                  <div className="rounded-xl overflow-hidden border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/30">
+                    <img
+                      src={context.howToGraphicUrl}
+                      alt="How-To Graphic"
+                      className="w-full h-auto object-cover max-h-48"
+                    />
+                    <div className="px-2 py-1 text-[9px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-t border-emerald-100 dark:border-emerald-900/60">
+                      🧴 Application Steps
+                    </div>
+                  </div>
+                )}
+
                 <p className="text-[11px] text-zinc-700 dark:text-zinc-300 leading-relaxed whitespace-pre-line">
                   {module.howToUse}
                 </p>
@@ -192,6 +254,16 @@ export function TrainingMobilePreview({ module, context }: TrainingMobilePreview
                 </span>
                 <p className="text-[10px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
                   {module.storageHandlingSop}
+                </p>
+              </div>
+
+              {/* Future-Ready Video Banner */}
+              <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 p-3 bg-zinc-50/50 dark:bg-zinc-900/50 text-center space-y-1">
+                <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 flex items-center justify-center gap-1">
+                  <span>🎬</span> Product & How-To Video
+                </span>
+                <p className="text-[10px] text-zinc-400 leading-tight">
+                  Short video training modules are currently in production and will appear here upon official release.
                 </p>
               </div>
 

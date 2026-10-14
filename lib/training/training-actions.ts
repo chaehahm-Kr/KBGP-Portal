@@ -76,14 +76,62 @@ export async function getGroundedProductContext(productId: string): Promise<Grou
     effectiveBullets = [p.bullet_points];
   }
 
-  // Count media assets
+  // Primary image signed url
+  let primaryImageUrl: string | null = null;
+  const rawImages = (p.product_images as any[]) || [];
+  if (rawImages.length > 0 && rawImages[0].storage_path) {
+    try {
+      const { data: sData } = await adminClient.storage
+        .from("company-uploads")
+        .createSignedUrl(rawImages[0].storage_path, 7200);
+      primaryImageUrl = sData?.signedUrl || null;
+    } catch {
+      // ignore
+    }
+  }
+
+  // Count and fetch approved/draft media assets
   let mediaCount = 0;
+  let benefitGraphicUrl: string | null = null;
+  let infographicUrl: string | null = null;
+  let lifestyleImageUrl: string | null = null;
+  let howToGraphicUrl: string | null = null;
+
   try {
-    const { count } = await adminClient
+    const { data: assets, count } = await adminClient
       .from("product_media_assets")
-      .select("id", { count: "exact", head: true })
-      .eq("product_id", productId);
+      .select("asset_type, storage_path, status", { count: "exact" })
+      .eq("product_id", productId)
+      .in("status", ["approved", "draft"]);
+
     mediaCount = count || 0;
+
+    if (assets) {
+      for (const a of assets) {
+        if (!a.storage_path) continue;
+        let signed = "";
+        try {
+          const { data: s } = await adminClient.storage
+            .from("company-uploads")
+            .createSignedUrl(a.storage_path, 7200);
+          signed = s?.signedUrl || "";
+        } catch {
+          // ignore
+        }
+
+        if (signed) {
+          if (a.asset_type === "benefit_graphic" && (!benefitGraphicUrl || a.status === "approved")) {
+            benefitGraphicUrl = signed;
+          } else if (a.asset_type === "infographic" && (!infographicUrl || a.status === "approved")) {
+            infographicUrl = signed;
+          } else if (a.asset_type === "lifestyle_image" && (!lifestyleImageUrl || a.status === "approved")) {
+            lifestyleImageUrl = signed;
+          } else if (a.asset_type === "how_to_graphic" && (!howToGraphicUrl || a.status === "approved")) {
+            howToGraphicUrl = signed;
+          }
+        }
+      }
+    }
   } catch {
     // ignore
   }
@@ -106,6 +154,11 @@ export async function getGroundedProductContext(productId: string): Promise<Grou
     shortDescription: trading.short_description || null,
     mediaAssetCount: mediaCount,
     imageCount: (p.product_images as any[])?.length || 0,
+    primaryImageUrl,
+    benefitGraphicUrl,
+    infographicUrl,
+    lifestyleImageUrl,
+    howToGraphicUrl,
   };
 }
 
