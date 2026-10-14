@@ -40,9 +40,11 @@ async function runProductionP4R4QA() {
     console.log(`✓ Live Commit SHA: ${diag.deployment.commitSha}`);
     console.log(`✓ Live Branch: ${diag.deployment.branch}`);
     console.log(`✓ Live Environment: ${diag.deployment.environment}`);
+    const { execSync } = require('child_process');
+    const localHead = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
     console.assert(
-      diag.deployment.commitSha === '43ffce413cbc31dceb67f07b87b7b43beed32785',
-      'Live SHA must match local HEAD'
+      diag.deployment.commitSha === localHead,
+      `Live SHA (${diag.deployment.commitSha}) must match local HEAD (${localHead})`
     );
 
     // 2. Authenticate Retailer
