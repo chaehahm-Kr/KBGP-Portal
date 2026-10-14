@@ -41,7 +41,7 @@ async function runProductionP4R4QA() {
     console.log(`✓ Live Branch: ${diag.deployment.branch}`);
     console.log(`✓ Live Environment: ${diag.deployment.environment}`);
     console.assert(
-      diag.deployment.commitSha === '44cfcfa761c92207ebbf8b51f3d777671c6adbca',
+      diag.deployment.commitSha === '43ffce413cbc31dceb67f07b87b7b43beed32785',
       'Live SHA must match local HEAD'
     );
 
