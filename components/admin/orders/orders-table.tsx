@@ -11,9 +11,10 @@ import {
   AdminOrderFilter,
   AdminOrderSummaryCounters,
   AdminOrderBox,
+  AdminOrderDispatchSummary,
 } from "@/lib/admin/orders-types";
 import { getAdminRetailerOrdersAction } from "@/lib/admin/orders-actions";
-import { PackagesPopover } from "./packages-popover";
+import { OrderTrackingModal } from "./order-tracking-modal";
 import { EditTrackingModal } from "./edit-tracking-modal";
 
 function formatYMD(d: Date): string {
@@ -149,7 +150,7 @@ export function AdminOrdersTable({
     if (initialCounters) setCounters(initialCounters);
   }, [initialOrders, initialTotal, initialCounters]);
 
-  // In-place tracking modal state
+  // In-place tracking modal state (for editing specific dispatch)
   const [trackingModalState, setTrackingModalState] = useState<{
     fulfillmentId: string;
     fulfillmentNumber: string;
@@ -157,6 +158,12 @@ export function AdminOrdersTable({
     currentBoxes: AdminOrderBox[];
     currentNotes?: string | null;
   } | null>(null);
+
+  // Unified multi-dispatch tracking overview modal
+  const [viewingTrackingOrder, setViewingTrackingOrder] = useState<AdminRetailerOrderSummary | null>(null);
+  const [initialFocusDispatchId, setInitialFocusDispatchId] = useState<string | null>(null);
+
+  const DEFAULT_ACTIVE_STATUSES = "submitted,processing,partially_shipped";
 
   // Filter States initialized from URL searchParams
   const [quickFilter, setQuickFilter] = useState<string>(
@@ -174,12 +181,19 @@ export function AdminOrdersTable({
   const [selectedStoreId, setSelectedStoreId] = useState<string>(
     searchParams.get("storeId") || "all"
   );
-  const [statusFilter, setStatusFilter] = useState<string>(
-    searchParams.get("status") || "all"
-  );
+  const [statusFilter, setStatusFilter] = useState<string>(() => {
+    const raw = searchParams.get("status");
+    if (raw) return raw;
+    if (searchParams.get("quickFilter")) return "all";
+    return DEFAULT_ACTIVE_STATUSES;
+  });
   const [selectedStatuses, setSelectedStatuses] = useState<Set<ApprovedOrderStatus>>(() => {
     const raw = searchParams.get("status");
-    if (!raw || raw === "all") return new Set<ApprovedOrderStatus>();
+    if (raw === "all") return new Set<ApprovedOrderStatus>();
+    if (!raw) {
+      if (searchParams.get("quickFilter")) return new Set<ApprovedOrderStatus>();
+      return new Set<ApprovedOrderStatus>(["submitted", "processing", "partially_shipped"]);
+    }
     const list = raw.split(",").map((s) => s.trim().toLowerCase()) as ApprovedOrderStatus[];
     return new Set(
       list.filter((s) =>
@@ -231,7 +245,7 @@ export function AdminOrdersTable({
       Boolean(skuTerm.trim()) ||
       selectedCompanyId !== "all" ||
       selectedStoreId !== "all" ||
-      (statusFilter !== "all" && selectedStatuses.size > 0 && selectedStatuses.size < 6) ||
+      (statusFilter !== "all" && statusFilter !== DEFAULT_ACTIVE_STATUSES) ||
       paymentStatus !== "all" ||
       datePreset !== "all" ||
       Boolean(startDate) ||
@@ -245,7 +259,6 @@ export function AdminOrdersTable({
     selectedCompanyId,
     selectedStoreId,
     statusFilter,
-    selectedStatuses,
     paymentStatus,
     datePreset,
     startDate,
@@ -395,8 +408,8 @@ export function AdminOrdersTable({
     setSkuTerm("");
     setSelectedCompanyId("all");
     setSelectedStoreId("all");
-    setStatusFilter("all");
-    setSelectedStatuses(new Set());
+    setStatusFilter(DEFAULT_ACTIVE_STATUSES);
+    setSelectedStatuses(new Set(["submitted", "processing", "partially_shipped"]));
     setPaymentStatus("all");
     setDatePreset("all");
     setStartDate("");
@@ -413,7 +426,7 @@ export function AdminOrdersTable({
     setIsPending(true);
     (async () => {
       try {
-        const res = await getAdminRetailerOrdersAction({});
+        const res = await getAdminRetailerOrdersAction({ status: DEFAULT_ACTIVE_STATUSES });
         setOrders(res.orders);
         setTotalCount(res.totalCount);
         setCounters(res.summaryCounters);
@@ -423,6 +436,19 @@ export function AdminOrdersTable({
         setIsPending(false);
       }
     })();
+  };
+
+  const handleEditDispatchFromTrackingModal = (dispatch: AdminOrderDispatchSummary) => {
+    if (!viewingTrackingOrder) return;
+    const orderNum = viewingTrackingOrder.orderNumber;
+    setViewingTrackingOrder(null);
+    setTrackingModalState({
+      fulfillmentId: dispatch.id,
+      fulfillmentNumber: dispatch.fulfillmentNumber,
+      orderNumber: orderNum,
+      currentBoxes: dispatch.boxes,
+      currentNotes: dispatch.notes,
+    });
   };
 
   const handleSort = (field: "created_at" | "order_number" | "retailer" | "remaining" | "total" | "updated_at" | "days_open") => {
@@ -658,7 +684,9 @@ export function AdminOrdersTable({
           type="button"
           onClick={() => {
             setQuickFilter("all");
-            executeQuery({ quickFilter: "all", page: 1 });
+            setStatusFilter("all");
+            setSelectedStatuses(new Set());
+            executeQuery({ quickFilter: "all", status: "all", page: 1 });
           }}
           className={`p-3 rounded-2xl border text-left transition-all ${
             quickFilter === "all"
@@ -680,7 +708,9 @@ export function AdminOrdersTable({
           type="button"
           onClick={() => {
             setQuickFilter("new");
-            executeQuery({ quickFilter: "new", page: 1 });
+            setStatusFilter("all");
+            setSelectedStatuses(new Set());
+            executeQuery({ quickFilter: "new", status: "all", page: 1 });
           }}
           className={`p-3 rounded-2xl border text-left transition-all ${
             quickFilter === "new"
@@ -704,7 +734,9 @@ export function AdminOrdersTable({
           type="button"
           onClick={() => {
             setQuickFilter("ready");
-            executeQuery({ quickFilter: "ready", page: 1 });
+            setStatusFilter("all");
+            setSelectedStatuses(new Set());
+            executeQuery({ quickFilter: "ready", status: "all", page: 1 });
           }}
           className={`p-3 rounded-2xl border text-left transition-all ${
             quickFilter === "ready"
@@ -728,7 +760,9 @@ export function AdminOrdersTable({
           type="button"
           onClick={() => {
             setQuickFilter("partially_shipped");
-            executeQuery({ quickFilter: "partially_shipped", page: 1 });
+            setStatusFilter("all");
+            setSelectedStatuses(new Set());
+            executeQuery({ quickFilter: "partially_shipped", status: "all", page: 1 });
           }}
           className={`p-3 rounded-2xl border text-left transition-all ${
             quickFilter === "partially_shipped"
@@ -752,7 +786,9 @@ export function AdminOrdersTable({
           type="button"
           onClick={() => {
             setQuickFilter("on_hold");
-            executeQuery({ quickFilter: "on_hold", page: 1 });
+            setStatusFilter("all");
+            setSelectedStatuses(new Set());
+            executeQuery({ quickFilter: "on_hold", status: "all", page: 1 });
           }}
           className={`p-3 rounded-2xl border text-left transition-all ${
             quickFilter === "on_hold"
@@ -776,7 +812,9 @@ export function AdminOrdersTable({
           type="button"
           onClick={() => {
             setQuickFilter("tracking_missing");
-            executeQuery({ quickFilter: "tracking_missing", page: 1 });
+            setStatusFilter("all");
+            setSelectedStatuses(new Set());
+            executeQuery({ quickFilter: "tracking_missing", status: "all", page: 1 });
           }}
           className={`p-3 rounded-2xl border text-left transition-all ${
             quickFilter === "tracking_missing"
@@ -800,7 +838,9 @@ export function AdminOrdersTable({
           type="button"
           onClick={() => {
             setQuickFilter("completed");
-            executeQuery({ quickFilter: "completed", page: 1 });
+            setStatusFilter("all");
+            setSelectedStatuses(new Set());
+            executeQuery({ quickFilter: "completed", status: "all", page: 1 });
           }}
           className={`p-3 rounded-2xl border text-left transition-all ${
             quickFilter === "completed"
@@ -968,30 +1008,74 @@ export function AdminOrdersTable({
               {/* From and To Date Inputs ALWAYS VISIBLE Side-by-Side */}
               <div className="flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-800/80 px-2 py-1 rounded-xl border border-zinc-200 dark:border-zinc-700">
                 <span className="text-[10px] font-bold text-zinc-500 uppercase">From:</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => handleDateInputChange(e.target.value, endDate)}
-                  onClick={(e) => {
-                    try {
-                      e.currentTarget.showPicker?.();
-                    } catch {}
-                  }}
-                  className="w-28 px-1.5 py-0.5 text-[11px] rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
-                />
+                <div className="relative inline-flex items-center">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => handleDateInputChange(e.target.value, endDate)}
+                    onClick={(e) => {
+                      try {
+                        e.currentTarget.showPicker?.();
+                      } catch {}
+                    }}
+                    className="w-28 pl-1.5 pr-6 py-0.5 text-[11px] font-mono rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-0"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-label="Pick start date"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const input = e.currentTarget.parentElement?.querySelector("input");
+                      try { input?.showPicker?.(); } catch {}
+                      input?.focus();
+                    }}
+                    className="absolute right-1 text-zinc-500 hover:text-zinc-800 dark:text-zinc-200 dark:hover:text-white cursor-pointer p-0.5"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                  </button>
+                </div>
+
                 <span className="text-zinc-400 text-xs">→</span>
+
                 <span className="text-[10px] font-bold text-zinc-500 uppercase">To:</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => handleDateInputChange(startDate, e.target.value)}
-                  onClick={(e) => {
-                    try {
-                      e.currentTarget.showPicker?.();
-                    } catch {}
-                  }}
-                  className="w-28 px-1.5 py-0.5 text-[11px] rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
-                />
+                <div className="relative inline-flex items-center">
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => handleDateInputChange(startDate, e.target.value)}
+                    onClick={(e) => {
+                      try {
+                        e.currentTarget.showPicker?.();
+                      } catch {}
+                    }}
+                    className="w-28 pl-1.5 pr-6 py-0.5 text-[11px] font-mono rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-0"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-label="Pick end date"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const input = e.currentTarget.parentElement?.querySelector("input");
+                      try { input?.showPicker?.(); } catch {}
+                      input?.focus();
+                    }}
+                    className="absolute right-1 text-zinc-500 hover:text-zinc-800 dark:text-zinc-200 dark:hover:text-white cursor-pointer p-0.5"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1311,72 +1395,40 @@ export function AdminOrdersTable({
                       </td>
 
                       {/* Tracking & Cartons */}
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
                         {!ord.hasConfirmedDispatch ? (
                           <span className="text-zinc-400 text-xs italic">— Not Shipped</span>
                         ) : ord.untrackedDispatchesCount > 0 ? (
-                          <div className="flex flex-col items-center gap-1">
-                            {ord.packages.length > 0 && (
-                              <PackagesPopover
-                                packages={ord.packages}
-                                orderNumber={ord.orderNumber}
-                              />
-                            )}
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
-                              ⚠️ {ord.untrackedDispatchesCount} {ord.untrackedDispatchesCount === 1 ? "Dispatch" : "Dispatches"} Missing Track
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setViewingTrackingOrder(ord);
+                              setInitialFocusDispatchId("incomplete");
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-300/80 dark:border-amber-700/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            <span>📦</span>
+                            <span>
+                              {ord.totalBoxCount > 0
+                                ? `${ord.totalBoxCount} ${ord.totalBoxCount === 1 ? "Box" : "Boxes"} ⚠️ ${ord.untrackedDispatchesCount} Missing`
+                                : "+ Add Track ⚠️"}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const untracked =
-                                  ord.dispatches.find((d) => d.status !== "cancelled" && !d.isTrackingComplete) ||
-                                  ord.dispatches[0];
-                                if (untracked) {
-                                  setTrackingModalState({
-                                    fulfillmentId: untracked.id,
-                                    fulfillmentNumber: untracked.fulfillmentNumber,
-                                    orderNumber: ord.orderNumber,
-                                    currentBoxes: untracked.boxes,
-                                    currentNotes: untracked.notes,
-                                  });
-                                }
-                              }}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-2xs transition-colors"
-                            >
-                              + Add Track
-                            </button>
-                          </div>
+                          </button>
                         ) : (
-                          <div className="flex flex-col items-center gap-1">
-                            <div className="flex items-center gap-1.5">
-                              <PackagesPopover
-                                packages={ord.packages}
-                                orderNumber={ord.orderNumber}
-                              />
-                              {ord.dispatches.length > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const target = ord.dispatches[ord.dispatches.length - 1] || ord.dispatches[0];
-                                    setTrackingModalState({
-                                      fulfillmentId: target.id,
-                                      fulfillmentNumber: target.fulfillmentNumber,
-                                      orderNumber: ord.orderNumber,
-                                      currentBoxes: target.boxes,
-                                      currentNotes: target.notes,
-                                    });
-                                  }}
-                                  className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                                  title="Edit Tracking / Boxes"
-                                >
-                                  ✏️ Edit
-                                </button>
-                              )}
-                            </div>
-                            <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
-                              ✓ All Tracked
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setViewingTrackingOrder(ord);
+                              setInitialFocusDispatchId(null);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-zinc-50 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            <span>📦</span>
+                            <span>
+                              {ord.totalBoxCount} {ord.totalBoxCount === 1 ? "Box" : "Boxes"}
                             </span>
-                          </div>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-black">✓</span>
+                          </button>
                         )}
                       </td>
 
@@ -1510,6 +1562,22 @@ export function AdminOrdersTable({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 5.5 Unified Multi-Dispatch Order Tracking Modal */}
+      {viewingTrackingOrder && (
+        <OrderTrackingModal
+          orderNumber={viewingTrackingOrder.orderNumber}
+          dispatches={viewingTrackingOrder.dispatches}
+          packages={viewingTrackingOrder.packages}
+          isOpen={Boolean(viewingTrackingOrder)}
+          initialFocusDispatchId={initialFocusDispatchId}
+          onClose={() => {
+            setViewingTrackingOrder(null);
+            setInitialFocusDispatchId(null);
+          }}
+          onEditDispatch={handleEditDispatchFromTrackingModal}
+        />
       )}
 
       {/* 6. In-place Multi-Box Tracking Modal */}

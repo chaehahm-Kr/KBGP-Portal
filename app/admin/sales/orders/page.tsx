@@ -18,13 +18,24 @@ export default async function AdminRetailerOrdersPage({
   await verifyAdminSession();
   const rawParams = searchParams ? await searchParams : {};
 
+  // Phase B6 / ADM-ORDER-PROCESSING-001-R2:
+  // Default to actively workable statuses (Submitted, Processing, Partially Shipped)
+  // when neither ?status= nor ?quickFilter= is specified.
+  const defaultActiveStatuses = "submitted,processing,partially_shipped";
+  const effectiveStatus =
+    typeof rawParams.status === "string"
+      ? rawParams.status
+      : rawParams.quickFilter
+      ? undefined
+      : defaultActiveStatuses;
+
   const filter: AdminOrderFilter = {
     search: typeof rawParams.search === "string" ? rawParams.search : undefined,
     sku: typeof rawParams.sku === "string" ? rawParams.sku : undefined,
     quickFilter: typeof rawParams.quickFilter === "string" ? (rawParams.quickFilter as any) : undefined,
     companyId: typeof rawParams.companyId === "string" ? rawParams.companyId : undefined,
     storeId: typeof rawParams.storeId === "string" ? rawParams.storeId : undefined,
-    status: typeof rawParams.status === "string" ? rawParams.status : undefined,
+    status: effectiveStatus !== "all" ? effectiveStatus : undefined,
     paymentStatus: typeof rawParams.paymentStatus === "string" ? rawParams.paymentStatus : undefined,
     datePreset: typeof rawParams.datePreset === "string" ? (rawParams.datePreset as any) : undefined,
     startDate: typeof rawParams.startDate === "string" ? rawParams.startDate : undefined,
