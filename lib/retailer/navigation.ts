@@ -51,6 +51,34 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    key: "myProducts",
+    name: "My Products",
+    href: "/sales",
+    icon: "package",
+    roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
+    isBottomNav: false,
+    subItems: [
+      {
+        key: "productPerformance",
+        name: "Product Performance",
+        href: "/sales",
+        roles: ["owner", "buyer", "accounting"],
+      },
+      {
+        key: "weeklyInventory",
+        name: "Weekly Inventory",
+        href: "/check",
+        roles: ["owner", "store_manager", "employee"],
+      },
+      {
+        key: "priceTags",
+        name: "Price Tags",
+        href: "/tags",
+        roles: ["owner", "buyer", "store_manager", "employee"],
+      },
+    ],
+  },
+  {
     key: "orders",
     name: "Orders",
     href: "/orders",
@@ -65,34 +93,6 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     icon: "credit-card",
     roles: ["owner", "buyer", "store_manager", "accounting"],
     isBottomNav: false,
-  },
-  {
-    key: "myProducts",
-    name: "My Products",
-    href: "/check",
-    icon: "package",
-    roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
-    isBottomNav: false,
-    subItems: [
-      {
-        key: "weeklyInventory",
-        name: "Weekly Inventory",
-        href: "/check",
-        roles: ["owner", "store_manager", "employee"],
-      },
-      {
-        key: "productPerformance",
-        name: "Product Performance",
-        href: "/sales",
-        roles: ["owner", "buyer", "accounting"],
-      },
-      {
-        key: "priceTags",
-        name: "Price Tags",
-        href: "/tags",
-        roles: ["owner", "buyer", "store_manager", "employee"],
-      },
-    ],
   },
   {
     key: "learningCenter",
