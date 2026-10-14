@@ -149,7 +149,7 @@ async function runProductionP4R1QA() {
       await addBtn.click();
       await retailerPage.waitForTimeout(1000);
 
-      const successFeedback = await retailerPage.$('text="Added to Cart!"');
+      const successFeedback = await retailerPage.$('button:has-text("Added to Cart"), div:has-text("Added to cart")');
       console.log('✓ Button feedback "Added to Cart!" visible:', Boolean(successFeedback));
     }
 
@@ -187,7 +187,7 @@ async function runProductionP4R1QA() {
     await retailerPage.goto('https://portal.kselecthub.com/checkout', { waitUntil: 'domcontentloaded' });
     await retailerPage.waitForTimeout(3000);
 
-    const checkoutTitle = await retailerPage.$('h1:has-text("주문서 작성"), h1:has-text("Checkout")');
+    const checkoutTitle = await retailerPage.$('h1:has-text("Order Review"), h1:has-text("Checkout")');
     console.log('✓ Checkout page rendered cleanly without errors:', Boolean(checkoutTitle));
 
     console.log('\n================================================================');
