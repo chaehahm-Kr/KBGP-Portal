@@ -7,9 +7,9 @@ interface DashboardBillsCardProps {
 }
 
 export function DashboardBillsCard({ summary }: DashboardBillsCardProps) {
-  const hasPastDue = summary.pastDueAmount > 0;
-  const hasDueSoon = summary.dueSoonAmount > 0;
-  const isAllCaughtUp = summary.openAR <= 0;
+  const hasPastDue = (summary?.pastDueAmount || 0) > 0;
+  const hasDueSoon = (summary?.dueSoonAmount || 0) > 0;
+  const isAllCaughtUp = (summary?.openAR || 0) <= 0;
 
   return (
     <div
@@ -56,13 +56,13 @@ export function DashboardBillsCard({ summary }: DashboardBillsCardProps) {
               </p>
             </div>
           </div>
-          {summary.creditLimit > 0 && (
+          {(summary?.creditLimit || 0) > 0 && (
             <div className="sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-emerald-200/40">
               <span className="text-[10px] text-zinc-500 dark:text-zinc-400 uppercase font-bold block">
                 Available Credit
               </span>
               <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
-                ${summary.availableCredit.toFixed(2)}
+                ${Number(summary?.availableCredit || 0).toFixed(2)}
               </p>
             </div>
           )}
@@ -73,9 +73,9 @@ export function DashboardBillsCard({ summary }: DashboardBillsCardProps) {
             <div className="flex items-center gap-2 p-2.5 rounded-lg bg-rose-100/70 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 text-xs font-semibold">
               <span>⚠️</span>
               <span>
-                You have {summary.pastDueInvoiceCount} overdue bill
-                {summary.pastDueInvoiceCount === 1 ? "" : "s"} totaling $
-                {summary.pastDueAmount.toFixed(2)}. Immediate settlement recommended.
+                You have {summary?.pastDueInvoiceCount || 0} overdue bill
+                {summary?.pastDueInvoiceCount === 1 ? "" : "s"} totaling $
+                {Number(summary?.pastDueAmount || 0).toFixed(2)}. Immediate settlement recommended.
               </span>
             </div>
           )}
@@ -85,7 +85,7 @@ export function DashboardBillsCard({ summary }: DashboardBillsCardProps) {
             <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <span className="text-[10px] uppercase font-bold text-zinc-400">Total Due</span>
               <div className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">
-                ${summary.openAR.toFixed(2)}
+                ${Number(summary?.openAR || 0).toFixed(2)}
               </div>
             </div>
 
@@ -111,7 +111,7 @@ export function DashboardBillsCard({ summary }: DashboardBillsCardProps) {
                     : "text-zinc-900 dark:text-white"
                 }`}
               >
-                ${summary.pastDueAmount.toFixed(2)}
+                ${Number(summary?.pastDueAmount || 0).toFixed(2)}
               </div>
             </div>
 
@@ -137,7 +137,7 @@ export function DashboardBillsCard({ summary }: DashboardBillsCardProps) {
                     : "text-zinc-900 dark:text-white"
                 }`}
               >
-                ${summary.dueSoonAmount.toFixed(2)}
+                ${Number(summary?.dueSoonAmount || 0).toFixed(2)}
               </div>
             </div>
 
@@ -145,7 +145,7 @@ export function DashboardBillsCard({ summary }: DashboardBillsCardProps) {
             <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <span className="text-[10px] uppercase font-bold text-zinc-400">Available Credit</span>
               <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                ${summary.availableCredit.toFixed(2)}
+                ${Number(summary?.availableCredit || 0).toFixed(2)}
               </div>
             </div>
           </div>

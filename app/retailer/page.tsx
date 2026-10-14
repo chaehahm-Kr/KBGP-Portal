@@ -188,9 +188,9 @@ export default async function RetailerHomePage() {
   // 7. Check if 30-day activity data exists
   const hasSalesActivity = Boolean(
     performanceSummary &&
-      (performanceSummary.totalEstimatedMovement > 0 ||
-        performanceSummary.totalEstimatedRetailSales > 0 ||
-        performanceSummary.productsNeedingReorderCount > 0)
+      ((performanceSummary.totalEstimatedMovement || 0) > 0 ||
+        (performanceSummary.totalEstimatedRetailSales || 0) > 0 ||
+        (performanceSummary.productsNeedingReorderCount || 0) > 0)
   );
 
   // 8. Fetch Product Training stats for current user
@@ -378,7 +378,7 @@ export default async function RetailerHomePage() {
                     Past Due Bills
                   </p>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-2">
-                    ${arSummary.pastDueAmount.toFixed(2)} overdue balance. View details & settle.
+                    ${(Number(arSummary?.pastDueAmount) || 0).toFixed(2)} overdue balance. View details & settle.
                   </p>
                 </div>
               </Link>
@@ -419,7 +419,9 @@ export default async function RetailerHomePage() {
             <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <span className="text-[10px] uppercase font-bold text-zinc-500 dark:text-zinc-400">{t.dashboard.estUnitsMoved}</span>
               <div className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">
-                {performanceSummary.totalEstimatedMovement.toLocaleString()}
+                {performanceSummary.totalEstimatedMovement != null
+                  ? performanceSummary.totalEstimatedMovement.toLocaleString()
+                  : "—"}
               </div>
             </div>
 
@@ -428,7 +430,9 @@ export default async function RetailerHomePage() {
               <div className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">
                 {performanceSummary.isFinancialsHidden
                   ? "—"
-                  : `$${performanceSummary.totalEstimatedRetailSales.toFixed(2)}`}
+                  : performanceSummary.totalEstimatedRetailSales != null
+                  ? `$${Number(performanceSummary.totalEstimatedRetailSales).toFixed(2)}`
+                  : "—"}
               </div>
             </div>
 
@@ -437,7 +441,9 @@ export default async function RetailerHomePage() {
               <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                 {performanceSummary.isFinancialsHidden
                   ? "—"
-                  : `+$${performanceSummary.totalEstimatedGrossProfit.toFixed(2)}`}
+                  : performanceSummary.totalEstimatedGrossProfit != null
+                  ? `+$${Number(performanceSummary.totalEstimatedGrossProfit).toFixed(2)}`
+                  : "—"}
               </div>
             </div>
 
@@ -446,7 +452,7 @@ export default async function RetailerHomePage() {
                 {t.dashboard.reorderAlerts}
               </span>
               <div className="text-lg font-extrabold text-purple-700 dark:text-purple-300 mt-0.5">
-                {performanceSummary.productsNeedingReorderCount} SKUs
+                {performanceSummary.productsNeedingReorderCount || 0} SKUs
               </div>
             </div>
           </div>
