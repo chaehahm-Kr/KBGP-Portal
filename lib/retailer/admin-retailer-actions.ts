@@ -30,7 +30,43 @@ export interface CreateRetailerPayload {
   internalNote?: string;
 }
 
-export async function getAdminRetailersList() {
+export interface AdminRetailerListItem {
+  id: string;
+  name: string;
+  companyCode?: string | null;
+  businessRegistrationNumber?: string | null;
+  country: string;
+  contactName?: string | null;
+  status: string;
+  storesCount: number;
+  stores: Array<{ id: string; name: string; city?: string; state?: string }>;
+  usersCount: number;
+  pendingInvitesCount: number;
+  paymentTerms: string;
+  approvedTerms: string;
+  termsStatus: string;
+  termsEnabled: boolean;
+  creditLimit: number;
+  // Group 4: Orders & AR
+  openOrdersCount: number;
+  readyToShipCount: number;
+  openAR: number;
+  hasPastDue: boolean;
+  pastDueCount: number;
+  // Group 5: Products & Training
+  distinctAssortment: number;
+  trainingCompletedCount: number | null;
+  trainingEligibleCount: number | null;
+  trainingStatusText: string;
+  // Group 6: Operations
+  reportingStoresCount: number;
+  eligibleStoresCount: number;
+  attentionCount: number;
+  internalNote?: string;
+  createdAt: string;
+}
+
+export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> {
   await verifyAdminSession();
   const adminClient = createAdminClient();
 
@@ -40,8 +76,10 @@ export async function getAdminRetailersList() {
     .select(`
       id,
       name,
+      company_code,
       business_registration_number,
       country,
+      contact_name,
       status,
       created_at,
       retailer_profiles (
@@ -71,37 +109,111 @@ export async function getAdminRetailersList() {
     return [];
   }
 
-  // Also count active users and pending invitations per company
   const companyIds = (companies || []).map((c) => c.id);
 
   let invitationCounts: Record<string, number> = {};
   let userCounts: Record<string, number> = {};
+  const ordersMap: Record<string, { openCount: number; readyCount: number; totalCount: number }> = {};
+  const arMap: Record<string, { openAR: number; pastDueCount: number; hasPastDue: boolean }> = {};
+  const assortmentMap: Record<string, Set<string>> = {};
+  const weeklyChecksMap: Record<string, Set<string>> = {};
 
   if (companyIds.length > 0) {
-    const { data: invitations } = await adminClient
-      .from("retailer_invitations")
-      .select("company_id")
-      .in("company_id", companyIds)
-      .eq("status", "pending");
+    const [
+      invitationsRes,
+      companyUsersRes,
+      ordersRes,
+      invoicesRes,
+      storeProductsRes,
+      weeklyChecksRes,
+    ] = await Promise.all([
+      adminClient
+        .from("retailer_invitations")
+        .select("company_id")
+        .in("company_id", companyIds)
+        .eq("status", "pending"),
+      adminClient
+        .from("company_users")
+        .select("company_id, status")
+        .in("company_id", companyIds),
+      adminClient
+        .from("retailer_orders")
+        .select("id, company_id, order_status, total_amount, is_test")
+        .in("company_id", companyIds),
+      adminClient
+        .from("retailer_invoices")
+        .select("id, retailer_company_id, balance_due, due_date, invoice_status")
+        .in("retailer_company_id", companyIds)
+        .not("invoice_status", "in", '("void","cancelled")'),
+      adminClient
+        .from("retailer_store_products")
+        .select("company_id, product_id, is_active")
+        .in("company_id", companyIds)
+        .eq("is_active", true),
+      adminClient
+        .from("retailer_weekly_checks")
+        .select("company_id, store_id, status")
+        .in("company_id", companyIds),
+    ]);
 
-    (invitations || []).forEach((inv) => {
+    // Map invitations
+    (invitationsRes.data || []).forEach((inv) => {
       invitationCounts[inv.company_id] = (invitationCounts[inv.company_id] || 0) + 1;
     });
 
-    const { data: companyUsers, error: cuErr } = await adminClient
-      .from("company_users")
-      .select("company_id, status")
-      .in("company_id", companyIds);
+    // Map active users
+    (companyUsersRes.data || []).forEach((cu) => {
+      if ((cu.status || "active").toLowerCase() === "active") {
+        userCounts[cu.company_id] = (userCounts[cu.company_id] || 0) + 1;
+      }
+    });
 
-    if (cuErr) {
-      console.error("[getAdminRetailersList] Error fetching company_users:", cuErr);
-    } else if (companyUsers) {
-      companyUsers.forEach((cu) => {
-        if ((cu.status || "active").toLowerCase() === "active") {
-          userCounts[cu.company_id] = (userCounts[cu.company_id] || 0) + 1;
+    // Map operational orders
+    (ordersRes.data || []).forEach((o: any) => {
+      if (!ordersMap[o.company_id]) {
+        ordersMap[o.company_id] = { openCount: 0, readyCount: 0, totalCount: 0 };
+      }
+      ordersMap[o.company_id].totalCount += 1;
+      const stat = (o.order_status || "").toLowerCase();
+      // Operational open: orders not delivered or cancelled or shipped
+      if (!["cancelled", "delivered", "shipped"].includes(stat)) {
+        ordersMap[o.company_id].openCount += 1;
+      }
+      // Ready to ship: orders awaiting fulfillment dispatch (confirmed, processing, submitted)
+      if (["confirmed", "processing", "submitted"].includes(stat)) {
+        ordersMap[o.company_id].readyCount += 1;
+      }
+    });
+
+    // Map AR & past due
+    const nowMs = Date.now();
+    (invoicesRes.data || []).forEach((inv: any) => {
+      if (!arMap[inv.retailer_company_id]) {
+        arMap[inv.retailer_company_id] = { openAR: 0, pastDueCount: 0, hasPastDue: false };
+      }
+      const bal = Math.max(0, Number(inv.balance_due || 0));
+      if (bal > 0) {
+        arMap[inv.retailer_company_id].openAR += bal;
+        if (inv.due_date && new Date(inv.due_date).getTime() < nowMs) {
+          arMap[inv.retailer_company_id].pastDueCount += 1;
+          arMap[inv.retailer_company_id].hasPastDue = true;
         }
-      });
-    }
+      }
+    });
+
+    // Map assortment SKUs (distinct active store products)
+    (storeProductsRes.data || []).forEach((sp: any) => {
+      if (!assortmentMap[sp.company_id]) assortmentMap[sp.company_id] = new Set();
+      assortmentMap[sp.company_id].add(sp.product_id);
+    });
+
+    // Map weekly inventory check reporting coverage (submitted checks)
+    (weeklyChecksRes.data || []).forEach((wc: any) => {
+      if (wc.status === "submitted") {
+        if (!weeklyChecksMap[wc.company_id]) weeklyChecksMap[wc.company_id] = new Set();
+        weeklyChecksMap[wc.company_id].add(wc.store_id);
+      }
+    });
   }
 
   return (companies || []).map((comp: any) => {
@@ -110,12 +222,24 @@ export async function getAdminRetailersList() {
       : comp.retailer_profiles;
 
     const stores = Array.isArray(comp.stores) ? comp.stores : [];
+    const ord = ordersMap[comp.id] || { openCount: 0, readyCount: 0, totalCount: 0 };
+    const ar = arMap[comp.id] || { openAR: 0, pastDueCount: 0, hasPastDue: false };
+    const distinctAssortment = assortmentMap[comp.id]?.size || 0;
+    const reportingStores = weeklyChecksMap[comp.id]?.size || 0;
+
+    // Calculate verifiable operational attention issues count
+    let attentionCount = 0;
+    if (ord.readyCount > 0) attentionCount += 1;
+    if (stores.length > 0 && reportingStores < stores.length) attentionCount += 1;
+    if (profile?.terms_status === "pending") attentionCount += 1;
 
     return {
       id: comp.id,
       name: comp.name,
-      businessRegistrationNumber: comp.business_registration_number,
+      companyCode: comp.company_code || null,
+      businessRegistrationNumber: comp.business_registration_number || null,
       country: formatCanonicalCountryName(comp.country) || "United States",
+      contactName: comp.contact_name || null,
       status: normalizeRetailerAccountStatus(profile?.status || comp.status),
       paymentTerms: formatApprovedTermsDisplay(profile?.approved_terms || profile?.payment_terms),
       approvedTerms: profile?.approved_terms || "prepaid",
@@ -128,6 +252,21 @@ export async function getAdminRetailersList() {
       stores: stores,
       usersCount: userCounts[comp.id] || 0,
       pendingInvitesCount: invitationCounts[comp.id] || 0,
+      // Group 4: Orders & AR
+      openOrdersCount: ord.openCount,
+      readyToShipCount: ord.readyCount,
+      openAR: Math.round(ar.openAR * 100) / 100,
+      hasPastDue: ar.hasPastDue,
+      pastDueCount: ar.pastDueCount,
+      // Group 5: Products & Training
+      distinctAssortment,
+      trainingCompletedCount: null,
+      trainingEligibleCount: distinctAssortment,
+      trainingStatusText: "Training: Not Tracked",
+      // Group 6: Operations
+      reportingStoresCount: reportingStores,
+      eligibleStoresCount: stores.length,
+      attentionCount,
       internalNote: profile?.internal_note || "",
       createdAt: comp.created_at,
     };

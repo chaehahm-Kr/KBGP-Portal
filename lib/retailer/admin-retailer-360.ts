@@ -1185,9 +1185,9 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
   // 7. Fetch Product Training Completion
   const { data: trainingProgress } = await adminClient
     .from("retailer_product_training_progress")
-    .select("product_id, user_id, is_completed, completed_at")
+    .select("product_id, user_id, status, completed_at")
     .eq("company_id", companyId)
-    .eq("is_completed", true);
+    .eq("status", "completed");
 
   const completedByProduct: Record<string, number> = {};
   (trainingProgress || []).forEach((tp) => {
@@ -1401,8 +1401,8 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     });
   }
 
-  // E. Pending Commercial Terms
-  if (profile.terms_status === "pending" || (profile.terms_enabled && !profile.terms_approved_by_admin)) {
+  // E. Pending Commercial Terms (Only trigger when terms request is actively pending review)
+  if (profile.terms_status === "pending") {
     needsAttention.push({
       id: "terms-pending-review",
       type: "terms_review",

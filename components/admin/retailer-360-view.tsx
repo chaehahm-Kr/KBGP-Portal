@@ -877,45 +877,74 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {data.needsAttention.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-lg border border-rose-200/70 bg-rose-50/20 p-3 shadow-2xs dark:border-rose-900/40 dark:bg-rose-950/10 flex flex-col justify-between hover:border-rose-300 dark:hover:border-rose-800 transition-colors"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <span className="text-xs font-bold text-zinc-900 dark:text-white leading-snug">
-                      {item.title}
-                    </span>
-                    <span className="rounded bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 px-1.5 py-0.5 text-[9px] font-bold shrink-0 border border-rose-200/60 dark:border-rose-800/60">
-                      {item.badge}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 line-clamp-2">
-                    {item.description}
-                  </p>
-                </div>
+            {data.needsAttention.map((item) => {
+              const isUrgent = item.severity === "urgent";
+              const isWarning = item.severity === "warning";
 
-                <div className="pt-2 mt-2 border-t border-rose-100 dark:border-rose-950/50 flex justify-end">
-                  {item.href.startsWith("#") ? (
-                    <button
-                      type="button"
-                      onClick={() => handleSelectTab(item.href.replace("#", "") as TabKey)}
-                      className="text-[11px] font-bold text-rose-700 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 hover:underline cursor-pointer"
-                    >
-                      Resolve in 360° →
-                    </button>
-                  ) : (
-                    <Link
-                      href={item.href}
-                      className="text-[11px] font-bold text-rose-700 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 hover:underline"
-                    >
-                      Open Action Module →
-                    </Link>
-                  )}
+              const cardClasses = isUrgent
+                ? "border-rose-200/70 bg-rose-50/20 dark:border-rose-900/40 dark:bg-rose-950/10 hover:border-rose-300 dark:hover:border-rose-800"
+                : isWarning
+                ? "border-amber-200/70 bg-amber-50/20 dark:border-amber-900/40 dark:bg-amber-950/10 hover:border-amber-300 dark:hover:border-amber-800"
+                : "border-sky-200/70 bg-sky-50/20 dark:border-sky-900/40 dark:bg-sky-950/10 hover:border-sky-300 dark:hover:border-sky-800";
+
+              const badgeClasses = isUrgent
+                ? "bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border-rose-200/60 dark:border-rose-800/60"
+                : isWarning
+                ? "bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border-amber-200/60 dark:border-amber-800/60"
+                : "bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 border-sky-200/60 dark:border-sky-800/60";
+
+              const linkClasses = isUrgent
+                ? "text-rose-700 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300"
+                : isWarning
+                ? "text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
+                : "text-sky-700 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300";
+
+              const borderTopClasses = isUrgent
+                ? "border-rose-100 dark:border-rose-950/50"
+                : isWarning
+                ? "border-amber-100 dark:border-amber-950/50"
+                : "border-sky-100 dark:border-sky-950/50";
+
+              return (
+                <div
+                  key={item.id}
+                  className={`rounded-lg border p-3 shadow-2xs flex flex-col justify-between transition-colors ${cardClasses}`}
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <span className="text-xs font-bold text-zinc-900 dark:text-white leading-snug">
+                        {item.title}
+                      </span>
+                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold shrink-0 border ${badgeClasses}`}>
+                        {item.badge}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-600 dark:text-zinc-400 line-clamp-2">
+                      {item.description}
+                    </p>
+                  </div>
+
+                  <div className={`pt-2 mt-2 border-t flex justify-end ${borderTopClasses}`}>
+                    {item.href.startsWith("#") ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectTab(item.href.replace("#", "") as TabKey)}
+                        className={`text-[11px] font-bold hover:underline cursor-pointer ${linkClasses}`}
+                      >
+                        Resolve in 360° →
+                      </button>
+                    ) : (
+                      <Link
+                        href={item.href}
+                        className={`text-[11px] font-bold hover:underline ${linkClasses}`}
+                      >
+                        Open Action Module →
+                      </Link>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
