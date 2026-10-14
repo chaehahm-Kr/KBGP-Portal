@@ -96,7 +96,8 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.set("tab", key);
-      router.push(`/admin/retailers/${data.company.id}?${params.toString()}`, { scroll: false });
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.pushState({ tab: key }, "", newUrl);
     }
   };
 
