@@ -9,7 +9,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getGlobalARSummary } from "@/lib/finance/invoice-actions";
 import { getAdminRetailerOrdersAction } from "@/lib/admin/orders-actions";
 import { evaluateHubVisibility } from "@/lib/product/hub-visibility";
-import { getPendingPartnerInquiriesCount } from "@/lib/inquiry/actions";
 
 export type PriorityLevel = "critical" | "high" | "medium" | "low";
 export type ActionDomain = "hub" | "network" | "finance";
@@ -113,7 +112,7 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
   const [
     arSummary,
     ordersResult,
-    pendingInquiriesCount,
+    openInquiriesRes,
     appsRes,
     companiesRes,
     brandsRes,
@@ -127,8 +126,11 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
     // 2. Retailer Orders & Multi-Box Logistics
     getAdminRetailerOrdersAction(),
 
-    // 3. Partner Inquiries
-    getPendingPartnerInquiriesCount(),
+    // 3. Partner Inquiries (Status: Open)
+    adminClient
+      .from("partner_inquiries")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "open"),
 
     // 4. Brand Applications
     adminClient
@@ -186,6 +188,9 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
       .select("id, status, eta, shipment_lines:inbound_shipment_lines(product_id)")
       .not("status", "in", '("CANCELLED","COMPLETED")')
   ]);
+
+  // Partner Inquiries (Status: Open)
+  const openPartnerInquiriesCount = openInquiriesRes.count || 0;
 
   // A. Build company lookup map
   const companies = companiesRes.data || [];
@@ -433,15 +438,15 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
   }
 
   // MEDIUM 2: Open Partner Inquiries Awaiting Response
-  if (pendingInquiriesCount > 0) {
+  if (openPartnerInquiriesCount > 0) {
     priorityActions.push({
       id: "medium-partner-inquiries",
       domain: "network",
       domainLabel: "K SELECT NETWORK",
-      title: `${pendingInquiriesCount}건의 미확인 파트너 문의 접수`,
+      title: `${openPartnerInquiriesCount}건의 미확인 파트너 문의 접수`,
       description: "파트너사의 기술 지원, 입점 및 거래 문의 메시지가 도착했습니다. 신속한 회신이 필요합니다.",
       priority: "medium",
-      count: pendingInquiriesCount,
+      count: openPartnerInquiriesCount,
       actionUrl: "/admin/partner-inquiries",
       actionLabel: "문의 응대하기 →",
     });
@@ -557,12 +562,12 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
       totalCompanies,
       activeCompanies,
       totalBrands,
-      openPartnerInquiriesCount: pendingInquiriesCount,
+      openPartnerInquiriesCount: openPartnerInquiriesCount,
     },
     priorityActions: boundedPriorityActions,
     generatedAt: now.toISOString(),
     recentOrders,
     recentApplications,
-    pendingPartnerInquiriesCount: pendingInquiriesCount,
+    pendingPartnerInquiriesCount: openPartnerInquiriesCount,
   };
 }
