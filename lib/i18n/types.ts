@@ -66,6 +66,7 @@ export interface Dictionary {
     myProducts?: string;
     weeklyInventory?: string;
     weeklyCheck: string;
+    weeklyReports?: string;
     productPerformance?: string;
     sales: string;
     priceTags?: string;
@@ -82,6 +83,7 @@ export interface Dictionary {
     accountSettings: string;
     companySettings: string;
     teamSettings: string;
+    notificationsSettings?: string;
     shippingSettings?: string;
     paymentSettings?: string;
     retailerPortal: string;

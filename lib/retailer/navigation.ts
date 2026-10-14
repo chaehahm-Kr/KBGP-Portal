@@ -71,6 +71,12 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
         roles: ["owner", "store_manager", "employee"],
       },
       {
+        key: "weeklyReports",
+        name: "Weekly Reports",
+        href: "/reports/weekly",
+        roles: ["owner", "buyer", "store_manager", "accounting"],
+      },
+      {
         key: "priceTags",
         name: "Price Tags",
         href: "/tags",
@@ -149,6 +155,12 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
         name: "Team & Staff",
         href: "/settings/team",
         roles: ["owner", "buyer"],
+      },
+      {
+        key: "notificationsSettings",
+        name: "Notifications",
+        href: "/settings/notifications",
+        roles: ["owner", "buyer", "store_manager"],
       },
       {
         key: "shippingSettings",

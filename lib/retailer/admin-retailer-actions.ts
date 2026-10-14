@@ -16,6 +16,7 @@ import { getRetailerARStatus } from "@/lib/finance/invoice-actions";
 import { getEasternReportingWeek } from "@/lib/utils/timezone";
 import { resolveAuthoritativeProductImages } from "@/lib/retailer/product-images";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { sendTemplatedEmail, DEFAULT_TEMPLATES } from "@/lib/notifications/templates";
 
 export interface CreateRetailerPayload {
   companyName: string;
@@ -1713,4 +1714,286 @@ export async function getAdminWeeklyCheckSubmissionDetail(
     items,
   };
 }
+
+export interface WeeklyCheckReminderRecipient {
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+  phone?: string | null;
+}
+
+export interface WeeklyCheckReminderPreview {
+  storeId: string;
+  storeName: string;
+  companyId: string;
+  companyName: string;
+  reportingWeek: string;
+  isAlreadySubmitted: boolean;
+  recipients: WeeklyCheckReminderRecipient[];
+  subject: string;
+  body: string;
+}
+
+/**
+ * Loads recipient preview and pre-send status for Admin Weekly Check Reminder Modal
+ */
+export async function adminGetWeeklyCheckReminderPreviewAction(params: {
+  companyId: string;
+  storeId: string;
+  reportingWeek: string;
+}): Promise<{
+  success: boolean;
+  data?: WeeklyCheckReminderPreview;
+  error?: string;
+}> {
+  try {
+    await verifyAdminSession();
+    const adminClient = createAdminClient();
+
+    // 1. Fetch Store and Company info
+    const { data: store } = await adminClient
+      .from("stores")
+      .select("id, name, company_id")
+      .eq("id", params.storeId)
+      .maybeSingle();
+
+    if (!store) {
+      return { success: false, error: "Store not found." };
+    }
+
+    const { data: company } = await adminClient
+      .from("companies")
+      .select("id, name")
+      .eq("id", params.companyId)
+      .maybeSingle();
+
+    const companyName = company?.name || "Retail Partner";
+    const storeName = store.name;
+
+    // 2. Pre-check if check was already submitted
+    const { data: check } = await adminClient
+      .from("retailer_weekly_checks")
+      .select("id, status")
+      .eq("company_id", params.companyId)
+      .eq("store_id", params.storeId)
+      .eq("reporting_week", params.reportingWeek)
+      .maybeSingle();
+
+    const isAlreadySubmitted = check?.status === "submitted";
+
+    // 3. Fetch eligible recipients (active company users with store access or management roles)
+    const { data: companyUsers } = await adminClient
+      .from("company_users")
+      .select("id, name, email, phone, company_role, status")
+      .eq("company_id", params.companyId)
+      .eq("status", "active");
+
+    const { data: userRoles } = await adminClient
+      .from("retailer_user_roles")
+      .select("user_id, role, has_all_stores_access")
+      .eq("company_id", params.companyId);
+
+    const { data: storeAccess } = await adminClient
+      .from("retailer_user_store_access")
+      .select("user_id, store_id")
+      .eq("company_id", params.companyId)
+      .eq("store_id", params.storeId);
+
+    const storeUserIds = new Set((storeAccess || []).map((sa) => sa.user_id));
+    const roleMap = new Map((userRoles || []).map((ur) => [ur.user_id, ur]));
+
+    const recipients: WeeklyCheckReminderRecipient[] = [];
+    (companyUsers || []).forEach((u) => {
+      const ur = roleMap.get(u.id);
+      const role = (ur?.role || u.company_role || "employee").toLowerCase();
+      const hasAllStores = ur?.has_all_stores_access ?? (role === "owner" || role === "buyer");
+      const hasDirectAccess = storeUserIds.has(u.id);
+
+      if (hasAllStores || hasDirectAccess) {
+        recipients.push({
+          userId: u.id,
+          name: u.name || u.email,
+          email: u.email,
+          role,
+          phone: u.phone,
+        });
+      }
+    });
+
+    // 4. Resolve default template preview text
+    const templateDef = DEFAULT_TEMPLATES.hub_retailer_weekly_check_reminder;
+    const sampleRecipientName = recipients[0]?.name || "Store Manager";
+
+    const subject = templateDef.subject
+      .replace("{{storeName}}", storeName)
+      .replace("{{reportingWeek}}", params.reportingWeek);
+
+    const body = templateDef.body
+      .replace("{{contactName}}", sampleRecipientName)
+      .replace("{{storeName}}", storeName)
+      .replace("{{reportingWeek}}", params.reportingWeek)
+      .replace("{{infoBox}}", `• Store: ${storeName}\n• Reporting Week: ${params.reportingWeek}\n• Status: Inventory Count Required\n• Due: Monday 9:00 AM Eastern Time`)
+      .replace("{{ctaButton}}", `https://portal.kselecthub.com/retailer/check`);
+
+    return {
+      success: true,
+      data: {
+        storeId: params.storeId,
+        storeName,
+        companyId: params.companyId,
+        companyName,
+        reportingWeek: params.reportingWeek,
+        isAlreadySubmitted,
+        recipients,
+        subject,
+        body,
+      },
+    };
+  } catch (err: any) {
+    console.error("Error in adminGetWeeklyCheckReminderPreviewAction:", err);
+    return { success: false, error: err.message || "Failed to load reminder preview." };
+  }
+}
+
+/**
+ * Admin Action: Send Weekly Check Reminder to selected store recipients
+ * Enforces pre-send check to guarantee no duplicate reminders if store already submitted
+ */
+export async function adminSendWeeklyCheckReminderAction(params: {
+  companyId: string;
+  storeId: string;
+  reportingWeek: string;
+  recipientUserIds?: string[];
+}): Promise<{
+  success: boolean;
+  recipientsCount?: number;
+  error?: string;
+  alreadySubmitted?: boolean;
+}> {
+  try {
+    const adminSession = await verifyAdminSession();
+    const adminClient = createAdminClient();
+
+    // 1. Fetch Store and Company
+    const { data: store } = await adminClient
+      .from("stores")
+      .select("id, name")
+      .eq("id", params.storeId)
+      .maybeSingle();
+
+    const { data: company } = await adminClient
+      .from("companies")
+      .select("id, name")
+      .eq("id", params.companyId)
+      .maybeSingle();
+
+    const storeName = store?.name || "Store";
+    const companyName = company?.name || "Retail Partner";
+
+    // 2. Strict Pre-send check: verify store has not submitted in the interim
+    const { data: existingCheck } = await adminClient
+      .from("retailer_weekly_checks")
+      .select("id, status")
+      .eq("company_id", params.companyId)
+      .eq("store_id", params.storeId)
+      .eq("reporting_week", params.reportingWeek)
+      .maybeSingle();
+
+    if (existingCheck && existingCheck.status === "submitted") {
+      return {
+        success: false,
+        alreadySubmitted: true,
+        error: `Store "${storeName}" has already submitted the inventory check for ${params.reportingWeek}. Reminder aborted.`,
+      };
+    }
+
+    // 3. Fetch target recipients
+    const { data: companyUsers } = await adminClient
+      .from("company_users")
+      .select("id, name, email, status")
+      .eq("company_id", params.companyId)
+      .eq("status", "active");
+
+    let targetUsers = companyUsers || [];
+    if (params.recipientUserIds && params.recipientUserIds.length > 0) {
+      targetUsers = targetUsers.filter((u) => params.recipientUserIds!.includes(u.id));
+    }
+
+    if (targetUsers.length === 0) {
+      return {
+        success: false,
+        error: "No active recipients found for this store reminder.",
+      };
+    }
+
+    // 4. Send email notifications
+    const portalUrl = `https://portal.kselecthub.com/retailer/check`;
+    for (const user of targetUsers) {
+      try {
+        await sendTemplatedEmail("hub_retailer_weekly_check_reminder", user.email, {
+          contactName: user.name || "Store Manager",
+          companyName,
+          storeName,
+          reportingWeek: params.reportingWeek,
+          dueDate: "Monday 9:00 AM ET",
+          portalUrl,
+          link: portalUrl,
+          supportEmail: "support@kselecthub.com",
+        });
+      } catch (sendErr) {
+        console.error(`Failed to send check reminder to ${user.email}:`, sendErr);
+      }
+    }
+
+    // 5. Audit Logging to email_delivery_logs
+    try {
+      await adminClient.from("email_delivery_logs").insert(
+        targetUsers.map((u) => ({
+          company_id: params.companyId,
+          store_id: params.storeId,
+          recipient_email: u.email,
+          recipient_name: u.name,
+          template_key: "hub_retailer_weekly_check_reminder",
+          subject: `[K SELECT HUB] Action Required: Weekly Inventory Check for ${storeName} (${params.reportingWeek})`,
+          status: "sent",
+          sent_by: adminSession.userId,
+          metadata: {
+            reportingWeek: params.reportingWeek,
+            storeName,
+            companyName,
+            adminUserId: adminSession.userId,
+            recipientRole: "store_recipient",
+          },
+        }))
+      );
+    } catch {
+      // Graceful fallback if table is pending migration
+    }
+
+    // 6. Audit Logging to activity_logs
+    try {
+      await adminClient.from("activity_logs").insert({
+        entity_type: "company",
+        entity_id: params.companyId,
+        before_state: existingCheck?.status || "not_started",
+        after_state: "reminder_sent",
+        changed_by: adminSession.userId,
+        reason: `Admin manual check reminder dispatched for store "${storeName}" (${params.reportingWeek}) to ${targetUsers.length} recipients.`,
+      });
+    } catch {
+      // Graceful fallback
+    }
+
+    revalidatePath(`/admin/retailers/${params.companyId}`);
+    return {
+      success: true,
+      recipientsCount: targetUsers.length,
+    };
+  } catch (err: any) {
+    console.error("Error in adminSendWeeklyCheckReminderAction:", err);
+    return { success: false, error: err.message || "Failed to send check reminder." };
+  }
+}
+
 

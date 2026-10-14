@@ -37,6 +37,7 @@ import { RetailerRole } from "@/lib/retailer/onboarding-types";
 import { Retailer360MemberItem } from "@/lib/retailer/admin-retailer-360";
 import { StartImpersonationModal } from "@/components/admin/start-impersonation-modal";
 import { EditTrackingModal } from "@/components/admin/orders/edit-tracking-modal";
+import { WeeklyCheckReminderModal } from "@/components/admin/weekly-check-reminder-modal";
 import {
   normalizeApprovedTerms,
   formatApprovedTermsDisplay,
@@ -306,6 +307,13 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
   const [inspectLoading, setInspectLoading] = useState<boolean>(false);
   const [inspectError, setInspectError] = useState<string | null>(null);
   const [inspectSearch, setInspectSearch] = useState<string>("");
+
+  // Weekly Check Reminder Modal State
+  const [reminderModalStore, setReminderModalStore] = useState<{
+    storeId: string;
+    storeName: string;
+    reportingWeek: string;
+  } | null>(null);
 
   const handleOpenCheckDetail = async (checkId: string) => {
     setInspectCheckId(checkId);
@@ -2978,7 +2986,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                         {st.submittedAt ? formatDate(st.submittedAt) : "—"}
                       </td>
                       <td className="py-2.5 px-3 text-center">
-                        {st.checkId ? (
+                        {st.status === "submitted" && st.checkId ? (
                           <button
                             type="button"
                             onClick={() => handleOpenCheckDetail(st.checkId!)}
@@ -2987,7 +2995,31 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                             Inspect Items →
                           </button>
                         ) : (
-                          <span className="text-zinc-400 text-xs">No Record</span>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setReminderModalStore({
+                                  storeId: st.storeId,
+                                  storeName: st.storeName,
+                                  reportingWeek: st.reportingWeek,
+                                })
+                              }
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-800 transition-colors cursor-pointer"
+                            >
+                              <span>✉️</span>
+                              <span>Send Reminder</span>
+                            </button>
+                            {st.checkId && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCheckDetail(st.checkId!)}
+                                className="inline-flex items-center px-1.5 py-1 rounded-md text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                              >
+                                Draft
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -4787,6 +4819,21 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
           isOpen={true}
           onClose={() => setEditingFulfillment(null)}
           onSuccess={() => window.location.reload()}
+        />
+      )}
+
+      {/* Weekly Check Reminder Modal */}
+      {reminderModalStore && (
+        <WeeklyCheckReminderModal
+          isOpen={!!reminderModalStore}
+          onClose={() => setReminderModalStore(null)}
+          companyId={data.company.id}
+          storeId={reminderModalStore.storeId}
+          storeName={reminderModalStore.storeName}
+          reportingWeek={reminderModalStore.reportingWeek}
+          onReminderSent={() => {
+            router.refresh();
+          }}
         />
       )}
     </div>

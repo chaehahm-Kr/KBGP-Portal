@@ -41,6 +41,8 @@ export const HUB_TEMPLATE_KEYS = [
   "hub_shipment_tracking_update",
   "hub_order_delivered",
   "hub_retailer_agreement_completed",
+  "hub_retailer_weekly_performance_report",
+  "hub_retailer_weekly_check_reminder",
 ] as const;
 
 export const TEMPLATE_KEYS = [
@@ -231,6 +233,16 @@ export const DEFAULT_TEMPLATES: Record<
     description: "Retailer Partner — Retailer Agreement Completed",
     subject: "[K SELECT HUB] Your Retailer Agreement Has Been Completed",
     body: "Your Retailer Agreement has been successfully executed.\n\nHello {{recipient_name}},\n\nThe K SELECT Retailer Operating Agreement (Version {{agreement_version}}) for {{company_name}} has been successfully executed.\n\nYour official executed agreement is attached to this email and is also permanently preserved in your Retailer Portal for secure access.\n\n{{infoBox}}\n\n{{ctaButton}}\n\nIf you have any questions regarding your agreement or next onboarding steps, our team is here to assist you at {{supportEmail}}.",
+  },
+  hub_retailer_weekly_performance_report: {
+    description: "Retailer Partner — Weekly Performance & Reorder Report",
+    subject: "[K SELECT HUB] Your Weekly Performance & Reorder Report — {{reportingWeek}}",
+    body: "Your store performance and reorder recommendations for {{reportingWeek}} are ready.\n\nHello {{contactName}},\n\nHere is your weekly business summary for {{companyName}} covering {{reportingWeek}}:\n\n{{infoBox}}\n\nKey Weekly Highlights:\n• Estimated Retail Sales: {{estimatedSales}}\n• Estimated Gross Profit: {{estimatedGrossProfit}}\n• Estimated Units Sold: {{estimatedUnitsSold}}\n• Products Recommended for Reorder: {{reorderProductCount}}\n\nLog in to the Retailer Portal to review full SKU breakdowns and add replenishment items directly to your cart:\n\n{{ctaButton}}",
+  },
+  hub_retailer_weekly_check_reminder: {
+    description: "Retailer Partner — Weekly Inventory Check Reminder",
+    subject: "[K SELECT HUB] Action Required: Weekly Inventory Check for {{storeName}} ({{reportingWeek}})",
+    body: "Please complete your physical inventory count for {{storeName}}.\n\nHello {{contactName}},\n\nOur records indicate that the weekly inventory check for {{storeName}} has not been submitted yet for {{reportingWeek}}.\n\n{{infoBox}}\n\nSubmitting your 5-minute stock check enables accurate reorder calculations, protects your fast-moving SKUs from running out of stock, and updates your store's sales estimates.\n\nYou can complete the count directly on your smartphone by scanning shelf tags or entering quantities:\n\n{{ctaButton}}",
   },
 };
 
@@ -559,6 +571,29 @@ export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, strin
     agreement_view_url: "https://portal.kselecthub.com/retailer/account?tab=documents",
     agreementViewUrl: "https://portal.kselecthub.com/retailer/account?tab=documents",
   },
+  hub_retailer_weekly_performance_report: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    reportingWeek: "2026-W42",
+    estimatedSales: "$4,820.00",
+    estimatedGrossProfit: "$2,410.00",
+    estimatedUnitsSold: "186 units",
+    reorderProductCount: "3 products",
+    coverageStatus: "Full Coverage (2 of 2 stores)",
+    portalUrl: "https://portal.kselecthub.com/retailer/reports/weekly?week=2026-W42",
+    link: "https://portal.kselecthub.com/retailer/reports/weekly?week=2026-W42",
+    supportEmail: "support@kselecthub.com",
+  },
+  hub_retailer_weekly_check_reminder: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    storeName: "Luxe Beauty Bar - Flushing",
+    reportingWeek: "2026-W42",
+    dueDate: "Monday 9:00 AM ET",
+    portalUrl: "https://portal.kselecthub.com/retailer/check",
+    link: "https://portal.kselecthub.com/retailer/check",
+    supportEmail: "support@kselecthub.com",
+  },
 };
 
 /**
@@ -827,6 +862,29 @@ export const TEMPLATE_VARIABLE_CHIPS: Record<TemplateKey, Array<{ tag: string; l
     { tag: "{{supportEmail}}", label: "Support Email" },
     { tag: "{{infoBox}}", label: "Agreement Summary Card" },
     { tag: "{{ctaButton}}", label: "View Agreement Button (Signer Only)" },
+  ],
+  hub_retailer_weekly_performance_report: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company Name" },
+    { tag: "{{reportingWeek}}", label: "Reporting Week" },
+    { tag: "{{estimatedSales}}", label: "Est. Retail Sales" },
+    { tag: "{{estimatedGrossProfit}}", label: "Est. Gross Profit" },
+    { tag: "{{estimatedUnitsSold}}", label: "Est. Units Sold" },
+    { tag: "{{reorderProductCount}}", label: "Reorder Needed Count" },
+    { tag: "{{coverageStatus}}", label: "Coverage Status" },
+    { tag: "{{infoBox}}", label: "Weekly Summary Card" },
+    { tag: "{{ctaButton}}", label: "View Weekly Report Button" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
+  ],
+  hub_retailer_weekly_check_reminder: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company Name" },
+    { tag: "{{storeName}}", label: "Store Name" },
+    { tag: "{{reportingWeek}}", label: "Reporting Week" },
+    { tag: "{{dueDate}}", label: "Due Date" },
+    { tag: "{{infoBox}}", label: "Check Status Card" },
+    { tag: "{{ctaButton}}", label: "Start Inventory Count Button" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
   ],
 };
 
