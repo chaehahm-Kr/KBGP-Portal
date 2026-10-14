@@ -123,18 +123,37 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
   return (
     <div className="space-y-6">
       {/* Breadcrumb Navigation */}
-      <nav className="flex items-center gap-2 text-xs text-zinc-500">
-        <Link href="/admin/sales" className="hover:underline">
-          Sales & Performance
-        </Link>
-        <span>/</span>
-        <Link href="/admin/sales/orders" className="hover:underline">
-          Retailer Orders
-        </Link>
-        <span>/</span>
-        <span className="font-semibold text-zinc-900 dark:text-white">
-          {order.orderNumber}
-        </span>
+      <nav className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/sales/orders"
+            className="hover:underline font-bold text-indigo-600 dark:text-indigo-400 inline-flex items-center gap-1"
+          >
+            <span>← Back to Order Processing</span>
+          </Link>
+          <span className="text-zinc-300 dark:text-zinc-700">|</span>
+          <Link href="/admin/sales" className="hover:underline">
+            Sales & Performance
+          </Link>
+          <span>/</span>
+          <Link href="/admin/sales/orders" className="hover:underline">
+            Order Processing
+          </Link>
+          <span>/</span>
+          <span className="font-semibold text-zinc-900 dark:text-white">
+            #{order.orderNumber}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/admin/retailers/${order.companyId}?tab=orders`}
+            className="hover:underline text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 inline-flex items-center gap-1"
+          >
+            <span>🏪 View Retailer 360</span>
+            <span>↗</span>
+          </Link>
+        </div>
       </nav>
 
       {/* Top Header Banner */}
@@ -288,63 +307,84 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
             </div>
 
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800 text-xs">
-              {order.items.map((it) => (
-                <div key={it.id} className="p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                        {it.brandName}
-                      </span>
-                      <h3 className="font-bold text-zinc-900 dark:text-white">
-                        {it.productName}
-                      </h3>
-                      <p className="text-[11px] text-zinc-500 font-mono">
-                        SKU: {it.sku} • Case Pack: {it.casePackQty}
-                      </p>
+              {order.items.map((it) => {
+                const hasRemaining = it.quantityRemaining > 0;
+                return (
+                  <div
+                    key={it.id}
+                    className={`p-4 space-y-2 transition-colors ${
+                      hasRemaining
+                        ? "bg-amber-50/30 dark:bg-amber-950/10 border-l-4 border-l-amber-500"
+                        : ""
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                            {it.brandName}
+                          </span>
+                          {hasRemaining ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                              ⚡ To Pack: {it.quantityRemaining} units
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                              ✓ All Packed
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="font-bold text-zinc-900 dark:text-white mt-0.5">
+                          {it.productName}
+                        </h3>
+                        <p className="text-[11px] text-zinc-500 font-mono">
+                          SKU: {it.sku} • Case Pack: {it.casePackQty}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-extrabold text-sm text-zinc-900 dark:text-white block">
+                          ${it.lineTotal.toFixed(2)}
+                        </span>
+                        <span className="text-[11px] text-zinc-500">
+                          ${it.unitWholesalePrice.toFixed(2)} / unit
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="font-extrabold text-sm text-zinc-900 dark:text-white block">
-                        ${it.lineTotal.toFixed(2)}
-                      </span>
-                      <span className="text-[11px] text-zinc-500">
-                        ${it.unitWholesalePrice.toFixed(2)} / unit
-                      </span>
+
+                    {/* Units Breakdown per Line */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/60 text-[11px]">
+                      <div className="flex items-center gap-3">
+                        <span>Ordered: <strong>{it.quantityOrdered}</strong></span>
+                        <span className="text-zinc-300">•</span>
+                        <span className="text-indigo-600 dark:text-indigo-400 font-semibold">
+                          Shipped: <strong>{it.quantityShipped}</strong>
+                        </span>
+                        <span className="text-zinc-300">•</span>
+                        <span className="text-orange-600 font-semibold">
+                          Cancelled: <strong>{it.quantityCancelled}</strong>
+                        </span>
+                        <span className="text-zinc-300">•</span>
+                        <span className={it.quantityRemaining > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-emerald-600 dark:text-emerald-400 font-semibold"}>
+                          Remaining: <strong>{it.quantityRemaining}</strong>
+                        </span>
+                      </div>
+
+                      {it.quantityRemaining > 0 && order.orderStatus !== "cancelled" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCancelModalItem({ id: it.id, name: it.productName, max: it.quantityRemaining });
+                            setCancelQty(it.quantityRemaining);
+                          }}
+                          className="text-[10px] font-bold text-orange-600 hover:underline cursor-pointer"
+                        >
+                          Cancel / Short Line
+                        </button>
+                      )}
                     </div>
                   </div>
-
-                  {/* Units Breakdown per Line */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/60 text-[11px]">
-                    <div className="flex items-center gap-3">
-                      <span>Ordered: <strong>{it.quantityOrdered}</strong></span>
-                      <span className="text-zinc-300">•</span>
-                      <span className="text-indigo-600 dark:text-indigo-400 font-semibold">
-                        Shipped: <strong>{it.quantityShipped}</strong>
-                      </span>
-                      <span className="text-zinc-300">•</span>
-                      <span className="text-orange-600 font-semibold">
-                        Cancelled: <strong>{it.quantityCancelled}</strong>
-                      </span>
-                      <span className="text-zinc-300">•</span>
-                      <span className={it.quantityRemaining > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-emerald-600 dark:text-emerald-400 font-semibold"}>
-                        Remaining: <strong>{it.quantityRemaining}</strong>
-                      </span>
-                    </div>
-
-                    {it.quantityRemaining > 0 && order.orderStatus !== "cancelled" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCancelModalItem({ id: it.id, name: it.productName, max: it.quantityRemaining });
-                          setCancelQty(it.quantityRemaining);
-                        }}
-                        className="text-[10px] font-bold text-orange-600 hover:underline"
-                      >
-                        Cancel / Short Line
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -383,6 +423,19 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
 
                       <div className="flex items-center gap-2">
                         {(() => {
+                          const isTrackingMissing =
+                            !sh.trackingNumber &&
+                            (!sh.boxes || sh.boxes.length === 0 || sh.boxes.every((b) => !b.trackingNumber));
+                          if (isTrackingMissing) {
+                            return (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                                ⚠️ Missing Tracking
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                        {(() => {
                           const linkedInv = order.invoices?.find(
                             (inv) => inv.fulfillmentId === sh.id || inv.fulfillmentNumber === sh.fulfillmentNumber
                           );
@@ -406,13 +459,24 @@ export function AdminOrderDetailView({ order }: AdminOrderDetailViewProps) {
                           }
                           return null;
                         })()}
-                        <button
-                          type="button"
-                          onClick={() => setEditingShipment(sh)}
-                          className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:hover:bg-indigo-900 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
-                        >
-                          ✏️ Edit Tracking
-                        </button>
+                        {(() => {
+                          const isTrackingMissing =
+                            !sh.trackingNumber &&
+                            (!sh.boxes || sh.boxes.length === 0 || sh.boxes.every((b) => !b.trackingNumber));
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setEditingShipment(sh)}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors cursor-pointer ${
+                                isTrackingMissing
+                                  ? "bg-amber-600 text-white hover:bg-amber-700 shadow-2xs"
+                                  : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:hover:bg-indigo-900 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                              }`}
+                            >
+                              {isTrackingMissing ? "+ Add Tracking ⚠️" : "✏️ Edit Tracking"}
+                            </button>
+                          );
+                        })()}
                         <PackagesPopover packages={sh.packages} orderNumber={order.orderNumber} />
                       </div>
                     </div>

@@ -1546,10 +1546,17 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
       {/* TAB 4: ORDERS & FULFILLMENT */}
       {activeTab === "orders" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
               Retailer Orders & Shipment Dispatch ({data.orders.length})
             </h3>
+            <Link
+              href={`/admin/sales/orders?companyId=${data.company.id}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition-colors"
+            >
+              <span>Open in Order Processing Workspace</span>
+              <span>→</span>
+            </Link>
           </div>
 
           <div className="space-y-4">
@@ -1562,9 +1569,12 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-sm font-black text-zinc-900 dark:text-white">
+                        <Link
+                          href={`/admin/sales/orders/${order.id}`}
+                          className="font-mono text-sm font-black text-zinc-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-colors"
+                        >
                           #{order.orderNumber}
-                        </span>
+                        </Link>
                         <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
                           order.orderStatus === "partially_shipped"
                             ? "bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
@@ -1611,20 +1621,30 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                         );
                         const canCreateShipment = !isTerminal && orderRemainingUnits > 0;
 
-                        return canCreateShipment ? (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenFulfillmentModal(order)}
-                            className="rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 transition-colors shadow-2xs cursor-pointer"
-                          >
-                            + Create Shipment
-                          </button>
-                        ) : (
-                          <span className="rounded-xl bg-zinc-100 dark:bg-zinc-800/80 px-3 py-1.5 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 border border-zinc-200 dark:border-zinc-700/60">
-                            {order.orderStatus.toLowerCase() === "cancelled"
-                              ? "Cancelled"
-                              : "Fully Dispatched"}
-                          </span>
+                        return (
+                          <div className="flex items-center gap-2">
+                            {canCreateShipment ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenFulfillmentModal(order)}
+                                className="rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 transition-colors shadow-2xs cursor-pointer"
+                              >
+                                + Create Shipment
+                              </button>
+                            ) : (
+                              <span className="rounded-xl bg-zinc-100 dark:bg-zinc-800/80 px-3 py-1.5 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 border border-zinc-200 dark:border-zinc-700/60">
+                                {order.orderStatus.toLowerCase() === "cancelled"
+                                  ? "Cancelled"
+                                  : "Fully Dispatched"}
+                              </span>
+                            )}
+                            <Link
+                              href={`/admin/sales/orders/${order.id}`}
+                              className="rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 px-3 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-colors"
+                            >
+                              Process ↗
+                            </Link>
+                          </div>
                         );
                       })()}
                     </div>

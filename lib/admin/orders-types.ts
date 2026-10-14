@@ -145,8 +145,24 @@ export interface AdminRetailerOrderSummary {
   refundStatus: string;
   processingFee?: number;
   isTest: boolean;
+  shippingCity?: string | null;
+  shippingState?: string | null;
+  lastActivityAt?: string;
+  dispatchCount?: number;
+  hasMissingTracking?: boolean;
+  actionRequired?: "new_order" | "ready_to_ship" | "hold_cancellation" | "tracking_needed" | "completed" | "none";
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AdminOrderSummaryCounters {
+  total: number;
+  newOrders: number;
+  readyToProcess: number;
+  partiallyShipped: number;
+  onHold: number;
+  trackingMissing: number;
+  completed: number;
 }
 
 export interface AdminRetailerOrderDetail extends AdminRetailerOrderSummary {
@@ -167,6 +183,7 @@ export interface AdminRetailerOrderDetail extends AdminRetailerOrderSummary {
 }
 
 export interface AdminOrderFilter {
+  quickFilter?: "all" | "new" | "ready" | "partially_shipped" | "on_hold" | "tracking_missing" | "completed";
   search?: string;
   sku?: string;
   status?: string;
@@ -175,6 +192,18 @@ export interface AdminOrderFilter {
   storeId?: string;
   startDate?: string;
   endDate?: string;
+  datePreset?: "all" | "today" | "7d" | "30d" | "custom";
+  testMode?: "all" | "live" | "test";
+  sortBy?: "created_at" | "updated_at" | "order_number" | "retailer" | "remaining" | "total";
+  sortDirection?: "asc" | "desc";
   page?: number;
   pageSize?: number;
+}
+
+export interface AdminRetailerOrdersResult {
+  orders: AdminRetailerOrderSummary[];
+  totalCount: number;
+  summaryCounters: AdminOrderSummaryCounters;
+  companies: { id: string; name: string; companyCode?: string | null }[];
+  stores: { id: string; name: string; companyId: string; city?: string | null; state?: string | null }[];
 }

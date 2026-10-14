@@ -16,6 +16,8 @@ import {
   AdminOrderPackage,
   AdminOrderBox,
   AdminOrderLineItem,
+  AdminRetailerOrdersResult,
+  AdminOrderSummaryCounters,
 } from "./orders-types";
 import { computeAuthoritativeOrderStatus } from "@/lib/orders/order-status-utils";
 
@@ -24,10 +26,31 @@ import { computeAuthoritativeOrderStatus } from "@/lib/orders/order-status-utils
  */
 export async function getAdminRetailerOrdersAction(
   filters?: AdminOrderFilter
-): Promise<{ orders: AdminRetailerOrderSummary[]; totalCount: number }> {
+): Promise<AdminRetailerOrdersResult> {
   await verifyAdminSession();
   const adminClient = createAdminClient();
 
+  // 1. Fetch companies and stores for filter dropdowns in parallel
+  const [companiesRes, storesRes] = await Promise.all([
+    adminClient.from("companies").select("id, name, company_code").order("name", { ascending: true }),
+    adminClient.from("stores").select("id, name, company_id, city, state").order("name", { ascending: true }),
+  ]);
+
+  const companies = (companiesRes.data || []).map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    companyCode: c.company_code || null,
+  }));
+
+  const stores = (storesRes.data || []).map((s: any) => ({
+    id: s.id,
+    name: s.name,
+    companyId: s.company_id,
+    city: s.city || null,
+    state: s.state || null,
+  }));
+
+  // 2. Fetch orders with relationships
   let query = adminClient
     .from("retailer_orders")
     .select(`
@@ -40,10 +63,17 @@ export async function getAdminRetailerOrdersAction(
       payment_terms,
       subtotal_amount,
       total_amount,
+      discount_amount,
+      coupon_code,
       total_items_count,
       total_skus_count,
       shipping_destination_type,
       recipient_name,
+      shipping_city,
+      shipping_state,
+      cancellation_requested,
+      refund_amount,
+      refund_status,
       is_test,
       created_at,
       updated_at,
@@ -66,6 +96,8 @@ export async function getAdminRetailerOrdersAction(
         sku,
         product_name,
         quantity,
+        quantity_shipped,
+        quantity_cancelled,
         unit_wholesale_price,
         line_total
       ),
@@ -79,38 +111,61 @@ export async function getAdminRetailerOrdersAction(
         balance_due,
         invoice_status,
         payment_status,
-        terms_name
+        terms_name,
+        fulfillment_id,
+        fulfillment_number
+      ),
+      retailer_order_fulfillments (
+        id,
+        fulfillment_number,
+        status,
+        carrier,
+        tracking_number,
+        box_count,
+        created_at,
+        shipped_at,
+        retailer_order_fulfillment_boxes (
+          id,
+          box_number,
+          carrier,
+          tracking_number,
+          status
+        )
       )
-    `, { count: "exact" })
+    `)
     .order("created_at", { ascending: false });
 
-  if (filters?.search) {
-    const term = filters.search.trim();
-    query = query.or(`order_number.ilike.%${term}%,recipient_name.ilike.%${term}%`);
-  }
-  if (filters?.companyId) {
+  if (filters?.companyId && filters.companyId !== "all") {
     query = query.eq("company_id", filters.companyId);
   }
-  if (filters?.storeId) {
+  if (filters?.storeId && filters.storeId !== "all") {
     query = query.eq("store_id", filters.storeId);
   }
   if (filters?.paymentStatus && filters.paymentStatus !== "all") {
     query = query.eq("payment_status", filters.paymentStatus);
   }
-  if (filters?.startDate) {
-    query = query.gte("created_at", `${filters.startDate}T00:00:00.000Z`);
-  }
-  if (filters?.endDate) {
-    query = query.lte("created_at", `${filters.endDate}T23:59:59.999Z`);
-  }
 
-  const { data: rawOrders, error, count } = await query;
+  const { data: rawOrders, error } = await query;
   if (error || !rawOrders) {
     console.error("getAdminRetailerOrdersAction error:", error);
-    return { orders: [], totalCount: 0 };
+    return {
+      orders: [],
+      totalCount: 0,
+      summaryCounters: {
+        total: 0,
+        newOrders: 0,
+        readyToProcess: 0,
+        partiallyShipped: 0,
+        onHold: 0,
+        trackingMissing: 0,
+        completed: 0,
+      },
+      companies,
+      stores,
+    };
   }
 
-  // Fetch packages for these orders in one query
+  // Fetch packages for carton tracking popover in one query
   const orderIds = rawOrders.map((o) => o.id);
   const packagesMap = new Map<string, AdminOrderPackage[]>();
 
@@ -182,6 +237,41 @@ export async function getAdminRetailerOrdersAction(
       prepaymentAllocatedAmount: Number(inv.prepayment_allocated_amount || 0),
     }));
 
+    const fulfillments = o.retailer_order_fulfillments || [];
+    const dispatchCount = fulfillments.length;
+
+    // Check if any active/non-cancelled fulfillment has missing tracking
+    const hasMissingTracking = fulfillments.some((f: any) => {
+      if (f.status === "cancelled") return false;
+      const hasFulfillmentTracking = Boolean(f.tracking_number && f.tracking_number.trim());
+      const hasBoxTracking = (f.retailer_order_fulfillment_boxes || []).some(
+        (b: any) => b.status === "active" && Boolean(b.tracking_number && b.tracking_number.trim())
+      );
+      return !hasFulfillmentTracking && !hasBoxTracking;
+    });
+
+    // Derive actionable warehouse priority
+    let actionRequired: "new_order" | "ready_to_ship" | "hold_cancellation" | "tracking_needed" | "completed" | "none" = "none";
+    if (Boolean(o.cancellation_requested)) {
+      actionRequired = "hold_cancellation";
+    } else if (hasMissingTracking) {
+      actionRequired = "tracking_needed";
+    } else if (authoritativeStatus === "submitted") {
+      actionRequired = "new_order";
+    } else if (["submitted", "processing", "partially_shipped"].includes(authoritativeStatus) && totalRemainingUnits > 0) {
+      actionRequired = "ready_to_ship";
+    } else if (["shipped", "cancelled"].includes(authoritativeStatus) || (totalRemainingUnits === 0 && totalShippedUnits > 0)) {
+      actionRequired = "completed";
+    }
+
+    // Determine latest activity timestamp
+    const activityTimestamps = [
+      o.created_at,
+      o.updated_at,
+      ...fulfillments.map((f: any) => f.shipped_at || f.created_at).filter(Boolean),
+    ];
+    const lastActivityAt = activityTimestamps.sort().reverse()[0] || o.updated_at || o.created_at;
+
     return {
       id: o.id,
       orderNumber: o.order_number,
@@ -192,6 +282,8 @@ export async function getAdminRetailerOrdersAction(
       storeName: o.stores?.name || "Direct Store",
       destinationLabel: o.stores?.name || o.recipient_name || "Delivery Destination",
       destinationType: o.shipping_destination_type || "store",
+      shippingCity: o.shipping_city || o.stores?.city || null,
+      shippingState: o.shipping_state || o.stores?.state || null,
       orderStatus: authoritativeStatus,
       paymentStatus: o.payment_status || "unpaid",
       paymentMethod: o.payment_terms ? "terms" : "standard",
@@ -208,6 +300,10 @@ export async function getAdminRetailerOrdersAction(
       totalBoxCount,
       packages: pkgs,
       invoices,
+      dispatchCount,
+      hasMissingTracking,
+      actionRequired,
+      lastActivityAt,
       cancellationRequested: Boolean(o.cancellation_requested),
       refundAmount: Number(o.refund_amount || 0),
       refundStatus: o.refund_status || "none",
@@ -217,11 +313,136 @@ export async function getAdminRetailerOrdersAction(
     };
   });
 
-  // Client-requested status filtering (after canonical resolution)
+  // Calculate live summary counters across all mapped orders
+  const summaryCounters: AdminOrderSummaryCounters = {
+    total: mappedOrders.length,
+    newOrders: 0,
+    readyToProcess: 0,
+    partiallyShipped: 0,
+    onHold: 0,
+    trackingMissing: 0,
+    completed: 0,
+  };
+
+  mappedOrders.forEach((ord) => {
+    if (ord.orderStatus === "submitted") summaryCounters.newOrders++;
+    if (
+      ["submitted", "processing", "partially_shipped"].includes(ord.orderStatus) &&
+      ord.totalRemainingUnits > 0 &&
+      !ord.cancellationRequested
+    ) {
+      summaryCounters.readyToProcess++;
+    }
+    if (ord.orderStatus === "partially_shipped") summaryCounters.partiallyShipped++;
+    if (ord.cancellationRequested) summaryCounters.onHold++;
+    if (ord.hasMissingTracking) summaryCounters.trackingMissing++;
+    if (
+      ["shipped", "cancelled"].includes(ord.orderStatus) ||
+      (ord.totalRemainingUnits === 0 && ord.totalShippedUnits > 0)
+    ) {
+      summaryCounters.completed++;
+    }
+  });
+
+  // Apply filters
   let filtered = mappedOrders;
+
+  // Test mode filter
+  if (filters?.testMode && filters.testMode !== "all") {
+    if (filters.testMode === "live") {
+      filtered = filtered.filter((o) => !o.isTest);
+    } else if (filters.testMode === "test") {
+      filtered = filtered.filter((o) => o.isTest);
+    }
+  }
+
+  // Quick Filter Tabs
+  if (filters?.quickFilter && filters.quickFilter !== "all") {
+    switch (filters.quickFilter) {
+      case "new":
+        filtered = filtered.filter((o) => o.orderStatus === "submitted");
+        break;
+      case "ready":
+        filtered = filtered.filter(
+          (o) =>
+            ["submitted", "processing", "partially_shipped"].includes(o.orderStatus) &&
+            o.totalRemainingUnits > 0 &&
+            !o.cancellationRequested
+        );
+        break;
+      case "partially_shipped":
+        filtered = filtered.filter((o) => o.orderStatus === "partially_shipped");
+        break;
+      case "on_hold":
+        filtered = filtered.filter((o) => o.cancellationRequested);
+        break;
+      case "tracking_missing":
+        filtered = filtered.filter((o) => o.hasMissingTracking);
+        break;
+      case "completed":
+        filtered = filtered.filter(
+          (o) =>
+            ["shipped", "cancelled"].includes(o.orderStatus) ||
+            (o.totalRemainingUnits === 0 && o.totalShippedUnits > 0)
+        );
+        break;
+    }
+  }
+
+  // Status Filter
   if (filters?.status && filters.status !== "all") {
     filtered = filtered.filter((ord) => ord.orderStatus === filters.status);
   }
+
+  // Date Presets & Custom Ranges
+  const now = new Date();
+  if (filters?.datePreset && filters.datePreset !== "all") {
+    if (filters.datePreset === "today") {
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      filtered = filtered.filter((ord) => new Date(ord.createdAt).getTime() >= todayStart);
+    } else if (filters.datePreset === "7d") {
+      const past7d = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+      filtered = filtered.filter((ord) => new Date(ord.createdAt).getTime() >= past7d);
+    } else if (filters.datePreset === "30d") {
+      const past30d = now.getTime() - 30 * 24 * 60 * 60 * 1000;
+      filtered = filtered.filter((ord) => new Date(ord.createdAt).getTime() >= past30d);
+    }
+  } else {
+    if (filters?.startDate) {
+      const startMs = new Date(`${filters.startDate}T00:00:00.000Z`).getTime();
+      filtered = filtered.filter((ord) => new Date(ord.createdAt).getTime() >= startMs);
+    }
+    if (filters?.endDate) {
+      const endMs = new Date(`${filters.endDate}T23:59:59.999Z`).getTime();
+      filtered = filtered.filter((ord) => new Date(ord.createdAt).getTime() <= endMs);
+    }
+  }
+
+  // Free-form Search (Order #, Company, Store, Destination, City, State, Recipient)
+  if (filters?.search && filters.search.trim()) {
+    const term = filters.search.trim().toLowerCase();
+    filtered = filtered.filter((ord) => {
+      const basicMatch =
+        ord.orderNumber.toLowerCase().includes(term) ||
+        ord.companyName.toLowerCase().includes(term) ||
+        ord.storeName.toLowerCase().includes(term) ||
+        ord.destinationLabel.toLowerCase().includes(term) ||
+        (ord.shippingCity && ord.shippingCity.toLowerCase().includes(term)) ||
+        (ord.shippingState && ord.shippingState.toLowerCase().includes(term));
+
+      if (basicMatch) return true;
+
+      // Match item SKUs or product names
+      const raw = rawOrders.find((r: any) => r.id === ord.id);
+      return (raw?.retailer_order_items || []).some(
+        (it: any) =>
+          it.sku?.toLowerCase().includes(term) ||
+          it.product_name?.toLowerCase().includes(term)
+      );
+    });
+  }
+
+  // SKU Filter
   if (filters?.sku && filters.sku.trim()) {
     const sTerm = filters.sku.trim().toLowerCase();
     filtered = filtered.filter((ord) => {
@@ -234,9 +455,46 @@ export async function getAdminRetailerOrdersAction(
     });
   }
 
+  // Sorting
+  const sortBy = filters?.sortBy || "created_at";
+  const sortDirection = filters?.sortDirection || "desc";
+  const sortMultiplier = sortDirection === "asc" ? 1 : -1;
+
+  filtered.sort((a, b) => {
+    switch (sortBy) {
+      case "order_number":
+        return a.orderNumber.localeCompare(b.orderNumber) * sortMultiplier;
+      case "retailer":
+        return a.companyName.localeCompare(b.companyName) * sortMultiplier;
+      case "remaining":
+        return (a.totalRemainingUnits - b.totalRemainingUnits) * sortMultiplier;
+      case "total":
+        return (a.totalAmount - b.totalAmount) * sortMultiplier;
+      case "updated_at":
+        return (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()) * sortMultiplier;
+      case "created_at":
+      default:
+        return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * sortMultiplier;
+    }
+  });
+
+  const totalFilteredCount = filtered.length;
+
+  // Pagination
+  let paginatedOrders = filtered;
+  if (filters?.pageSize && filters.pageSize > 0) {
+    const page = Math.max(1, filters.page || 1);
+    const pageSize = filters.pageSize;
+    const startIndex = (page - 1) * pageSize;
+    paginatedOrders = filtered.slice(startIndex, startIndex + pageSize);
+  }
+
   return {
-    orders: filtered,
-    totalCount: count ?? filtered.length,
+    orders: paginatedOrders,
+    totalCount: totalFilteredCount,
+    summaryCounters,
+    companies,
+    stores,
   };
 }
 
