@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { verifyAdminSession } from "@/lib/auth/dal";
+import { verifyAdminSession, getAdminStaffContext } from "@/lib/auth/dal";
 import {
   type RetailerInvoice,
   type RetailerARStatus,
@@ -39,8 +39,14 @@ export async function getRetailerARStatus(companyId: string): Promise<RetailerAR
 
 /**
  * Shared Authoritative Resolver: Computes network-wide Accounts Receivable summary for Admin Dashboard.
+ * P3-RBAC-FIX-001 (VULN-003): Enforces staff authentication and Finance authorization.
  */
 export async function getGlobalARSummary(): Promise<GlobalARSummary> {
+  const staff = await getAdminStaffContext();
+  if (!staff.canAccessFinance) {
+    throw new Error("Unauthorized: Access to network-wide financial Accounts Receivable data is restricted.");
+  }
+
   const adminClient = createAdminClient();
 
   const { data: invoices, error } = await adminClient
@@ -109,7 +115,10 @@ export async function getAdminInvoicesAction(filters?: {
   endDate?: string;
 }): Promise<{ success: boolean; invoices: RetailerInvoice[]; error?: string }> {
   try {
-    await verifyAdminSession();
+    const staff = await getAdminStaffContext();
+    if (!staff.canAccessFinance) {
+      return { success: false, invoices: [], error: "Unauthorized: Access to financial invoices is restricted." };
+    }
     const adminClient = createAdminClient();
 
     let query = adminClient
@@ -239,7 +248,10 @@ export async function getAdminInvoicesAction(filters?: {
  */
 export async function getAdminInvoiceDetailAction(invoiceId: string) {
   try {
-    await verifyAdminSession();
+    const staff = await getAdminStaffContext();
+    if (!staff.canAccessFinance) {
+      return { success: false, error: "Unauthorized: Access to financial invoice details is restricted." };
+    }
     const adminClient = createAdminClient();
 
     const { data: inv, error: invErr } = await adminClient
@@ -322,7 +334,10 @@ export async function issueDispatchInvoiceAction(
   options?: { notes?: string }
 ): Promise<{ success: boolean; invoiceId?: string; invoiceNumber?: string; alreadyExists?: boolean; error?: string }> {
   try {
-    await verifyAdminSession();
+    const staff = await getAdminStaffContext();
+    if (!staff.canAccessFinance) {
+      return { success: false, error: "Unauthorized: Financial invoice generation is restricted." };
+    }
     const adminClient = createAdminClient();
     const { createDispatchInvoice } = await import("@/lib/finance/dispatch-invoicing");
     const res = await createDispatchInvoice(adminClient, fulfillmentId, options);
@@ -350,7 +365,10 @@ export async function issueInvoiceForOrderAction(
   options?: { notes?: string; customDueDays?: number }
 ): Promise<{ success: boolean; invoice?: RetailerInvoice; error?: string }> {
   try {
-    await verifyAdminSession();
+    const staff = await getAdminStaffContext();
+    if (!staff.canAccessFinance) {
+      return { success: false, error: "Unauthorized: Financial invoice generation is restricted." };
+    }
     const adminClient = createAdminClient();
 
     // 1. Idempotency Guard: check if an active invoice already exists
@@ -488,7 +506,10 @@ export async function issueInvoiceForOrderAction(
  */
 export async function voidInvoiceAction(invoiceId: string, reason?: string) {
   try {
-    await verifyAdminSession();
+    const staff = await getAdminStaffContext();
+    if (!staff.canAccessFinance) {
+      return { success: false, error: "Unauthorized: Financial invoice voiding is restricted." };
+    }
     const adminClient = createAdminClient();
 
     const { data: inv } = await adminClient
@@ -539,7 +560,10 @@ export async function voidInvoiceAction(invoiceId: string, reason?: string) {
  */
 export async function getEligibleOrdersForInvoicingAction() {
   try {
-    await verifyAdminSession();
+    const staff = await getAdminStaffContext();
+    if (!staff.canAccessFinance) {
+      return { success: false, orders: [], error: "Unauthorized: Access to financial invoice orders is restricted." };
+    }
     const adminClient = createAdminClient();
 
     // 1. Fetch active invoice order IDs

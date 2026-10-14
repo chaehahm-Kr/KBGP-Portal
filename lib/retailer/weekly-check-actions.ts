@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSalePriceActive } from "@/lib/retailer/store-pricing-types";
-import { getStoreConfirmedDeliveredQty } from "@/lib/retailer/fulfillment-actions";
+import {
+  getStoreConfirmedDeliveredQty,
+  getStoreConfirmedDeliveredQtysBatch,
+} from "@/lib/retailer/fulfillment-actions";
 
 export async function updateWeeklyCheckItemsAction(
   checkId: string,
@@ -111,11 +114,22 @@ export async function updateWeeklyCheckItemsAction(
       }
     }
 
+    // Batch query delivered quantities if submitting to eliminate N+1 loop
+    let batchDeliveredMap = new Map<string, number>();
+    if (isSubmitting && productIds.length > 0) {
+      batchDeliveredMap = await getStoreConfirmedDeliveredQtysBatch(
+        storeId,
+        productIds,
+        prevSubmittedAt,
+        new Date().toISOString()
+      );
+    }
+
     let totalCounted = 0;
     let totalUnits = 0;
 
     for (const it of items) {
-      const remaining = Math.max(0, it.remainingQty || 0);
+      const remaining = Math.max(0, Math.floor(Number(it.remainingQty) || 0));
       const isCounted = Boolean(it.isCounted);
       if (isCounted) {
         totalCounted += 1;
@@ -133,12 +147,7 @@ export async function updateWeeklyCheckItemsAction(
         if (prevQtyMap.has(it.productId)) {
           prevReported = prevQtyMap.get(it.productId) ?? null;
           if (prevReported !== null) {
-            const confirmedDelivered = await getStoreConfirmedDeliveredQty(
-              storeId,
-              it.productId,
-              prevSubmittedAt,
-              new Date().toISOString()
-            );
+            const confirmedDelivered = batchDeliveredMap.get(it.productId) ?? 0;
             deliveredSince = confirmedDelivered;
             movement = prevReported + confirmedDelivered - remaining;
           }
@@ -222,6 +231,8 @@ export async function updateWeeklyCheckItemsAction(
     revalidatePath("/check");
     revalidatePath("/check/history");
     revalidatePath(`/check/${checkId}`);
+    revalidatePath("/retailer/check");
+    revalidatePath(`/retailer/check/${checkId}`);
     revalidatePath("/retailer");
     revalidatePath("/sales");
 
@@ -229,5 +240,90 @@ export async function updateWeeklyCheckItemsAction(
   } catch (err: any) {
     console.error("updateWeeklyCheckItemsAction error:", err);
     return { success: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+
+/**
+ * Mobile-First: Persist a single product count immediately upon "Save & Scan Next".
+ * Returns confirmed saved quantity and updated store count.
+ */
+export async function saveWeeklyCheckSingleItemAction(
+  checkId: string,
+  item: {
+    productId: string;
+    remainingQty: number;
+    notes?: string;
+  }
+): Promise<{ success: boolean; error?: string; remainingQty?: number; totalCounted?: number }> {
+  try {
+    const session = await verifyRetailerSession();
+    const adminClient = createAdminClient();
+
+    // Verify draft ownership
+    const { data: check } = await adminClient
+      .from("retailer_weekly_checks")
+      .select("id, status, company_id, store_id")
+      .eq("id", checkId)
+      .maybeSingle();
+
+    if (!check) {
+      return { success: false, error: "Weekly check session not found." };
+    }
+
+    if (check.status !== "draft") {
+      return { success: false, error: "This weekly check has already been submitted and cannot be modified." };
+    }
+
+    const validQty = Math.max(0, Math.floor(Number(item.remainingQty) || 0));
+
+    // Update single item
+    const { error: itemErr } = await adminClient
+      .from("retailer_weekly_check_items")
+      .update({
+        reported_remaining_qty: validQty,
+        is_counted: true,
+        notes: item.notes || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("check_id", checkId)
+      .eq("product_id", item.productId);
+
+    if (itemErr) {
+      return { success: false, error: "Failed to persist item count." };
+    }
+
+    // Recount totals for header
+    const { data: allItems } = await adminClient
+      .from("retailer_weekly_check_items")
+      .select("reported_remaining_qty, is_counted")
+      .eq("check_id", checkId);
+
+    let totalCounted = 0;
+    let totalUnits = 0;
+    (allItems || []).forEach((it) => {
+      if (it.is_counted) {
+        totalCounted++;
+        totalUnits += Number(it.reported_remaining_qty || 0);
+      }
+    });
+
+    await adminClient
+      .from("retailer_weekly_checks")
+      .update({
+        total_counted_products: totalCounted,
+        total_remaining_units: totalUnits,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", checkId);
+
+    revalidatePath("/check");
+    revalidatePath(`/check/${checkId}`);
+    revalidatePath("/retailer/check");
+    revalidatePath(`/retailer/check/${checkId}`);
+
+    return { success: true, remainingQty: validQty, totalCounted };
+  } catch (err: any) {
+    console.error("saveWeeklyCheckSingleItemAction error:", err);
+    return { success: false, error: err.message || "Failed to save item count." };
   }
 }

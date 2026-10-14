@@ -3,8 +3,11 @@
 import React, { useState, useTransition, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { WeeklyCheckSession } from "@/lib/retailer/weekly-check";
-import { updateWeeklyCheckItemsAction } from "@/lib/retailer/weekly-check-actions";
+import { WeeklyCheckSession, getWeeklyCheckPath } from "@/lib/retailer/weekly-check-types";
+import {
+  updateWeeklyCheckItemsAction,
+  saveWeeklyCheckSingleItemAction,
+} from "@/lib/retailer/weekly-check-actions";
 import { WeeklyCheckScannerModal } from "@/components/retailer/weekly-check-scanner-modal";
 
 interface WeeklyCheckStepperProps {
@@ -54,6 +57,25 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
   const countedItemsCount = Object.values(counts).filter((c) => c.isCounted).length;
   const progressPercent = totalItemsCount > 0 ? Math.round((countedItemsCount / totalItemsCount) * 100) : 0;
 
+  const uncountedIndices = useMemo(() => {
+    const indices: number[] = [];
+    filteredItems.forEach((it, idx) => {
+      if (!counts[it.productId]?.isCounted) {
+        indices.push(idx);
+      }
+    });
+    return indices;
+  }, [filteredItems, counts]);
+
+  const handleJumpToNextUncounted = () => {
+    const next = uncountedIndices.find((idx) => idx > currentIndex);
+    if (next !== undefined) {
+      setCurrentIndex(next);
+    } else if (uncountedIndices.length > 0) {
+      setCurrentIndex(uncountedIndices[0]);
+    }
+  };
+
   const currentCountState = activeItem
     ? counts[activeItem.productId] || { remainingQty: 0, isCounted: false, notes: "" }
     : { remainingQty: 0, isCounted: false, notes: "" };
@@ -80,12 +102,12 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
     }));
   };
 
-  const handleScannerSaveCount = (
+  const handleScannerSaveCount = async (
     productId: string,
     remainingQty: number,
     notes: string,
     andSaveDraft: boolean = true
-  ) => {
+  ): Promise<{ success: boolean; error?: string }> => {
     const validQty = Math.max(0, isNaN(remainingQty) ? 0 : remainingQty);
     const updatedCounts = {
       ...counts,
@@ -104,21 +126,22 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
     }
 
     if (andSaveDraft) {
-      const payload = Object.entries(updatedCounts).map(([pId, state]) => ({
-        productId: pId,
-        remainingQty: state.remainingQty,
-        isCounted: state.isCounted,
-        notes: state.notes,
-      }));
-
-      startTransition(async () => {
-        const res = await updateWeeklyCheckItemsAction(session.id, payload, "draft", checkNotes);
-        if (res.success) {
-          setSaveMessage("Draft saved ✓");
-          setTimeout(() => setSaveMessage(null), 2500);
-        }
+      const res = await saveWeeklyCheckSingleItemAction(session.id, {
+        productId,
+        remainingQty: validQty,
+        notes,
       });
+      if (res.success) {
+        setSaveMessage("Saved ✓");
+        setTimeout(() => setSaveMessage(null), 2500);
+        return { success: true };
+      } else {
+        setErrorMessage(res.error || "Failed to save item count.");
+        return { success: false, error: res.error || "Failed to save item count." };
+      }
     }
+
+    return { success: true };
   };
 
   const handleSaveDraft = async () => {
@@ -175,7 +198,7 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
     startTransition(async () => {
       const res = await updateWeeklyCheckItemsAction(session.id, payload, "submit", checkNotes);
       if (res.success) {
-        router.push(`/check/${session.id}`);
+        router.push(getWeeklyCheckPath(session.id));
       } else {
         setErrorMessage(res.error || "Failed to submit weekly check.");
       }
@@ -189,7 +212,7 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
         <div>
           <div className="flex items-center gap-2">
             <Link
-              href="/check"
+              href={getWeeklyCheckPath()}
               className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
             >
               ← Back
@@ -315,6 +338,22 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
                         </span>
                       )}
 
+                      {Boolean(activeItem.incomingQty && activeItem.incomingQty > 0) && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                          <span>🚚</span> +{activeItem.incomingQty} In-Transit (Do not count)
+                        </span>
+                      )}
+
+                      {currentCountState.isCounted ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-200 dark:border-emerald-800 text-[11px]">
+                          Counted: {currentCountState.remainingQty} units
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-semibold border border-zinc-200 dark:border-zinc-700 text-[11px]">
+                          Uncounted
+                        </span>
+                      )}
+
                       {activeItem.previousReportedQty !== null && currentCountState.isCounted && (
                         <div className="text-indigo-600 dark:text-indigo-400 font-semibold">
                           Estimated Movement:{" "}
@@ -344,36 +383,52 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-center sm:justify-start gap-4">
-                    {/* Stepper Buttons */}
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <div className="flex items-center justify-center gap-4">
+                      {/* Stepper Buttons */}
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateQty(activeItem.productId, currentCountState.remainingQty - 1)}
+                        className="w-12 h-12 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-lg font-bold text-zinc-800 dark:text-zinc-200 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 active:scale-95 transition-all shadow-xs cursor-pointer"
+                        aria-label="Decrease quantity"
+                      >
+                        −
+                      </button>
+
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        min={0}
+                        value={currentCountState.remainingQty}
+                        onChange={(e) => handleUpdateQty(activeItem.productId, parseInt(e.target.value, 10))}
+                        className="w-24 sm:w-32 h-12 text-center text-2xl font-bold bg-white dark:bg-zinc-900 border-2 border-indigo-500 dark:border-indigo-400 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/20 shadow-xs"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateQty(activeItem.productId, currentCountState.remainingQty + 1)}
+                        className="w-12 h-12 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-lg font-bold text-zinc-800 dark:text-zinc-200 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 active:scale-95 transition-all shadow-xs cursor-pointer"
+                        aria-label="Increase quantity"
+                      >
+                        +
+                      </button>
+
+                      <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">units</span>
+                    </div>
+
+                    {/* Quick 0 — Out of Stock Button */}
                     <button
                       type="button"
-                      onClick={() => handleUpdateQty(activeItem.productId, currentCountState.remainingQty - 1)}
-                      className="w-12 h-12 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-lg font-bold text-zinc-800 dark:text-zinc-200 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 active:scale-95 transition-all shadow-xs"
-                      aria-label="Decrease quantity"
+                      onClick={() => handleUpdateQty(activeItem.productId, 0)}
+                      className={`px-4 py-3 rounded-xl text-xs font-bold transition-all border cursor-pointer w-full sm:w-auto ${
+                        currentCountState.isCounted && currentCountState.remainingQty === 0
+                          ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-750"
+                      }`}
                     >
-                      −
+                      0 — Out of Stock
                     </button>
-
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      value={currentCountState.remainingQty}
-                      onChange={(e) => handleUpdateQty(activeItem.productId, parseInt(e.target.value, 10))}
-                      className="w-24 sm:w-32 h-12 text-center text-2xl font-bold bg-white dark:bg-zinc-900 border-2 border-indigo-500 dark:border-indigo-400 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/20 shadow-xs"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateQty(activeItem.productId, currentCountState.remainingQty + 1)}
-                      className="w-12 h-12 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-lg font-bold text-zinc-800 dark:text-zinc-200 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 active:scale-95 transition-all shadow-xs"
-                      aria-label="Increase quantity"
-                    >
-                      +
-                    </button>
-
-                    <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">units</span>
                   </div>
 
                   {/* Optional Notes Input */}
@@ -419,9 +474,9 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
 
           {/* Quick Jump Carousel / Grid */}
           <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3 shadow-xs">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Quick Jump to Product:</span>
+                <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Quick Jump:</span>
                 <button
                   type="button"
                   onClick={() => setIsScannerOpen(true)}
@@ -430,6 +485,15 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
                   <span>📷</span>
                   <span>Scan QR</span>
                 </button>
+                {uncountedIndices.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleJumpToNextUncounted}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <span>⚡ Next Uncounted ({uncountedIndices.length})</span>
+                  </button>
+                )}
               </div>
               <input
                 type="text"
@@ -481,6 +545,28 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
                 Confirm reported quantities before submitting. Once submitted, records become read-only.
               </p>
             </div>
+
+            {/* Uncounted Warning Banner if any uncounted items */}
+            {countedItemsCount < totalItemsCount && (
+              <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-600 dark:text-amber-400 text-lg">⚠️</span>
+                  <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                    {totalItemsCount - countedItemsCount} products remain uncounted. Uncounted products will be marked as uncounted for this week.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReviewMode(false);
+                    handleJumpToNextUncounted();
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition-all cursor-pointer shrink-0"
+                >
+                  Count Remaining SKUs
+                </button>
+              </div>
+            )}
 
             {/* Metrics Strip */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

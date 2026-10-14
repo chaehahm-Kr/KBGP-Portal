@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { WeeklyCheckHistorySummary } from "@/lib/retailer/weekly-check";
+import { WeeklyCheckHistorySummary, getWeeklyCheckPath } from "@/lib/retailer/weekly-check-types";
 
 interface WeeklyCheckDashboardProps {
   stores: Array<{ id: string; name: string; address?: string; city?: string; state?: string }>;
@@ -30,11 +30,10 @@ export function RetailerWeeklyCheckDashboard({
 }: WeeklyCheckDashboardProps) {
   const router = useRouter();
   const [storeId, setStoreId] = useState(selectedStoreId || (stores.length > 0 ? stores[0].id : ""));
-  const [isStarting, setIsStarting] = useState(false);
 
   const handleStoreChange = (newStoreId: string) => {
     setStoreId(newStoreId);
-    router.push(`/check?storeId=${newStoreId}`);
+    router.push(getWeeklyCheckPath(undefined, { storeId: newStoreId }));
   };
 
   const isCompleted = activeCheck?.status === "submitted";
@@ -61,14 +60,14 @@ export function RetailerWeeklyCheckDashboard({
           </p>
         </div>
 
-        {/* Store Selector (if multi-store) */}
-        {stores.length > 1 && (
+        {/* Store Selector (if multi-store) or Single Store Badge */}
+        {stores.length > 1 ? (
           <div className="flex items-center gap-2">
             <span className="text-xs text-zinc-500 font-medium">Store:</span>
             <select
               value={storeId}
               onChange={(e) => handleStoreChange(e.target.value)}
-              className="text-xs font-semibold rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="text-xs font-semibold rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
             >
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -77,7 +76,12 @@ export function RetailerWeeklyCheckDashboard({
               ))}
             </select>
           </div>
-        )}
+        ) : stores.length === 1 ? (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xs font-bold text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700">
+            <span>📍</span>
+            <span>{stores[0].name}</span>
+          </div>
+        ) : null}
       </div>
 
       {/* Main Status & Action Card */}
@@ -107,17 +111,24 @@ export function RetailerWeeklyCheckDashboard({
           <div>
             {isCompleted ? (
               <Link
-                href={`/check/${activeCheck?.id}`}
+                href={getWeeklyCheckPath(activeCheck?.id)}
                 className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl font-bold text-sm bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:opacity-95 shadow-sm transition-all"
               >
                 <span>View Submitted Check →</span>
               </Link>
+            ) : isDraft ? (
+              <Link
+                href={getWeeklyCheckPath(activeCheck?.id || "start", { storeId })}
+                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all cursor-pointer"
+              >
+                <span>Resume Weekly Check ({activeCheck?.totalCountedProducts || 0} of {activeCheck?.totalProductsCount || 0} Counted) →</span>
+              </Link>
             ) : (
               <Link
-                href={`/check/${activeCheck?.id || "start"}?storeId=${storeId}`}
+                href={getWeeklyCheckPath("start", { storeId })}
                 className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all cursor-pointer"
               >
-                <span>{isDraft ? "Resume Weekly Check →" : "Start Weekly Check →"}</span>
+                <span>Start Weekly Check →</span>
               </Link>
             )}
           </div>
@@ -185,7 +196,7 @@ export function RetailerWeeklyCheckDashboard({
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <Link
-                          href={`/check/${h.id}`}
+                          href={getWeeklyCheckPath(h.id)}
                           className="inline-flex items-center text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
                         >
                           View Report →

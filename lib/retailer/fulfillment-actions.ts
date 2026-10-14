@@ -209,6 +209,60 @@ export async function getStoreConfirmedDeliveredQty(
 }
 
 /**
+ * Fetch Confirmed Delivered Quantity for multiple products for a Store within an interval in a single batch query.
+ * Eliminates N+1 query explosion during Weekly Check initialization and submission.
+ */
+export async function getStoreConfirmedDeliveredQtysBatch(
+  storeId: string,
+  productIds: string[],
+  startTime?: string | null,
+  endTime?: string | null
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (!storeId || !productIds || productIds.length === 0) {
+    return result;
+  }
+
+  const adminClient = createAdminClient();
+
+  let query = adminClient
+    .from("retailer_order_fulfillment_items")
+    .select(`
+      product_id,
+      quantity_delivered,
+      retailer_order_fulfillments!inner (
+        store_id,
+        status,
+        delivered_at
+      )
+    `)
+    .in("product_id", productIds)
+    .eq("retailer_order_fulfillments.store_id", storeId)
+    .eq("retailer_order_fulfillments.status", "delivered")
+    .not("retailer_order_fulfillments.delivered_at", "is", null);
+
+  if (startTime) {
+    query = query.gt("retailer_order_fulfillments.delivered_at", startTime);
+  }
+  if (endTime) {
+    query = query.lte("retailer_order_fulfillments.delivered_at", endTime);
+  }
+
+  const { data, error } = await query;
+  if (error || !data) {
+    return result;
+  }
+
+  data.forEach((row: any) => {
+    const pId = row.product_id;
+    const current = result.get(pId) || 0;
+    result.set(pId, current + Number(row.quantity_delivered || 0));
+  });
+
+  return result;
+}
+
+/**
  * Admin Action: Create / Record a new Shipment Fulfillment for a Retailer Order
  */
 export async function adminCreateOrderFulfillmentAction(params: {

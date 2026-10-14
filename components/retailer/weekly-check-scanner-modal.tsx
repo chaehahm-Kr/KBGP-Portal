@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import jsQR from "jsqr";
-import { WeeklyCheckItemState } from "@/lib/retailer/weekly-check";
+import { WeeklyCheckItemState } from "@/lib/retailer/weekly-check-types";
 import { parseKSelectProductQr } from "@/lib/product/qr";
 
 interface WeeklyCheckScannerModalProps {
@@ -15,7 +15,7 @@ interface WeeklyCheckScannerModalProps {
     remainingQty: number,
     notes: string,
     andSaveDraft?: boolean
-  ) => void;
+  ) => Promise<{ success: boolean; error?: string }> | void;
   storeName: string;
 }
 
@@ -53,6 +53,8 @@ export function WeeklyCheckScannerModal({
   const [inputQty, setInputQty] = useState<number>(0);
   const [inputNotes, setInputNotes] = useState<string>("");
   const [isAlreadyCounted, setIsAlreadyCounted] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Last scanned info for unassigned or invalid state
   const [lastScannedPayload, setLastScannedPayload] = useState<string>("");
@@ -110,6 +112,7 @@ export function WeeklyCheckScannerModal({
 
       const trimmed = payload.trim();
       setLastScannedPayload(trimmed);
+      setSaveError(null);
 
       // Haptic feedback & audio chime if supported
       try {
@@ -190,34 +193,64 @@ export function WeeklyCheckScannerModal({
     setMatchedItem(null);
     setInputQty(0);
     setInputNotes("");
+    setSaveError(null);
     setScanStatus("scanning");
   }, []);
 
-  // Save current item count and scan next product
-  const handleSaveAndScanNext = useCallback(() => {
-    if (!matchedItem) return;
+  // Save current item count and scan next product (waits for persistence confirmation)
+  const handleSaveAndScanNext = useCallback(async () => {
+    if (!matchedItem || isSaving) return;
+
+    setIsSaving(true);
+    setSaveError(null);
 
     const savedName = matchedItem.productName;
     const savedQty = inputQty;
 
-    onSaveItemCount(matchedItem.productId, inputQty, inputNotes, true);
+    try {
+      const res = await onSaveItemCount(matchedItem.productId, inputQty, inputNotes, true);
+      if (res && res.success === false) {
+        setSaveError(res.error || "Failed to save item count. Please try again.");
+        setIsSaving(false);
+        return;
+      }
 
-    setSuccessToast(`✓ ${savedName} saved — Remaining Qty: ${savedQty}`);
-    setTimeout(() => {
-      setSuccessToast(null);
-    }, 3000);
+      setSuccessToast(`✓ ${savedName} saved — Qty: ${savedQty}`);
+      setTimeout(() => {
+        setSuccessToast(null);
+      }, 3000);
 
-    resumeScanning();
-  }, [matchedItem, inputQty, inputNotes, onSaveItemCount, resumeScanning]);
+      resumeScanning();
+    } catch (err: any) {
+      setSaveError(err?.message || "Failed to save item count.");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [matchedItem, inputQty, inputNotes, isSaving, onSaveItemCount, resumeScanning]);
 
   // Save current item count and close scanner (return to list)
-  const handleSaveAndReturn = useCallback(() => {
-    if (matchedItem) {
-      onSaveItemCount(matchedItem.productId, inputQty, inputNotes, true);
+  const handleSaveAndReturn = useCallback(async () => {
+    if (matchedItem && !isSaving) {
+      setIsSaving(true);
+      setSaveError(null);
+      try {
+        const res = await onSaveItemCount(matchedItem.productId, inputQty, inputNotes, true);
+        if (res && res.success === false) {
+          setSaveError(res.error || "Failed to save item count.");
+          setIsSaving(false);
+          return;
+        }
+      } catch (err: any) {
+        setSaveError(err?.message || "Failed to save item count.");
+        setIsSaving(false);
+        return;
+      } finally {
+        setIsSaving(false);
+      }
     }
     stopCamera();
     onClose();
-  }, [matchedItem, inputQty, inputNotes, onSaveItemCount, stopCamera, onClose]);
+  }, [matchedItem, inputQty, inputNotes, isSaving, onSaveItemCount, stopCamera, onClose]);
 
   // Manual input submit
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -414,7 +447,7 @@ export function WeeklyCheckScannerModal({
         </div>
       </div>
 
-      {/* Toast Notification (e.g. "✓ Aloe Gel saved — Remaining Qty: 8") */}
+      {/* Toast Notification */}
       {successToast && (
         <div className="absolute top-16 inset-x-4 z-40 flex justify-center animate-in fade-in slide-in-from-top-4 duration-200">
           <div className="px-4 py-2.5 rounded-2xl bg-emerald-600 text-white text-xs font-bold shadow-xl flex items-center gap-2 border border-emerald-400/30 max-w-md text-center">
@@ -502,16 +535,28 @@ export function WeeklyCheckScannerModal({
               </div>
               <h4 className="text-sm font-bold text-white">Product Not Assigned</h4>
               <p className="text-xs text-amber-200/80">
-                This is a valid K SELECT product QR, but it is not assigned to{" "}
+                This is a valid K SELECT product QR, but it is not currently assigned to{" "}
                 <strong className="text-white">{storeName}</strong>.
               </p>
-              <button
-                type="button"
-                onClick={resumeScanning}
-                className="w-full py-3 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-zinc-950 shadow-lg transition-all cursor-pointer"
-              >
-                Scan Next Product 📷
-              </button>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={resumeScanning}
+                  className="flex-1 py-3 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-zinc-950 shadow-lg transition-all cursor-pointer"
+                >
+                  Scan Next Product 📷
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    stopCamera();
+                    onClose();
+                  }}
+                  className="py-3 px-4 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -580,7 +625,7 @@ export function WeeklyCheckScannerModal({
                   {matchedItem.productName}
                 </h3>
 
-                <div className="flex items-center gap-3 text-[11px] text-zinc-400 mt-1">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400 mt-1">
                   <span>
                     Prev:{" "}
                     <strong className="text-zinc-200">
@@ -589,9 +634,23 @@ export function WeeklyCheckScannerModal({
                         : "Baseline"}
                     </strong>
                   </span>
-                  {isAlreadyCounted && (
+                  {Boolean(matchedItem.deliveredSincePrevious && matchedItem.deliveredSincePrevious > 0) && (
+                    <span className="text-emerald-400 font-semibold">
+                      • +{matchedItem.deliveredSincePrevious} Delivered
+                    </span>
+                  )}
+                  {Boolean(matchedItem.incomingQty && matchedItem.incomingQty > 0) && (
+                    <span className="text-amber-400 font-semibold">
+                      • 🚚 {matchedItem.incomingQty} In-Transit
+                    </span>
+                  )}
+                  {isAlreadyCounted ? (
                     <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-semibold border border-emerald-500/20 text-[10px]">
-                      Already Counted ({inputQty})
+                      Counted ({inputQty})
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 font-semibold text-[10px]">
+                      Uncounted
                     </span>
                   )}
                 </div>
@@ -621,6 +680,7 @@ export function WeeklyCheckScannerModal({
                   ref={scanInputRef}
                   type="number"
                   inputMode="numeric"
+                  pattern="[0-9]*"
                   min={0}
                   value={inputQty}
                   onChange={(e) => {
@@ -640,6 +700,19 @@ export function WeeklyCheckScannerModal({
                 </button>
               </div>
 
+              {/* Explicit Quick "0 - Out of Stock" Button */}
+              <button
+                type="button"
+                onClick={() => setInputQty(0)}
+                className={`w-full py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                  inputQty === 0
+                    ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                    : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:bg-zinc-850"
+                }`}
+              >
+                0 — Out of Stock
+              </button>
+
               {/* Optional Item Note */}
               <input
                 type="text"
@@ -648,24 +721,44 @@ export function WeeklyCheckScannerModal({
                 onChange={(e) => setInputNotes(e.target.value)}
                 className="w-full text-xs px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
               />
+
+              {/* Server Save Error Alert */}
+              {saveError && (
+                <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/50 text-xs text-rose-200">
+                  <div className="font-bold flex items-center justify-between">
+                    <span>Save Failed</span>
+                    <button type="button" onClick={() => setSaveError(null)}>✕</button>
+                  </div>
+                  <p className="mt-0.5 text-[11px]">{saveError}</p>
+                </div>
+              )}
             </div>
 
             {/* Fast Action Buttons */}
             <div className="flex flex-col gap-2 pt-1">
               <button
                 type="button"
+                disabled={isSaving}
                 onClick={handleSaveAndScanNext}
-                className="w-full py-4 rounded-2xl text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-4 rounded-2xl text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                <span>Save & Scan Next Product 📷</span>
+                {isSaving ? (
+                  <>
+                    <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                    <span>Saving Count...</span>
+                  </>
+                ) : (
+                  <span>Save & Scan Next Product 📷</span>
+                )}
               </button>
 
               <button
                 type="button"
+                disabled={isSaving}
                 onClick={handleSaveAndReturn}
-                className="w-full py-2.5 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-all cursor-pointer text-center"
+                className="w-full py-2.5 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-all cursor-pointer text-center disabled:opacity-50"
               >
-                Save & Return to Product List
+                {isSaving ? "Saving..." : "Save & Return to Product List"}
               </button>
             </div>
           </div>

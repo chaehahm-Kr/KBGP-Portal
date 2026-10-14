@@ -4,7 +4,7 @@
 
 "use server";
 
-import { verifyAdminSession } from "@/lib/auth/dal";
+import { verifyAdminSession, getAdminStaffContext } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGlobalARSummary } from "@/lib/finance/invoice-actions";
 import { getAdminRetailerOrdersAction } from "@/lib/admin/orders-actions";
@@ -98,6 +98,17 @@ export interface AdminDashboardV2Metrics {
 
   // Inquiries Banner
   pendingPartnerInquiriesCount: number;
+
+  // Staff RBAC permissions (P3-RBAC-FIX-001)
+  permissions: {
+    canAccessFinance: boolean;
+    canAccessExecutiveKPIs: boolean;
+    canAccessRetail: boolean;
+    canAccessBrand: boolean;
+    canManageStaff: boolean;
+    isSuperAdmin: boolean;
+    baseRole: string;
+  };
 }
 
 /**
@@ -105,7 +116,7 @@ export interface AdminDashboardV2Metrics {
  * Fetches all operational metrics in parallel using bounded, non-N+1 queries.
  */
 export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metrics> {
-  await verifyAdminSession();
+  const staff = await getAdminStaffContext();
   const adminClient = createAdminClient();
 
   // Run all authoritative domain queries in parallel
@@ -121,7 +132,16 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
     inboundShipmentsRes
   ] = await Promise.all([
     // 1. Finance & Receivables
-    getGlobalARSummary(),
+    staff.canAccessFinance
+      ? getGlobalARSummary()
+      : Promise.resolve({
+          totalOpenAR: 0,
+          totalPastDueAmount: 0,
+          totalDueSoonAmount: 0,
+          openInvoiceCount: 0,
+          pastDueInvoiceCount: 0,
+          paidInvoiceCount: 0,
+        }),
 
     // 2. Retailer Orders & Multi-Box Logistics
     getAdminRetailerOrdersAction(),
@@ -177,10 +197,10 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
       `),
 
     // 8. Void Invoices Count
-    adminClient
+    staff.canAccessFinance ? adminClient
       .from("retailer_invoices")
       .select("id", { count: "exact", head: true })
-      .eq("invoice_status", "void"),
+      .eq("invoice_status", "void") : Promise.resolve({ count: 0 } as any),
 
     // 9. Open Inbound Shipments for Hub Visibility restock ETAs
     adminClient
@@ -295,7 +315,7 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
 
   mappedOrders.forEach((ord) => {
     // Exclude cancelled orders from GMV
-    if (ord.orderStatus !== "cancelled") {
+    if (ord.orderStatus !== "cancelled" && !ord.isTest) {
       const orderDate = new Date(ord.createdAt);
       if (orderDate.getUTCFullYear() === currentYear && orderDate.getUTCMonth() === currentMonth) {
         retailOrderValueMTD += Number(ord.totalAmount || 0);
@@ -314,6 +334,12 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
       if (ord.daysOpen >= 7) open7PlusDays++;
     }
   });
+
+  // Zero out executive commercial sales KPIs if caller lacks executive permission
+  if (!staff.canAccessExecutiveKPIs) {
+    retailOrderValueMTD = 0;
+    retailOrdersMTDCount = 0;
+  }
 
   const recentOrders = mappedOrders.slice(0, 5).map((o) => ({
     id: o.id,
@@ -347,7 +373,7 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
   }
 
   // CRITICAL 2: Overdue Accounts Receivable (Past Due Invoices)
-  if (arSummary.totalPastDueAmount > 0) {
+  if (staff.canAccessFinance && arSummary.totalPastDueAmount > 0) {
     priorityActions.push({
       id: "critical-past-due-ar",
       domain: "finance",
@@ -527,13 +553,20 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
   return {
     retailOrderValueMTD: Math.round(retailOrderValueMTD * 100) / 100,
     retailOrdersMTDCount,
-    openAR: {
+    openAR: staff.canAccessFinance ? {
       totalOpenAR: arSummary.totalOpenAR,
       openInvoiceCount: arSummary.openInvoiceCount,
       pastDueAmount: arSummary.totalPastDueAmount,
       dueSoonAmount: arSummary.totalDueSoonAmount,
       paidInvoiceCount: arSummary.paidInvoiceCount,
       voidInvoiceCount: voidInvoicesRes.count || 0,
+    } : {
+      totalOpenAR: 0,
+      openInvoiceCount: 0,
+      pastDueAmount: 0,
+      dueSoonAmount: 0,
+      paidInvoiceCount: 0,
+      voidInvoiceCount: 0,
     },
     activeOrdersSummary: {
       total: summaryCounters.total,
@@ -570,5 +603,14 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardV2Metric
     recentOrders,
     recentApplications,
     pendingPartnerInquiriesCount: openPartnerInquiriesCount,
+    permissions: {
+      canAccessFinance: staff.canAccessFinance,
+      canAccessExecutiveKPIs: staff.canAccessExecutiveKPIs,
+      canAccessRetail: staff.hasPermission("retail", "view"),
+      canAccessBrand: staff.hasPermission("applications", "view") || staff.hasPermission("products", "view"),
+      canManageStaff: staff.canManageStaff,
+      isSuperAdmin: staff.isSuperAdmin,
+      baseRole: staff.baseRole,
+    },
   };
 }

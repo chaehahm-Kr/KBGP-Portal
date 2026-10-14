@@ -125,8 +125,10 @@ export async function updateSession(request: NextRequest) {
       return createRedirectWithCookies(url);
     }
   } else if (host.includes("portal.kselectnetwork.com")) {
-    if (pathname.startsWith("/retailer")) {
-      const cleanPath = pathname === "/retailer" ? "/" : pathname.replace(/^\/retailer/, "");
+    if (pathname.startsWith("/retailer") || pathname === "/check" || pathname.startsWith("/check/")) {
+      const cleanPath = pathname.startsWith("/retailer")
+        ? (pathname === "/retailer" ? "/" : pathname.replace(/^\/retailer/, ""))
+        : pathname;
       const targetUrl = new URL(`https://portal.kselecthub.com${cleanPath}${request.nextUrl.search}`);
       return createRedirectWithCookies(targetUrl);
     }

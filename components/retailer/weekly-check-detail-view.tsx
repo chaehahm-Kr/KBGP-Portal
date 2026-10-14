@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { WeeklyCheckSession } from "@/lib/retailer/weekly-check";
+import { WeeklyCheckSession, getWeeklyCheckPath } from "@/lib/retailer/weekly-check-types";
 
 interface WeeklyCheckDetailViewProps {
   session: WeeklyCheckSession;
@@ -16,7 +16,7 @@ export function RetailerWeeklyCheckDetailView({ session }: WeeklyCheckDetailView
         <div>
           <div className="flex items-center gap-2">
             <Link
-              href="/check"
+              href={getWeeklyCheckPath()}
               className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
             >
               ← Back to Weekly Checks
@@ -115,6 +115,11 @@ export function RetailerWeeklyCheckDetailView({ session }: WeeklyCheckDetailView
                       </span>
                     ) : (
                       "0 units"
+                    )}
+                    {Boolean(it.incomingQty && it.incomingQty > 0) && (
+                      <div className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
+                        🚚 {it.incomingQty} In-Transit
+                      </div>
                     )}
                   </td>
                   <td className="py-3.5 px-4 text-right font-bold text-zinc-900 dark:text-white">

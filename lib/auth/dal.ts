@@ -304,3 +304,107 @@ export const requireSuperAdmin = cache(async (): Promise<VerifiedSession> => {
 
   return session;
 });
+
+export type StaffBaseRole = "super_admin" | "admin" | "account_manager" | string;
+export type StaffMenuAction = "view" | "create" | "edit" | "delete" | "approve" | "impersonate";
+
+export type AdminStaffContext = {
+  session: VerifiedSession;
+  staffId: string;
+  name: string;
+  email: string;
+  baseRole: StaffBaseRole;
+  roles: string[];
+  isSuperAdmin: boolean;
+  menuPermissions: Record<string, Record<string, boolean>>;
+  canAccessFinance: boolean;
+  canAccessExecutiveKPIs: boolean;
+  canManageStaff: boolean;
+  hasPermission: (module: string, action?: StaffMenuAction) => boolean;
+};
+
+/**
+ * Authoritative Staff Context & RBAC Resolver (P3-RBAC-FIX-001)
+ * Enforces server-side permissions from staff_members, base_role, menu_permissions, and staff_roles.
+ *
+ * Precedence / Policy Rules:
+ * 1. Super Admin: full authorized administrative access across existing modules.
+ * 2. Non-super-admin: Deny sensitive Finance access by default unless explicitly granted in menu_permissions.finance?.view === true.
+ * 3. Account Manager: Retail Network operational access according to existing permissions.
+ *    - No global Executive financial KPIs by default.
+ *    - No Finance Overview, company-wide AR or sensitive financial data without explicit Finance access.
+ *    - No access to staff administration mutations.
+ */
+export const getAdminStaffContext = cache(async (): Promise<AdminStaffContext> => {
+  const session = await verifyAdminSession();
+  const adminClient = createAdminClient();
+
+  const [staffRes, rolesRes] = await Promise.all([
+    adminClient
+      .from("staff_members")
+      .select("id, name, email, status, base_role, menu_permissions")
+      .eq("id", session.userId)
+      .maybeSingle(),
+    adminClient
+      .from("staff_roles")
+      .select("role")
+      .eq("staff_id", session.userId),
+  ]);
+
+  const staffMember = staffRes.data;
+  const assignedRoles = (rolesRes.data || []).map((r: any) => r.role);
+  const baseRole = (staffMember?.base_role as StaffBaseRole) || "admin";
+  const isSuperAdmin = baseRole === "super_admin" || assignedRoles.includes("super_admin");
+  const menuPermissions = (staffMember?.menu_permissions || {}) as Record<string, Record<string, boolean>>;
+
+  const isAccountManager = baseRole === "account_manager" || assignedRoles.includes("account_manager");
+
+  // Finance: Super Admin has full access. Deny by default for others unless explicitly granted.
+  const canAccessFinance = isSuperAdmin
+    ? true
+    : isAccountManager
+    ? Boolean(menuPermissions.finance?.view)
+    : Boolean(menuPermissions.finance?.view);
+
+  // Top Executive Commercial Sales KPIs (MTD Wholesale GMV, MTD Order Count)
+  const canAccessExecutiveKPIs = isSuperAdmin
+    ? true
+    : isAccountManager
+    ? false
+    : Boolean(menuPermissions.executive_kpis?.view);
+
+  // Staff Administration mutations
+  const canManageStaff = isSuperAdmin;
+
+  const hasPermission = (module: string, action: StaffMenuAction = "view"): boolean => {
+    if (isSuperAdmin) return true;
+    if (module === "finance") {
+      return Boolean(menuPermissions.finance?.[action]);
+    }
+    if (module === "executive_kpis") {
+      return Boolean(menuPermissions.executive_kpis?.[action]);
+    }
+    if (module === "staff" && action !== "view") {
+      return false; // Staff mutations reserved for super_admin
+    }
+    const modulePerms = menuPermissions[module];
+    if (!modulePerms) return false;
+    return Boolean(modulePerms[action]);
+  };
+
+  return {
+    session,
+    staffId: session.userId,
+    name: staffMember?.name || session.email.split("@")[0],
+    email: staffMember?.email || session.email,
+    baseRole,
+    roles: assignedRoles,
+    isSuperAdmin,
+    menuPermissions,
+    canAccessFinance,
+    canAccessExecutiveKPIs,
+    canManageStaff,
+    hasPermission,
+  };
+});
+
