@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { ContentProductItem } from "@/lib/product/content-actions";
 import { MediaAssetsWorkspace } from "./media-assets-workspace";
 import { FaqWorkspace } from "./faq-workspace";
+import { TrainingWorkspace } from "../training/training-workspace";
 
 // Native SVG Icons
 function ArrowLeftIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -404,55 +405,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
 
         {/* Tab 2: Training */}
         {activeTab === "training" && (
-          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-8 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-zinc-100 dark:border-zinc-800 gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <BookOpenIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                  <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                    Training & Staff SOP (교육 자료 및 매장 직원 가이드)
-                  </h2>
-                </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  리테일 매장 판매 직원 대상 세일즈 포인트, 상담 스크립트, 취급 가이드를 제공합니다.
-                </p>
-              </div>
-              <span className="px-3 py-1 rounded-md text-xs font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 shrink-0">
-                Module Foundation
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850 border border-zinc-200/80 dark:border-zinc-750 space-y-2">
-                <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Selling Points & Hooks</div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  고객 방문 시 첫 10초 내 관심을 끄는 3대 차별화 포인트 요약
-                </p>
-              </div>
-              <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850 border border-zinc-200/80 dark:border-zinc-750 space-y-2">
-                <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Customer Objections & Answers</div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  자주 묻는 질문 및 가격/성분 의문에 대한 현장 대응 스크립트
-                </p>
-              </div>
-              <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850 border border-zinc-200/80 dark:border-zinc-750 space-y-2">
-                <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Storage & Handling SOP</div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  매장 진열 조건, 유통기한 관리법 및 파손 방지 지침
-                </p>
-              </div>
-            </div>
-
-            <div className="p-6 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-850/30 flex flex-col items-center justify-center text-center py-10">
-              <BookOpenIcon className="w-10 h-10 text-zinc-400 mb-3" />
-              <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                Staff Training Module Framework Ready
-              </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md mt-1">
-                Interactive quiz, staff onboarding verification, and downloadable PDF cards will be managed in upcoming training updates.
-              </p>
-            </div>
-          </div>
+          <TrainingWorkspace product={product} />
         )}
 
         {/* Tab 3: Media Assets */}
