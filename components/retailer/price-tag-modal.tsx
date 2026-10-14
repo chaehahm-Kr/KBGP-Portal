@@ -170,8 +170,12 @@ export function PriceTagModal({
                 {item.productName}
               </div>
               <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mt-0.5">
-                <span>Wholesale Cost: ${item.wholesalePrice.toFixed(2)}</span>
-                <span>•</span>
+                {typeof item.wholesalePrice === "number" && (
+                  <>
+                    <span>Wholesale Cost: ${item.wholesalePrice.toFixed(2)}</span>
+                    <span>•</span>
+                  </>
+                )}
                 <span className="font-semibold text-purple-600 dark:text-purple-400">
                   Suggested MSRP: ${item.msrp.toFixed(2)}
                 </span>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import jsQR from "jsqr";
 import { WeeklyCheckItemState } from "@/lib/retailer/weekly-check-types";
 import { parseKSelectProductQr } from "@/lib/product/qr";
@@ -28,6 +28,50 @@ type ScanStatus =
   | "product_not_in_store"
   | "invalid_qr";
 
+/**
+ * Neutral product image component that guarantees no broken or unrelated commercial images
+ */
+function SafeProductThumbnail({
+  src,
+  alt,
+  sku,
+  sizeClass = "w-full h-full",
+}: {
+  src: string | null;
+  alt: string;
+  sku: string;
+  sizeClass?: string;
+}) {
+  const [hasError, setHasError] = useState(false);
+
+  if (!src || hasError) {
+    return (
+      <div className={`${sizeClass} flex flex-col items-center justify-center bg-zinc-800 text-zinc-400 p-1.5 rounded-xl`}>
+        <svg className="w-6 h-6 text-zinc-500 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+          />
+        </svg>
+        <span className="text-[9px] font-mono text-zinc-400 truncate max-w-full text-center leading-tight">
+          {sku}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={() => setHasError(true)}
+      className={`${sizeClass} object-contain`}
+    />
+  );
+}
+
 export function WeeklyCheckScannerModal({
   isOpen,
   onClose,
@@ -41,6 +85,8 @@ export function WeeklyCheckScannerModal({
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const scanInputRef = useRef<HTMLInputElement | null>(null);
+  const barcodeDetectorRef = useRef<any>(null);
+  const isProcessingFrameRef = useRef(false);
 
   const [scanStatus, setScanStatus] = useState<ScanStatus>("initializing");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -60,9 +106,36 @@ export function WeeklyCheckScannerModal({
   const [lastScannedPayload, setLastScannedPayload] = useState<string>("");
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
+  // Uncounted & Product Search Drawer
+  const [showProductDrawer, setShowProductDrawer] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<"uncounted" | "all">("uncounted");
+  const [drawerSearch, setDrawerSearch] = useState("");
+
   // Manual input fallback toggle
   const [showManualInput, setShowManualInput] = useState(false);
   const [manualText, setManualText] = useState("");
+
+  // Uncounted count
+  const uncountedCount = useMemo(() => {
+    return items.filter((it) => !currentCounts[it.productId]?.isCounted).length;
+  }, [items, currentCounts]);
+
+  // Drawer filtered list
+  const drawerFilteredItems = useMemo(() => {
+    let list = items;
+    if (drawerTab === "uncounted") {
+      list = list.filter((it) => !currentCounts[it.productId]?.isCounted);
+    }
+    if (!drawerSearch.trim()) return list;
+    const q = drawerSearch.toLowerCase().trim();
+    return list.filter(
+      (it) =>
+        it.productName.toLowerCase().includes(q) ||
+        (it.productNameEn && it.productNameEn.toLowerCase().includes(q)) ||
+        it.sku.toLowerCase().includes(q) ||
+        it.brandName.toLowerCase().includes(q)
+    );
+  }, [items, currentCounts, drawerTab, drawerSearch]);
 
   // Stop media stream and cancel animation frames
   const stopCamera = useCallback(() => {
@@ -105,7 +178,7 @@ export function WeeklyCheckScannerModal({
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
   }, []);
 
-  // Handle scanned raw payload
+  // Handle scanned raw payload with native & fallback parsing
   const handlePayloadDetected = useCallback(
     (payload: string) => {
       if (!payload || !payload.trim()) return;
@@ -114,75 +187,81 @@ export function WeeklyCheckScannerModal({
       setLastScannedPayload(trimmed);
       setSaveError(null);
 
-      // Haptic feedback & audio chime if supported
+      // Haptic feedback if supported
       try {
         if (typeof navigator !== "undefined" && navigator.vibrate) {
-          navigator.vibrate(40);
+          navigator.vibrate(50);
         }
       } catch {
         // ignore
       }
 
-      // Parse canonical product QR
+      // Parse canonical product QR (handles URL, UUID, or SKU)
       const parsed = parseKSelectProductQr(trimmed);
 
-      if (parsed.isValid && parsed.productId) {
-        // Look up product in current store assortment
-        const found = items.find(
-          (it) => it.productId.toLowerCase() === parsed.productId!.toLowerCase()
-        );
+      // Multi-layer product matching:
+      let found: WeeklyCheckItemState | null = null;
 
-        if (found) {
-          const existingCount = currentCounts[found.productId];
-          const countVal =
-            existingCount && existingCount.isCounted
-              ? existingCount.remainingQty
-              : 0;
-          const notesVal = existingCount?.notes || "";
+      // 1. By canonical UUID if present
+      if (parsed.productId) {
+        found =
+          items.find(
+            (it) => it.productId.toLowerCase() === parsed.productId!.toLowerCase()
+          ) || null;
+      }
 
-          setMatchedItem(found);
-          setInputQty(countVal);
-          setInputNotes(notesVal);
-          setIsAlreadyCounted(Boolean(existingCount?.isCounted));
-          setScanStatus("product_found");
+      // 2. By SKU if parsed or raw SKU matches
+      if (!found && parsed.sku) {
+        const targetSku = parsed.sku.toLowerCase();
+        found =
+          items.find(
+            (it) =>
+              it.sku.toLowerCase() === targetSku ||
+              (it as any).manufactureSku?.toLowerCase() === targetSku
+          ) || null;
+      }
 
-          setTimeout(() => {
-            if (scanInputRef.current) {
-              scanInputRef.current.focus();
-              scanInputRef.current.select();
-            }
-          }, 100);
-        } else {
-          // Valid K SELECT product QR, but not assigned to this store
-          setMatchedItem(null);
-          setScanStatus("product_not_in_store");
-        }
+      // 3. By raw string match against items
+      if (!found) {
+        const normTrimmed = trimmed.toLowerCase();
+        found =
+          items.find(
+            (it) =>
+              it.productId.toLowerCase() === normTrimmed ||
+              it.sku.toLowerCase() === normTrimmed ||
+              (it as any).manufactureSku?.toLowerCase() === normTrimmed ||
+              (it.productName && it.productName.toLowerCase() === normTrimmed)
+          ) || null;
+      }
+
+      if (found) {
+        // Check existing count for recount flow
+        const existingCount = currentCounts[found.productId];
+        const isCounted = Boolean(existingCount?.isCounted);
+        const countVal = isCounted ? existingCount!.remainingQty : 0;
+        const notesVal = existingCount?.notes || "";
+
+        setMatchedItem(found);
+        setInputQty(countVal);
+        setInputNotes(notesVal);
+        setIsAlreadyCounted(isCounted);
+        setScanStatus("product_found");
+        setShowProductDrawer(false);
+
+        setTimeout(() => {
+          if (scanInputRef.current) {
+            scanInputRef.current.focus();
+            scanInputRef.current.select();
+          }
+        }, 100);
+      } else if (parsed.productId && parsed.isValid) {
+        // Valid K SELECT product QR, but not assigned to this store
+        setMatchedItem(null);
+        setScanStatus("product_not_in_store");
       } else {
-        // Check if manual SKU or ID match against store items
-        const foundBySku = items.find(
-          (it) =>
-            it.sku.toLowerCase() === trimmed.toLowerCase() ||
-            it.productId.toLowerCase() === trimmed.toLowerCase() ||
-            (it.productName && it.productName.toLowerCase().includes(trimmed.toLowerCase()))
-        );
-
-        if (foundBySku) {
-          const existingCount = currentCounts[foundBySku.productId];
-          const countVal =
-            existingCount && existingCount.isCounted
-              ? existingCount.remainingQty
-              : 0;
-          const notesVal = existingCount?.notes || "";
-
-          setMatchedItem(foundBySku);
-          setInputQty(countVal);
-          setInputNotes(notesVal);
-          setIsAlreadyCounted(Boolean(existingCount?.isCounted));
-          setScanStatus("product_found");
-        } else {
-          setMatchedItem(null);
-          setScanStatus("invalid_qr");
-        }
+        // Invalid or unrecognized QR/barcode
+        setMatchedItem(null);
+        setScanStatus("invalid_qr");
       }
     },
     [items, currentCounts]
@@ -197,7 +276,7 @@ export function WeeklyCheckScannerModal({
     setScanStatus("scanning");
   }, []);
 
-  // Save current item count and scan next product (waits for persistence confirmation)
+  // Save current item count and scan next product
   const handleSaveAndScanNext = useCallback(async () => {
     if (!matchedItem || isSaving) return;
 
@@ -215,10 +294,10 @@ export function WeeklyCheckScannerModal({
         return;
       }
 
-      setSuccessToast(`✓ ${savedName} saved — Qty: ${savedQty}`);
+      setSuccessToast(`✓ Saved to Cloud — ${savedName} (Qty: ${savedQty})`);
       setTimeout(() => {
         setSuccessToast(null);
-      }, 3000);
+      }, 3500);
 
       resumeScanning();
     } catch (err: any) {
@@ -261,6 +340,28 @@ export function WeeklyCheckScannerModal({
     setShowManualInput(false);
   };
 
+  // Direct selection of an item from uncounted/search drawer
+  const handleSelectDrawerItem = (item: WeeklyCheckItemState) => {
+    const existingCount = currentCounts[item.productId];
+    const isCounted = Boolean(existingCount?.isCounted);
+    const countVal = isCounted ? existingCount!.remainingQty : 0;
+    const notesVal = existingCount?.notes || "";
+
+    setMatchedItem(item);
+    setInputQty(countVal);
+    setInputNotes(notesVal);
+    setIsAlreadyCounted(isCounted);
+    setScanStatus("product_found");
+    setShowProductDrawer(false);
+
+    setTimeout(() => {
+      if (scanInputRef.current) {
+        scanInputRef.current.focus();
+        scanInputRef.current.select();
+      }
+    }, 100);
+  };
+
   // Start Camera Stream & Frame Analysis Loop
   useEffect(() => {
     if (!isOpen) {
@@ -298,11 +399,21 @@ export function WeeklyCheckScannerModal({
 
         streamRef.current = stream;
 
-        // Check torch capability
+        // Apply continuous autofocus constraints for crisp mobile barcode detection
         const track = stream.getVideoTracks()[0];
         if (track) {
           const caps: any = track.getCapabilities ? track.getCapabilities() : {};
           setHasTorch(Boolean(caps.torch));
+
+          if ((track as any).applyConstraints) {
+            try {
+              await (track as any).applyConstraints({
+                advanced: [{ focusMode: "continuous" } as any],
+              });
+            } catch {
+              // ignore if continuous focus unsupported
+            }
+          }
         }
 
         if (videoRef.current) {
@@ -322,7 +433,9 @@ export function WeeklyCheckScannerModal({
           err.message?.includes("Permission denied")
         ) {
           setScanStatus("permission_denied");
-          setErrorMessage("Camera permission was denied. Please allow camera access in your browser settings to scan price tags.");
+          setErrorMessage(
+            "Camera permission was denied. Please allow camera access in your browser settings to scan price tags."
+          );
         } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
           setScanStatus("unsupported");
           setErrorMessage("No camera device was detected on this device.");
@@ -341,41 +454,81 @@ export function WeeklyCheckScannerModal({
     };
   }, [isOpen, facingMode, stopCamera]);
 
-  // Frame processing loop using jsQR
+  // Frame processing loop using native BarcodeDetector with jsQR fallback
   useEffect(() => {
     if (scanStatus !== "scanning" || !isOpen) return;
 
     let active = true;
 
-    const scanFrame = () => {
+    // Initialize native BarcodeDetector if available (Chromium/Android Chrome)
+    if (typeof window !== "undefined" && "BarcodeDetector" in window && !barcodeDetectorRef.current) {
+      try {
+        barcodeDetectorRef.current = new (window as any).BarcodeDetector({
+          formats: ["qr_code", "ean_13", "ean_8", "code_128", "code_39", "upc_a", "upc_e"],
+        });
+      } catch (err) {
+        console.warn("Native BarcodeDetector initialization fallback:", err);
+      }
+    }
+
+    const scanFrame = async () => {
       if (!active || scanStatus !== "scanning") return;
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
 
-      if (video && canvas && video.readyState >= video.HAVE_CURRENT_DATA) {
-        const width = video.videoWidth;
-        const height = video.videoHeight;
+      if (video && video.readyState >= video.HAVE_CURRENT_DATA && !isProcessingFrameRef.current) {
+        isProcessingFrameRef.current = true;
 
-        if (width > 0 && height > 0) {
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        try {
+          let detectedValue: string | null = null;
 
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, width, height);
-            const imageData = ctx.getImageData(0, 0, width, height);
-
-            // Fast decode with jsQR
-            const code = jsQR(imageData.data, width, height, {
-              inversionAttempts: "dontInvert",
-            });
-
-            if (code && code.data) {
-              handlePayloadDetected(code.data);
-              return; // Pause loop
+          // 1. Hardware-accelerated Native BarcodeDetector (Android Chrome primary)
+          if (barcodeDetectorRef.current) {
+            try {
+              const barcodes = await barcodeDetectorRef.current.detect(video);
+              if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+                detectedValue = barcodes[0].rawValue;
+              }
+            } catch {
+              // ignore and fall back to jsQR
             }
           }
+
+          // 2. High-speed bounded jsQR Fallback (iOS Safari / desktop fallback)
+          if (!detectedValue && canvas && video.videoWidth > 0 && video.videoHeight > 0) {
+            // Downscale analysis canvas to max 512px on longer dimension (runs in <10ms)
+            const maxDim = 512;
+            const scale = Math.min(1, maxDim / Math.max(video.videoWidth, video.videoHeight));
+            const targetWidth = Math.round(video.videoWidth * scale);
+            const targetHeight = Math.round(video.videoHeight * scale);
+
+            if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+              canvas.width = targetWidth;
+              canvas.height = targetHeight;
+            }
+
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            if (ctx) {
+              ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+              const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+
+              const code = jsQR(imageData.data, targetWidth, targetHeight, {
+                inversionAttempts: "dontInvert",
+              });
+
+              if (code && code.data) {
+                detectedValue = code.data;
+              }
+            }
+          }
+
+          if (detectedValue) {
+            handlePayloadDetected(detectedValue);
+            return; // Pause scanning while user inputs quantity
+          }
+        } finally {
+          isProcessingFrameRef.current = false;
         }
       }
 
@@ -416,7 +569,9 @@ export function WeeklyCheckScannerModal({
           </button>
           <div className="text-white text-xs">
             <span className="font-bold block">{storeName}</span>
-            <span className="text-zinc-400 text-[10px]">Fast Count Scanner</span>
+            <span className="text-zinc-400 text-[10px]">
+              {uncountedCount} uncounted / {items.length} total
+            </span>
           </div>
         </div>
 
@@ -486,30 +641,39 @@ export function WeeklyCheckScannerModal({
             </div>
 
             <p className="mt-6 text-xs font-semibold text-white/90 bg-black/60 px-4 py-1.5 rounded-full backdrop-blur-md shadow-sm">
-              Align K SELECT Product QR within frame
+              Align Shelf Price Tag QR within frame
             </p>
           </div>
         )}
 
-        {/* Permission Denied / Error State */}
+        {/* Permission Denied / Unsupported State */}
         {(scanStatus === "permission_denied" || scanStatus === "unsupported") && (
           <div className="absolute inset-0 z-20 flex items-center justify-center p-6 bg-zinc-950/90 backdrop-blur-md">
             <div className="max-w-xs w-full text-center space-y-4">
               <div className="w-16 h-16 rounded-3xl bg-rose-500/10 text-rose-500 border border-rose-500/20 text-3xl flex items-center justify-center mx-auto">
                 📷
               </div>
-              <h3 className="text-base font-bold text-white">Camera Access Required</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                {errorMessage ||
-                  "Please enable camera permissions in your browser or switch to manual product list."}
-              </p>
-              <div className="pt-2 space-y-2">
+              <div>
+                <h3 className="text-base font-bold text-white">Camera Unavailable</h3>
+                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                  {errorMessage || "Unable to access device camera."}
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowProductDrawer(true)}
+                  className="w-full py-3 px-4 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all cursor-pointer shadow-md"
+                >
+                  📋 View & Count Store Products
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowManualInput(true)}
-                  className="w-full py-3 px-4 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all cursor-pointer"
+                  className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-all cursor-pointer"
                 >
-                  Enter SKU or QR Manually
+                  Enter SKU Manually
                 </button>
                 <button
                   type="button"
@@ -517,7 +681,7 @@ export function WeeklyCheckScannerModal({
                     stopCamera();
                     onClose();
                   }}
-                  className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-all cursor-pointer"
+                  className="w-full py-2 px-4 rounded-xl text-xs text-zinc-500 hover:text-white transition-colors"
                 >
                   Return to Product List
                 </button>
@@ -568,9 +732,9 @@ export function WeeklyCheckScannerModal({
               <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center text-2xl mx-auto border border-rose-500/20">
                 ❌
               </div>
-              <h4 className="text-sm font-bold text-white">Invalid QR Code</h4>
+              <h4 className="text-sm font-bold text-white">Unrecognized QR or Barcode</h4>
               <p className="text-xs text-rose-200/80">
-                Not a valid K SELECT product QR code or unrecognized SKU.
+                The scanned code does not match any product in this store.
               </p>
               <div className="flex gap-2 pt-1">
                 <button
@@ -578,14 +742,14 @@ export function WeeklyCheckScannerModal({
                   onClick={resumeScanning}
                   className="flex-1 py-3 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer"
                 >
-                  Try Again
+                  Scan Again
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowManualInput(true)}
+                  onClick={() => setShowProductDrawer(true)}
                   className="flex-1 py-3 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all cursor-pointer"
                 >
-                  Type SKU
+                  Select from List
                 </button>
               </div>
             </div>
@@ -597,18 +761,28 @@ export function WeeklyCheckScannerModal({
       {scanStatus === "product_found" && matchedItem && (
         <div className="relative z-40 bg-zinc-900 border-t border-zinc-800 rounded-t-3xl p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom duration-200 pb-safe">
           <div className="max-w-md mx-auto space-y-4">
+            {/* Recount Notice Banner if previously counted */}
+            {isAlreadyCounted && (
+              <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center gap-3">
+                <span className="text-xl">🔄</span>
+                <div className="flex-1 text-xs">
+                  <div className="font-bold text-amber-300">Recounting Product</div>
+                  <div className="text-[11px] text-amber-200/80">
+                    Previously saved count: <strong className="text-white">{inputQty} units</strong>. Update below if needed.
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Header / Product summary */}
             <div className="flex items-start gap-4">
               <div className="w-16 h-16 rounded-2xl bg-zinc-800 border border-zinc-700 p-1 shrink-0 flex items-center justify-center overflow-hidden">
-                {matchedItem.thumbnailUrl ? (
-                  <img
-                    src={matchedItem.thumbnailUrl}
-                    alt={matchedItem.productName}
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <span className="text-[10px] text-zinc-500">No Img</span>
-                )}
+                <SafeProductThumbnail
+                  src={matchedItem.thumbnailUrl}
+                  alt={matchedItem.productName}
+                  sku={matchedItem.sku}
+                  sizeClass="w-full h-full"
+                />
               </div>
 
               <div className="flex-1 min-w-0">
@@ -727,7 +901,9 @@ export function WeeklyCheckScannerModal({
                 <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/50 text-xs text-rose-200">
                   <div className="font-bold flex items-center justify-between">
                     <span>Save Failed</span>
-                    <button type="button" onClick={() => setSaveError(null)}>✕</button>
+                    <button type="button" onClick={() => setSaveError(null)}>
+                      ✕
+                    </button>
                   </div>
                   <p className="mt-0.5 text-[11px]">{saveError}</p>
                 </div>
@@ -745,10 +921,14 @@ export function WeeklyCheckScannerModal({
                 {isSaving ? (
                   <>
                     <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                    <span>Saving Count...</span>
+                    <span>Saving to Cloud...</span>
                   </>
                 ) : (
-                  <span>Save & Scan Next Product 📷</span>
+                  <span>
+                    {isAlreadyCounted
+                      ? "Update Count & Scan Next 📷"
+                      : "Save & Scan Next Product 📷"}
+                  </span>
                 )}
               </button>
 
@@ -758,16 +938,206 @@ export function WeeklyCheckScannerModal({
                 onClick={handleSaveAndReturn}
                 className="w-full py-2.5 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-all cursor-pointer text-center disabled:opacity-50"
               >
-                {isSaving ? "Saving..." : "Save & Return to Product List"}
+                {isSaving
+                  ? "Saving..."
+                  : isAlreadyCounted
+                  ? "Update & Return to Product List"
+                  : "Save & Return to Product List"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Manual Input Fallback Drawer / Modal */}
+      {/* Floating Bottom Quick Actions (when scanning) */}
+      {scanStatus === "scanning" && (
+        <div className="relative z-30 p-4 pb-safe flex items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setDrawerTab("uncounted");
+              setShowProductDrawer(true);
+            }}
+            className="text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 rounded-full backdrop-blur-md border border-indigo-400/40 active:scale-95 transition-all shadow-lg flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>📋</span>
+            <span>Uncounted ({uncountedCount} left)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setDrawerTab("all");
+              setShowProductDrawer(true);
+            }}
+            className="text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-900/90 px-3.5 py-2.5 rounded-full backdrop-blur-md border border-zinc-700 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <span>🔍</span>
+            <span>Search SKU</span>
+          </button>
+        </div>
+      )}
+
+      {/* Uncounted & Product Search Drawer (Slide-up Sheet) */}
+      {showProductDrawer && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col justify-end animate-in fade-in duration-150">
+          <div className="w-full max-w-lg mx-auto bg-zinc-900 border-t border-zinc-800 rounded-t-3xl p-5 space-y-4 shadow-2xl max-h-[85vh] flex flex-col animate-in slide-in-from-bottom-6 duration-200 pb-safe">
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white">Store Inventory Products</h3>
+                <p className="text-[11px] text-zinc-400">
+                  Select any product to enter count without scanning
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProductDrawer(false)}
+                className="w-8 h-8 rounded-full bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-2 p-1 bg-zinc-950 rounded-xl border border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setDrawerTab("uncounted")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  drawerTab === "uncounted"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                Uncounted ({uncountedCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDrawerTab("all")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  drawerTab === "all"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                All Products ({items.length})
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search product name, brand, or SKU..."
+                value={drawerSearch}
+                onChange={(e) => setDrawerSearch(e.target.value)}
+                className="w-full text-xs p-3 pl-9 rounded-xl bg-zinc-950 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <span className="absolute left-3 top-3 text-zinc-500 text-xs">🔍</span>
+              {drawerSearch && (
+                <button
+                  type="button"
+                  onClick={() => setDrawerSearch("")}
+                  className="absolute right-3 top-3 text-zinc-400 hover:text-white text-xs font-bold"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Products List */}
+            <div className="flex-1 overflow-y-auto space-y-2 min-h-[200px] pr-1">
+              {drawerFilteredItems.length === 0 ? (
+                <div className="py-8 text-center text-xs text-zinc-500">
+                  {drawerTab === "uncounted"
+                    ? "All products in this store have been counted! 🎉"
+                    : "No matching products found."}
+                </div>
+              ) : (
+                drawerFilteredItems.map((item) => {
+                  const state = currentCounts[item.productId];
+                  const isCounted = Boolean(state?.isCounted);
+
+                  return (
+                    <div
+                      key={item.productId}
+                      onClick={() => handleSelectDrawerItem(item)}
+                      className="p-3 rounded-2xl bg-zinc-950 border border-zinc-800 hover:border-indigo-500/60 transition-all flex items-center justify-between gap-3 cursor-pointer group"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 p-1 shrink-0 flex items-center justify-center overflow-hidden">
+                        <SafeProductThumbnail
+                          src={item.thumbnailUrl}
+                          alt={item.productName}
+                          sku={item.sku}
+                        />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold uppercase text-indigo-400 truncate">
+                            {item.brandName}
+                          </span>
+                          <span className="text-zinc-600">•</span>
+                          <span className="text-[10px] font-mono text-zinc-400 truncate">
+                            {item.sku}
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-white truncate mt-0.5 group-hover:text-indigo-300">
+                          {item.productName}
+                        </p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">
+                          Prev: {item.previousReportedQty !== null ? `${item.previousReportedQty} u` : "Baseline"}
+                          {Boolean(item.deliveredSincePrevious && item.deliveredSincePrevious > 0) && (
+                            <span className="text-emerald-400 ml-1.5">+{item.deliveredSincePrevious} Deliv</span>
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        {isCounted ? (
+                          <span className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                            Counted ({state.remainingQty})
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 rounded-lg bg-indigo-600 text-white text-[10px] font-bold group-hover:bg-indigo-500 transition-colors">
+                            Count →
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="flex items-center gap-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowProductDrawer(false);
+                  setShowManualInput(true);
+                }}
+                className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+              >
+                ⌨️ Type Custom URL / SKU
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowProductDrawer(false)}
+                className="py-2.5 px-4 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Input Fallback Modal */}
       {showManualInput && (
-        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4">
           <div className="w-full max-w-sm rounded-3xl bg-zinc-900 border border-zinc-800 p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white">Manual Product Search</h3>
@@ -807,19 +1177,6 @@ export function WeeklyCheckScannerModal({
               </div>
             </form>
           </div>
-        </div>
-      )}
-
-      {/* Bottom Manual Fallback Trigger (when scanning) */}
-      {scanStatus === "scanning" && (
-        <div className="relative z-30 p-4 pb-safe flex justify-center">
-          <button
-            type="button"
-            onClick={() => setShowManualInput(true)}
-            className="text-[11px] font-semibold text-zinc-400 hover:text-white bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-white/10 active:scale-95 transition-all cursor-pointer"
-          >
-            ⌨️ Having trouble scanning? Type SKU / URL
-          </button>
         </div>
       )}
     </div>

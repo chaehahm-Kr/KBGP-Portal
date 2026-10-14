@@ -49,38 +49,50 @@ export async function generateProductQrDataUrl(productId: string): Promise<strin
  */
 export function parseKSelectProductQr(payload: string): {
   productId: string | null;
+  sku: string | null;
+  rawIdentifier: string | null;
   isValid: boolean;
 } {
   if (!payload || typeof payload !== "string") {
-    return { productId: null, isValid: false };
+    return { productId: null, sku: null, rawIdentifier: null, isValid: false };
   }
 
   const trimmed = payload.trim();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   // 1. Direct UUID format
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (uuidRegex.test(trimmed)) {
-    return { productId: trimmed, isValid: true };
+    return { productId: trimmed, sku: null, rawIdentifier: trimmed, isValid: true };
   }
 
-  // 2. URL format: https://www.kselecthub.com/products/{productId}
+  // 2. URL format: e.g. https://www.kselecthub.com/products/{productIdOrSku}
   try {
     const url = new URL(trimmed);
     const parts = url.pathname.split("/").filter(Boolean);
     const prodIdx = parts.indexOf("products");
     if (prodIdx !== -1 && parts[prodIdx + 1]) {
-      const candidateId = decodeURIComponent(parts[prodIdx + 1]);
-      if (uuidRegex.test(candidateId)) {
-        return { productId: candidateId, isValid: true };
+      const candidate = decodeURIComponent(parts[prodIdx + 1]).trim();
+      if (uuidRegex.test(candidate)) {
+        return { productId: candidate, sku: null, rawIdentifier: candidate, isValid: true };
       }
+      return { productId: null, sku: candidate, rawIdentifier: candidate, isValid: Boolean(candidate) };
     }
   } catch {
-    // If not a valid standard URL, check regex match on path
-    const match = trimmed.match(/\/products\/([0-9a-f-]{36})/i);
+    // If not a standard URL, check regex for /products/ segment
+    const match = trimmed.match(/\/products\/([^\/\?#\s]+)/i);
     if (match && match[1]) {
-      return { productId: match[1], isValid: true };
+      const candidate = decodeURIComponent(match[1]).trim();
+      if (uuidRegex.test(candidate)) {
+        return { productId: candidate, sku: null, rawIdentifier: candidate, isValid: true };
+      }
+      return { productId: null, sku: candidate, rawIdentifier: candidate, isValid: Boolean(candidate) };
     }
   }
 
-  return { productId: null, isValid: false };
+  // 3. Fallback: treat clean non-empty string as candidate identifier/SKU
+  if (trimmed.length >= 2 && !trimmed.includes("\n") && !trimmed.includes("<")) {
+    return { productId: null, sku: trimmed, rawIdentifier: trimmed, isValid: true };
+  }
+
+  return { productId: null, sku: null, rawIdentifier: null, isValid: false };
 }

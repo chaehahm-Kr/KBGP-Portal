@@ -10,7 +10,7 @@ import { resolveEffectiveSku } from "@/lib/product/types";
 import { AdminBrandDetail, type AdminBrandDetailData } from "@/components/admin/admin-brand-detail";
 
 interface AdminBrandDetailPageProps {
-  params: Promise<{ brandId: string }> | { brandId: string };
+  params: Promise<{ brandId: string }>;
 }
 
 export async function generateMetadata({ params }: AdminBrandDetailPageProps): Promise<Metadata> {

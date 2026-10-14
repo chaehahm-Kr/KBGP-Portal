@@ -343,15 +343,15 @@ export function RetailerOrdersList({
 
     if (method === "card") {
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
           <span>💳</span>
-          <span>Credit Card</span>
+          <span>Card</span>
         </span>
       );
     }
     if (method === "ach") {
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
           <span>🏦</span>
           <span>ACH</span>
         </span>
@@ -360,7 +360,7 @@ export function RetailerOrdersList({
     if (method === "terms" || (order.paymentTerms && order.paymentTerms.toLowerCase().includes("net"))) {
       const termsLabel = order.paymentTerms ? order.paymentTerms.replace(/_/g, " ") : "Net Terms";
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
           <span>📄</span>
           <span>{termsLabel}</span>
         </span>
@@ -368,7 +368,7 @@ export function RetailerOrdersList({
     }
     if (order.paymentTerms && order.paymentTerms.toLowerCase().includes("prepaid")) {
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
           <span>⚡</span>
           <span>Prepaid</span>
         </span>
@@ -487,7 +487,7 @@ export function RetailerOrdersList({
       case "saved_address":
         return (
           <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-medium bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-            Saved Address
+            Saved
           </span>
         );
       case "custom_address":
@@ -498,11 +498,7 @@ export function RetailerOrdersList({
         );
       case "store":
       default:
-        return (
-          <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
-            Store
-          </span>
-        );
+        return null;
     }
   };
 
@@ -517,15 +513,15 @@ export function RetailerOrdersList({
   return (
     <div className="space-y-4">
       {/* 1. Filter Bar & Search Controls */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3.5 sm:p-4 shadow-xs space-y-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           {/* Order # Search */}
           <div>
-            <label className="block text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
+            <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
               Order # Search
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">
                 🔍
               </span>
               <input
@@ -534,18 +530,18 @@ export function RetailerOrdersList({
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && executeFilterQuery()}
                 placeholder="Search Order #..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white"
+                className="w-full pl-7 pr-2.5 py-1 text-xs rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
               />
             </div>
           </div>
 
           {/* SKU Search */}
           <div>
-            <label className="block text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
+            <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
               SKU Search
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">
                 🏷️
               </span>
               <input
@@ -554,7 +550,7 @@ export function RetailerOrdersList({
                 onChange={(e) => setSkuTerm(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && executeFilterQuery()}
                 placeholder="SKU (e.g. DR120-SB-001)..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white"
+                className="w-full pl-7 pr-2.5 py-1 text-xs rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
               />
             </div>
           </div>
@@ -587,22 +583,22 @@ export function RetailerOrdersList({
         </div>
 
         {/* Multi-Select Toggle Filter Groups */}
-        <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+        <div className="pt-2.5 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
           {/* Group 1: Fulfillment Status */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <div className="flex items-center gap-1.5 sm:w-28 shrink-0">
-              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1 sm:w-24 shrink-0">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
                 Fulfillment:
               </span>
               {selectedOrderStatuses.length === 0 ? (
                 <span className="text-[10px] text-zinc-400 font-medium">(All)</span>
               ) : (
-                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded-md">
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1 py-0.2 rounded">
                   {selectedOrderStatuses.length}
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1">
               {FULFILLMENT_OPTIONS.map((opt) => {
                 const isSelected = selectedOrderStatuses.includes(opt.key);
                 return (
@@ -610,7 +606,7 @@ export function RetailerOrdersList({
                     key={opt.key}
                     type="button"
                     onClick={() => toggleOrderStatus(opt.key)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all select-none ${
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-all select-none ${
                       isSelected
                         ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-xs ring-1 ring-zinc-900 dark:ring-white"
                         : "bg-zinc-100/80 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/60 border border-zinc-200/80 dark:border-zinc-700/60"
@@ -627,20 +623,20 @@ export function RetailerOrdersList({
           </div>
 
           {/* Group 2: Payment Method */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <div className="flex items-center gap-1.5 sm:w-28 shrink-0">
-              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1 sm:w-24 shrink-0">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
                 Payment:
               </span>
               {selectedPaymentMethods.length === 0 ? (
                 <span className="text-[10px] text-zinc-400 font-medium">(All)</span>
               ) : (
-                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded-md">
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1 py-0.2 rounded">
                   {selectedPaymentMethods.length}
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1">
               {PAYMENT_METHOD_OPTIONS.map((opt) => {
                 const isSelected = selectedPaymentMethods.includes(opt.key);
                 return (
@@ -648,7 +644,7 @@ export function RetailerOrdersList({
                     key={opt.key}
                     type="button"
                     onClick={() => togglePaymentMethod(opt.key)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all select-none ${
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-all select-none ${
                       isSelected
                         ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-xs ring-1 ring-zinc-900 dark:ring-white"
                         : "bg-zinc-100/80 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/60 border border-zinc-200/80 dark:border-zinc-700/60"
@@ -666,20 +662,20 @@ export function RetailerOrdersList({
           </div>
 
           {/* Group 3: Invoice Status */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <div className="flex items-center gap-1.5 sm:w-28 shrink-0">
-              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1 sm:w-24 shrink-0">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
                 Invoice:
               </span>
               {selectedInvoiceStatuses.length === 0 ? (
                 <span className="text-[10px] text-zinc-400 font-medium">(All)</span>
               ) : (
-                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded-md">
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1 py-0.2 rounded">
                   {selectedInvoiceStatuses.length}
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1">
               {INVOICE_STATUS_OPTIONS.map((opt) => {
                 const isSelected = selectedInvoiceStatuses.includes(opt.key);
                 return (
@@ -687,7 +683,7 @@ export function RetailerOrdersList({
                     key={opt.key}
                     type="button"
                     onClick={() => toggleInvoiceStatus(opt.key)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all select-none ${
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-all select-none ${
                       isSelected
                         ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-xs ring-1 ring-zinc-900 dark:ring-white"
                         : "bg-zinc-100/80 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/60 border border-zinc-200/80 dark:border-zinc-700/60"
@@ -706,7 +702,7 @@ export function RetailerOrdersList({
 
         {/* Action Row */}
         <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
-          <div className="text-xs text-zinc-500">
+          <div className="text-[11px] text-zinc-500">
             {hasActiveFilters ? (
               <span className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-medium">
                 <span>Active filters applied</span>
@@ -720,7 +716,7 @@ export function RetailerOrdersList({
               type="button"
               onClick={() => executeFilterQuery()}
               disabled={isPending}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 transition-colors shadow-xs"
+              className="px-3 py-1 rounded-lg text-xs font-bold bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 transition-colors shadow-xs"
             >
               {isPending ? "Filtering..." : "Apply Filters"}
             </button>
@@ -728,7 +724,7 @@ export function RetailerOrdersList({
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
               >
                 Reset
               </button>
@@ -786,23 +782,23 @@ export function RetailerOrdersList({
           )}
         </div>
       ) : (
-        <div className="hidden md:block rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-xs">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs min-w-[920px]">
-              <thead className="bg-zinc-50 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 uppercase tracking-wider font-semibold text-[10px]">
+        <div className="hidden md:block rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-xs">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs table-auto">
+              <thead className="bg-zinc-50/80 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 uppercase tracking-wider font-semibold text-[10px]">
                 <tr>
-                  <th className="py-3.5 px-4">Order #</th>
-                  <th className="py-3.5 px-4">Order Date</th>
-                  <th className="py-3.5 px-4">Destination</th>
-                  <th className="py-3.5 px-4 text-center">SKUs</th>
-                  <th className="py-3.5 px-4 text-center">Units</th>
-                  <th className="py-3.5 px-4 text-center">Shipped Qty</th>
-                  <th className="py-3.5 px-4 text-center">Tracking</th>
-                  <th className="py-3.5 px-4">Unified Status</th>
-                  <th className="py-3.5 px-4">Payment Method</th>
-                  <th className="py-3.5 px-4">Invoice</th>
-                  <th className="py-3.5 px-4 text-right">Total Amount</th>
-                  <th className="py-3.5 px-4 text-right">{t.common.actions}</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Order #</th>
+                  <th className="py-2.5 px-2 whitespace-nowrap">Date</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Destination</th>
+                  <th className="py-2.5 px-1.5 text-center whitespace-nowrap">SKUs</th>
+                  <th className="py-2.5 px-1.5 text-center whitespace-nowrap">Units</th>
+                  <th className="py-2.5 px-1.5 text-center whitespace-nowrap">Shipped</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Tracking</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-2 whitespace-nowrap">Payment</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Invoice</th>
+                  <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Total</th>
+                  <th className="py-2.5 px-2.5 text-right whitespace-nowrap">{t.common.actions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
@@ -814,59 +810,60 @@ export function RetailerOrdersList({
                       key={order.id}
                       className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/40 transition-colors"
                     >
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-1.5">
+                      {/* Order # (Never wrap, single line) */}
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
                           <Link
                             href={`/orders/${order.orderNumber}`}
-                            className="font-bold text-zinc-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                            className="font-bold font-mono text-zinc-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors whitespace-nowrap"
                           >
                             {order.orderNumber}
                           </Link>
                           {order.isTest && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                            <span className="px-1 py-0.2 rounded text-[9px] font-black bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 shrink-0">
                               TEST
                             </span>
                           )}
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
+                      {/* Order Date (Single line) */}
+                      <td className="py-2.5 px-2 text-zinc-600 dark:text-zinc-400 whitespace-nowrap text-xs">
                         {formatDate(order.createdAt)}
                       </td>
 
-                      {/* Destination */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-semibold text-zinc-900 dark:text-white">
-                            📍 {order.destinationLabel || order.storeName}
+                      {/* Destination (Single line with controlled ellipsis) */}
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1 max-w-[140px] xl:max-w-[200px]">
+                          <span
+                            className="font-semibold text-zinc-900 dark:text-white truncate"
+                            title={order.destinationLabel || order.storeName}
+                          >
+                            {order.destinationLabel || order.storeName}
                           </span>
                           {order.destinationType && order.destinationType !== "store" && (
-                            <div>{getDestinationBadge(order.destinationType)}</div>
+                            <span className="shrink-0">{getDestinationBadge(order.destinationType)}</span>
                           )}
                         </div>
                       </td>
 
-                      {/* Split SKU Column */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-extrabold text-zinc-900 dark:text-white">
-                          {order.totalSkusCount}
-                        </span>
+                      {/* SKUs */}
+                      <td className="py-2.5 px-1.5 text-center whitespace-nowrap font-extrabold text-zinc-900 dark:text-white">
+                        {order.totalSkusCount}
                       </td>
 
-                      {/* Split Units Column */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-medium text-zinc-600 dark:text-zinc-400">
-                          {order.totalItemsCount.toLocaleString()}
-                        </span>
+                      {/* Units */}
+                      <td className="py-2.5 px-1.5 text-center whitespace-nowrap font-medium text-zinc-600 dark:text-zinc-400">
+                        {order.totalItemsCount.toLocaleString()}
                       </td>
 
-                      {/* Shipped Qty Column */}
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap font-semibold text-zinc-900 dark:text-white">
+                      {/* Shipped Qty */}
+                      <td className="py-2.5 px-1.5 text-center whitespace-nowrap font-semibold text-zinc-900 dark:text-white">
                         {order.totalShippedUnits || 0}
                       </td>
 
-                      {/* Tracking Column */}
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                      {/* Tracking */}
+                      <td className="py-2.5 px-2 text-center whitespace-nowrap">
                         <TrackingPopover
                           orderNumber={order.orderNumber}
                           packages={order.packages as any}
@@ -874,26 +871,28 @@ export function RetailerOrdersList({
                         />
                       </td>
 
-                      {/* Unified Order Status Column */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {getStatusBadge(order.orderStatus)}
-                        {order.totalCancelledUnits > 0 && (
-                          <div className="text-[9px] text-orange-600 font-bold mt-0.5">
-                            {order.totalCancelledUnits} units voided
-                          </div>
-                        )}
+                      {/* Unified Status */}
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          {getStatusBadge(order.orderStatus)}
+                          {order.totalCancelledUnits > 0 && (
+                            <span className="text-[9px] text-orange-600 font-bold shrink-0">
+                              ({order.totalCancelledUnits} void)
+                            </span>
+                          )}
+                        </div>
                       </td>
 
-                      {/* Payment Method Column */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      {/* Payment Method */}
+                      <td className="py-2.5 px-2 whitespace-nowrap">
                         {renderPaymentMethod(order)}
                       </td>
 
-                      {/* Invoice Column */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex flex-col gap-0.5">
+                      {/* Invoice */}
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold self-start ${invSummary.badgeClass}`}
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${invSummary.badgeClass}`}
                           >
                             {invSummary.status}
                           </span>
@@ -914,16 +913,19 @@ export function RetailerOrdersList({
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 text-right font-extrabold text-zinc-900 dark:text-white text-sm whitespace-nowrap">
+                      {/* Total Amount */}
+                      <td className="py-2.5 px-2.5 text-right font-extrabold text-zinc-900 dark:text-white text-xs whitespace-nowrap">
                         ${order.totalAmount.toFixed(2)}
                       </td>
 
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                      {/* Actions */}
+                      <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
                         <Link
                           href={`/orders/${order.orderNumber}`}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                          className="inline-flex items-center gap-0.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
                         >
-                          {t.common.details} →
+                          <span>{t.common.details || "Details"}</span>
+                          <span className="text-[10px]">→</span>
                         </Link>
                       </td>
                     </tr>

@@ -2,8 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
   StorePricingDashboardData,
   StoreProductTagItem,
@@ -11,6 +10,10 @@ import {
 } from "@/lib/retailer/store-pricing-types";
 import { PriceTagCard } from "@/components/retailer/price-tag-card";
 import { PriceTagModal } from "@/components/retailer/price-tag-modal";
+import {
+  savePriceTagForNiimbot,
+  copyPriceTagImageToClipboard,
+} from "@/lib/retailer/niimbot-export";
 
 interface PriceTagsDashboardProps {
   data: StorePricingDashboardData;
@@ -18,11 +21,13 @@ interface PriceTagsDashboardProps {
 
 export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
   const {
     canEditPrice,
+    userRole,
     selectedStoreId,
     selectedStoreName,
     stores,
@@ -30,6 +35,8 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
     totalAssortmentCount,
     pricedProductsCount,
     onSaleProductsCount,
+    incomingProductsCount,
+    unpricedProductsCount,
   } = data;
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -37,13 +44,27 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
   const [editingItem, setEditingItem] = useState<StoreProductTagItem | null>(null);
   const [previewingItem, setPreviewingItem] = useState<StoreProductTagItem | null>(null);
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [exportFeedback, setExportFeedback] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const isEmployee = userRole === "employee";
+
+  const getQty = (productId: string) => quantities[productId] || 1;
+  const updateQty = (productId: string, delta: number) => {
+    setQuantities((prev) => {
+      const current = prev[productId] || 1;
+      const next = Math.max(1, Math.min(50, current + delta));
+      return { ...prev, [productId]: next };
+    });
+  };
 
   const handleStoreChange = (storeId: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("store", storeId);
     startTransition(() => {
-      router.push(`/tags?${params.toString()}`);
+      router.push(`${pathname}?${params.toString()}`);
     });
   };
 
@@ -78,13 +99,43 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
     }
 
     if (filterMode === "priced") return p.hasStorePrice;
-    if (filterMode === "msrp") return !p.hasStorePrice;
+    if (filterMode === "unpriced" || filterMode === "msrp") return !p.hasStorePrice;
+    if (filterMode === "incoming") return p.tagStatus === "incoming";
     if (filterMode === "sale") return p.isSaleActive;
 
     return true;
   });
 
   const selectedPrintItems = products.filter((p) => selectedProductIds.has(p.productId));
+  const totalLabelsToPrint = selectedPrintItems.reduce((acc, it) => acc + getQty(it.productId), 0);
+
+  const handleExportSingleNiimbot = async (item: StoreProductTagItem) => {
+    try {
+      setIsExporting(true);
+      setExportFeedback(null);
+      const res = await savePriceTagForNiimbot(item);
+      if (res.success) {
+        setExportFeedback("📱 50×30mm label exported! Open NIIMBOT app → 50×30mm roll → Tap Image to print.");
+      }
+    } catch (err: any) {
+      setExportFeedback("Export failed. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleCopyClipboard = async (item: StoreProductTagItem) => {
+    try {
+      const ok = await copyPriceTagImageToClipboard(item);
+      if (ok) {
+        setExportFeedback("📋 Label image copied to clipboard!");
+      } else {
+        setExportFeedback("Clipboard not supported in this browser. Please use 'Save Label'.");
+      }
+    } catch {
+      setExportFeedback("Failed to copy image.");
+    }
+  };
 
   const triggerBrowserPrint = () => {
     window.print();
@@ -104,7 +155,7 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
             </span>
           </div>
           <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Manage store-specific regular and promotional selling prices, preview shelf tags, and batch print labels with canonical product QR codes.
+            Store-specific shelf price labels for NIIMBOT B1 thermal printers and POS fixture sheets.
           </p>
         </div>
 
@@ -141,7 +192,7 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
       {/* Info & Fixture Dimension Banner */}
       <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-gradient-to-r from-purple-50/50 via-zinc-50 to-zinc-50 dark:from-purple-950/30 dark:via-zinc-900/60 dark:to-zinc-900/60 p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-bold text-zinc-900 dark:text-white">
               📍 Active Location: {selectedStoreName}
             </span>
@@ -150,20 +201,30 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
             </span>
           </div>
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-            Shelf tags include your store selling price and a canonical product QR. Customer scanning leads directly to public product authenticity details.
+            50mm × 30mm thermal shelf tags with canonical product QR codes. Compatible with smartphone Bluetooth label printers (NIIMBOT B1) and POS thermal sheets.
           </p>
         </div>
 
         {/* Stats snapshot */}
-        <div className="flex items-center gap-4 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+        <div className="flex items-center gap-3 sm:gap-4 text-xs font-semibold text-zinc-600 dark:text-zinc-300 flex-wrap">
           <div>
-            <span className="text-zinc-400">Assortment: </span>
+            <span className="text-zinc-400">Total: </span>
             <span className="font-bold text-zinc-900 dark:text-white">{totalAssortmentCount} SKUs</span>
           </div>
           <span>•</span>
           <div>
-            <span className="text-zinc-400">Store Priced: </span>
+            <span className="text-zinc-400">Priced: </span>
             <span className="font-bold text-emerald-600 dark:text-emerald-400">{pricedProductsCount}</span>
+          </div>
+          <span>•</span>
+          <div>
+            <span className="text-zinc-400">Needs Price: </span>
+            <span className="font-bold text-amber-600 dark:text-amber-400">{unpricedProductsCount}</span>
+          </div>
+          <span>•</span>
+          <div>
+            <span className="text-zinc-400">Incoming: </span>
+            <span className="font-bold text-blue-600 dark:text-blue-400">{incomingProductsCount}</span>
           </div>
           <span>•</span>
           <div>
@@ -190,8 +251,9 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
           {[
             { id: "all", label: `All (${products.length})` },
             { id: "priced", label: `Store Priced (${pricedProductsCount})` },
+            { id: "unpriced", label: `Needs Price (${unpricedProductsCount})` },
+            { id: "incoming", label: `Incoming (${incomingProductsCount})` },
             { id: "sale", label: `On Sale (${onSaleProductsCount})` },
-            { id: "msrp", label: `MSRP Guidance (${totalAssortmentCount - pricedProductsCount})` },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -215,10 +277,10 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
             🏷️
           </div>
           <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-            No products found in this store assortment
+            No products found matching filters
           </h3>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
-            Ensure products are mapped to this store in retailer store products or have been ordered.
+            All qualifying store assortment items and ordered products appear here automatically.
           </p>
         </div>
       ) : (
@@ -241,17 +303,22 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                       />
                     </th>
                     <th className="py-3.5 px-3">Product</th>
-                    <th className="py-3.5 px-3 text-right">Wholesale Cost</th>
+                    {!isEmployee && (
+                      <th className="py-3.5 px-3 text-right">Wholesale Cost</th>
+                    )}
                     <th className="py-3.5 px-3 text-right">Suggested MSRP</th>
                     <th className="py-3.5 px-3 text-right">Store Regular</th>
                     <th className="py-3.5 px-3 text-right">Sale / Promo</th>
-                    <th className="py-3.5 px-3 text-center">Tag Status</th>
+                    <th className="py-3.5 px-3 text-center">Status</th>
+                    <th className="py-3.5 px-3 text-center w-24">Facings</th>
                     <th className="py-3.5 pl-3 pr-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
                   {filteredProducts.map((p) => {
                     const isSelected = selectedProductIds.has(p.productId);
+                    const qty = getQty(p.productId);
+
                     return (
                       <tr
                         key={p.productId}
@@ -300,10 +367,12 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                           </div>
                         </td>
 
-                        {/* Wholesale Cost */}
-                        <td className="py-3.5 px-3 text-right font-medium text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
-                          ${p.wholesalePrice.toFixed(2)}
-                        </td>
+                        {/* Wholesale Cost (Privileged roles only) */}
+                        {!isEmployee && (
+                          <td className="py-3.5 px-3 text-right font-medium text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
+                            {typeof p.wholesalePrice === "number" ? `$${p.wholesalePrice.toFixed(2)}` : "—"}
+                          </td>
+                        )}
 
                         {/* Suggested MSRP */}
                         <td className="py-3.5 px-3 text-right font-semibold text-zinc-900 dark:text-zinc-200 whitespace-nowrap">
@@ -317,8 +386,8 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                               ${p.regularPrice.toFixed(2)}
                             </span>
                           ) : (
-                            <span className="text-zinc-400 italic text-[11px]">
-                              MSRP Default (${p.msrp.toFixed(2)})
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                              ⚠️ Set Price
                             </span>
                           )}
                         </td>
@@ -341,31 +410,65 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                           )}
                         </td>
 
-                        {/* Tag Status */}
+                        {/* Tag & Fulfillment Status */}
                         <td className="py-3.5 px-3 text-center whitespace-nowrap">
-                          {p.isSaleActive ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-50 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-900">
-                              🔥 SALE TAG
+                          <div className="flex flex-col items-center gap-1">
+                            {p.tagStatus === "incoming" ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                📦 INCOMING
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                ✓ IN STOCK
+                              </span>
+                            )}
+
+                            {p.isSaleActive ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-50 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-900">
+                                🔥 SALE
+                              </span>
+                            ) : !p.hasStorePrice ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-medium bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+                                MSRP GUIDANCE
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+
+                        {/* Quantity Stepper (for multi-facing print) */}
+                        <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                          <div className="inline-flex items-center border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-white dark:bg-zinc-900">
+                            <button
+                              type="button"
+                              onClick={() => updateQty(p.productId, -1)}
+                              className="px-2 py-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-bold"
+                            >
+                              -
+                            </button>
+                            <span className="px-2.5 py-1 text-xs font-bold text-zinc-900 dark:text-white min-w-[24px]">
+                              {qty}
                             </span>
-                          ) : p.hasStorePrice ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                              ✓ STORE TAG
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                              MSRP GUIDANCE
-                            </span>
-                          )}
+                            <button
+                              type="button"
+                              onClick={() => updateQty(p.productId, 1)}
+                              className="px-2 py-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-bold"
+                            >
+                              +
+                            </button>
+                          </div>
                         </td>
 
                         {/* Actions */}
                         <td className="py-3.5 pl-3 pr-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-2">
                             <button
-                              onClick={() => setPreviewingItem(p)}
+                              onClick={() => {
+                                setPreviewingItem(p);
+                                setExportFeedback(null);
+                              }}
                               className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200"
                             >
-                              👁️ Preview
+                              📱 Preview & Print
                             </button>
 
                             {canEditPrice && (
@@ -390,6 +493,8 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
           <div className="block lg:hidden space-y-3">
             {filteredProducts.map((p) => {
               const isSelected = selectedProductIds.has(p.productId);
+              const qty = getQty(p.productId);
+
               return (
                 <div
                   key={p.productId}
@@ -424,6 +529,22 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                     </div>
 
                     <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                        {p.tagStatus === "incoming" ? (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200">
+                            📦 INCOMING
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-200">
+                            ✓ IN STOCK
+                          </span>
+                        )}
+                        {p.isSaleActive && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-rose-50 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300 border border-rose-200">
+                            🔥 SALE
+                          </span>
+                        )}
+                      </div>
                       <div className="font-bold text-sm text-zinc-900 dark:text-white truncate">
                         {p.productName}
                       </div>
@@ -440,7 +561,13 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                     <div>
                       <span className="text-[10px] text-zinc-400 uppercase font-semibold">Store Regular</span>
                       <div className="font-bold text-zinc-900 dark:text-white mt-0.5">
-                        {p.hasStorePrice && p.regularPrice ? `$${p.regularPrice.toFixed(2)}` : `$${p.msrp.toFixed(2)} (MSRP)`}
+                        {p.hasStorePrice && p.regularPrice ? (
+                          `$${p.regularPrice.toFixed(2)}`
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400">
+                            ⚠️ Set Price (MSRP ${p.msrp.toFixed(2)})
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -452,29 +579,57 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                             ${p.salePrice.toFixed(2)} ({p.discountPercent}% OFF)
                           </span>
                         ) : (
-                          <span className="text-zinc-400">None</span>
+                          <span className="text-zinc-400">—</span>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center justify-end gap-2 pt-1">
-                    <button
-                      onClick={() => setPreviewingItem(p)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                    >
-                      👁️ Preview Tag
-                    </button>
+                  {/* Quantity & Actions row */}
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase">Tags:</span>
+                      <div className="inline-flex items-center border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-white dark:bg-zinc-900">
+                        <button
+                          type="button"
+                          onClick={() => updateQty(p.productId, -1)}
+                          className="px-2 py-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-bold"
+                        >
+                          -
+                        </button>
+                        <span className="px-2.5 py-1 text-xs font-bold text-zinc-900 dark:text-white min-w-[20px] text-center">
+                          {qty}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateQty(p.productId, 1)}
+                          className="px-2 py-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-bold"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
 
-                    {canEditPrice && (
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => setEditingItem(p)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 text-white"
+                        onClick={() => {
+                          setPreviewingItem(p);
+                          setExportFeedback(null);
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
                       >
-                        ✏️ Edit Price
+                        📱 Print Tag
                       </button>
-                    )}
+
+                      {canEditPrice && (
+                        <button
+                          onClick={() => setEditingItem(p)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 text-white"
+                        >
+                          ✏️ Edit Price
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -499,7 +654,7 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
         />
       )}
 
-      {/* Single Tag Preview Modal */}
+      {/* Single Tag Preview & NIIMBOT Export Modal */}
       {previewingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div
@@ -509,7 +664,7 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
             <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
               <div>
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                  Shelf Price Tag Preview
+                  50mm × 30mm Shelf Label
                 </h3>
                 <p className="text-[11px] text-zinc-400">
                   {PHYSICAL_PRICE_TAG_DIMENSIONS.labelName}
@@ -523,32 +678,61 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
               </button>
             </div>
 
+            {/* Visual Tag Preview */}
             <div className="flex justify-center p-4 bg-zinc-100 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200 dark:border-zinc-700/60">
               <PriceTagCard item={previewingItem} />
             </div>
 
-            <div className="text-[11px] text-zinc-500 dark:text-zinc-400 space-y-1">
-              <div><strong>Canonical QR URL:</strong> <span className="font-mono text-[10px] break-all">{previewingItem.canonicalProductUrl}</span></div>
-              <p className="text-[10px] text-zinc-400">Common public QR remains stable across all stores and price updates.</p>
+            {exportFeedback && (
+              <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-xs font-semibold text-purple-900 dark:text-purple-200">
+                {exportFeedback}
+              </div>
+            )}
+
+            {/* NIIMBOT B1 Instructions Tip */}
+            <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-700 text-[11px] text-zinc-600 dark:text-zinc-300 space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-zinc-900 dark:text-white">
+                <span>💡 NIIMBOT B1 Printing Tip</span>
+              </div>
+              <p>
+                Tap <strong>&quot;Save Label (50×30 PNG)&quot;</strong> to save this label. In the official NIIMBOT app, select <strong>50×30mm roll</strong>, tap <strong>&quot;Image&quot;</strong>, choose this file, and print via Bluetooth.
+              </p>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+            {/* Actions */}
+            <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
               <button
-                onClick={() => setPreviewingItem(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+                disabled={isExporting}
+                onClick={() => handleExportSingleNiimbot(previewingItem)}
+                className="w-full py-2.5 rounded-xl text-xs font-bold bg-purple-600 text-white hover:bg-purple-700 shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                Close
+                <span>📱</span>
+                <span>{isExporting ? "Exporting..." : "Save Label for NIIMBOT (50×30 PNG)"}</span>
               </button>
-              <button
-                onClick={() => {
-                  setSelectedProductIds(new Set([previewingItem.productId]));
-                  setPreviewingItem(null);
-                  setIsPrintModalOpen(true);
-                }}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
-              >
-                🖨️ Print This Tag
-              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleCopyClipboard(previewingItem)}
+                  className="py-2 rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 flex items-center justify-center gap-1.5"
+                >
+                  <span>📋</span>
+                  <span>Copy Image</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedProductIds(new Set([previewingItem.productId]));
+                    setPreviewingItem(null);
+                    setIsPrintModalOpen(true);
+                  }}
+                  className="py-2 rounded-xl text-xs font-bold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 flex items-center justify-center gap-1.5"
+                >
+                  <span>🖨️</span>
+                  <span>Print Sheet</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -561,14 +745,14 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
             className="w-full max-w-3xl rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header (Hidden during actual window.print()) */}
+            {/* Modal Header */}
             <div className="no-print px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                  Print Price Tags ({selectedPrintItems.length} Labels)
+                  Print Price Tags ({selectedPrintItems.length} Products, {totalLabelsToPrint} Labels)
                 </h3>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  📍 {selectedStoreName} • Standard 2.25" × 1.25" Fixture Tag Format
+                  📍 {selectedStoreName} • Standard 50mm × 30mm Format
                 </p>
               </div>
               <button
@@ -582,16 +766,23 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
             {/* Printable Tags Grid */}
             <div className="p-6 overflow-y-auto print-area bg-zinc-100/60 dark:bg-zinc-950/60">
               <div className="flex flex-wrap gap-4 justify-center items-start">
-                {selectedPrintItems.map((item) => (
-                  <PriceTagCard key={item.productId} item={item} isPrintVersion={true} />
-                ))}
+                {selectedPrintItems.flatMap((item) => {
+                  const qty = getQty(item.productId);
+                  return Array.from({ length: qty }).map((_, idx) => (
+                    <PriceTagCard
+                      key={`${item.productId}-copy-${idx}`}
+                      item={item}
+                      isPrintVersion={true}
+                    />
+                  ));
+                })}
               </div>
             </div>
 
-            {/* Modal Footer (Hidden during actual window.print()) */}
-            <div className="no-print px-6 py-4 bg-zinc-50 dark:bg-zinc-800/40 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+            {/* Modal Footer */}
+            <div className="no-print px-6 py-4 bg-zinc-50 dark:bg-zinc-800/40 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between flex-wrap gap-3">
               <span className="text-xs text-zinc-500">
-                Ready to print on standard shelf tag label sheets.
+                Ready for thermal rolls (1 label per cut) and desktop label sheets.
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -615,6 +806,10 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
       {/* Global Print CSS to isolate .print-area */}
       <style jsx global>{`
         @media print {
+          @page {
+            size: 50mm 30mm;
+            margin: 0;
+          }
           body * {
             visibility: hidden !important;
           }
@@ -638,10 +833,14 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
             background: transparent !important;
           }
           .print-tag-sheet {
+            page-break-after: always !important;
+            break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            margin: 4px !important;
-            display: inline-flex !important;
+            margin: 0 !important;
+            width: 50mm !important;
+            height: 30mm !important;
+            display: flex !important;
           }
         }
       `}</style>

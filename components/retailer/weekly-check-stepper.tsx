@@ -12,12 +12,47 @@ import { WeeklyCheckScannerModal } from "@/components/retailer/weekly-check-scan
 
 interface WeeklyCheckStepperProps {
   session: WeeklyCheckSession;
+  initialOpenScanner?: boolean;
 }
 
-export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps) {
+function SafeThumbnail({
+  src,
+  alt,
+  sku,
+}: {
+  src: string | null;
+  alt: string;
+  sku: string;
+}) {
+  const [error, setError] = useState(false);
+
+  if (!src || error) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-100 dark:bg-zinc-800 text-zinc-400 p-2 rounded-xl">
+        <svg className="w-8 h-8 text-zinc-400 dark:text-zinc-600 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        </svg>
+        <span className="text-[10px] font-mono text-zinc-400 truncate max-w-full text-center leading-tight">
+          {sku}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={() => setError(true)}
+      className="w-full h-full object-contain"
+    />
+  );
+}
+
+export function RetailerWeeklyCheckStepper({ session, initialOpenScanner = false }: WeeklyCheckStepperProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(initialOpenScanner);
 
   // Local state for counts: map of productId -> { remainingQty, isCounted, notes }
   const [counts, setCounts] = useState<Record<string, { remainingQty: number; isCounted: boolean; notes: string }>>(() => {
@@ -34,22 +69,27 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterTab, setFilterTab] = useState<"all" | "uncounted">("all");
   const [isReviewMode, setIsReviewMode] = useState(false);
   const [checkNotes, setCheckNotes] = useState(session.notes || "");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return session.items;
+    let list = session.items;
+    if (filterTab === "uncounted") {
+      list = list.filter((it) => !counts[it.productId]?.isCounted);
+    }
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase().trim();
-    return session.items.filter(
+    return list.filter(
       (it) =>
         it.productName.toLowerCase().includes(q) ||
         (it.productNameEn && it.productNameEn.toLowerCase().includes(q)) ||
         it.sku.toLowerCase().includes(q) ||
         it.brandName.toLowerCase().includes(q)
     );
-  }, [session.items, searchQuery]);
+  }, [session.items, counts, filterTab, searchQuery]);
 
   const activeItem = filteredItems[currentIndex] || filteredItems[0];
   const totalItemsCount = session.items.length;
@@ -166,16 +206,31 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
     });
   };
 
-  const handleSaveAndNext = () => {
-    // Mark current item as counted
+  const handleSaveAndNext = async () => {
+    // Mark current item as counted and auto-save immediately to DB
     if (activeItem) {
+      const validQty = Math.max(0, currentCountState.remainingQty);
       setCounts((prev) => ({
         ...prev,
         [activeItem.productId]: {
           ...prev[activeItem.productId],
+          remainingQty: validQty,
           isCounted: true,
         },
       }));
+
+      // Background persist to cloud DB so frequent interruptions never lose work
+      try {
+        await saveWeeklyCheckSingleItemAction(session.id, {
+          productId: activeItem.productId,
+          remainingQty: validQty,
+          notes: currentCountState.notes,
+        });
+        setSaveMessage("Saved to Cloud ✓");
+        setTimeout(() => setSaveMessage(null), 2500);
+      } catch (e) {
+        console.warn("Item count auto-save error:", e);
+      }
     }
 
     if (currentIndex < filteredItems.length - 1) {
@@ -291,16 +346,12 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
               <div className="p-6 sm:p-8 space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-6">
                   {/* Thumbnail */}
-                  <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 p-2 shrink-0 flex items-center justify-center border border-zinc-200 dark:border-zinc-800">
-                    {activeItem.thumbnailUrl ? (
-                      <img
-                        src={activeItem.thumbnailUrl}
-                        alt={activeItem.productName}
-                        className="w-full h-full object-contain"
-                      />
-                    ) : (
-                      <span className="text-xs text-zinc-400 font-medium">No Image</span>
-                    )}
+                  <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 p-2 shrink-0 flex items-center justify-center border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                    <SafeThumbnail
+                      src={activeItem.thumbnailUrl}
+                      alt={activeItem.productName}
+                      sku={activeItem.sku}
+                    />
                   </div>
 
                   {/* Title & Brand */}
@@ -485,15 +536,36 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
                   <span>📷</span>
                   <span>Scan QR</span>
                 </button>
-                {uncountedIndices.length > 0 && (
+                <div className="flex items-center gap-1 p-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-[11px] font-semibold">
                   <button
                     type="button"
-                    onClick={handleJumpToNextUncounted}
-                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all cursor-pointer flex items-center gap-1"
+                    onClick={() => {
+                      setFilterTab("all");
+                      setCurrentIndex(0);
+                    }}
+                    className={`px-2 py-0.5 rounded-md transition-colors ${
+                      filterTab === "all"
+                        ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold"
+                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                    }`}
                   >
-                    <span>⚡ Next Uncounted ({uncountedIndices.length})</span>
+                    All ({totalItemsCount})
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterTab("uncounted");
+                      setCurrentIndex(0);
+                    }}
+                    className={`px-2 py-0.5 rounded-md transition-colors ${
+                      filterTab === "uncounted"
+                        ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold"
+                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                    }`}
+                  >
+                    Uncounted ({totalItemsCount - countedItemsCount})
+                  </button>
+                </div>
               </div>
               <input
                 type="text"
@@ -593,6 +665,43 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
               </div>
             </div>
 
+            {/* Review Items Filter Tabs */}
+            <div className="flex items-center justify-between flex-wrap gap-2 pt-2">
+              <div className="flex items-center gap-1 p-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setFilterTab("all")}
+                  className={`px-3 py-1 rounded-md transition-colors ${
+                    filterTab === "all"
+                      ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold"
+                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                  }`}
+                >
+                  All ({totalItemsCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterTab("uncounted")}
+                  className={`px-3 py-1 rounded-md transition-colors ${
+                    filterTab === "uncounted"
+                      ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold"
+                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                  }`}
+                >
+                  Uncounted ({totalItemsCount - countedItemsCount})
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsScannerOpen(true)}
+                className="px-3 py-1 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+              >
+                <span>📷</span>
+                <span>Scan Product</span>
+              </button>
+            </div>
+
             {/* Items List Table */}
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
               <div className="overflow-x-auto">
@@ -601,23 +710,65 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
                     <tr>
                       <th className="py-2.5 px-4">Product</th>
                       <th className="py-2.5 px-4">SKU</th>
+                      <th className="py-2.5 px-4 text-center">Status</th>
                       <th className="py-2.5 px-4 text-right">Reported Remaining</th>
-                      <th className="py-2.5 px-4">Notes</th>
+                      <th className="py-2.5 px-4 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                    {session.items.map((it) => {
+                    {(filterTab === "uncounted"
+                      ? session.items.filter((it) => !counts[it.productId]?.isCounted)
+                      : session.items
+                    ).map((it) => {
                       const state = counts[it.productId] || { remainingQty: 0, isCounted: false, notes: "" };
                       return (
                         <tr key={it.productId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
-                          <td className="py-3 px-4 font-semibold text-zinc-900 dark:text-white">
-                            {it.productName}
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 p-0.5 shrink-0 flex items-center justify-center border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                                <SafeThumbnail
+                                  src={it.thumbnailUrl}
+                                  alt={it.productName}
+                                  sku={it.sku}
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-semibold text-zinc-900 dark:text-white truncate max-w-xs">
+                                  {it.productName}
+                                </p>
+                                <p className="text-[10px] text-zinc-400 uppercase tracking-wider">{it.brandName}</p>
+                              </div>
+                            </div>
                           </td>
                           <td className="py-3 px-4 font-mono text-zinc-400">{it.sku}</td>
-                          <td className="py-3 px-4 text-right font-bold text-zinc-900 dark:text-white">
-                            {state.remainingQty} units
+                          <td className="py-3 px-4 text-center">
+                            {state.isCounted ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 font-semibold text-[10px]">
+                                ✓ Counted
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-400 font-semibold text-[10px]">
+                                ⚠️ Uncounted
+                              </span>
+                            )}
                           </td>
-                          <td className="py-3 px-4 text-zinc-500">{state.notes || "-"}</td>
+                          <td className="py-3 px-4 text-right font-bold text-zinc-900 dark:text-white">
+                            {state.isCounted ? `${state.remainingQty} units` : "-"}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsReviewMode(false);
+                                setFilterTab("all");
+                                const idx = session.items.findIndex((p) => p.productId === it.productId);
+                                if (idx !== -1) setCurrentIndex(idx);
+                              }}
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:text-indigo-600 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
+                            >
+                              {state.isCounted ? "Recount" : "Count"}
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}

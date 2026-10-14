@@ -1,12 +1,16 @@
 /**
- * Centralized Physical Price Tag Dimensions configuration (standard 2.25" x 1.25" / 57mm x 32mm shelf label)
+ * Centralized Physical Price Tag Dimensions configuration (standard 50mm x 30mm NIIMBOT B1 shelf label)
  */
 export const PHYSICAL_PRICE_TAG_DIMENSIONS = {
-  widthInches: 2.25,
-  heightInches: 1.25,
-  widthMm: 57,
-  heightMm: 32,
-  labelName: 'Standard Shelf Fixture Tag (2.25" × 1.25")',
+  widthMm: 50,
+  heightMm: 30,
+  widthInches: 1.97,
+  heightInches: 1.18,
+  dpi: 203,
+  dotsPerMm: 8,
+  pixelWidth: 384, // Printable width on NIIMBOT B1 / 50mm direct thermal (400 dots total, 384 printable)
+  pixelHeight: 240, // Printable height on NIIMBOT B1 / 30mm direct thermal (240 dots)
+  labelName: "Standard Shelf Fixture Tag (50mm × 30mm) / NIIMBOT B1",
 };
 
 export interface StoreProductPriceRecord {
@@ -36,7 +40,7 @@ export interface StoreProductTagItem {
   category: string;
   categoryLabel: string;
   cartonPackQty: number;
-  wholesalePrice: number;
+  wholesalePrice: number | null; // Suppressed (null) for employee role to protect wholesale pricing
   msrp: number; // Suggested Retail Price guidance
   
   // Store Price info
@@ -47,8 +51,11 @@ export interface StoreProductTagItem {
   saleEndDate: string | null;
   discountPercent: number | null;
   isSaleActive: boolean;
-  effectivePrice: number; // Active sale price or regular price or MSRP fallback
+  effectivePrice: number; // Active sale price, regular store price, or MSRP fallback
   priceBasis: "store_sale" | "store_regular" | "msrp";
+
+  // Product Eligibility & Fulfillment Status
+  tagStatus: "in_stock" | "incoming";
 
   // QR info
   canonicalProductUrl: string;
@@ -67,6 +74,8 @@ export interface StorePricingDashboardData {
   totalAssortmentCount: number;
   pricedProductsCount: number;
   onSaleProductsCount: number;
+  incomingProductsCount: number;
+  unpricedProductsCount: number;
 }
 
 /**

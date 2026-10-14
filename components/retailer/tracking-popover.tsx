@@ -163,8 +163,11 @@ export function TrackingPopover({
 
   if (totalBoxCount === 0) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 whitespace-nowrap">
-        Not Available
+      <span
+        className="inline-flex items-center text-zinc-400 dark:text-zinc-500 text-xs font-semibold select-none"
+        title="No Tracking Available"
+      >
+        —
       </span>
     );
   }
@@ -190,17 +193,15 @@ export function TrackingPopover({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all border shadow-2xs cursor-pointer ${
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold transition-all border shadow-2xs cursor-pointer whitespace-nowrap ${
           isOpen
             ? "bg-emerald-600 text-white border-emerald-600"
             : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 dark:text-emerald-300 dark:border-emerald-800/80"
         }`}
       >
         <span className="text-[10px]">📍</span>
-        <span>
-          {totalBoxCount === 1 ? "Tracking Available (1 Box)" : `Tracking Available (${totalBoxCount} Boxes)`}
-        </span>
-        <span className="text-[9px] opacity-70">{isOpen ? "▲" : "▼"}</span>
+        <span>Track ({totalBoxCount})</span>
+        <span className="text-[8px] opacity-70">{isOpen ? "▲" : "▼"}</span>
       </button>
 
       {isOpen && (

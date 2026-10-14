@@ -9,6 +9,7 @@ import { getServerTranslations } from "@/lib/i18n/server";
 import { getCurrentReportingWeek } from "@/lib/retailer/weekly-check";
 import { getRetailerARStatus } from "@/lib/finance/invoice-actions";
 import { DashboardBillsCard } from "@/components/retailer/dashboard-bills-card";
+import { DashboardQuickScan } from "@/components/retailer/dashboard-quick-scan";
 
 export const dynamic = "force-dynamic";
 
@@ -218,6 +219,15 @@ export default async function RetailerHomePage() {
     <div className="space-y-6">
       {/* Agreement Onboarding Guidance Banner (Non-blocking) */}
       <RetailerAgreementBanner agreement={companyAgreement} />
+
+      {/* Primary Mobile Zero-Scroll Quick Scan Action */}
+      {storeRows.length > 0 && (
+        <DashboardQuickScan
+          stores={storeRows}
+          currentWeek={getCurrentReportingWeek()}
+          weeklyCheckDueCount={weeklyCheckDueCount}
+        />
+      )}
 
       {/* 1. Compact Unified Welcome Hero */}
       <div className="rounded-2xl bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-900 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 p-5 sm:p-6 text-white shadow-lg border border-zinc-700/50 dark:border-zinc-800">

@@ -42,38 +42,53 @@ export async function getStorePricingDashboardData(
 
   const storeId = activeStore.id;
 
-  // 2. Fetch Store Assortment from retailer_store_products
+  // 2. Unify Store Assortment: active store products + valid ordered/in-transit/delivered products
   const { data: storeProductRows } = await adminClient
     .from("retailer_store_products")
     .select("product_id")
     .eq("store_id", storeId)
     .eq("is_active", true);
 
-  const assortmentProductIds = (storeProductRows || []).map((sp) => sp.product_id);
+  const storeAssortmentIds = new Set<string>((storeProductRows || []).map((sp) => sp.product_id));
 
-  // If no store products assigned yet, also check retailer_orders for this store
-  if (assortmentProductIds.length === 0) {
-    const { data: orderItems } = await adminClient
-      .from("retailer_orders")
-      .select(`
-        id,
-        retailer_order_items (
-          product_id
-        )
-      `)
-      .eq("store_id", storeId);
+  // Query valid non-cancelled orders for this store
+  const { data: storeOrders } = await adminClient
+    .from("retailer_orders")
+    .select(`
+      id,
+      order_status,
+      retailer_order_items (
+        product_id
+      )
+    `)
+    .eq("store_id", storeId)
+    .in("order_status", ["confirmed", "processing", "partially_shipped", "shipped", "delivered"]);
 
-    if (orderItems && orderItems.length > 0) {
-      orderItems.forEach((o) => {
-        const items = (o.retailer_order_items as any[]) || [];
-        items.forEach((it) => {
-          if (!assortmentProductIds.includes(it.product_id)) {
-            assortmentProductIds.push(it.product_id);
-          }
-        });
-      });
-    }
-  }
+  // Map product to whether it is in stock (delivered or active store assortment) vs incoming
+  const productStatusMap = new Map<string, "in_stock" | "incoming">();
+
+  // Any product in active retailer_store_products is treated as in stock
+  storeAssortmentIds.forEach((pId) => {
+    productStatusMap.set(pId, "in_stock");
+  });
+
+  // Process orders for this store
+  (storeOrders || []).forEach((order) => {
+    const items = (order.retailer_order_items as any[]) || [];
+    const isDelivered = order.order_status === "delivered";
+
+    items.forEach((it) => {
+      if (!it.product_id) return;
+      const current = productStatusMap.get(it.product_id);
+      if (isDelivered || current === "in_stock") {
+        productStatusMap.set(it.product_id, "in_stock");
+      } else if (!current) {
+        productStatusMap.set(it.product_id, "incoming");
+      }
+    });
+  });
+
+  const assortmentProductIds = Array.from(productStatusMap.keys());
 
   if (assortmentProductIds.length === 0) {
     return {
@@ -87,6 +102,8 @@ export async function getStorePricingDashboardData(
       totalAssortmentCount: 0,
       pricedProductsCount: 0,
       onSaleProductsCount: 0,
+      incomingProductsCount: 0,
+      unpricedProductsCount: 0,
     };
   }
 
@@ -168,9 +185,16 @@ export async function getStorePricingDashboardData(
         "KS-PROD";
 
       // Wholesale Price & MSRP
-      let wholesalePrice = 0;
+      const isPrivilegedRole = ["owner", "buyer", "store_manager"].includes(userRole || "");
+      let rawWholesale = 0;
       if (curation?.wholesale_price && Number(curation.wholesale_price) > 0) {
-        wholesalePrice = Number(curation.wholesale_price);
+        rawWholesale = Number(curation.wholesale_price);
+      }
+
+      // Wholesale price payload is strictly suppressed for floor employees to protect wholesale pricing
+      let wholesalePrice: number | null = null;
+      if (isPrivilegedRole && rawWholesale > 0) {
+        wholesalePrice = rawWholesale;
       }
 
       let msrp = 0;
@@ -178,8 +202,8 @@ export async function getStorePricingDashboardData(
         msrp = Number(curation.suggest_retail_price);
       } else if (p.estimated_retail_price && Number(p.estimated_retail_price) > 0) {
         msrp = Number(p.estimated_retail_price);
-      } else if (wholesalePrice > 0) {
-        msrp = Number((wholesalePrice * 2.0).toFixed(2));
+      } else if (rawWholesale > 0) {
+        msrp = Number((rawWholesale * 2.0).toFixed(2));
       }
 
       const cartonPackQty = Math.max(1, overrides.carton_pack_qty || p.carton_pack_qty || 1);
@@ -226,6 +250,9 @@ export async function getStorePricingDashboardData(
         }
       }
 
+      // Product fulfillment / assortment status
+      const tagStatus = productStatusMap.get(p.id) || "in_stock";
+
       // Common Canonical QR
       const canonicalProductUrl = getCanonicalPublicProductUrl(p.id);
       let qrDataUrl: string | null = null;
@@ -260,6 +287,7 @@ export async function getStorePricingDashboardData(
         isSaleActive,
         effectivePrice,
         priceBasis,
+        tagStatus,
         canonicalProductUrl,
         qrDataUrl,
         qrSvg,
@@ -282,6 +310,8 @@ export async function getStorePricingDashboardData(
     totalAssortmentCount: cleanTagItems.length,
     pricedProductsCount: pricedCount,
     onSaleProductsCount: onSaleCount,
+    incomingProductsCount: cleanTagItems.filter((p) => p.tagStatus === "incoming").length,
+    unpricedProductsCount: cleanTagItems.filter((p) => !p.hasStorePrice).length,
   };
 }
 

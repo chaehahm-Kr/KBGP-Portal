@@ -16,6 +16,7 @@ interface CheckDetailPageProps {
   }>;
   searchParams: Promise<{
     storeId?: string;
+    action?: string;
   }>;
 }
 
@@ -38,7 +39,8 @@ export default async function RetailerWeeklyCheckDynamicPage({
     const session = await getOrCreateStoreWeeklyCheck(targetStoreId);
     if (!session) notFound();
 
-    redirect(`/check/${session.id}`);
+    const actionQuery = sParams.action ? `?action=${encodeURIComponent(sParams.action)}` : "";
+    redirect(`/check/${session.id}${actionQuery}`);
   }
 
   const session = await getWeeklyCheckById(id);
@@ -47,7 +49,12 @@ export default async function RetailerWeeklyCheckDynamicPage({
   }
 
   if (session.status === "draft") {
-    return <RetailerWeeklyCheckStepper session={session} />;
+    return (
+      <RetailerWeeklyCheckStepper
+        session={session}
+        initialOpenScanner={sParams.action === "scan"}
+      />
+    );
   }
 
   return <RetailerWeeklyCheckDetailView session={session} />;

@@ -1,4 +1,5 @@
 import React from "react";
+import { redirect } from "next/navigation";
 import {
   getRetailerAccessibleStores,
   getCurrentReportingWeek,
@@ -19,6 +20,7 @@ export const metadata: Metadata = {
 interface CheckPageProps {
   searchParams: Promise<{
     storeId?: string;
+    action?: string;
   }>;
 }
 
@@ -37,6 +39,10 @@ export default async function RetailerCheckDashboardPage({ searchParams }: Check
   const selectedStoreId = params.storeId && stores.some((s) => s.id === params.storeId)
     ? params.storeId
     : stores[0].id;
+
+  if (params.action === "scan") {
+    redirect(`/check/start?storeId=${selectedStoreId}&action=scan`);
+  }
 
   const currentWeek = getCurrentReportingWeek();
   const history = await getWeeklyCheckHistory(selectedStoreId);
