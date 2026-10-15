@@ -27,6 +27,22 @@ import type { RetailerShippingAddress } from "./shipping-address-types";
 import { computeAuthoritativeOrderStatus } from "@/lib/orders/order-status-utils";
 import { resolveCarrierTrackingUrl } from "@/lib/orders/carrier-resolver";
 import { getEasternReportingWeek } from "@/lib/utils/timezone";
+import {
+  computeRetailerTrainingAnalytics,
+  type RetailerTrainingAnalyticsData,
+  type Retailer360TrainingSummary,
+  type Retailer360StoreCoverageItem,
+  type Retailer360EmployeeTrainingItem,
+  type Retailer360TrainingGapItem,
+} from "./admin-training-analytics";
+
+export type {
+  RetailerTrainingAnalyticsData,
+  Retailer360TrainingSummary,
+  Retailer360StoreCoverageItem,
+  Retailer360EmployeeTrainingItem,
+  Retailer360TrainingGapItem,
+};
 
 export interface NeedsAttentionItem {
   id: string;
@@ -384,11 +400,7 @@ export interface Retailer360Data {
   }>;
   orders: Retailer360OrderItem[];
   performance: Retailer360PerformanceSummary;
-  training: {
-    products: Retailer360TrainingItem[];
-    overallCompletionPercent: number;
-    totalProductsCount: number;
-  };
+  training: RetailerTrainingAnalyticsData;
   protections: Retailer360ProtectionItem[];
   cases: Retailer360CaseItem[];
   arStatus?: RetailerARStatus;
@@ -1298,39 +1310,20 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     }),
   };
 
-  // 7. Fetch Product Training Completion
-  const { data: trainingProgress } = await adminClient
-    .from("retailer_product_training_progress")
-    .select("product_id, user_id, status, completed_at")
-    .eq("company_id", companyId)
-    .eq("status", "completed");
-
-  const completedByProduct: Record<string, number> = {};
-  (trainingProgress || []).forEach((tp) => {
-    completedByProduct[tp.product_id] = (completedByProduct[tp.product_id] || 0) + 1;
+  // 7. Fetch Authoritative Product Training Completion & Coverage Analytics (ADM-TRAINING-P2-001)
+  const trainingAnalytics = await computeRetailerTrainingAnalytics({
+    companyId,
+    stores,
+    members: members.map((m) => ({
+      id: m.userId,
+      fullName: m.displayName,
+      email: m.email,
+      role: m.role,
+      hasAllStoresAccess: m.hasAllStoresAccess,
+      assignedStores: m.assignedStores,
+    })),
+    adminClient,
   });
-
-  const totalEligibleMembersCount = Math.max(1, members.length);
-  const trainingProducts: Retailer360TrainingItem[] = productsCatalog.map((p: any) => {
-    const doneCount = completedByProduct[p.id] || 0;
-    const pct = Math.min(100, Math.round((doneCount / totalEligibleMembersCount) * 100));
-    return {
-      productId: p.id,
-      productName: p.name,
-      productNameEn: p.name_en,
-      brandName: p.brands?.name || "K SELECT Brand",
-      sku: resolveEffectiveSku(p) || "KS-SKU",
-      category: p.category || "General",
-      completedUsersCount: doneCount,
-      totalEligibleUsersCount: totalEligibleMembersCount,
-      completionPercent: pct,
-    };
-  });
-
-  const totalTrainingItems = trainingProducts.length;
-  const avgTrainingPct = totalTrainingItems > 0
-    ? Math.round(trainingProducts.reduce((sum, item) => sum + item.completionPercent, 0) / totalTrainingItems)
-    : 0;
 
   // 8. Fetch 90-Day Initial Protection Records & Resolutions
   const { data: rawProtections } = await adminClient
@@ -1641,7 +1634,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     creditLimit: Number(profile.credit_limit || 0),
     reportingCoveragePercent: coveragePercent,
     productsNeedingReorderCount,
-    trainingCompletionPercent: avgTrainingPct,
+    trainingCompletionPercent: trainingAnalytics.overallCompletionPercent,
     activeProtectionTrialsCount: activeProtectionsCount,
     protectionReviewsActionCount: pendingProtectionReviews.length,
     openSupportCasesCount: openCases.length,
@@ -1722,11 +1715,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     documents,
     orders,
     performance: performanceSummary,
-    training: {
-      products: trainingProducts,
-      overallCompletionPercent: avgTrainingPct,
-      totalProductsCount: trainingProducts.length,
-    },
+    training: trainingAnalytics,
     protections,
     cases,
     arStatus,

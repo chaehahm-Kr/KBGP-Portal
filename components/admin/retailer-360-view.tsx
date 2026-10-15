@@ -38,6 +38,7 @@ import { Retailer360MemberItem } from "@/lib/retailer/admin-retailer-360";
 import { StartImpersonationModal } from "@/components/admin/start-impersonation-modal";
 import { EditTrackingModal } from "@/components/admin/orders/edit-tracking-modal";
 import { WeeklyCheckReminderModal } from "@/components/admin/weekly-check-reminder-modal";
+import { Retailer360TrainingView } from "@/components/admin/retailer-360-training-view";
 import {
   normalizeApprovedTerms,
   formatApprovedTermsDisplay,
@@ -1014,7 +1015,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
               { key: "orders", label: "Orders & Fulfillment", icon: "📦", badge: data.orders.length },
               { key: "payments", label: "Payments & Terms", icon: "💳", badge: null },
               { key: "performance", label: "Performance & Check", icon: "📈", badge: `${data.metrics.reportingCoveragePercent}%` },
-              { key: "training", label: "Training", icon: "🎓", badge: `${data.training.overallCompletionPercent}%` },
+              { key: "training", label: "Training", icon: "🎓", badge: data.training.summary?.storeCoveragePercent !== null && data.training.summary?.storeCoveragePercent !== undefined ? `${data.training.summary.storeCoveragePercent}%` : "N/A" },
               { key: "protection", label: "90-Day Protection", icon: "🛡️", badge: data.protections.length },
               { key: "cases", label: "Support Cases", icon: "💬", badge: data.cases.length },
             ].map((tab) => {
@@ -3382,53 +3383,10 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
 
       {/* TAB 7: TRAINING */}
       {activeTab === "training" && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-100 dark:border-zinc-800">
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                  Product Training Completion Progress
-                </h3>
-                <p className="text-xs text-zinc-500">
-                  Staff completion progress for required product knowledge guides.
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] text-zinc-400 block">Overall Company Completion</span>
-                <span className="text-lg font-black text-indigo-600">
-                  {data.training.overallCompletionPercent}%
-                </span>
-              </div>
-            </div>
-
-            <div className="divide-y divide-zinc-100 dark:divide-zinc-800 mt-3">
-              {data.training.products.map((item) => (
-                <div key={item.productId} className="py-3 flex items-center justify-between gap-4 text-xs">
-                  <div>
-                    <span className="font-bold text-zinc-900 dark:text-white block">
-                      {item.productName}
-                    </span>
-                    <span className="text-[10px] text-zinc-400 font-mono">
-                      {item.sku} · {item.brandName}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="w-28 sm:w-40 bg-zinc-100 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="bg-indigo-600 h-full rounded-full transition-all"
-                        style={{ width: `${item.completionPercent}%` }}
-                      />
-                    </div>
-                    <span className="font-mono font-bold text-zinc-700 dark:text-zinc-300 text-[11px] min-w-[45px] text-right">
-                      {item.completionPercent}%
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <Retailer360TrainingView
+          training={data.training}
+          companyName={data.company.name}
+        />
       )}
 
       {/* TAB 8: PROTECTION */}

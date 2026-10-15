@@ -528,13 +528,45 @@ export function RetailersList({ initialRetailers, loadError }: RetailersListProp
 
                       {/* COLUMN 11: TRAINING */}
                       <td className="py-2.5 px-3 whitespace-nowrap text-left">
-                        <Link
-                          href={`/admin/retailers/${ret.id}?tab=training`}
-                          className="text-[11px] text-zinc-500 dark:text-zinc-400 hover:underline inline-block"
-                          title="Product Training Coverage Status"
-                        >
-                          {ret.trainingStatusText || "Not Tracked"}
-                        </Link>
+                        {ret.trainingEligibleCount && ret.trainingEligibleCount > 0 ? (
+                          <Link
+                            href={`/admin/retailers/${ret.id}?tab=training`}
+                            className="group inline-flex flex-col text-left hover:opacity-80 transition-opacity"
+                            title="Click to view detailed Training Coverage & Analytics"
+                          >
+                            <span className="inline-flex items-center gap-1.5 font-bold text-zinc-900 dark:text-white text-xs">
+                              <span
+                                className={`inline-block w-2 h-2 rounded-full ${
+                                  (ret.trainingCompletedCount || 0) === ret.trainingEligibleCount
+                                    ? "bg-emerald-500"
+                                    : (ret.trainingCompletedCount || 0) > 0
+                                    ? "bg-indigo-500"
+                                    : "bg-amber-500"
+                                }`}
+                              />
+                              {Math.round(((ret.trainingCompletedCount || 0) / ret.trainingEligibleCount) * 100)}%
+                            </span>
+                            <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">
+                              {ret.trainingCompletedCount || 0} / {ret.trainingEligibleCount}
+                            </span>
+                          </Link>
+                        ) : ret.trainingStatusText === "N/A" ? (
+                          <Link
+                            href={`/admin/retailers/${ret.id}?tab=training`}
+                            className="text-[11px] text-zinc-400 font-medium hover:underline inline-block"
+                            title="No published training modules eligible"
+                          >
+                            N/A
+                          </Link>
+                        ) : (
+                          <Link
+                            href={`/admin/retailers/${ret.id}?tab=training`}
+                            className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-medium inline-block"
+                            title="Click to review staff and store training setup"
+                          >
+                            {ret.trainingStatusText || "Not Tracked / Needs Review"}
+                          </Link>
+                        )}
                       </td>
 
                       {/* COLUMN 12: WEEKLY CHECK */}

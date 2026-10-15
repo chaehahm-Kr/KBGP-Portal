@@ -17,6 +17,7 @@ import { getEasternReportingWeek } from "@/lib/utils/timezone";
 import { resolveAuthoritativeProductImages } from "@/lib/retailer/product-images";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { sendTemplatedEmail, DEFAULT_TEMPLATES } from "@/lib/notifications/templates";
+import { computeBatchRetailersTrainingCoverage } from "@/lib/retailer/admin-training-analytics";
 
 export interface CreateRetailerPayload {
   companyName: string;
@@ -335,6 +336,9 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
     });
   }
 
+  // Compute batch store training coverage for all retailers
+  const batchCoverageMap = await computeBatchRetailersTrainingCoverage(adminClient, companies);
+
   return (companies || []).map((comp: any) => {
     const profile = Array.isArray(comp.retailer_profiles)
       ? comp.retailer_profiles[0]
@@ -356,6 +360,8 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
     if (ord.readyCount > 0) attentionCount += 1;
     if (stores.length > 0 && reportingStores < stores.length) attentionCount += 1;
     if (profile?.terms_status === "pending") attentionCount += 1;
+
+    const trainingSummary = batchCoverageMap.get(comp.id);
 
     return {
       id: comp.id,
@@ -387,9 +393,9 @@ export async function getAdminRetailersList(): Promise<AdminRetailerListItem[]> 
       pastDueAmount: Math.round(ar.pastDueAmount * 100) / 100,
       // Group 5: Products & Training
       distinctAssortment,
-      trainingCompletedCount: null,
-      trainingEligibleCount: distinctAssortment,
-      trainingStatusText: "Training: Not Tracked",
+      trainingCompletedCount: trainingSummary?.coveredPairsCount ?? null,
+      trainingEligibleCount: trainingSummary?.eligiblePairsCount ?? null,
+      trainingStatusText: trainingSummary?.trainingStatusText ?? "N/A",
       // Group 6: Operations (Strictly scoped to CURRENT REPORTING WEEK)
       reportingStoresCount: reportingStores,
       inProgressStoresCount: inProgressStores,
