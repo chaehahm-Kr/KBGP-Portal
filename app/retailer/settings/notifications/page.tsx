@@ -25,11 +25,12 @@ export default async function RetailerNotificationsSettingsPage() {
     optedInAt: null,
     email: null,
     role: "employee",
+    canManageRecipients: false,
+    companyId: "",
+    companyName: "",
+    recipients: [],
+    eligibleTeamMembers: [],
   };
 
-  return (
-    <div className="py-8 px-4 sm:px-6 lg:px-8">
-      <RetailerNotificationsSettingsView initialState={initialState} />
-    </div>
-  );
+  return <RetailerNotificationsSettingsView initialState={initialState} />;
 }

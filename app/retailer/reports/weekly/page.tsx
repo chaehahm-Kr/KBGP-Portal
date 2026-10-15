@@ -35,9 +35,5 @@ export default async function RetailerWeeklyReportsPage({ searchParams }: Props)
     storeId,
   });
 
-  return (
-    <div className="py-6 px-4 sm:px-6 lg:px-8">
-      <WeeklyReportView initialData={data} />
-    </div>
-  );
+  return <WeeklyReportView initialData={data} />;
 }

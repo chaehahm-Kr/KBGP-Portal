@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { WeeklyReportData, WeeklyReportItem } from "@/lib/retailer/weekly-report-types";
@@ -9,6 +8,55 @@ import { useCart } from "@/components/retailer/cart-context";
 
 interface Props {
   initialData: WeeklyReportData;
+}
+
+/**
+ * Resilient thumbnail component with onError fallback to a clean SVG placeholder.
+ * Prevents broken image icons when external or CMS assets fail to load.
+ */
+function ReportProductThumbnail({
+  src,
+  alt,
+  sku,
+}: {
+  src?: string | null;
+  alt: string;
+  sku: string;
+}) {
+  const [hasError, setHasError] = useState(false);
+
+  if (!src || hasError) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-100 dark:bg-zinc-800 text-zinc-400 p-1 text-center select-none">
+        <svg
+          className="w-4 h-4 text-zinc-400 dark:text-zinc-500 mb-0.5 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+          />
+        </svg>
+        <span className="text-[8px] font-mono leading-none truncate max-w-full text-zinc-400 dark:text-zinc-500">
+          {sku.slice(-6)}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={() => setHasError(true)}
+      className="w-full h-full object-cover"
+      loading="lazy"
+    />
+  );
 }
 
 export function WeeklyReportView({ initialData }: Props) {
@@ -115,8 +163,8 @@ export function WeeklyReportView({ initialData }: Props) {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-12">
-      {/* Header & Title */}
+    <div className="w-full space-y-5 pb-12">
+      {/* Header & Title (Left-Aligned) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -224,16 +272,15 @@ export function WeeklyReportView({ initialData }: Props) {
         </div>
       </div>
 
-      {/* Partial Coverage Warning Banner */}
+      {/* Compact Partial Coverage Warning Banner */}
       {coverageStatus === "partial" && selectedStoreId === "all" && (
-        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/80 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3 shadow-xs">
-          <span className="text-base shrink-0">⚠️</span>
-          <div className="space-y-1">
-            <p className="font-bold">Partial Store Coverage in Effect</p>
-            <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
-              Only <strong>{submittedStoresCount} of {totalStores} stores</strong> have submitted inventory counts for {reportingWeek}.
-              Unsubmitted store inventory is <strong>NOT assumed to be zero</strong>. Summary metrics and recommendations below reflect only stores with submitted counts.
-            </p>
+        <div className="py-2.5 px-4 rounded-xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/80 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2.5 shadow-2xs">
+          <span className="text-sm shrink-0">⚠️</span>
+          <div className="flex-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <strong className="text-amber-950 dark:text-amber-100 font-semibold">Partial Coverage:</strong>
+            <span>
+              {submittedStoresCount} of {totalStores} stores submitted for {reportingWeek}. Unsubmitted store stock is not assumed zero. Summary metrics reflect submitted counts only.
+            </span>
           </div>
         </div>
       )}
@@ -325,7 +372,7 @@ export function WeeklyReportView({ initialData }: Props) {
           </p>
         </div>
 
-        {/* 4. Reorder Recommended */}
+        {/* 4. Reorder Recommended (Stock & Velocity Distinction) */}
         <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 p-5 shadow-xs flex flex-col justify-between bg-gradient-to-br from-white to-indigo-50/20 dark:from-zinc-900 dark:to-indigo-950/20">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
@@ -341,113 +388,24 @@ export function WeeklyReportView({ initialData }: Props) {
               <span className="text-sm font-medium text-zinc-500">products</span>
             </div>
             {summary.totalSuggestedReorderUnits > 0 && (
-              <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">
+              <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 block">
                 {summary.totalSuggestedReorderUnits.toLocaleString()} units suggested
               </span>
             )}
           </div>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-            4-week safety stock & MOQ rules
-          </p>
+          <div className="pt-2 border-t border-indigo-100/60 dark:border-indigo-950/40 flex items-center justify-between text-[10px]">
+            <span className="text-zinc-500 dark:text-zinc-400">Demand Target</span>
+            <span
+              title="Calculated using 4-week sales velocity where baseline exists, or shelf minimum stock target (MOQ/Pack) for new products."
+              className="inline-flex items-center gap-1 font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded cursor-help"
+            >
+              Stock & Velocity Rules ℹ️
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Multi-Store Submission Breakdown (Company View) */}
-      {selectedStoreId === "all" && accessibleStores.length > 1 && (
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-3">
-          <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
-            Store Check Coverage for {reportingWeek}
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-zinc-100 dark:border-zinc-800 text-[10px] font-bold text-zinc-400 uppercase">
-                <tr>
-                  <th className="py-2 px-3">Store Name</th>
-                  <th className="py-2 px-3 text-center">Status</th>
-                  <th className="py-2 px-3 text-right">Products Counted</th>
-                  <th className="py-2 px-3 text-right">Remaining Units</th>
-                  <th className="py-2 px-3 text-center">Submitted At</th>
-                  <th className="py-2 px-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {storeStatuses.map((st) => (
-                  <tr key={st.storeId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
-                    <td className="py-2.5 px-3 font-semibold text-zinc-900 dark:text-white">
-                      🏪 {st.storeName}
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border capitalize ${
-                          st.hasSubmitted
-                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                            : st.status === "in_progress"
-                            ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800"
-                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700"
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
-                        {st.hasSubmitted ? "Submitted" : st.status === "in_progress" ? "In Progress" : "Not Started"}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono tabular-nums">
-                      {st.hasSubmitted ? `${st.countedProducts} / ${st.totalProducts}` : "—"}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono tabular-nums font-semibold">
-                      {st.hasSubmitted ? `${st.remainingUnits.toLocaleString()} units` : "—"}
-                    </td>
-                    <td className="py-2.5 px-3 text-center text-zinc-500 text-[11px]">
-                      {st.submittedAt ? new Date(st.submittedAt).toLocaleDateString() : "—"}
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleFilterChange(undefined, st.storeId)}
-                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                      >
-                        View Store Report →
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Honest Methodology & Calculation Notice Accordion */}
-      <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-2xl border border-zinc-200 dark:border-zinc-700/80 p-4 text-xs space-y-2">
-        <div
-          onClick={() => setShowMethodology(!showMethodology)}
-          className="flex items-center justify-between cursor-pointer select-none"
-        >
-          <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 font-semibold">
-            <span>ℹ️</span>
-            <span>Calculation Methodology & Honest Baseline Policy</span>
-          </div>
-          <span className="text-zinc-400 font-mono text-xs">{showMethodology ? "▲ Hide" : "▼ Learn More"}</span>
-        </div>
-
-        {showMethodology && (
-          <div className="pt-3 border-t border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 space-y-2 text-[11px] leading-relaxed">
-            <p>
-              • <strong>Physical stock counts vs POS sales:</strong> Weekly Inventory provides shelf counts, NOT real-time POS transaction logs. Derived revenue and profit values are strictly estimates.
-            </p>
-            <p>
-              • <strong>Estimated Units Sold formula:</strong> <code className="bg-zinc-200 dark:bg-zinc-700 px-1 py-0.5 rounded-sm font-mono text-[10px]">(Previous Stock + Confirmed Deliveries) - Current Reported Stock</code>.
-            </p>
-            <p>
-              • <strong>Baseline Count Rule:</strong> The initial stock check establishes a baseline. Delta-based sales calculations require at least 2 consecutive counts. If only 1 check exists, &quot;Insufficient Data&quot; is reported rather than fabricated $0 or positive numbers.
-            </p>
-            <p>
-              • <strong>Reorder Quantity Recommendation:</strong> Calculates 4-week target demand based on observed movement, compares against projected stock (remaining + pending orders), and normalizes to brand Case Pack multiples and Minimum Order Quantities (MOQ).
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Product List Section */}
+      {/* Product List Section (Positioned Higher Directly Under KPIs) */}
       <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xs overflow-hidden">
         {/* Product Filters & Search Bar */}
         <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -550,19 +508,11 @@ export function WeeklyReportView({ initialData }: Props) {
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 relative">
-                            {item.thumbnailUrl ? (
-                              <Image
-                                src={item.thumbnailUrl}
-                                alt={item.productName}
-                                fill
-                                className="object-cover"
-                                sizes="40px"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-400">
-                                KS
-                              </div>
-                            )}
+                            <ReportProductThumbnail
+                              src={item.thumbnailUrl}
+                              alt={item.productName}
+                              sku={item.sku}
+                            />
                           </div>
                           <div>
                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
@@ -665,9 +615,26 @@ export function WeeklyReportView({ initialData }: Props) {
                               <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 block">
                                 Reorder {item.suggestedReorderQty} units
                               </span>
-                              <span className="text-[10px] text-zinc-400 block">
-                                ({item.suggestedCases} {item.suggestedCases === 1 ? "case" : "cases"} · MOQ {item.moq})
-                              </span>
+                              <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                                <span className="text-[10px] text-zinc-400 block">
+                                  ({item.suggestedCases} {item.suggestedCases === 1 ? "case" : "cases"} · MOQ {item.moq})
+                                </span>
+                                {item.estimatedUnitsSold !== null && item.estimatedUnitsSold > 0 ? (
+                                  <span
+                                    title="Velocity-based reorder: Target demand calculated from recent weekly sales movement × 4-week safety stock"
+                                    className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 cursor-help"
+                                  >
+                                    Velocity (4w)
+                                  </span>
+                                ) : (
+                                  <span
+                                    title="Stock-based reorder: Target demand calculated to replenish shelf minimum stock and carton pack multiples"
+                                    className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 cursor-help"
+                                  >
+                                    Stock Target (MOQ)
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             {/* Stepper + Add Button */}
@@ -725,19 +692,11 @@ export function WeeklyReportView({ initialData }: Props) {
                 >
                   <div className="flex items-start gap-3">
                     <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 relative">
-                      {item.thumbnailUrl ? (
-                        <Image
-                          src={item.thumbnailUrl}
-                          alt={item.productName}
-                          fill
-                          className="object-cover"
-                          sizes="48px"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs text-zinc-400">
-                          KS
-                        </div>
-                      )}
+                      <ReportProductThumbnail
+                        src={item.thumbnailUrl}
+                        alt={item.productName}
+                        sku={item.sku}
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
@@ -803,9 +762,20 @@ export function WeeklyReportView({ initialData }: Props) {
                   {item.reorderNeeded && (
                     <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-3">
                       <div>
-                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 block">
-                          Suggested: {item.suggestedReorderQty} units
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                            Suggested: {item.suggestedReorderQty} units
+                          </span>
+                          {item.estimatedUnitsSold !== null && item.estimatedUnitsSold > 0 ? (
+                            <span className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80">
+                              Velocity (4w)
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                              Stock Target
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-zinc-400 block">
                           MOQ {item.moq} · Pack {item.cartonPackQty}
                         </span>
@@ -837,6 +807,101 @@ export function WeeklyReportView({ initialData }: Props) {
             })
           )}
         </div>
+      </div>
+
+      {/* Multi-Store Submission Breakdown (Company View - Positioned Below Product List) */}
+      {selectedStoreId === "all" && accessibleStores.length > 1 && (
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-3">
+          <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+            Store Check Coverage for {reportingWeek}
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-zinc-100 dark:border-zinc-800 text-[10px] font-bold text-zinc-400 uppercase">
+                <tr>
+                  <th className="py-2 px-3">Store Name</th>
+                  <th className="py-2 px-3 text-center">Status</th>
+                  <th className="py-2 px-3 text-right">Products Counted</th>
+                  <th className="py-2 px-3 text-right">Remaining Units</th>
+                  <th className="py-2 px-3 text-center">Submitted At</th>
+                  <th className="py-2 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                {storeStatuses.map((st) => (
+                  <tr key={st.storeId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
+                    <td className="py-2.5 px-3 font-semibold text-zinc-900 dark:text-white">
+                      🏪 {st.storeName}
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border capitalize ${
+                          st.hasSubmitted
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                            : st.status === "in_progress"
+                            ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700"
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
+                        {st.hasSubmitted ? "Submitted" : st.status === "in_progress" ? "In Progress" : "Not Started"}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums">
+                      {st.hasSubmitted ? `${st.countedProducts} / ${st.totalProducts}` : "—"}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums font-semibold">
+                      {st.hasSubmitted ? `${st.remainingUnits.toLocaleString()} units` : "—"}
+                    </td>
+                    <td className="py-2.5 px-3 text-center text-zinc-500 text-[11px]">
+                      {st.submittedAt ? new Date(st.submittedAt).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleFilterChange(undefined, st.storeId)}
+                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                      >
+                        View Store Report →
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Honest Methodology & Calculation Notice Accordion (Positioned Below Product List) */}
+      <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-2xl border border-zinc-200 dark:border-zinc-700/80 p-4 text-xs space-y-2">
+        <div
+          onClick={() => setShowMethodology(!showMethodology)}
+          className="flex items-center justify-between cursor-pointer select-none"
+        >
+          <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 font-semibold">
+            <span>ℹ️</span>
+            <span>Calculation Methodology & Honest Baseline Policy</span>
+          </div>
+          <span className="text-zinc-400 font-mono text-xs">{showMethodology ? "▲ Hide" : "▼ Learn More"}</span>
+        </div>
+
+        {showMethodology && (
+          <div className="pt-3 border-t border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 space-y-2 text-[11px] leading-relaxed">
+            <p>
+              • <strong>Physical stock counts vs POS sales:</strong> Weekly Inventory provides shelf counts, NOT real-time POS transaction logs. Derived revenue and profit values are strictly estimates.
+            </p>
+            <p>
+              • <strong>Estimated Units Sold formula:</strong> <code className="bg-zinc-200 dark:bg-zinc-700 px-1 py-0.5 rounded-sm font-mono text-[10px]">(Previous Stock + Confirmed Deliveries) - Current Reported Stock</code>.
+            </p>
+            <p>
+              • <strong>Baseline Count Rule:</strong> The initial stock check establishes a baseline. Delta-based sales calculations require at least 2 consecutive counts. If only 1 check exists, &quot;Insufficient Data&quot; is reported rather than fabricated $0 or positive numbers.
+            </p>
+            <p>
+              • <strong>Reorder Quantity Recommendation:</strong> Calculates 4-week target demand based on observed movement, compares against projected stock (remaining + pending orders), and normalizes to brand Case Pack multiples and Minimum Order Quantities (MOQ).
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
