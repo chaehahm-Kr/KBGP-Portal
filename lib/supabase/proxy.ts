@@ -125,7 +125,13 @@ export async function updateSession(request: NextRequest) {
       return createRedirectWithCookies(url);
     }
   } else if (host.includes("portal.kselectnetwork.com")) {
-    if (pathname.startsWith("/retailer") || pathname === "/check" || pathname.startsWith("/check/")) {
+    if (
+      pathname.startsWith("/retailer") ||
+      pathname === "/check" ||
+      pathname.startsWith("/check/") ||
+      pathname === "/training" ||
+      pathname.startsWith("/training/")
+    ) {
       const cleanPath = pathname.startsWith("/retailer")
         ? (pathname === "/retailer" ? "/" : pathname.replace(/^\/retailer/, ""))
         : pathname;

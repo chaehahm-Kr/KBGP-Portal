@@ -111,13 +111,13 @@ export function TrainingListView({
         )}
       </div>
 
-      {/* Compact Progress Banner (Phase 2 & Phase 1) */}
+      {/* Compact Dual-Metric Progress Banner (Phase 2 & Phase 1 Parity) */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-600 to-indigo-800 text-white p-4 sm:p-5 shadow-sm">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 max-w-xl">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-white/20 text-white backdrop-blur-sm">
-                🎓 Staff Training Progress
+                🎓 Learning Center
               </span>
               <span className="text-xs text-blue-100 font-medium">
                 {selectedStoreId === "all"
@@ -125,41 +125,82 @@ export function TrainingListView({
                   : stores.find((s) => s.id === selectedStoreId)?.name || "Selected Store"}
               </span>
               <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white/10 text-blue-100 border border-white/15">
-                {stats.totalCount} {selectedStoreId === "all" ? "Company" : "Store"} Products Eligible
+                {stats.availableCount} Published Modules
               </span>
             </div>
 
             <h2 className="text-base sm:text-lg font-black tracking-tight">
-              {stats.availableCount > 0 && stats.completedCount === stats.availableCount
-                ? "🎉 All Available Modules Verified Complete!"
+              {stats.officialCoverage
+                ? `${stats.officialCoverage.label}: ${stats.officialCoverage.percent}%`
                 : `${stats.completedCount} of ${stats.availableCount} Modules Verified Complete`}
             </h2>
+
+            <p className="text-xs text-blue-100/90 leading-relaxed">
+              {stats.officialCoverage && (
+                <span>
+                  Official Store Coverage: <strong className="text-white">{stats.officialCoverage.coveredCount} of {stats.officialCoverage.totalCount} {stats.officialCoverage.unitLabel}</strong> covered by certified staff passes.{" "}
+                </span>
+              )}
+              <span>
+                My Verified Learning: <strong className="text-emerald-300">{stats.completedCount} of {stats.availableCount} modules ({stats.percent}%)</strong> passed.
+              </span>
+            </p>
 
             {/* Note if legacy unverified completions exist */}
             {stats.legacyCount > 0 && (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/25 border border-amber-300/40 text-amber-100 text-xs font-semibold backdrop-blur-xs">
                 <span>⚠️</span>
                 <span>
-                  {stats.legacyCount} {stats.legacyCount === 1 ? "module has" : "modules have"} legacy self-reported completion. Pass the quiz to earn certified coverage.
+                  {stats.legacyCount} {stats.legacyCount === 1 ? "module has" : "modules have"} legacy self-reported completion. Pass the assessment quiz to earn certified store coverage.
                 </span>
               </div>
             )}
           </div>
 
-          <div className="flex flex-col items-start md:items-end gap-1.5 min-w-[170px] shrink-0">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl sm:text-3xl font-black">{stats.percent}%</span>
-              <span className="text-xs text-blue-200 font-semibold">Certified</span>
+          <div className="flex flex-col sm:flex-row md:flex-col items-start md:items-end gap-2.5 shrink-0">
+            {/* Metric 1: Official Coverage (Store/Company Level - Parity with Admin Retailer 360) */}
+            {stats.officialCoverage && (
+              <div className="w-full sm:w-auto md:w-52 p-2.5 rounded-xl bg-white/10 backdrop-blur-xs border border-white/15">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-200">
+                    Official Coverage
+                  </span>
+                  <span className="text-base font-black text-white">
+                    {stats.officialCoverage.percent}%
+                  </span>
+                </div>
+                <div className="w-full bg-white/20 rounded-full h-1.5 overflow-hidden my-1">
+                  <div
+                    className="bg-emerald-400 h-full rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${stats.officialCoverage.percent}%` }}
+                  />
+                </div>
+                <span className="text-[9px] text-blue-200/90 block">
+                  {stats.officialCoverage.coveredCount} / {stats.officialCoverage.totalCount} {stats.officialCoverage.unitLabel}
+                </span>
+              </div>
+            )}
+
+            {/* Metric 2: My Verified Learning (Employee Level) */}
+            <div className="w-full sm:w-auto md:w-52 p-2.5 rounded-xl bg-white/10 backdrop-blur-xs border border-white/15">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-200">
+                  My Verified Learning
+                </span>
+                <span className="text-base font-black text-emerald-300">
+                  {stats.percent}%
+                </span>
+              </div>
+              <div className="w-full bg-white/20 rounded-full h-1.5 overflow-hidden my-1">
+                <div
+                  className="bg-emerald-400 h-full rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${stats.percent}%` }}
+                />
+              </div>
+              <span className="text-[9px] text-blue-200/90 block">
+                {stats.completedCount} / {stats.availableCount} Modules Passed
+              </span>
             </div>
-            <div className="w-full md:w-44 bg-white/20 rounded-full h-2.5 overflow-hidden backdrop-blur-sm">
-              <div
-                className="bg-emerald-400 h-full rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${stats.percent}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-blue-200/80">
-              {stats.completedCount} verified / {stats.availableCount} published
-            </span>
           </div>
         </div>
       </div>

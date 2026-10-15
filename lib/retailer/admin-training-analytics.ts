@@ -379,7 +379,7 @@ export async function computeRetailerTrainingAnalytics({
   const memberNormalizedStoreMap = new Map<string, Set<string>>();
 
   members.forEach((m) => {
-    const isAllStores = m.role === "owner" || Boolean(m.hasAllStoresAccess);
+    const isAllStores = m.role === "owner" || m.role === "company_admin" || Boolean(m.hasAllStoresAccess);
     const assignedSet = new Set<string>();
 
     if (isAllStores) {
@@ -994,3 +994,125 @@ export async function computeBatchRetailersTrainingCoverage(
 
   return resultMap;
 }
+
+// ==============================================================================
+// Unified Authoritative Training Coverage for Retailer Portal & Admin
+// ==============================================================================
+
+export interface AuthoritativeCoverageMetric {
+  scope: "company" | "store";
+  label: string;
+  percent: number;
+  coveredCount: number;
+  totalCount: number;
+  unitLabel: string;
+}
+
+export async function getAuthoritativeTrainingCoverage(
+  companyId: string,
+  selectedStoreId?: string
+): Promise<AuthoritativeCoverageMetric> {
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const adminClient = createAdminClient();
+
+  // 1. Fetch stores
+  const { data: storesData } = await adminClient
+    .from("stores")
+    .select("id, name, city, state")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: true });
+
+  const stores = storesData || [];
+
+  // 2. Fetch members
+  const { data: companyUsers } = await adminClient
+    .from("company_users")
+    .select("id, name, email, company_role, status")
+    .eq("company_id", companyId);
+
+  const userIds = (companyUsers || []).map((cu: any) => cu.id);
+  const storeAccessMap = new Map<string, Array<{ id: string; name: string }>>();
+  const allStoresAccessMap = new Map<string, boolean>();
+
+  if (userIds.length > 0) {
+    try {
+      const { data: accessRows } = await adminClient
+        .from("retailer_user_store_access")
+        .select(`
+          user_id,
+          has_all_stores_access,
+          store_id,
+          stores (
+            id,
+            name
+          )
+        `)
+        .in("user_id", userIds);
+
+      (accessRows || []).forEach((row: any) => {
+        if (row.has_all_stores_access) {
+          allStoresAccessMap.set(row.user_id, true);
+        }
+        if (row.stores) {
+          const list = storeAccessMap.get(row.user_id) || [];
+          list.push({ id: row.stores.id, name: row.stores.name });
+          storeAccessMap.set(row.user_id, list);
+        }
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  const members = (companyUsers || []).map((cu: any) => {
+    const isOwnerRole = cu.company_role === "company_admin" || cu.company_role === "owner";
+    return {
+      id: cu.id,
+      fullName: cu.name,
+      email: cu.email,
+      role: cu.company_role || "employee",
+      hasAllStoresAccess: isOwnerRole || allStoresAccessMap.get(cu.id) === true,
+      assignedStores: storeAccessMap.get(cu.id) || [],
+    };
+  });
+
+  const analytics = await computeRetailerTrainingAnalytics({
+    companyId,
+    stores,
+    members,
+    adminClient,
+  });
+
+  if (!selectedStoreId || selectedStoreId === "all") {
+    return {
+      scope: "company",
+      label: "Official Company Coverage",
+      percent: analytics.summary.storeCoveragePercent ?? 0,
+      coveredCount: analytics.summary.coveredPairsCount,
+      totalCount: analytics.summary.eligiblePairsCount,
+      unitLabel: "Store/Product Pairs",
+    };
+  }
+
+  const matchedStore = analytics.stores.find((s) => s.storeId === selectedStoreId);
+  if (matchedStore) {
+    return {
+      scope: "store",
+      label: `${matchedStore.storeName} Coverage`,
+      percent: matchedStore.coveragePercent ?? 0,
+      coveredCount: matchedStore.coveredProductsCount,
+      totalCount: matchedStore.publishedProductsCount,
+      unitLabel: "Store Products",
+    };
+  }
+
+  return {
+    scope: "store",
+    label: "Store Coverage",
+    percent: 0,
+    coveredCount: 0,
+    totalCount: 0,
+    unitLabel: "Store Products",
+  };
+}
+
