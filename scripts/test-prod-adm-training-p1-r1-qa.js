@@ -117,16 +117,16 @@ async function runQA() {
 
     const modalVisible = await page.locator('text=Approve & Publish Training Module').isVisible();
     const hasClaimCheck = await page.locator('span:has-text("Factual Claim Verification")').first().isVisible();
-    const confirmPublishBtn = page.locator('button:has-text("Approve & Publish Live")').first();
+    const confirmPublishBtn = page.locator('button:has-text("Approve & Publish")').first();
     const isPublishDisabled = await confirmPublishBtn.isDisabled();
     console.log(`- Publish Modal opened safely: ${modalVisible}`);
     console.log(`- Factual Claim Verification in checklist: ${hasClaimCheck}`);
-    console.log(`- Approve & Publish Live button disabled (safety check): ${isPublishDisabled ? 'PASS ✓' : 'FAIL ✗'}`);
+    console.log(`- Approve & Publish to Network button disabled (safety check): ${isPublishDisabled ? 'PASS ✓' : 'FAIL ✗'}`);
 
     await page.screenshot({ path: 'reports/adm_training_publish_modal.png' });
 
     // Close Modal safely (DO NOT publish)
-    const closeBtn = page.locator('button:has-text("✕"), button:has-text("Cancel")').first();
+    const closeBtn = page.locator('.fixed button:has-text("Cancel")').first();
     await closeBtn.click();
     await page.waitForTimeout(500);
     console.log('✓ Publish modal closed safely without accidental publication.');
