@@ -4,7 +4,8 @@ import { verifyRetailerSession } from "@/lib/auth/dal";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { formatCategoryName } from "@/lib/retailer/products";
 import { getRetailerAccessibleStores } from "@/lib/retailer/weekly-check";
-import { resolveAuthoritativeProductImages } from "@/lib/retailer/product-images";
+import { resolveAuthoritativeProductImages, isSuppressedProductImage } from "@/lib/retailer/product-images";
+import { isServerVerifiedTrainingPass } from "@/lib/retailer/admin-training-analytics";
 
 export interface TrainingProductSummary {
   id: string;
@@ -20,6 +21,10 @@ export interface TrainingProductSummary {
   thumbnailUrl: string | null;
   isCompleted: boolean;
   completedAt: string | null;
+  completionStatus: "verified" | "legacy_needs_verification" | "not_started";
+  isLegacyCompleted: boolean;
+  quizScore?: number | null;
+  quizTotal?: number | null;
   trainingStatus: "published" | "preparing" | "unavailable";
   trainingStatusLabel: string;
   canStartTraining: boolean;
@@ -93,6 +98,7 @@ export interface TrainingProgressStats {
   availableCount: number;
   completedCount: number;
   toLearnCount: number;
+  legacyCount: number;
   percent: number;
 }
 
@@ -118,7 +124,7 @@ export async function getRetailerTrainingProducts(filters: {
   if (!companyId || stores.length === 0) {
     return {
       products: [],
-      stats: { totalCount: 0, availableCount: 0, completedCount: 0, toLearnCount: 0, percent: 0 },
+      stats: { totalCount: 0, availableCount: 0, completedCount: 0, toLearnCount: 0, legacyCount: 0, percent: 0 },
       stores: [],
       selectedStoreId: "all",
       userRole: userRole || "employee",
@@ -223,7 +229,7 @@ export async function getRetailerTrainingProducts(filters: {
   if (productIds.length === 0) {
     return {
       products: [],
-      stats: { totalCount: 0, availableCount: 0, completedCount: 0, toLearnCount: 0, percent: 0 },
+      stats: { totalCount: 0, availableCount: 0, completedCount: 0, toLearnCount: 0, legacyCount: 0, percent: 0 },
       stores,
       selectedStoreId,
       userRole,
@@ -257,7 +263,7 @@ export async function getRetailerTrainingProducts(filters: {
   if (error || !rawProducts) {
     return {
       products: [],
-      stats: { totalCount: 0, availableCount: 0, completedCount: 0, toLearnCount: 0, percent: 0 },
+      stats: { totalCount: 0, availableCount: 0, completedCount: 0, toLearnCount: 0, legacyCount: 0, percent: 0 },
       stores,
       selectedStoreId,
       userRole,
@@ -280,17 +286,24 @@ export async function getRetailerTrainingProducts(filters: {
   }
 
   // 4. Fetch user's completion progress for these products
-  const userProgressMap = new Map<string, string>(); // product_id -> completed_at
+  interface ProgressRecord {
+    completed_at: string;
+    completion_type: string | null;
+    quiz_score: number | null;
+    quiz_total: number | null;
+    status: string;
+  }
+  const userProgressMap = new Map<string, ProgressRecord>();
   try {
     const { data: progressRows } = await adminClient
       .from("retailer_product_training_progress")
-      .select("product_id, completed_at, status")
+      .select("product_id, completed_at, status, completion_type, quiz_score, quiz_total")
       .eq("user_id", session.userId)
       .eq("status", "completed");
 
     if (progressRows) {
       progressRows.forEach((r) => {
-        userProgressMap.set(r.product_id, r.completed_at);
+        userProgressMap.set(r.product_id, r);
       });
     }
   } catch {
@@ -317,8 +330,30 @@ export async function getRetailerTrainingProducts(filters: {
       "KS-PROD";
 
     const thumbnailUrl = imageMap[p.id]?.primaryUrl || null;
-    const isCompleted = userProgressMap.has(p.id);
-    const completedAt = userProgressMap.get(p.id) || null;
+    const prog = userProgressMap.get(p.id);
+
+    let completionStatus: "verified" | "legacy_needs_verification" | "not_started" = "not_started";
+    let isCompleted = false;
+    let isLegacyCompleted = false;
+    let completedAt: string | null = null;
+    let quizScore: number | null = null;
+    let quizTotal: number | null = null;
+
+    if (prog) {
+      completedAt = prog.completed_at;
+      quizScore = prog.quiz_score;
+      quizTotal = prog.quiz_total;
+      const isVerified = isServerVerifiedTrainingPass(prog);
+      if (isVerified) {
+        completionStatus = "verified";
+        isCompleted = true;
+        isLegacyCompleted = false;
+      } else {
+        completionStatus = "legacy_needs_verification";
+        isCompleted = false;
+        isLegacyCompleted = true;
+      }
+    }
 
     // Determine Training Status
     const tc = trainingContentMap.get(p.id);
@@ -355,6 +390,10 @@ export async function getRetailerTrainingProducts(filters: {
       thumbnailUrl,
       isCompleted,
       completedAt,
+      completionStatus,
+      isLegacyCompleted,
+      quizScore,
+      quizTotal,
       trainingStatus,
       trainingStatusLabel,
       canStartTraining,
@@ -364,7 +403,12 @@ export async function getRetailerTrainingProducts(filters: {
   // Calculate overall stats for this view
   const totalCount = allSummaries.length;
   const availableCount = allSummaries.filter((p) => p.trainingStatus === "published").length;
-  const completedCount = allSummaries.filter((p) => p.trainingStatus === "published" && p.isCompleted).length;
+  const completedCount = allSummaries.filter(
+    (p) => p.trainingStatus === "published" && p.completionStatus === "verified"
+  ).length;
+  const legacyCount = allSummaries.filter(
+    (p) => p.trainingStatus === "published" && p.completionStatus === "legacy_needs_verification"
+  ).length;
   const toLearnCount = availableCount - completedCount;
   const percent = availableCount > 0 ? Math.round((completedCount / availableCount) * 100) : 0;
 
@@ -383,10 +427,10 @@ export async function getRetailerTrainingProducts(filters: {
   }
 
   if (filters.statusFilter === "completed") {
-    filtered = filtered.filter((p) => p.isCompleted);
+    filtered = filtered.filter((p) => p.completionStatus === "verified");
   } else if (filters.statusFilter === "not_completed") {
-    // Only published trainings that are not yet completed
-    filtered = filtered.filter((p) => p.trainingStatus === "published" && !p.isCompleted);
+    // Only published trainings that are not yet verified
+    filtered = filtered.filter((p) => p.trainingStatus === "published" && p.completionStatus !== "verified");
   }
 
   return {
@@ -396,6 +440,7 @@ export async function getRetailerTrainingProducts(filters: {
       availableCount,
       completedCount,
       toLearnCount,
+      legacyCount,
       percent,
     },
     stores,
@@ -564,30 +609,46 @@ export async function getRetailerTrainingDetail(
   // 3. User completion progress
   let isCompleted = false;
   let completedAt: string | null = null;
+  let completionStatus: "verified" | "legacy_needs_verification" | "not_started" = "not_started";
+  let isLegacyCompleted = false;
+  let quizScore: number | null = null;
+  let quizTotal: number | null = null;
+
   try {
     const { data: progress } = await adminClient
       .from("retailer_product_training_progress")
-      .select("completed_at, status")
+      .select("completed_at, status, completion_type, quiz_score, quiz_total, quiz_version")
       .eq("user_id", session.userId)
       .eq("product_id", productId)
       .eq("status", "completed")
       .maybeSingle();
 
     if (progress) {
-      isCompleted = true;
       completedAt = progress.completed_at;
+      quizScore = progress.quiz_score;
+      quizTotal = progress.quiz_total;
+      const isVerified = isServerVerifiedTrainingPass(progress);
+      if (isVerified) {
+        completionStatus = "verified";
+        isCompleted = true;
+        isLegacyCompleted = false;
+      } else {
+        completionStatus = "legacy_needs_verification";
+        isCompleted = false;
+        isLegacyCompleted = true;
+      }
     }
   } catch {
     // ignore
   }
 
-  // 4. Sign product images
+  // 4. Sign product images (excluding any suppressed mismatched test merchandise images)
   const rawImages = (p.product_images as any[]) || [];
   const sortedImages = [...rawImages].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   const images: Array<{ id: string; url: string; position: number }> = [];
 
   for (const img of sortedImages) {
-    if (img.storage_path) {
+    if (img.storage_path && !isSuppressedProductImage(productId, img.storage_path)) {
       try {
         const { data: signed } = await adminClient.storage
           .from("company-uploads")
@@ -694,6 +755,10 @@ export async function getRetailerTrainingDetail(
     thumbnailUrl: images[0]?.url || null,
     isCompleted,
     completedAt,
+    completionStatus,
+    isLegacyCompleted,
+    quizScore,
+    quizTotal,
     trainingStatus,
     trainingStatusLabel,
     canStartTraining: isPublished,
@@ -839,6 +904,11 @@ export async function submitRetailerQuiz(
             user_id: session.userId,
             product_id: productId,
             status: "completed",
+            completion_type: "VERIFIED_QUIZ_PASSED",
+            quiz_score: correctCount,
+            quiz_total: total,
+            quiz_version: tc.version || "1.0",
+            quiz_answers: userAnswers,
             completed_at: completedAt,
             updated_at: completedAt,
           },
@@ -909,6 +979,7 @@ export async function toggleRetailerTrainingCompletion(
             user_id: session.userId,
             product_id: productId,
             status: "completed",
+            completion_type: "VERIFIED_QUIZ_PASSED",
             completed_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },

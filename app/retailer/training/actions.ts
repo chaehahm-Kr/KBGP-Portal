@@ -18,6 +18,10 @@ export async function toggleProductTrainingAction(
     revalidatePath("/training");
     revalidatePath(`/training/${productId}`);
     revalidatePath("/retailer");
+    revalidatePath("/admin/retailers");
+    revalidatePath("/admin/retailers/[id]");
+    revalidatePath("/admin/retailers/[id]/training");
+    revalidatePath("/admin/training");
     revalidatePath("/");
   }
   return res;
@@ -34,6 +38,10 @@ export async function submitRetailerQuizAction(
     revalidatePath("/training");
     revalidatePath(`/training/${productId}`);
     revalidatePath("/retailer");
+    revalidatePath("/admin/retailers");
+    revalidatePath("/admin/retailers/[id]");
+    revalidatePath("/admin/retailers/[id]/training");
+    revalidatePath("/admin/training");
     revalidatePath("/");
   }
   return res;

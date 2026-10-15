@@ -94,7 +94,7 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
     : null;
 
   const currentImage = product.images[selectedImageIndex]?.url || product.thumbnailUrl;
-  const isQuizPassed = hasQuiz && (quizPassed || (isCompleted && !quizSubmitted));
+  const isQuizPassed = hasQuiz && (quizPassed || (product.completionStatus === "verified" && !quizSubmitted));
 
   return (
     <div className="w-full max-w-5xl space-y-6 pb-24">
@@ -128,11 +128,13 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
         </div>
       )}
 
-      {/* Completion Status Alert Banner */}
+      {/* Completion Status Alert Banner (Phase 1) */}
       <div
         className={`rounded-2xl p-4 sm:p-5 border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm ${
           isCompleted
             ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/80 text-emerald-950 dark:text-emerald-200"
+            : product.completionStatus === "legacy_needs_verification"
+            ? "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/80 text-amber-950 dark:text-amber-200"
             : "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800/80 text-blue-950 dark:text-blue-200"
         }`}
       >
@@ -141,18 +143,26 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
             className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-black shrink-0 ${
               isCompleted
                 ? "bg-emerald-500 text-white"
+                : product.completionStatus === "legacy_needs_verification"
+                ? "bg-amber-500 text-white"
                 : "bg-blue-600 text-white"
             }`}
           >
-            {isCompleted ? "✓" : "📖"}
+            {isCompleted ? "✓" : product.completionStatus === "legacy_needs_verification" ? "⚠️" : "📖"}
           </div>
           <div>
             <h2 className="text-sm sm:text-base font-black">
-              {isCompleted ? "Training Module Completed!" : "Staff Training Guide"}
+              {isCompleted
+                ? "Training Module Verified Complete!"
+                : product.completionStatus === "legacy_needs_verification"
+                ? "Quiz Verification Required"
+                : "Staff Training Guide"}
             </h2>
             <p className="text-xs opacity-90">
               {isCompleted
-                ? "You have completed staff training for this product. You can review or proceed to the next item."
+                ? "You have completed certified staff training for this product. You can review or proceed to the next item."
+                : product.completionStatus === "legacy_needs_verification"
+                ? "This product was marked complete under legacy self-attestation. Pass the assessment quiz below to earn certified store coverage."
                 : "Review the grounded product guide below, then complete the quiz or mark training finished."}
             </p>
           </div>
@@ -179,6 +189,14 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
                 </Link>
               )}
             </>
+          ) : product.completionStatus === "legacy_needs_verification" ? (
+            <a
+              href="#quiz-section"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-black bg-amber-600 hover:bg-amber-700 text-white shadow-sm shadow-amber-500/20 flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+            >
+              <span>Take Quiz to Verify</span>
+              <span>↓</span>
+            </a>
           ) : !hasQuiz ? (
             <button
               type="button"
@@ -189,9 +207,12 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
               <span>{isPending ? "Saving..." : "✓ Mark Training Complete"}</span>
             </button>
           ) : (
-            <div className="text-[11px] font-bold text-blue-700 dark:text-blue-300 bg-blue-100/70 dark:bg-blue-950/70 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-900 text-center">
-              100% Quiz score required to complete
-            </div>
+            <a
+              href="#quiz-section"
+              className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-100/70 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-900 text-center hover:bg-blue-200/70 transition-colors"
+            >
+              100% Quiz score required to complete ↓
+            </a>
           )}
         </div>
       </div>
@@ -214,12 +235,22 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
               />
             ) : null}
             <div
-              className={`fallback-placeholder w-full h-full flex-col items-center justify-center text-center p-3 space-y-1 ${
+              className={`fallback-placeholder w-full h-full flex-col items-center justify-center text-center p-6 space-y-2 bg-gradient-to-b from-zinc-50 to-zinc-100/90 dark:from-zinc-800/40 dark:to-zinc-900/60 ${
                 currentImage ? "hidden" : "flex"
               }`}
             >
-              <span className="text-5xl text-zinc-300 dark:text-zinc-600">📦</span>
-              <span className="text-xs font-bold text-zinc-500 line-clamp-1">{product.brandName}</span>
+              <div className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center shadow-2xs">
+                <svg className="w-6 h-6 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                </svg>
+              </div>
+              <div className="space-y-0.5 max-w-[200px]">
+                <span className="text-[10px] font-extrabold tracking-wider text-zinc-400 dark:text-zinc-500 uppercase block">K SELECT</span>
+                <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300 block">{product.brandName}</span>
+              </div>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium text-zinc-500 dark:text-zinc-400 bg-zinc-200/60 dark:bg-zinc-800/80 border border-zinc-300/40 dark:border-zinc-700/40">
+                {product.sku}
+              </span>
             </div>
             <div className="absolute top-3 left-3">
               <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-zinc-900 text-white">
@@ -586,7 +617,7 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
 
       {/* 9. STAFF UNDERSTANDING QUIZ SECTION */}
       {hasQuiz && (
-        <div className="rounded-3xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/30 dark:bg-indigo-950/20 p-6 sm:p-8 space-y-6 shadow-sm">
+        <div id="quiz-section" className="rounded-3xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/30 dark:bg-indigo-950/20 p-6 sm:p-8 space-y-6 shadow-sm scroll-mt-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100 dark:border-indigo-900/60 pb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-lg font-black shrink-0">
@@ -794,9 +825,13 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
               <span>{isPending ? "Saving..." : "✓ Mark Training Complete"}</span>
             </button>
           ) : (
-            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-              Pass quiz to complete
-            </span>
+            <a
+              href="#quiz-section"
+              className="px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
+            >
+              <span>Take Quiz to Complete</span>
+              <span>↓</span>
+            </a>
           )}
         </div>
 

@@ -23,6 +23,34 @@ export type AuthoritativeProductImageMap = Record<string, AuthoritativeProductIm
 // storagePath -> { signedUrl: string, expiresAt: number }
 const signedUrlCache = new Map<string, { signedUrl: string; expiresAt: number }>();
 
+/**
+ * Known mismatched test merchandise assets identified during store audits.
+ * - Face Cream Antiaging (TESTSKU1-A_B, ID 78f2706b-f928-4ea8-8f10-52591eee98fe) -> mouthwash
+ * - CHAE FOOT CREAM (FOOT-TEST-123, ID be0e6cc0-f346-4c98-b60d-c235167751d9) -> Adidas sneakers
+ * Suppressed to return null so clean, official neutral K SELECT placeholders are rendered instead of misleading imagery.
+ */
+export const SUPPRESSED_MISMATCHED_PRODUCT_IDS = new Set<string>([
+  "78f2706b-f928-4ea8-8f10-52591eee98fe",
+  "be0e6cc0-f346-4c98-b60d-c235167751d9",
+]);
+
+export const SUPPRESSED_MISMATCHED_STORAGE_SUBSTRINGS = [
+  "74804f8e-7498-48aa-9487-fcb9bcf94cf0", // mouthwash image
+  "1018bb0f-23ff-4eb0-97e9-dc5ea302cb64", // sneaker image
+];
+
+export function isSuppressedProductImage(productId?: string | null, storagePath?: string | null): boolean {
+  if (productId && SUPPRESSED_MISMATCHED_PRODUCT_IDS.has(productId)) {
+    return true;
+  }
+  if (storagePath) {
+    for (const sub of SUPPRESSED_MISMATCHED_STORAGE_SUBSTRINGS) {
+      if (storagePath.includes(sub)) return true;
+    }
+  }
+  return false;
+}
+
 async function getOrSignStoragePath(client: SupabaseClient, storagePath: string): Promise<string | null> {
   if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
     return storagePath;
@@ -116,14 +144,24 @@ export async function resolveAuthoritativeProductImages(
   const resultMap: AuthoritativeProductImageMap = {};
 
   for (const pid of uniqueIds) {
+    // If the entire product has suppressed mismatched imagery, return null immediately
+    if (isSuppressedProductImage(pid, null)) {
+      resultMap[pid] = {
+        primaryUrl: null,
+        galleryUrls: [],
+      };
+      continue;
+    }
+
     const prodImgs = imagesByProd.get(pid) || [];
     // Sort ascending by position: position 0 is main/representative, position 1, 2... are gallery
     prodImgs.sort((a, b) => a.position - b.position);
 
     const signedUrls: string[] = [];
 
-    // Sign product_images items
+    // Sign product_images items (excluding any suppressed storage paths)
     for (const img of prodImgs) {
+      if (isSuppressedProductImage(pid, img.storage_path)) continue;
       const url = await getOrSignStoragePath(client, img.storage_path);
       if (url) {
         signedUrls.push(url);
@@ -134,6 +172,7 @@ export async function resolveAuthoritativeProductImages(
     if (signedUrls.length === 0) {
       const fbPaths = fallbackImagesByProd.get(pid) || [];
       for (const fbPath of fbPaths) {
+        if (isSuppressedProductImage(pid, fbPath)) continue;
         const url = await getOrSignStoragePath(client, fbPath);
         if (url) {
           signedUrls.push(url);

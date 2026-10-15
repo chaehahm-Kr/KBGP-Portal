@@ -43,10 +43,10 @@ export function TrainingListView({
 
   // Filter products by search query and active tab
   const filteredProducts = products.filter((p) => {
-    if (activeTab === "completed" && !p.isCompleted) return false;
+    if (activeTab === "completed" && p.completionStatus !== "verified") return false;
     if (activeTab === "not_completed") {
-      // Only actionable incomplete published modules
-      if (p.trainingStatus !== "published" || p.isCompleted) return false;
+      // Actionable published modules that are not yet verified (includes not_started and legacy_needs_verification)
+      if (p.trainingStatus !== "published" || p.completionStatus === "verified") return false;
     }
 
     if (searchQuery.trim()) {
@@ -61,9 +61,9 @@ export function TrainingListView({
   });
 
   return (
-    <div className="w-full space-y-6 pb-12">
+    <div className="w-full space-y-5 pb-12">
       {/* Header & Store Button Selector */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-2xl">🎓</span>
@@ -111,46 +111,55 @@ export function TrainingListView({
         )}
       </div>
 
-      {/* Progress Card */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-800 text-white p-6 shadow-md">
+      {/* Compact Progress Banner (Phase 2 & Phase 1) */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-600 to-indigo-800 text-white p-4 sm:p-5 shadow-sm">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/20 text-white backdrop-blur-sm">
-                My Training Progress
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-white/20 text-white backdrop-blur-sm">
+                🎓 Staff Training Progress
               </span>
               <span className="text-xs text-blue-100 font-medium">
                 {selectedStoreId === "all"
                   ? "All Stores (Company View)"
                   : stores.find((s) => s.id === selectedStoreId)?.name || "Selected Store"}
               </span>
-            </div>
-            <h2 className="text-lg sm:text-xl font-black">
-              {stats.availableCount > 0 && stats.completedCount === stats.availableCount
-                ? "🎉 All Available Trainings Completed!"
-                : `${stats.completedCount} of ${stats.availableCount} Available Trainings Completed`}
-            </h2>
-            <p className="text-xs sm:text-sm text-blue-100 max-w-xl leading-relaxed">
-              Complete each quick 1-minute product guide to feel confident answering customer questions and recommending K-Beauty essentials.
-            </p>
-            <div className="pt-1">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-white/10 text-blue-100 border border-white/15">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white/10 text-blue-100 border border-white/15">
                 {stats.totalCount} {selectedStoreId === "all" ? "Company" : "Store"} Products Eligible
               </span>
             </div>
+
+            <h2 className="text-base sm:text-lg font-black tracking-tight">
+              {stats.availableCount > 0 && stats.completedCount === stats.availableCount
+                ? "🎉 All Available Modules Verified Complete!"
+                : `${stats.completedCount} of ${stats.availableCount} Modules Verified Complete`}
+            </h2>
+
+            {/* Note if legacy unverified completions exist */}
+            {stats.legacyCount > 0 && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/25 border border-amber-300/40 text-amber-100 text-xs font-semibold backdrop-blur-xs">
+                <span>⚠️</span>
+                <span>
+                  {stats.legacyCount} {stats.legacyCount === 1 ? "module has" : "modules have"} legacy self-reported completion. Pass the quiz to earn certified coverage.
+                </span>
+              </div>
+            )}
           </div>
 
-          <div className="flex flex-col items-start md:items-end gap-1.5 min-w-[160px]">
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl sm:text-4xl font-black">{stats.percent}%</span>
-              <span className="text-xs text-blue-200 font-semibold">Done</span>
+          <div className="flex flex-col items-start md:items-end gap-1.5 min-w-[170px] shrink-0">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl sm:text-3xl font-black">{stats.percent}%</span>
+              <span className="text-xs text-blue-200 font-semibold">Certified</span>
             </div>
-            <div className="w-full md:w-48 bg-white/20 rounded-full h-3 overflow-hidden backdrop-blur-sm">
+            <div className="w-full md:w-44 bg-white/20 rounded-full h-2.5 overflow-hidden backdrop-blur-sm">
               <div
                 className="bg-emerald-400 h-full rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${stats.percent}%` }}
               />
             </div>
+            <span className="text-[10px] text-blue-200/80">
+              {stats.completedCount} verified / {stats.availableCount} published
+            </span>
           </div>
         </div>
       </div>
@@ -190,7 +199,7 @@ export function TrainingListView({
                 : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
             }`}
           >
-            Completed ({stats.completedCount})
+            Verified Complete ({stats.completedCount})
           </button>
         </div>
 
@@ -215,7 +224,7 @@ export function TrainingListView({
         </div>
       </div>
 
-      {/* Product Training Grid */}
+      {/* Product Training Grid: Responsive 5 cols at 2xl, 4 cols at lg, 3 cols at md, 2 cols at sm, 1 col mobile */}
       {filteredProducts.length === 0 ? (
         <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-12 text-center space-y-3">
           <div className="w-12 h-12 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xl mx-auto">
@@ -228,8 +237,8 @@ export function TrainingListView({
             {searchQuery
               ? `No products match "${searchQuery}". Try a different keyword.`
               : activeTab === "completed"
-              ? "You haven't completed any product training modules yet. Choose a product below to get started!"
-              : "All products in this category have been completed!"}
+              ? "No verified completed modules yet. Pass the quiz on an available module to verify completion!"
+              : "All products in this category have been verified completed!"}
           </p>
           {(searchQuery || activeTab !== "all") && (
             <button
@@ -244,21 +253,23 @@ export function TrainingListView({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3.5 sm:gap-4">
           {filteredProducts.map((product) => {
             const detailUrl = `/training/${product.id}${selectedStoreId && selectedStoreId !== "all" ? `?storeId=${selectedStoreId}` : ""}`;
 
             return (
               <div
                 key={product.id}
-                className={`group rounded-2xl border transition-all duration-200 flex flex-col bg-white dark:bg-zinc-900 overflow-hidden shadow-sm hover:shadow-md ${
-                  product.isCompleted
+                className={`group rounded-2xl border transition-all duration-200 flex flex-col bg-white dark:bg-zinc-900 overflow-hidden shadow-2xs hover:shadow-md ${
+                  product.completionStatus === "verified"
                     ? "border-emerald-200 dark:border-emerald-900/40"
+                    : product.completionStatus === "legacy_needs_verification"
+                    ? "border-amber-200 dark:border-amber-800/60"
                     : "border-zinc-200 dark:border-zinc-800 hover:border-blue-300 dark:hover:border-blue-800"
                 }`}
               >
-                {/* Image & Badges */}
-                <div className="relative aspect-[4/3] bg-zinc-50 dark:bg-zinc-800/40 p-4 flex items-center justify-center border-b border-zinc-100 dark:border-zinc-800/60 overflow-hidden">
+                {/* Compact Image Area with Neutral Placeholder (Phase 2 & Phase 3) */}
+                <div className="relative h-40 sm:h-44 bg-zinc-50 dark:bg-zinc-800/40 p-3 flex items-center justify-center border-b border-zinc-100 dark:border-zinc-800/60 overflow-hidden">
                   {product.thumbnailUrl ? (
                     <img
                       src={product.thumbnailUrl}
@@ -271,39 +282,54 @@ export function TrainingListView({
                       }}
                     />
                   ) : null}
+
+                  {/* Official Neutral K SELECT Branded Placeholder (Phase 3) */}
                   <div
-                    className={`fallback-placeholder w-full h-full flex-col items-center justify-center text-center p-3 space-y-1 ${
+                    className={`fallback-placeholder w-full h-full flex-col items-center justify-center text-center p-3 space-y-1.5 bg-gradient-to-b from-zinc-50 to-zinc-100/90 dark:from-zinc-800/40 dark:to-zinc-900/60 ${
                       product.thumbnailUrl ? "hidden" : "flex"
                     }`}
                   >
-                    <span className="text-3xl text-zinc-300 dark:text-zinc-600">📦</span>
-                    <span className="text-[10px] font-bold text-zinc-500 line-clamp-1">{product.brandName}</span>
-                    <span className="text-[9px] font-mono text-zinc-400">{product.sku}</span>
+                    <div className="w-9 h-9 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/80 flex items-center justify-center shadow-2xs">
+                      <svg className="w-4 h-4 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                      </svg>
+                    </div>
+                    <div className="space-y-0.5 max-w-[130px]">
+                      <span className="text-[9px] font-extrabold tracking-wider text-zinc-400 dark:text-zinc-500 uppercase block">K SELECT</span>
+                      <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 line-clamp-1 block">{product.brandName}</span>
+                    </div>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium text-zinc-500 dark:text-zinc-400 bg-zinc-200/60 dark:bg-zinc-800/80 border border-zinc-300/40 dark:border-zinc-700/40">
+                      {product.sku}
+                    </span>
                   </div>
 
-                  {/* Brand & Category pill */}
-                  <div className="absolute top-3 left-3 flex flex-col gap-1 items-start">
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold tracking-wider uppercase bg-zinc-900/80 text-white backdrop-blur-sm">
+                  {/* Brand pill */}
+                  <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 items-start">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold tracking-wider uppercase bg-zinc-900/80 text-white backdrop-blur-xs">
                       {product.brandName}
                     </span>
                   </div>
 
-                  {/* Completion / Training Status badge */}
-                  <div className="absolute top-3 right-3">
-                    {product.isCompleted ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-500 text-white shadow-sm">
-                        ✓ Completed
+                  {/* Completion / Training Status badge (Phase 1) */}
+                  <div className="absolute top-2.5 right-2.5">
+                    {product.completionStatus === "verified" ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-white shadow-xs">
+                        ✓ Verified
+                      </span>
+                    ) : product.completionStatus === "legacy_needs_verification" ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/90 dark:text-amber-200 border border-amber-300 dark:border-amber-700 shadow-xs">
+                        ⚠️ Verify Quiz
                       </span>
                     ) : product.trainingStatus === "preparing" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/90 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                        ⏳ Training Preparing
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/90 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                        ⏳ Preparing
                       </span>
                     ) : product.trainingStatus === "unavailable" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-100 text-zinc-500 dark:bg-zinc-800/90 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
-                        Training Not Available
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-100 text-zinc-500 dark:bg-zinc-800/90 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                        Unavailable
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                         To Learn
                       </span>
                     )}
@@ -311,60 +337,68 @@ export function TrainingListView({
                 </div>
 
                 {/* Content info */}
-                <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <div className="space-y-1.5">
+                <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between space-y-3">
+                  <div className="space-y-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                      <span className="text-[10px] sm:text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
                         {product.categoryLabel}
                       </span>
-                      <span className="text-[11px] font-mono text-zinc-400">
+                      <span className="text-[10px] font-mono text-zinc-400">
                         {product.sku}
                       </span>
                     </div>
 
-                    <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white line-clamp-2 leading-snug">
+                    <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white line-clamp-2 leading-snug">
                       {product.name}
                     </h3>
 
                     {product.volume && (
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                         Size: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{product.volume}</span>
                       </p>
                     )}
                   </div>
 
-                  {/* Action Button */}
-                  <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
+                  {/* Action Button aligned to bottom */}
+                  <div className="pt-2 mt-auto border-t border-zinc-100 dark:border-zinc-800/80">
                     {product.trainingStatus === "unavailable" ? (
                       <button
                         type="button"
                         disabled
-                        className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-800/60 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-200 dark:border-zinc-700/60"
+                        className="w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 bg-zinc-100 dark:bg-zinc-800/60 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-200/80 dark:border-zinc-700/60"
                       >
-                        <span>Training Not Available</span>
+                        <span>Unavailable</span>
                       </button>
                     ) : product.trainingStatus === "preparing" ? (
                       <button
                         type="button"
                         disabled
-                        className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 bg-purple-50/60 dark:bg-purple-950/30 text-purple-400 dark:text-purple-400/80 cursor-not-allowed border border-purple-200/60 dark:border-purple-900/40"
+                        className="w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 bg-purple-50/60 dark:bg-purple-950/30 text-purple-400 dark:text-purple-400/80 cursor-not-allowed border border-purple-200/60 dark:border-purple-900/40"
                       >
-                        <span>⏳ Training Preparing</span>
+                        <span>⏳ Preparing</span>
                       </button>
-                    ) : product.isCompleted ? (
+                    ) : product.completionStatus === "verified" ? (
                       <Link
                         href={detailUrl}
-                        className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 transition-colors"
+                        className="w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 transition-colors"
                       >
-                        <span>Review Training</span>
+                        <span>Review Guide</span>
+                        <span>→</span>
+                      </Link>
+                    ) : product.completionStatus === "legacy_needs_verification" ? (
+                      <Link
+                        href={detailUrl}
+                        className="w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shadow-xs shadow-amber-600/20 transition-colors"
+                      >
+                        <span>Take Quiz to Verify</span>
                         <span>→</span>
                       </Link>
                     ) : (
                       <Link
                         href={detailUrl}
-                        className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/20 transition-colors"
+                        className="w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-xs shadow-blue-500/20 transition-colors"
                       >
-                        <span>Start Training (1 min)</span>
+                        <span>Start Training</span>
                         <span>→</span>
                       </Link>
                     )}
