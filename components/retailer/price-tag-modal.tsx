@@ -207,10 +207,10 @@ export function PriceTagModal({
                 <>
                   <div className="font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
                     <span>💡</span>
-                    <span>Suggested from MSRP: ${item.msrp.toFixed(2)}</span>
+                    <span>MSRP Default: ${item.msrp.toFixed(2)}</span>
                   </div>
                   <p className="text-[11px] text-purple-800 dark:text-purple-300">
-                    The Suggested MSRP has been prefilled as your recommended starting price. You may adjust this value before confirming. An explicit save is required.
+                    Store regular price is automatically initialized from Suggested MSRP. Adjusting and saving will create an explicit Store Price override.
                   </p>
                 </>
               ) : (

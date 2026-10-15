@@ -413,17 +413,35 @@ export async function getStorePricingDashboardData(
         .filter((st) => assignedStoreIds.includes(st.id))
         .map((st) => {
           const pRow = pStorePrices.get(st.id);
-          const hasPrice = !!pRow && Number(pRow.regular_price) > 0;
-          const regPrice = hasPrice ? Number(pRow.regular_price) : null;
+          const hasExplicit = !!pRow && Number(pRow.regular_price) > 0;
+          const explicitReg = hasExplicit ? Number(pRow.regular_price) : null;
+
+          // Effective Regular Price hierarchy:
+          // 1. Explicit Store Override
+          // 2. MSRP Default (if msrp > 0)
+          // 3. null (needs price)
+          let regPrice: number | null = null;
+          let isMsrp = false;
+          if (hasExplicit) {
+            regPrice = explicitReg;
+            isMsrp = false;
+          } else if (hasMsrp && msrp > 0) {
+            regPrice = msrp;
+            isMsrp = true;
+          }
+
           const sPrice = pRow?.sale_price ? Number(pRow.sale_price) : null;
           const sStart = pRow?.sale_start_date || null;
           const sEnd = pRow?.sale_end_date || null;
           const isSActive = isSalePriceActive(sPrice, sStart, sEnd);
-          const discPercent = regPrice && isSActive ? calculateDiscountPercent(regPrice, sPrice) : null;
-          const effPrice = isSActive && sPrice ? sPrice : (regPrice || msrp);
+          const discPercent =
+            regPrice && isSActive && sPrice && sPrice < regPrice
+              ? calculateDiscountPercent(regPrice, sPrice)
+              : null;
+          const effPrice = isSActive && sPrice ? sPrice : (regPrice || 0);
           const pBasis: StoreProductTagItem["priceBasis"] = isSActive && sPrice
             ? "store_sale"
-            : hasPrice
+            : hasExplicit
             ? "store_regular"
             : "msrp";
 
@@ -437,7 +455,8 @@ export async function getStorePricingDashboardData(
             salePrice: sPrice,
             discountPercent: discPercent,
             isSaleActive: isSActive,
-            hasStorePrice: hasPrice,
+            hasStorePrice: hasExplicit,
+            isMsrpDefault: isMsrp,
             effectivePrice: effPrice,
             priceBasis: pBasis,
             regularGrossProfit: regMetrics.grossProfit,
@@ -449,43 +468,66 @@ export async function getStorePricingDashboardData(
 
       // Determine single-store active values vs overview values
       let hasStorePrice = false;
+      let isMsrpDefault = false;
       let regularPrice: number | null = null;
       let salePrice: number | null = null;
       let saleStartDate: string | null = null;
       let saleEndDate: string | null = null;
       let discountPercent: number | null = null;
       let isSaleActive = false;
-      let effectivePrice = msrp;
+      let effectivePrice = msrp > 0 ? msrp : 0;
       let priceBasis: StoreProductTagItem["priceBasis"] = "msrp";
 
       if (!isAllStores) {
         // Single Store Mode
         const priceRow = pStorePrices.get(activeStore.id);
-        hasStorePrice = !!priceRow && Number(priceRow.regular_price) > 0;
-        regularPrice = hasStorePrice ? Number(priceRow.regular_price) : null;
+        const hasExplicit = !!priceRow && Number(priceRow.regular_price) > 0;
+        hasStorePrice = hasExplicit;
+
+        if (hasExplicit) {
+          regularPrice = Number(priceRow.regular_price);
+          isMsrpDefault = false;
+          priceBasis = "store_regular";
+        } else if (hasMsrp && msrp > 0) {
+          regularPrice = msrp;
+          isMsrpDefault = true;
+          priceBasis = "msrp";
+        } else {
+          regularPrice = null;
+          isMsrpDefault = false;
+          priceBasis = "msrp";
+        }
+
         salePrice = priceRow?.sale_price ? Number(priceRow.sale_price) : null;
         saleStartDate = priceRow?.sale_start_date || null;
         saleEndDate = priceRow?.sale_end_date || null;
 
         isSaleActive = isSalePriceActive(salePrice, saleStartDate, saleEndDate);
-        discountPercent = regularPrice && isSaleActive ? calculateDiscountPercent(regularPrice, salePrice) : null;
+        discountPercent =
+          regularPrice && isSaleActive && salePrice && salePrice < regularPrice
+            ? calculateDiscountPercent(regularPrice, salePrice)
+            : null;
 
-        if (hasStorePrice && regularPrice) {
+        if (regularPrice !== null) {
           pricedCount += 1;
-          if (isSaleActive && salePrice) {
+          if (isSaleActive && salePrice && salePrice < regularPrice) {
             onSaleCount += 1;
             effectivePrice = salePrice;
             priceBasis = "store_sale";
           } else {
             effectivePrice = regularPrice;
-            priceBasis = "store_regular";
           }
+        } else {
+          effectivePrice = 0;
         }
       } else {
         // All Stores Mode: summarize across breakdowns
-        const pricedBreakdowns = storeBreakdowns.filter((b) => b.hasStorePrice && b.regularPrice);
-        hasStorePrice = pricedBreakdowns.length > 0;
-        if (hasStorePrice) pricedCount += 1;
+        const pricedBreakdowns = storeBreakdowns.filter((b) => b.regularPrice !== null);
+        const explicitBreakdowns = storeBreakdowns.filter((b) => b.hasStorePrice);
+        hasStorePrice = explicitBreakdowns.length > 0;
+        isMsrpDefault = !hasStorePrice && hasMsrp && msrp > 0;
+
+        if (pricedBreakdowns.length > 0) pricedCount += 1;
 
         const onSaleBreakdowns = storeBreakdowns.filter((b) => b.isSaleActive && b.salePrice);
         isSaleActive = onSaleBreakdowns.length > 0;
@@ -497,8 +539,8 @@ export async function getStorePricingDashboardData(
           const allSame = pricedBreakdowns.every((b) => b.regularPrice === firstPrice);
           if (allSame) {
             regularPrice = firstPrice;
-            effectivePrice = firstPrice || msrp;
-            priceBasis = "store_regular";
+            effectivePrice = firstPrice || 0;
+            priceBasis = hasStorePrice ? "store_regular" : "msrp";
           }
         }
       }
@@ -539,6 +581,7 @@ export async function getStorePricingDashboardData(
         msrp,
         hasMsrp,
         hasStorePrice,
+        isMsrpDefault,
         regularPrice,
         salePrice,
         saleStartDate,
@@ -565,6 +608,13 @@ export async function getStorePricingDashboardData(
 
   const cleanTagItems = tagItems.filter(Boolean);
 
+  const totalAssortmentCount = cleanTagItems.length;
+  const pricedProductsCount = cleanTagItems.filter((p) => p.regularPrice !== null).length;
+  const storeOverrideCount = cleanTagItems.filter((p) => p.hasStorePrice).length;
+  const msrpDefaultCount = cleanTagItems.filter((p) => p.isMsrpDefault).length;
+  const onSaleProductsCount = cleanTagItems.filter((p) => p.isSaleActive).length;
+  const unpricedProductsCount = cleanTagItems.filter((p) => p.regularPrice === null).length;
+
   return {
     companyId,
     userRole: userRole || "employee",
@@ -574,11 +624,13 @@ export async function getStorePricingDashboardData(
     selectedStoreName,
     stores: stores.map((s) => ({ id: s.id, name: s.name })),
     products: cleanTagItems,
-    totalAssortmentCount: cleanTagItems.length,
-    pricedProductsCount: pricedCount,
-    onSaleProductsCount: onSaleCount,
+    totalAssortmentCount,
+    pricedProductsCount,
+    storeOverrideCount,
+    msrpDefaultCount,
+    onSaleProductsCount,
     incomingProductsCount: cleanTagItems.filter((p) => p.tagStatus === "incoming").length,
-    unpricedProductsCount: cleanTagItems.filter((p) => !p.hasStorePrice).length,
+    unpricedProductsCount,
   };
 }
 

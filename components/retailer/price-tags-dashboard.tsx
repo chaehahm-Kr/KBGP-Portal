@@ -109,8 +109,8 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
       if (!match) return false;
     }
 
-    if (filterMode === "priced") return p.hasStorePrice;
-    if (filterMode === "unpriced" || filterMode === "msrp") return !p.hasStorePrice;
+    if (filterMode === "priced") return p.regularPrice !== null;
+    if (filterMode === "unpriced" || filterMode === "msrp") return p.regularPrice === null;
     if (filterMode === "incoming") return p.tagStatus === "incoming";
     if (filterMode === "sale") return p.isSaleActive;
 
@@ -306,7 +306,7 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
         <div className="flex items-center gap-1.5 flex-wrap">
           {[
             { id: "all", label: `All (${products.length})` },
-            { id: "priced", label: `Store Priced (${pricedProductsCount})` },
+            { id: "priced", label: `Priced (${pricedProductsCount})` },
             { id: "unpriced", label: `Needs Price (${unpricedProductsCount})` },
             { id: "incoming", label: `Incoming (${incomingProductsCount})` },
             { id: "sale", label: `On Sale (${onSaleProductsCount})` },
@@ -479,7 +479,7 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                                         {b.storeName}:
                                       </span>
                                       <span className="font-bold text-zinc-800 dark:text-zinc-200 font-mono">
-                                        {b.hasStorePrice && b.regularPrice ? `$${b.regularPrice.toFixed(2)}` : "Set Price"}
+                                        {b.regularPrice ? `${b.regularPrice.toFixed(2)}${b.isMsrpDefault ? " (MSRP)" : ""}` : "Set Price"}
                                       </span>
                                       {!isEmployee && b.regularGrossProfit !== null && (
                                         <span
@@ -503,11 +503,28 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                           ) : (
                             /* Single Store Mode */
                             <div>
-                              {p.hasStorePrice && p.regularPrice ? (
+                              {p.regularPrice !== null ? (
                                 <div>
-                                  <span className="font-bold text-zinc-900 dark:text-white">
-                                    ${p.regularPrice.toFixed(2)}
-                                  </span>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <span className="font-bold text-zinc-900 dark:text-white">
+                                      `${p.regularPrice.toFixed(2)}`
+                                    </span>
+                                    {p.isMsrpDefault ? (
+                                      <span
+                                        className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                                        title="Store regular price automatically initialized from Suggested MSRP"
+                                      >
+                                        MSRP Default
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                                        title="Explicit Store Price override"
+                                      >
+                                        Store Price
+                                      </span>
+                                    )}
+                                  </div>
                                   {!isEmployee && p.regularGrossProfit !== null && (
                                     <div
                                       className={`text-[10px] font-semibold flex items-center justify-end gap-1 ${
@@ -515,10 +532,10 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                                           ? "text-rose-600 dark:text-rose-400 font-bold"
                                           : "text-emerald-600 dark:text-emerald-400"
                                       }`}
-                                      title={`Gross Profit: $${p.regularGrossProfit.toFixed(2)} | Gross Margin: ${p.regularGrossMarginPercent}% (Margin = GP / Regular Price)`}
+                                      title={`Gross Profit: ${p.regularGrossProfit.toFixed(2)} | Gross Margin: ${p.regularGrossMarginPercent}% (Margin = GP / Regular Price)`}
                                     >
                                       <span>GP ${p.regularGrossProfit.toFixed(2)}</span>
-                                      <span>({p.regularGrossMarginPercent}%)</span>
+                                      <span>(${p.regularGrossMarginPercent}%)</span>
                                     </div>
                                   )}
                                 </div>
@@ -527,11 +544,9 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                                     ⚠️ Set Price
                                   </span>
-                                  {p.hasMsrp && (
-                                    <span className="block text-[9px] text-zinc-400">
-                                      MSRP ${p.msrp.toFixed(2)}
-                                    </span>
-                                  )}
+                                  <span className="block text-[9px] text-zinc-400">
+                                    MSRP Not Available
+                                  </span>
                                 </div>
                               )}
                             </div>
@@ -727,7 +742,7 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                           <div className="space-y-1">
                             {p.storeBreakdowns?.map((b) => (
                               <div key={b.storeId} className="text-[10px] text-zinc-600 dark:text-zinc-300">
-                                {b.storeName}: <strong>{b.regularPrice ? `$${b.regularPrice.toFixed(2)}` : "—"}</strong>
+                                {b.storeName}: <strong>{b.regularPrice ? `${b.regularPrice.toFixed(2)}${b.isMsrpDefault ? " (MSRP)" : ""}` : "Set Price"}</strong>
                                 {!isEmployee && b.regularGrossMarginPercent !== null && (
                                   <span className="text-emerald-600 dark:text-emerald-400 ml-1">
                                     ({b.regularGrossMarginPercent}%)
@@ -736,9 +751,20 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                               </div>
                             ))}
                           </div>
-                        ) : p.hasStorePrice && p.regularPrice ? (
+                        ) : p.regularPrice !== null ? (
                           <div>
-                            <div>${p.regularPrice.toFixed(2)}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span>`${p.regularPrice.toFixed(2)}`</span>
+                              {p.isMsrpDefault ? (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200">
+                                  MSRP Default
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                                  Store Price
+                                </span>
+                              )}
+                            </div>
                             {!isEmployee && p.regularGrossProfit !== null && (
                               <span
                                 className={`text-[10px] font-semibold ${
@@ -747,13 +773,13 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                                     : "text-emerald-600 dark:text-emerald-400"
                                 }`}
                               >
-                                GP ${p.regularGrossProfit.toFixed(2)} ({p.regularGrossMarginPercent}%)
+                                GP ${p.regularGrossProfit.toFixed(2)} (${p.regularGrossMarginPercent}%)
                               </span>
                             )}
                           </div>
                         ) : (
                           <span className="text-amber-600 dark:text-amber-400">
-                            ⚠️ Set Price (MSRP ${p.msrp.toFixed(2)})
+                            ⚠️ Set Price (MSRP Not Available)
                           </span>
                         )}
                       </div>

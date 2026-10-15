@@ -37,6 +37,7 @@ export interface StorePriceBreakdownItem {
   discountPercent: number | null;
   isSaleActive: boolean;
   hasStorePrice: boolean;
+  isMsrpDefault?: boolean;
   effectivePrice: number;
   priceBasis: "store_sale" | "store_regular" | "msrp";
   regularGrossProfit: number | null;
@@ -66,8 +67,9 @@ export interface StoreProductTagItem {
   hasMsrp: boolean;
 
   // Store Price info (Single Store or Primary View)
-  hasStorePrice: boolean;
-  regularPrice: number | null;
+  hasStorePrice: boolean; // True if explicit store price record exists in DB
+  isMsrpDefault?: boolean; // True if regularPrice is automatically initialized from MSRP
+  regularPrice: number | null; // Effective regular price (Store Override or MSRP Default, or null if neither)
   salePrice: number | null;
   saleStartDate: string | null;
   saleEndDate: string | null;
@@ -106,6 +108,8 @@ export interface StorePricingDashboardData {
   products: StoreProductTagItem[];
   totalAssortmentCount: number;
   pricedProductsCount: number;
+  storeOverrideCount?: number;
+  msrpDefaultCount?: number;
   onSaleProductsCount: number;
   incomingProductsCount: number;
   unpricedProductsCount: number;

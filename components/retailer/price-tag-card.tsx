@@ -17,6 +17,7 @@ export function PriceTagCard({ item, className = "", isPrintVersion = false, sca
     brandName,
     sku,
     hasStorePrice,
+    isMsrpDefault,
     regularPrice,
     salePrice,
     discountPercent,
@@ -26,7 +27,20 @@ export function PriceTagCard({ item, className = "", isPrintVersion = false, sca
     qrDataUrl,
   } = item;
 
-  const isSale = isSaleActive && salePrice !== null && discountPercent !== null;
+  const isSale =
+    isSaleActive &&
+    salePrice !== null &&
+    salePrice > 0 &&
+    regularPrice !== null &&
+    regularPrice > 0 &&
+    salePrice < regularPrice;
+
+  const effectiveDiscount =
+    discountPercent !== null && discountPercent !== undefined
+      ? discountPercent
+      : isSale && regularPrice && salePrice
+      ? Math.round(((regularPrice - salePrice) / regularPrice) * 100)
+      : null;
 
   return (
     <div
@@ -65,38 +79,54 @@ export function PriceTagCard({ item, className = "", isPrintVersion = false, sca
           {isSale ? (
             <div className="space-y-0.5">
               <div className="flex items-center gap-1">
-                <span className="text-[9px] text-black/60 line-through font-semibold">
+                <span className="px-1.5 py-0.2 rounded bg-black text-white text-[8px] font-black uppercase tracking-wider">
+                  SALE
+                </span>
+                {effectiveDiscount !== null && (
+                  <span className="px-1 py-0.2 rounded border border-black text-black text-[7.5px] font-black uppercase tracking-tight">
+                    SAVE {effectiveDiscount}%
+                  </span>
+                )}
+              </div>
+              <div className="flex items-baseline gap-1.5 mt-0.5">
+                <span className="text-xl sm:text-2xl font-black text-black leading-none tracking-tight">
+                  ${salePrice?.toFixed(2)}
+                </span>
+                <span className="text-[8.5px] text-black/70 line-through font-bold">
                   ${regularPrice?.toFixed(2)}
                 </span>
-                <span className="px-1 py-0.2 rounded bg-black text-white text-[8px] font-black uppercase tracking-tight">
-                  SAVE {discountPercent}%
-                </span>
-              </div>
-              <div className="text-lg sm:text-xl font-black text-black leading-none tracking-tight">
-                ${salePrice?.toFixed(2)}
               </div>
             </div>
-          ) : hasStorePrice && regularPrice ? (
+          ) : hasStorePrice && regularPrice && !isMsrpDefault ? (
             <div className="space-y-0.5">
-              <div className="text-[8px] font-bold uppercase tracking-wider text-black/60">
+              <div className="text-[7.5px] font-bold uppercase tracking-wider text-black/60">
                 STORE PRICE
               </div>
-              <div className="text-lg sm:text-xl font-black text-black leading-none tracking-tight">
+              <div className="text-xl sm:text-2xl font-black text-black leading-none tracking-tight">
+                ${regularPrice.toFixed(2)}
+              </div>
+            </div>
+          ) : isMsrpDefault && regularPrice ? (
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1">
+                <span className="text-[7.5px] font-extrabold uppercase tracking-wider text-black/60">
+                  REGULAR
+                </span>
+                <span className="px-1 py-0.2 rounded bg-zinc-100 border border-black/30 text-[7px] font-bold uppercase tracking-tight text-black">
+                  MSRP
+                </span>
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-black leading-none tracking-tight">
                 ${regularPrice.toFixed(2)}
               </div>
             </div>
           ) : (
             <div className="space-y-0.5">
-              <div className="flex items-center gap-1">
-                <span className="text-[8px] font-extrabold uppercase tracking-wider text-black/60">
-                  MSRP
-                </span>
-                <span className="px-1 py-0.2 rounded border border-black/40 text-[7px] font-black uppercase tracking-tight text-black">
-                  SET PRICE
-                </span>
+              <div className="px-1 py-0.2 rounded border border-black/40 text-[7.5px] font-black uppercase tracking-tight text-black inline-block">
+                SET PRICE
               </div>
-              <div className="text-base sm:text-lg font-black text-black leading-none tracking-tight">
-                ${effectivePrice.toFixed(2)}
+              <div className="text-sm font-bold text-black/40 leading-none">
+                Not Priced
               </div>
             </div>
           )}
