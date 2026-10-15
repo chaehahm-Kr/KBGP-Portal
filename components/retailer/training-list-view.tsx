@@ -28,17 +28,21 @@ export function TrainingListView({
   const [isPending, startTransition] = useTransition();
 
   const handleStoreChange = (storeId: string) => {
-    startTransition(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (storeId === "all") {
-        params.delete("store");
-        params.delete("storeId");
-      } else {
-        params.set("store", storeId);
-        params.delete("storeId");
-      }
-      router.push(`${pathname}?${params.toString()}`);
-    });
+    const params = new URLSearchParams(searchParams.toString());
+    if (storeId === "all") {
+      params.delete("store");
+      params.delete("storeId");
+    } else {
+      params.set("store", storeId);
+      params.delete("storeId");
+    }
+    const query = params.toString();
+    const url = query ? `${pathname}?${query}` : pathname;
+    if (typeof window !== "undefined") {
+      window.location.assign(url);
+    } else {
+      router.push(url);
+    }
   };
 
   // Filter products by search query and active tab
