@@ -7,7 +7,7 @@ const TEST_PASSWORD = process.env.TEST_RETAILER_PASSWORD || "Password123!@#";
 
 const STORE_01_ID = "effe7832-096c-4ae1-86c7-3cb189b59731";
 const STORE_02_ID = "34bb2857-01dd-4d6e-bfd4-7112eec1ac1f";
-const TARGET_COMMIT = "b993ea7";
+const TARGET_COMMITS = ["e107536", "b993ea7"];
 
 const ARTIFACT_DIR = "C:/Users/ChaeHahm/.gemini/antigravity/brain/945ab025-0f8f-4fce-b0bc-56237108874e";
 
@@ -17,7 +17,7 @@ async function runProductionPricingR1QA() {
   console.log("==================================================================");
 
   // Poll for deployment SHA
-  console.log(`\n[Step 0] Waiting for Vercel production deployment (${TARGET_COMMIT})...`);
+  console.log(`\n[Step 0] Waiting for Vercel production deployment (${TARGET_COMMITS.join(", ")})...`);
   let deployed = false;
   for (let attempt = 1; attempt <= 30; attempt++) {
     try {
@@ -26,7 +26,7 @@ async function runProductionPricingR1QA() {
         const diag = await res.json();
         const sha = diag?.deployment?.commitSha || "";
         console.log(`  Attempt ${attempt}/30: Deployed SHA = ${sha.slice(0, 7)}`);
-        if (sha.startsWith(TARGET_COMMIT)) {
+        if (TARGET_COMMITS.some((c) => sha.startsWith(c))) {
           deployed = true;
           break;
         }
@@ -249,19 +249,12 @@ async function runProductionPricingR1QA() {
 
     // Phase 2: Mobile Viewport QA (iPhone 14 Pro)
     console.log("\n--- [Phase 2: Mobile Viewport QA (iPhone 14 Pro)] ---");
+    const storageState = await desktopContext.storageState();
     const mobileContext = await browser.newContext({
       ...devices["iPhone 14 Pro"],
+      storageState,
     });
     const mobilePage = await mobileContext.newPage();
-
-    // Mobile Login
-    await mobilePage.goto(`${HUB_URL}/login`, { waitUntil: "domcontentloaded", timeout: 25000 });
-    await mobilePage.waitForSelector('input[type="email"], input[name="email"], input#email', { timeout: 15000 });
-    await mobilePage.locator('input[type="email"], input[name="email"], input#email').fill(TEST_EMAIL);
-    await mobilePage.locator('input[type="password"], input[name="password"], input#password').fill(TEST_PASSWORD);
-    await mobilePage.locator('button[type="submit"]').click();
-    await mobilePage.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 25000 });
-    await mobilePage.waitForTimeout(2000);
 
     // Mobile Tags
     await mobilePage.goto(`${HUB_URL}/retailer/tags?store=${STORE_02_ID}`, { waitUntil: "networkidle", timeout: 25000 });
