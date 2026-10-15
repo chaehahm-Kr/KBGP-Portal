@@ -507,7 +507,7 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                                 <div>
                                   <div className="flex items-center justify-end gap-1.5">
                                     <span className="font-bold text-zinc-900 dark:text-white">
-                                      `${p.regularPrice.toFixed(2)}`
+                                      ${p.regularPrice.toFixed(2)}
                                     </span>
                                     {p.isMsrpDefault ? (
                                       <span
@@ -754,7 +754,7 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                         ) : p.regularPrice !== null ? (
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <span>`${p.regularPrice.toFixed(2)}`</span>
+                              <span>${p.regularPrice.toFixed(2)}</span>
                               {p.isMsrpDefault ? (
                                 <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200">
                                   MSRP Default

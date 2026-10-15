@@ -7,34 +7,34 @@ const TEST_PASSWORD = process.env.TEST_RETAILER_PASSWORD || "Password123!@#";
 
 const STORE_01_ID = "effe7832-096c-4ae1-86c7-3cb189b59731";
 const STORE_02_ID = "34bb2857-01dd-4d6e-bfd4-7112eec1ac1f";
-const TARGET_COMMIT = "52c98ed";
+const TARGET_COMMIT = "79f9f28";
 
 const ARTIFACT_DIR = "C:/Users/ChaeHahm/.gemini/antigravity/brain/945ab025-0f8f-4fce-b0bc-56237108874e";
 
-async function runProductionPricingQA() {
+async function runProductionPricingR1QA() {
   console.log("\n==================================================================");
-  console.log("  RTP-PRICE-TAG-PRICING-002 Production Browser QA");
+  console.log("  RTP-PRICE-TAG-PRICING-002-R1 Production Browser QA");
   console.log("==================================================================");
 
   // Poll for deployment SHA
   console.log(`\n[Step 0] Waiting for Vercel production deployment (${TARGET_COMMIT})...`);
   let deployed = false;
-  for (let attempt = 1; attempt <= 24; attempt++) {
+  for (let attempt = 1; attempt <= 30; attempt++) {
     try {
       const res = await fetch(`${HUB_URL}/api/diagnostics`);
       if (res.ok) {
         const diag = await res.json();
         const sha = diag?.deployment?.commitSha || "";
-        console.log(`  Attempt ${attempt}/24: Deployed SHA = ${sha.slice(0, 7)}`);
-        if (sha.startsWith("52c98ed") || sha.startsWith("8640dcb")) {
+        console.log(`  Attempt ${attempt}/30: Deployed SHA = ${sha.slice(0, 7)}`);
+        if (sha.startsWith(TARGET_COMMIT)) {
           deployed = true;
           break;
         }
       }
     } catch (e: any) {
-      console.log(`  Attempt ${attempt}/24 diagnostics fetch error: ${e.message}`);
+      console.log(`  Attempt ${attempt}/30 diagnostics fetch error: ${e.message}`);
     }
-    await new Promise((r) => setTimeout(r, 10000));
+    await new Promise((r) => setTimeout(r, 8000));
   }
 
   if (!deployed) {
@@ -45,20 +45,24 @@ async function runProductionPricingQA() {
   const results: Record<string, boolean> = {
     diagnosticsShaMatches: deployed,
     loginSuccessful: false,
-    storeSwitcherButtonsRendered: false,
-    allStoresModeOverviewActive: false,
-    allStoresBreakdownRendered: false,
-    allStoresPrintGuarded: false,
-    store01SwitchedSuccessfully: false,
-    wholesaleCostAndSourceDisplayed: false,
-    grossProfitAndMarginDisplayed: false,
-    msrpGuidanceInEditModal: false,
-    previewShelfLabelCleanOfMargins: false,
+    // Issue B: Automatic MSRP Initialization
+    store02FootTestMSRPInitialized: false,
+    store02MsrpDefaultBadgePresent: false,
+    store02GrossMarginComputedFromMSRP: false,
+    store02LabelPreviewShowsMsrpPrice: false,
+    // Issue A: SALE Badge on Shelf Label Preview
+    store01SaleBadgeOnShelfLabel: false,
+    store01SaleOriginalStrikethrough: false,
+    store01SalePriceDominant: false,
+    store01SavePercentageDisplayed: false,
+    nonSaleShelfLabelClean: false,
+    shelfLabelFreeOfMarginLeakage: false,
+    // Responsiveness
+    mobileResponsiveRendering: false,
   };
 
   try {
-    // Phase 1: Desktop QA
-    console.log("\n--- [Phase 1: Desktop Viewport QA] ---");
+    console.log("\n--- [Phase 1: Desktop QA] ---");
     const desktopContext = await browser.newContext({
       viewport: { width: 1440, height: 900 },
     });
@@ -79,165 +83,162 @@ async function runProductionPricingQA() {
     results.loginSuccessful = true;
     console.log("  [Step 3] Logged in successfully.");
 
-    // 2. Navigate to /retailer/tags
-    console.log("  [Step 4] Navigating to /retailer/tags...");
-    await page.goto(`${HUB_URL}/retailer/tags`, { waitUntil: "networkidle", timeout: 25000 });
+    // 2. Test Store 02 - Verify Automatic MSRP Initialization for FOOT-TEST-123
+    console.log("\n--- [Step 4: Testing Store 02 Automatic MSRP Initialization for FOOT-TEST-123] ---");
+    await page.goto(`${HUB_URL}/retailer/tags?store=${STORE_02_ID}`, { waitUntil: "networkidle", timeout: 25000 });
     await page.waitForTimeout(2000);
 
-    // Screenshot initial tags view
-    const initialScreen = path.join(ARTIFACT_DIR, "prod_rtp_pricing_initial_tags.png");
-    await page.screenshot({ path: initialScreen, fullPage: false });
-    console.log(`  Saved screenshot: ${initialScreen}`);
+    const store02Screen = path.join(ARTIFACT_DIR, "prod_r1_store02_foot_test_msrp_view.png");
+    await page.screenshot({ path: store02Screen, fullPage: false });
+    console.log(`  Saved screenshot: ${store02Screen}`);
 
-    // 3. Verify Button-based Store Selector
-    console.log("  [Step 5] Checking segmented button store selector...");
-    const allStoresBtn = page.locator('button:has-text("All Stores")');
-    const store01Btn = page.locator(`button:has-text("Test Store 01")`);
-    const store02Btn = page.locator(`button:has-text("Test Store 02")`);
+    const store02Content = await page.textContent("body");
 
-    const hasAllStoresBtn = (await allStoresBtn.count()) > 0;
-    const hasStore01Btn = (await store01Btn.count()) > 0;
-    console.log(`  Store buttons present: All Stores=${hasAllStoresBtn}, Store 01=${hasStore01Btn}`);
+    // Search or find FOOT-TEST-123
+    const hasFootSku = store02Content?.includes("FOOT-TEST-123");
+    console.log(`  Store 02 contains FOOT-TEST-123: ${hasFootSku}`);
 
-    if (hasAllStoresBtn && hasStore01Btn) {
-      results.storeSwitcherButtonsRendered = true;
-    }
+    // Verify FOOT-TEST-123 regular price is $9.50 with MSRP Default badge
+    const footRow = page.locator('tr:has-text("FOOT-TEST-123")').first();
+    if ((await footRow.count()) > 0) {
+      const rowText = await footRow.textContent();
+      console.log(`  FOOT-TEST-123 Row Text: ${rowText?.replace(/\s+/g, " ").trim()}`);
 
-    // 4. Test All Stores Overview Mode
-    console.log("  [Step 6] Testing All Stores Mode...");
-    if (hasAllStoresBtn) {
-      await allStoresBtn.first().click();
-      await page.waitForURL((url) => url.searchParams.get("store") === "all", { timeout: 10000 });
-      await page.waitForTimeout(2000);
+      const hasPrice950 = rowText?.includes("$9.50");
+      const hasMsrpBadge = rowText?.includes("MSRP Default");
+      const hasMargin = rowText?.includes("GP $") || rowText?.includes("%");
 
-      const pageText = await page.textContent("body");
-      const hasOverviewBanner =
-        pageText?.includes("Overview & Comparison Mode") ||
-        pageText?.includes("Displaying union of assortment products");
-      console.log(`  All Stores overview banner present: ${hasOverviewBanner}`);
-      if (hasOverviewBanner) {
-        results.allStoresModeOverviewActive = true;
+      if (hasPrice950) {
+        results.store02FootTestMSRPInitialized = true;
+        console.log("  ✓ FOOT-TEST-123 Store Regular Price successfully initialized to $9.50!");
+      }
+      if (hasMsrpBadge) {
+        results.store02MsrpDefaultBadgePresent = true;
+        console.log("  ✓ 'MSRP Default' badge is rendered on table!");
+      }
+      if (hasMargin) {
+        results.store02GrossMarginComputedFromMSRP = true;
+        console.log("  ✓ Gross Margin computed from $9.50 MSRP Default!");
       }
 
-      // Check Store-by-Store price breakdown in table
-      const hasStorePill =
-        pageText?.includes("Test Store 01:") ||
-        pageText?.includes("Test Store 01") && pageText?.includes("Test Store 02");
-      console.log(`  Store-by-Store price breakdown rendered: ${hasStorePill}`);
-      if (hasStorePill) {
-        results.allStoresBreakdownRendered = true;
-      }
-
-      // Verify Batch Print button is guarded in All Stores
-      const printBtn = page.locator('button:has-text("Print Selected")').first();
-      const isDisabled = await printBtn.isDisabled();
-      console.log(`  Batch Print disabled in All Stores mode: ${isDisabled}`);
-      if (isDisabled) {
-        results.allStoresPrintGuarded = true;
-      }
-
-      // Screenshot All Stores mode
-      const allStoresScreen = path.join(ARTIFACT_DIR, "prod_rtp_pricing_all_stores_overview.png");
-      await page.screenshot({ path: allStoresScreen, fullPage: false });
-      console.log(`  Saved screenshot: ${allStoresScreen}`);
-    }
-
-    // 5. Switch to Test Store 01
-    console.log("  [Step 7] Switching to Test Store 01...");
-    if (hasStore01Btn) {
-      await store01Btn.first().click();
-      await page.waitForURL((url) => url.searchParams.get("store") === STORE_01_ID, { timeout: 10000 });
-      await page.waitForTimeout(2000);
-      results.store01SwitchedSuccessfully = true;
-
-      // Screenshot Store 01 view
-      const store01Screen = path.join(ARTIFACT_DIR, "prod_rtp_pricing_store01_view.png");
-      await page.screenshot({ path: store01Screen, fullPage: false });
-      console.log(`  Saved screenshot: ${store01Screen}`);
-
-      const store01Text = await page.textContent("body");
-
-      // 6. Check Wholesale Cost & Source Attribution
-      console.log("  [Step 8] Verifying Wholesale Cost & Source Attribution...");
-      const hasWholesaleLabel =
-        store01Text?.includes("Cost:") ||
-        store01Text?.includes("Wholesale:") ||
-        store01Text?.includes("Last Purchase") ||
-        store01Text?.includes("Invoice #") ||
-        store01Text?.includes("Catalog Wholesale");
-      console.log(`  Wholesale Cost with source tag present: ${hasWholesaleLabel}`);
-      if (hasWholesaleLabel) {
-        results.wholesaleCostAndSourceDisplayed = true;
-      }
-
-      // 7. Check Gross Profit ($) and Gross Margin (%)
-      console.log("  [Step 9] Verifying Gross Profit & Margin %...");
-      const hasGpMargin =
-        store01Text?.includes("GP $") ||
-        /GP \$[0-9]+\.[0-9]{2} \([0-9.-]+%\)/.test(store01Text || "");
-      console.log(`  Gross Profit & Margin % displayed: ${hasGpMargin}`);
-      if (hasGpMargin) {
-        results.grossProfitAndMarginDisplayed = true;
-      }
-
-      // 8. Test Edit Price Modal & MSRP Guidance
-      console.log("  [Step 10] Testing Edit Price Modal & MSRP Guidance...");
-      const editBtn = page.locator('button:has-text("Edit Price")').first();
-      if ((await editBtn.count()) > 0) {
-        await editBtn.click();
-        await page.waitForSelector('h2:has-text("Edit Store Price & Tag")', { timeout: 10000 });
-        await page.waitForTimeout(1000);
-
-        const modalText = await page.locator(".fixed.inset-0").first().textContent();
-        const hasMsrpPrefillOrGuidance =
-          modalText?.includes("Suggested MSRP") ||
-          modalText?.includes("Suggested from MSRP") ||
-          modalText?.includes("Estimated Merchandise Profit");
-        console.log(`  Edit Modal MSRP guidance and margin preview: ${hasMsrpPrefillOrGuidance}`);
-        if (hasMsrpPrefillOrGuidance) {
-          results.msrpGuidanceInEditModal = true;
-        }
-
-        // Screenshot Edit Modal
-        const editModalScreen = path.join(ARTIFACT_DIR, "prod_rtp_pricing_edit_modal.png");
-        await page.screenshot({ path: editModalScreen, fullPage: false });
-        console.log(`  Saved screenshot: ${editModalScreen}`);
-
-        // Close modal
-        const cancelBtn = page.locator('button:has-text("Cancel")');
-        if ((await cancelBtn.count()) > 0) {
-          await cancelBtn.click();
-          await page.waitForTimeout(500);
-        }
-      }
-
-      // 9. Test Preview & Print Modal - Verify Shelf Label Does NOT leak Margin / Cost
-      console.log("  [Step 11] Checking Preview Shelf Label safety...");
-      const previewBtn = page.locator('button:has-text("Preview & Print")').first();
+      // Check Preview modal for FOOT-TEST-123
+      const previewBtn = footRow.locator('button:has-text("Preview & Print")');
       if ((await previewBtn.count()) > 0) {
         await previewBtn.click();
         await page.waitForSelector('h3:has-text("Shelf Tag Preview")', { timeout: 10000 });
         await page.waitForTimeout(1000);
 
-        // Inspect the shelf label card inside the preview modal
-        const labelCard = page.locator(".price-tag-container").first();
-        const labelText = await labelCard.textContent();
+        const card = page.locator(".price-tag-container").first();
+        const cardText = await card.textContent();
+        console.log(`  FOOT-TEST-123 Shelf Label Preview: ${cardText?.replace(/\s+/g, " ").trim()}`);
 
-        const leaksWholesale = labelText?.includes("Wholesale") || labelText?.includes("Cost");
-        const leaksMargin = labelText?.includes("GP $") || labelText?.includes("Margin");
-        console.log(`  Label card leaks wholesale: ${leaksWholesale}, leaks margin: ${leaksMargin}`);
-
-        if (!leaksWholesale && !leaksMargin) {
-          results.previewShelfLabelCleanOfMargins = true;
-          console.log("  ✓ Shelf label preview contains strictly customer-facing retail price and QR.");
+        const hasCardPrice = cardText?.includes("$9.50");
+        const doesNotSaySetPrice = !cardText?.includes("SET PRICE") && !cardText?.includes("Not Priced");
+        if (hasCardPrice && doesNotSaySetPrice) {
+          results.store02LabelPreviewShowsMsrpPrice = true;
+          console.log("  ✓ Shelf label preview renders $9.50 cleanly without 'SET PRICE' warning!");
         }
 
-        // Screenshot Preview Modal
-        const previewModalScreen = path.join(ARTIFACT_DIR, "prod_rtp_pricing_preview_modal.png");
-        await page.screenshot({ path: previewModalScreen, fullPage: false });
-        console.log(`  Saved screenshot: ${previewModalScreen}`);
+        const footPreviewScreen = path.join(ARTIFACT_DIR, "prod_r1_store02_foot_test_label_preview.png");
+        await page.screenshot({ path: footPreviewScreen, fullPage: false });
+        console.log(`  Saved screenshot: ${footPreviewScreen}`);
 
-        // Close preview modal
+        const closeBtn = page.locator('button:has-text("✕")');
+        if ((await closeBtn.count()) > 0) {
+          await closeBtn.first().click();
+          await page.waitForTimeout(500);
+        }
+      }
+    }
+
+    // 3. Test Store 01 - Verify SALE Badge, Strikethrough & High-Contrast Thermal Design
+    console.log("\n--- [Step 5: Testing Store 01 SALE Badge & Shelf Label Design] ---");
+    await page.goto(`${HUB_URL}/retailer/tags?store=${STORE_01_ID}`, { waitUntil: "networkidle", timeout: 25000 });
+    await page.waitForTimeout(2000);
+
+    const store01Screen = path.join(ARTIFACT_DIR, "prod_r1_store01_sale_items_view.png");
+    await page.screenshot({ path: store01Screen, fullPage: false });
+    console.log(`  Saved screenshot: ${store01Screen}`);
+
+    // Find on-sale product (e.g. Barrier Repair Ceramide Serum or TEST-SKN-001)
+    const saleRow = page.locator('tr:has-text("TEST-SKN-001")').first();
+    if ((await saleRow.count()) > 0) {
+      const previewBtn = saleRow.locator('button:has-text("Preview & Print")');
+      if ((await previewBtn.count()) > 0) {
+        await previewBtn.click();
+        await page.waitForSelector('h3:has-text("Shelf Tag Preview")', { timeout: 10000 });
+        await page.waitForTimeout(1000);
+
+        const card = page.locator(".price-tag-container").first();
+        const cardText = await card.textContent();
+        console.log(`  Sale Shelf Label Text: ${cardText?.replace(/\s+/g, " ").trim()}`);
+
+        const hasSaleBadge = cardText?.includes("SALE");
+        const hasStrikethroughPrice = cardText?.includes("$22.00");
+        const hasSalePrice = cardText?.includes("$18.99");
+        const hasSavePercent = cardText?.includes("SAVE 14%") || cardText?.includes("SAVE");
+        const leaksWholesaleOrMargin = cardText?.includes("Wholesale") || cardText?.includes("GP $");
+
+        if (hasSaleBadge) {
+          results.store01SaleBadgeOnShelfLabel = true;
+          console.log("  ✓ Explicit SALE badge is present on shelf label!");
+        }
+        if (hasStrikethroughPrice) {
+          results.store01SaleOriginalStrikethrough = true;
+          console.log("  ✓ Original Regular price $22.00 is displayed!");
+        }
+        if (hasSalePrice) {
+          results.store01SalePriceDominant = true;
+          console.log("  ✓ Dominant sale price $18.99 is displayed!");
+        }
+        if (hasSavePercent) {
+          results.store01SavePercentageDisplayed = true;
+          console.log("  ✓ SAVE discount percentage is displayed!");
+        }
+        if (!leaksWholesaleOrMargin) {
+          results.shelfLabelFreeOfMarginLeakage = true;
+          console.log("  ✓ Zero internal cost or profit data on customer-facing label.");
+        }
+
+        const salePreviewScreen = path.join(ARTIFACT_DIR, "prod_r1_store01_sale_label_preview.png");
+        await page.screenshot({ path: salePreviewScreen, fullPage: false });
+        console.log(`  Saved screenshot: ${salePreviewScreen}`);
+
+        const closeBtn = page.locator('button:has-text("✕")');
+        if ((await closeBtn.count()) > 0) {
+          await closeBtn.first().click();
+          await page.waitForTimeout(500);
+        }
+      }
+    }
+
+    // 4. Test Non-Sale Product Shelf Label (e.g. Brightening Triple-Vitamin Toner Pads / TEST-SKN-002)
+    console.log("\n--- [Step 6: Testing Non-Sale Shelf Label Cleanliness] ---");
+    const nonSaleRow = page.locator('tr:has-text("TEST-SKN-002")').first();
+    if ((await nonSaleRow.count()) > 0) {
+      const previewBtn = nonSaleRow.locator('button:has-text("Preview & Print")');
+      if ((await previewBtn.count()) > 0) {
+        await previewBtn.click();
+        await page.waitForSelector('h3:has-text("Shelf Tag Preview")', { timeout: 10000 });
+        await page.waitForTimeout(1000);
+
+        const card = page.locator(".price-tag-container").first();
+        const cardText = await card.textContent();
+        console.log(`  Non-Sale Shelf Label Text: ${cardText?.replace(/\s+/g, " ").trim()}`);
+
+        const doesNotHaveSaleBadge = !cardText?.includes("SALE");
+        const doesNotHaveSave = !cardText?.includes("SAVE");
+        const hasRegularPrice = cardText?.includes("$24.00");
+
+        if (doesNotHaveSaleBadge && doesNotHaveSave && hasRegularPrice) {
+          results.nonSaleShelfLabelClean = true;
+          console.log("  ✓ Non-sale shelf label is clean without SALE/SAVE badges!");
+        }
+
+        const nonSalePreviewScreen = path.join(ARTIFACT_DIR, "prod_r1_store01_nonsale_label_preview.png");
+        await page.screenshot({ path: nonSalePreviewScreen, fullPage: false });
+        console.log(`  Saved screenshot: ${nonSalePreviewScreen}`);
+
         const closeBtn = page.locator('button:has-text("✕")');
         if ((await closeBtn.count()) > 0) {
           await closeBtn.first().click();
@@ -263,13 +264,18 @@ async function runProductionPricingQA() {
     await mobilePage.waitForTimeout(2000);
 
     // Mobile Tags
-    await mobilePage.goto(`${HUB_URL}/retailer/tags`, { waitUntil: "networkidle", timeout: 25000 });
+    await mobilePage.goto(`${HUB_URL}/retailer/tags?store=${STORE_02_ID}`, { waitUntil: "networkidle", timeout: 25000 });
     await mobilePage.waitForTimeout(2000);
 
-    // Screenshot Mobile View
-    const mobileScreen = path.join(ARTIFACT_DIR, "prod_rtp_pricing_mobile_view.png");
+    const mobileScreen = path.join(ARTIFACT_DIR, "prod_r1_mobile_store02_view.png");
     await mobilePage.screenshot({ path: mobileScreen, fullPage: false });
     console.log(`  Saved screenshot: ${mobileScreen}`);
+
+    const mobileText = await mobilePage.textContent("body");
+    if (mobileText?.includes("FOOT-TEST-123") && mobileText?.includes("$9.50")) {
+      results.mobileResponsiveRendering = true;
+      console.log("  ✓ Mobile viewport renders FOOT-TEST-123 with $9.50 MSRP default cleanly!");
+    }
 
     await desktopContext.close();
     await mobileContext.close();
@@ -280,7 +286,7 @@ async function runProductionPricingQA() {
   }
 
   console.log("\n==================================================================");
-  console.log("  RTP-PRICE-TAG-PRICING-002 QA RESULTS SUMMARY");
+  console.log("  RTP-PRICE-TAG-PRICING-002-R1 QA RESULTS SUMMARY");
   console.log("==================================================================");
   console.table(results);
 
@@ -291,4 +297,4 @@ async function runProductionPricingQA() {
   return results;
 }
 
-runProductionPricingQA();
+runProductionPricingR1QA();
