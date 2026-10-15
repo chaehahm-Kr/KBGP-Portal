@@ -7,7 +7,7 @@ const TEST_PASSWORD = process.env.TEST_RETAILER_PASSWORD || "Password123!@#";
 
 const STORE_01_ID = "effe7832-096c-4ae1-86c7-3cb189b59731";
 const STORE_02_ID = "34bb2857-01dd-4d6e-bfd4-7112eec1ac1f";
-const TARGET_COMMIT = "79f9f28";
+const TARGET_COMMIT = "b993ea7";
 
 const ARTIFACT_DIR = "C:/Users/ChaeHahm/.gemini/antigravity/brain/945ab025-0f8f-4fce-b0bc-56237108874e";
 
