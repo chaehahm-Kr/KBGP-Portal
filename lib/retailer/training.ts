@@ -4,6 +4,7 @@ import { verifyRetailerSession } from "@/lib/auth/dal";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { formatCategoryName } from "@/lib/retailer/products";
 import { getRetailerAccessibleStores } from "@/lib/retailer/weekly-check";
+import { resolveAuthoritativeProductImages } from "@/lib/retailer/product-images";
 
 export interface TrainingProductSummary {
   id: string;
@@ -89,13 +90,15 @@ export interface TrainingProductDetail extends TrainingProductSummary {
 
 export interface TrainingProgressStats {
   totalCount: number;
+  availableCount: number;
   completedCount: number;
+  toLearnCount: number;
   percent: number;
 }
 
 /**
- * Fetch Store-specific Training Products list for authenticated user
- * Incorporates the authoritative Union Set (Active Store Products + Valid Orders)
+ * Fetch Store-specific or Company-Wide Training Products list for authenticated user
+ * Incorporates the authoritative Union Set (Active Store Products + Valid Orders + Counted Weekly Checks)
  */
 export async function getRetailerTrainingProducts(filters: {
   storeId?: string;
@@ -105,7 +108,7 @@ export async function getRetailerTrainingProducts(filters: {
   products: TrainingProductSummary[];
   stats: TrainingProgressStats;
   stores: Array<{ id: string; name: string }>;
-  selectedStoreId: string | null;
+  selectedStoreId: string;
   userRole: string;
 }> {
   const session = await verifyRetailerSession();
@@ -115,30 +118,37 @@ export async function getRetailerTrainingProducts(filters: {
   if (!companyId || stores.length === 0) {
     return {
       products: [],
-      stats: { totalCount: 0, completedCount: 0, percent: 0 },
+      stats: { totalCount: 0, availableCount: 0, completedCount: 0, toLearnCount: 0, percent: 0 },
       stores: [],
-      selectedStoreId: null,
+      selectedStoreId: "all",
       userRole: userRole || "employee",
     };
   }
 
-  // Determine active store
-  const selectedStoreId =
-    filters.storeId && stores.some((s: { id: string }) => s.id === filters.storeId)
-      ? filters.storeId
-      : stores[0].id;
+  // Determine active store view: default is "all"
+  const isAllStores = !filters.storeId || filters.storeId === "all";
+  const selectedStoreId = isAllStores
+    ? "all"
+    : stores.some((s: { id: string }) => s.id === filters.storeId)
+    ? filters.storeId!
+    : "all";
 
-  // 1. Fetch store assortment union set (retailer_store_products + valid retailer_orders)
+  // 1. Fetch store assortment union set (retailer_store_products + valid retailer_orders + submitted weekly checks)
   const storeAssortmentIds = new Set<string>();
 
   // A. Active store assortment products
   try {
-    const { data: storeProducts } = await adminClient
+    let spQuery = adminClient
       .from("retailer_store_products")
       .select("product_id")
-      .eq("store_id", selectedStoreId)
+      .eq("company_id", companyId)
       .eq("is_active", true);
 
+    if (selectedStoreId !== "all") {
+      spQuery = spQuery.eq("store_id", selectedStoreId);
+    }
+
+    const { data: storeProducts } = await spQuery;
     (storeProducts || []).forEach((sp) => {
       if (sp.product_id) storeAssortmentIds.add(sp.product_id);
     });
@@ -146,20 +156,26 @@ export async function getRetailerTrainingProducts(filters: {
     console.warn("Error fetching store products for training:", err);
   }
 
-  // B. Products from valid non-cancelled orders for this store
+  // B. Products from valid non-cancelled orders for this company & store
   try {
-    const { data: storeOrders } = await adminClient
+    let ordQuery = adminClient
       .from("retailer_orders")
       .select(`
         id,
+        store_id,
         order_status,
         retailer_order_items (
           product_id
         )
       `)
-      .eq("store_id", selectedStoreId)
+      .eq("company_id", companyId)
       .in("order_status", ["confirmed", "processing", "partially_shipped", "shipped", "delivered"]);
 
+    if (selectedStoreId !== "all") {
+      ordQuery = ordQuery.eq("store_id", selectedStoreId);
+    }
+
+    const { data: storeOrders } = await ordQuery;
     (storeOrders || []).forEach((order) => {
       const items = (order.retailer_order_items as any[]) || [];
       items.forEach((it) => {
@@ -170,19 +186,51 @@ export async function getRetailerTrainingProducts(filters: {
     console.warn("Error fetching store orders for training:", err);
   }
 
+  // C. Products counted in submitted weekly checks for this company & store
+  try {
+    let chkQuery = adminClient
+      .from("retailer_weekly_checks")
+      .select(`
+        id,
+        store_id,
+        retailer_weekly_check_items (
+          product_id,
+          is_counted
+        )
+      `)
+      .eq("company_id", companyId)
+      .eq("status", "submitted");
+
+    if (selectedStoreId !== "all") {
+      chkQuery = chkQuery.eq("store_id", selectedStoreId);
+    }
+
+    const { data: checks } = await chkQuery;
+    (checks || []).forEach((c) => {
+      const items = (c.retailer_weekly_check_items as any[]) || [];
+      items.forEach((it) => {
+        if (it.is_counted && it.product_id) {
+          storeAssortmentIds.add(it.product_id);
+        }
+      });
+    });
+  } catch (err) {
+    console.warn("Error fetching weekly checks for training:", err);
+  }
+
   const productIds = Array.from(storeAssortmentIds);
 
   if (productIds.length === 0) {
     return {
       products: [],
-      stats: { totalCount: 0, completedCount: 0, percent: 0 },
+      stats: { totalCount: 0, availableCount: 0, completedCount: 0, toLearnCount: 0, percent: 0 },
       stores,
       selectedStoreId,
       userRole,
     };
   }
 
-  // 2. Fetch candidate products with images, brand, overrides
+  // 2. Fetch candidate products with brand and pricing details
   const { data: rawProducts, error } = await adminClient
     .from("products")
     .select(`
@@ -201,11 +249,6 @@ export async function getRetailerTrainingProducts(filters: {
       brands (
         id,
         name
-      ),
-      product_images (
-        id,
-        storage_path,
-        position
       )
     `)
     .in("id", productIds)
@@ -214,7 +257,7 @@ export async function getRetailerTrainingProducts(filters: {
   if (error || !rawProducts) {
     return {
       products: [],
-      stats: { totalCount: 0, completedCount: 0, percent: 0 },
+      stats: { totalCount: 0, availableCount: 0, completedCount: 0, toLearnCount: 0, percent: 0 },
       stores,
       selectedStoreId,
       userRole,
@@ -254,12 +297,15 @@ export async function getRetailerTrainingProducts(filters: {
     // table might be pending migration or empty
   }
 
-  // 5. Map and sign thumbnail images & determine training status
+  // 5. Authoritative Image Resolution & Training Product Summaries
+  const imageMap = await resolveAuthoritativeProductImages(adminClient, productIds);
   const allSummaries: TrainingProductSummary[] = [];
 
   for (const p of rawProducts) {
     const info = (p.price_additional_info as any) || {};
-    if (info.deleted_at || (p as any).deleted_at) continue;
+    // Note: Do not drop products on brand-portal soft-delete (info.deleted_at),
+    // because historical retailer purchases and store inventory remain company-eligible learning assets.
+    if ((p as any).deleted_at) continue;
 
     const overrides = info.admin_overrides || {};
     const brand = (p.brands as any) || {};
@@ -270,22 +316,7 @@ export async function getRetailerTrainingProducts(filters: {
       resolveEffectiveSku(overrides.manufacture_sku, p.manufacture_sku) ||
       "KS-PROD";
 
-    // Primary image
-    const rawImages = (p.product_images as any[]) || [];
-    const sortedImages = [...rawImages].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-    let thumbnailUrl: string | null = null;
-
-    if (sortedImages.length > 0 && sortedImages[0].storage_path) {
-      try {
-        const { data: signed } = await adminClient.storage
-          .from("company-uploads")
-          .createSignedUrl(sortedImages[0].storage_path, 7200);
-        thumbnailUrl = signed?.signedUrl || null;
-      } catch {
-        // ignore
-      }
-    }
-
+    const thumbnailUrl = imageMap[p.id]?.primaryUrl || null;
     const isCompleted = userProgressMap.has(p.id);
     const completedAt = userProgressMap.get(p.id) || null;
 
@@ -330,15 +361,17 @@ export async function getRetailerTrainingProducts(filters: {
     });
   }
 
-  // Calculate overall stats for this store assortment
+  // Calculate overall stats for this view
   const totalCount = allSummaries.length;
-  const completedCount = allSummaries.filter((p) => p.isCompleted).length;
-  const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const availableCount = allSummaries.filter((p) => p.trainingStatus === "published").length;
+  const completedCount = allSummaries.filter((p) => p.trainingStatus === "published" && p.isCompleted).length;
+  const toLearnCount = availableCount - completedCount;
+  const percent = availableCount > 0 ? Math.round((completedCount / availableCount) * 100) : 0;
 
   // 6. Apply search and status filters
   let filtered = allSummaries;
 
-  if (filters.search) {
+  if (filters.search && filters.search.trim()) {
     const q = filters.search.toLowerCase().trim();
     filtered = filtered.filter(
       (p) =>
@@ -352,12 +385,19 @@ export async function getRetailerTrainingProducts(filters: {
   if (filters.statusFilter === "completed") {
     filtered = filtered.filter((p) => p.isCompleted);
   } else if (filters.statusFilter === "not_completed") {
-    filtered = filtered.filter((p) => !p.isCompleted);
+    // Only published trainings that are not yet completed
+    filtered = filtered.filter((p) => p.trainingStatus === "published" && !p.isCompleted);
   }
 
   return {
     products: filtered,
-    stats: { totalCount, completedCount, percent },
+    stats: {
+      totalCount,
+      availableCount,
+      completedCount,
+      toLearnCount,
+      percent,
+    },
     stores,
     selectedStoreId,
     userRole,

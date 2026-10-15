@@ -15,6 +15,7 @@ export const metadata: Metadata = {
 interface RetailerTrainingPageProps {
   searchParams: Promise<{
     storeId?: string;
+    store?: string;
     q?: string;
     status?: "all" | "completed" | "not_completed";
   }>;
@@ -24,12 +25,13 @@ export default async function RetailerTrainingPage({
   searchParams,
 }: RetailerTrainingPageProps) {
   await verifyRetailerSession();
-  const { storeId, q, status } = await searchParams;
+  const resolvedParams = await searchParams;
+  const storeFilter = resolvedParams.store || resolvedParams.storeId;
 
   const data = await getRetailerTrainingProducts({
-    storeId,
-    search: q,
-    statusFilter: status,
+    storeId: storeFilter,
+    search: resolvedParams.q,
+    statusFilter: resolvedParams.status,
   });
 
   return (

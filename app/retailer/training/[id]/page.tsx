@@ -13,6 +13,7 @@ interface RetailerTrainingDetailPageProps {
   }>;
   searchParams: Promise<{
     storeId?: string;
+    store?: string;
   }>;
 }
 
@@ -22,7 +23,8 @@ export default async function RetailerTrainingDetailPage({
 }: RetailerTrainingDetailPageProps) {
   await verifyRetailerSession();
   const { id: productId } = await params;
-  const { storeId } = await searchParams;
+  const sp = await searchParams;
+  const storeId = sp.store || sp.storeId;
 
   const product = await getRetailerTrainingDetail(productId, storeId);
 

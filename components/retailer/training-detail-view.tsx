@@ -84,19 +84,20 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
     });
   };
 
-  const backUrl = `/training${storeId ? `?storeId=${storeId}` : ""}`;
+  const storeQuery = storeId && storeId !== "all" ? `?store=${storeId}` : "";
+  const backUrl = `/training${storeQuery}`;
   const nextUrl = product.nextProductId
-    ? `/training/${product.nextProductId}${storeId ? `?storeId=${storeId}` : ""}`
+    ? `/training/${product.nextProductId}${storeQuery}`
     : null;
   const prevUrl = product.prevProductId
-    ? `/training/${product.prevProductId}${storeId ? `?storeId=${storeId}` : ""}`
+    ? `/training/${product.prevProductId}${storeQuery}`
     : null;
 
   const currentImage = product.images[selectedImageIndex]?.url || product.thumbnailUrl;
   const isQuizPassed = hasQuiz && (quizPassed || (isCompleted && !quizSubmitted));
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-24">
+    <div className="w-full max-w-5xl space-y-6 pb-24">
       {/* Top Navigation & Breadcrumbs */}
       <div className="flex items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-4">
         <Link
@@ -205,10 +206,21 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
                 src={currentImage}
                 alt={product.name}
                 className="w-full h-full object-contain drop-shadow-sm"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  const fallback = e.currentTarget.parentElement?.querySelector(".fallback-placeholder");
+                  if (fallback) (fallback as HTMLElement).style.display = "flex";
+                }}
               />
-            ) : (
-              <div className="text-5xl text-zinc-300 dark:text-zinc-600">📦</div>
-            )}
+            ) : null}
+            <div
+              className={`fallback-placeholder w-full h-full flex-col items-center justify-center text-center p-3 space-y-1 ${
+                currentImage ? "hidden" : "flex"
+              }`}
+            >
+              <span className="text-5xl text-zinc-300 dark:text-zinc-600">📦</span>
+              <span className="text-xs font-bold text-zinc-500 line-clamp-1">{product.brandName}</span>
+            </div>
             <div className="absolute top-3 left-3">
               <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-zinc-900 text-white">
                 {product.brandName}

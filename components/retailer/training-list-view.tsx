@@ -2,15 +2,14 @@
 
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { TrainingProductSummary, TrainingProgressStats } from "@/lib/retailer/training";
 
 interface TrainingListViewProps {
   products: TrainingProductSummary[];
   stats: TrainingProgressStats;
   stores: Array<{ id: string; name: string }>;
-  selectedStoreId: string | null;
+  selectedStoreId: string;
   userRole: string;
 }
 
@@ -22,6 +21,7 @@ export function TrainingListView({
   userRole,
 }: TrainingListViewProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
   const [activeTab, setActiveTab] = useState<"all" | "not_completed" | "completed">("all");
@@ -30,15 +30,24 @@ export function TrainingListView({
   const handleStoreChange = (storeId: string) => {
     startTransition(() => {
       const params = new URLSearchParams(searchParams.toString());
-      params.set("storeId", storeId);
-      router.push(`?${params.toString()}`);
+      if (storeId === "all") {
+        params.delete("store");
+        params.delete("storeId");
+      } else {
+        params.set("store", storeId);
+        params.delete("storeId");
+      }
+      router.push(`${pathname}?${params.toString()}`);
     });
   };
 
   // Filter products by search query and active tab
   const filteredProducts = products.filter((p) => {
     if (activeTab === "completed" && !p.isCompleted) return false;
-    if (activeTab === "not_completed" && p.isCompleted) return false;
+    if (activeTab === "not_completed") {
+      // Only actionable incomplete published modules
+      if (p.trainingStatus !== "published" || p.isCompleted) return false;
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -51,12 +60,10 @@ export function TrainingListView({
     return true;
   });
 
-  const notCompletedCount = stats.totalCount - stats.completedCount;
-
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-12">
-      {/* Header & Store Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
+    <div className="w-full space-y-6 pb-12">
+      {/* Header & Store Button Selector */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-2xl">🎓</span>
@@ -65,26 +72,41 @@ export function TrainingListView({
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Learn key benefits, how to use, selling points, and customer talk-tracks for products carried in your store.
+            Company-wide product knowledge, verified benefits, customer talk-tracks, and quick staff assessments.
           </p>
         </div>
 
-        {stores.length > 1 && (
-          <div className="flex items-center gap-2 self-start sm:self-auto bg-zinc-100 dark:bg-zinc-800/80 p-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700">
-            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 pl-2">
-              Store:
-            </span>
-            <select
-              value={selectedStoreId || ""}
-              onChange={(e) => handleStoreChange(e.target.value)}
-              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs font-bold text-zinc-900 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        {/* Store Selector: All Stores / Store 01 / Store 02 */}
+        {stores.length > 0 && (
+          <div className="flex items-center gap-1.5 p-1 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl border border-zinc-200 dark:border-zinc-700/60 overflow-x-auto no-scrollbar max-w-full">
+            <button
+              type="button"
+              onClick={() => handleStoreChange("all")}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                selectedStoreId === "all"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
+              }`}
             >
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>
+              All Stores
+            </button>
+            {stores.map((s) => {
+              const isSelected = selectedStoreId === s.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => handleStoreChange(s.id)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    isSelected
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
+                  }`}
+                >
                   {s.name}
-                </option>
-              ))}
-            </select>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -95,22 +117,27 @@ export function TrainingListView({
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/20 text-white backdrop-blur-sm">
-                Store Assortment Training
+                My Training Progress
               </span>
               <span className="text-xs text-blue-100 font-medium">
-                {stores.find((s) => s.id === selectedStoreId)?.name || "Current Store"}
+                {selectedStoreId === "all"
+                  ? "All Stores (Company View)"
+                  : stores.find((s) => s.id === selectedStoreId)?.name || "Selected Store"}
               </span>
             </div>
             <h2 className="text-lg sm:text-xl font-black">
-              {stats.completedCount === stats.totalCount && stats.totalCount > 0
-                ? "🎉 All Store Products Completed!"
-                : `${stats.completedCount} of ${stats.totalCount} Products Completed`}
+              {stats.availableCount > 0 && stats.completedCount === stats.availableCount
+                ? "🎉 All Available Trainings Completed!"
+                : `${stats.completedCount} of ${stats.availableCount} Available Trainings Completed`}
             </h2>
             <p className="text-xs sm:text-sm text-blue-100 max-w-xl leading-relaxed">
-              {stats.completedCount === stats.totalCount && stats.totalCount > 0
-                ? "Excellent job! You have completed staff training for all active products carried by your store."
-                : "Complete each quick 1-minute product guide to feel confident answering customer questions and recommending K-Beauty essentials."}
+              Complete each quick 1-minute product guide to feel confident answering customer questions and recommending K-Beauty essentials.
             </p>
+            <div className="pt-1">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-white/10 text-blue-100 border border-white/15">
+                {stats.totalCount} {selectedStoreId === "all" ? "Company" : "Store"} Products Eligible
+              </span>
+            </div>
           </div>
 
           <div className="flex flex-col items-start md:items-end gap-1.5 min-w-[160px]">
@@ -141,7 +168,7 @@ export function TrainingListView({
                 : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
             }`}
           >
-            All ({stats.totalCount})
+            All Products ({stats.totalCount})
           </button>
           <button
             type="button"
@@ -152,7 +179,7 @@ export function TrainingListView({
                 : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
             }`}
           >
-            To Learn ({notCompletedCount})
+            To Learn ({stats.toLearnCount})
           </button>
           <button
             type="button"
@@ -219,7 +246,7 @@ export function TrainingListView({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {filteredProducts.map((product) => {
-            const detailUrl = `/training/${product.id}${selectedStoreId ? `?storeId=${selectedStoreId}` : ""}`;
+            const detailUrl = `/training/${product.id}${selectedStoreId && selectedStoreId !== "all" ? `?storeId=${selectedStoreId}` : ""}`;
 
             return (
               <div
@@ -237,10 +264,22 @@ export function TrainingListView({
                       src={product.thumbnailUrl}
                       alt={product.name}
                       className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        const fallback = e.currentTarget.parentElement?.querySelector(".fallback-placeholder");
+                        if (fallback) (fallback as HTMLElement).style.display = "flex";
+                      }}
                     />
-                  ) : (
-                    <div className="text-3xl text-zinc-300 dark:text-zinc-600">📦</div>
-                  )}
+                  ) : null}
+                  <div
+                    className={`fallback-placeholder w-full h-full flex-col items-center justify-center text-center p-3 space-y-1 ${
+                      product.thumbnailUrl ? "hidden" : "flex"
+                    }`}
+                  >
+                    <span className="text-3xl text-zinc-300 dark:text-zinc-600">📦</span>
+                    <span className="text-[10px] font-bold text-zinc-500 line-clamp-1">{product.brandName}</span>
+                    <span className="text-[9px] font-mono text-zinc-400">{product.sku}</span>
+                  </div>
 
                   {/* Brand & Category pill */}
                   <div className="absolute top-3 left-3 flex flex-col gap-1 items-start">
@@ -261,7 +300,7 @@ export function TrainingListView({
                       </span>
                     ) : product.trainingStatus === "unavailable" ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-100 text-zinc-500 dark:bg-zinc-800/90 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
-                        Training Not Available Yet
+                        Training Not Available
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
@@ -302,7 +341,7 @@ export function TrainingListView({
                         disabled
                         className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-800/60 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-200 dark:border-zinc-700/60"
                       >
-                        <span>Training Not Ready</span>
+                        <span>Training Not Available</span>
                       </button>
                     ) : product.trainingStatus === "preparing" ? (
                       <button
