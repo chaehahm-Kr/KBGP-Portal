@@ -502,8 +502,37 @@ export async function getContentProductDetail(productId: string): Promise<Conten
     customerPageStatus = "missing";
   }
 
-  const trainingStatus: TrainingStatus =
-    contentMeta.training_status || (info.training_ready ? "ready" : "missing");
+  let trainingStatus: TrainingStatus = "missing";
+  try {
+    const { data: trainingRow } = await adminSupabase
+      .from("retailer_product_training_content")
+      .select("status, is_published")
+      .eq("product_id", p.id)
+      .maybeSingle();
+
+    if (trainingRow) {
+      if (trainingRow.status === "published" || trainingRow.is_published) {
+        trainingStatus = "published";
+      } else if (trainingRow.status === "in_review") {
+        trainingStatus = "in_review";
+      } else if (trainingRow.status === "archived") {
+        trainingStatus = "archived";
+      } else {
+        trainingStatus = "draft";
+      }
+    } else if (info.training_draft) {
+      trainingStatus = "draft";
+    } else if (contentMeta.training_status) {
+      trainingStatus = contentMeta.training_status;
+    } else if (info.training_ready) {
+      trainingStatus = "ready";
+    } else {
+      trainingStatus = "missing";
+    }
+  } catch (err) {
+    console.warn("[getContentProductDetail] Warning fetching training content:", err);
+    trainingStatus = contentMeta.training_status || (info.training_ready ? "ready" : "missing");
+  }
 
   // Fetch product_faqs for authoritative status (Ready, Draft, Empty)
   let faqStatus: FaqStatus = "empty";

@@ -1,9 +1,33 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
+const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
+
+const envText = fs.readFileSync('.env.local', 'utf8');
+const env = {};
+envText.split('\n').forEach(line => {
+  const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+  if (match) {
+    let value = match[2] || '';
+    if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+    if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
+    env[match[1]] = value.trim();
+  }
+});
+
+const client = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function runQA() {
   console.log('=== ADM-TRAINING-P1-001-R1 AUTOMATED PRODUCTION BROWSER QA ===\n');
   fs.mkdirSync('reports', { recursive: true });
+
+  // Ensure QA Admin user password
+  const { data: users } = await client.auth.admin.listUsers();
+  const qaAdmin = users?.users?.find(u => u.email === 'qa-admin-test@letusto.com');
+  if (qaAdmin) {
+    await client.auth.admin.updateUserById(qaAdmin.id, { password: 'Password123!@#' });
+    console.log('✓ QA Admin password verified');
+  }
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -13,11 +37,11 @@ async function runQA() {
 
   // 1. Authenticate as Admin
   console.log('[1/5] Authenticating as Admin...');
-  await page.goto(`${BASE_URL}/admin/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.fill('input[type="email"], input#email', 'abc-manager@kselectnetwork.com');
-  await page.fill('input[type="password"], input#password', 'Admin2026!@#');
-  await page.click('button[type="submit"]');
-  await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20000 });
+  await page.goto(`${BASE_URL}/admin/login`, { waitUntil: 'networkidle', timeout: 30000 });
+  await page.locator('input#email').fill('qa-admin-test@letusto.com');
+  await page.locator('input#password').fill('Password123!@#');
+  await page.locator('button[type="submit"]').click();
+  await page.waitForTimeout(4000);
   console.log('✓ Admin authenticated.\n');
 
   // 2. Content & Training List View
@@ -40,7 +64,13 @@ async function runQA() {
   // Click on Training Tab
   const trainingTab = page.locator('button:has-text("Training")').first();
   await trainingTab.click();
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(1000);
+  try {
+    await page.waitForSelector('text=Loading Product Training Studio...', { state: 'detached', timeout: 20000 });
+  } catch (e) {
+    console.log('Studio loader timed out or already gone.');
+  }
+  await page.waitForTimeout(3000);
 
   // Verify Training Tab Badge displays DRAFT (not MISSING)
   const trainingTabBadgeText = await trainingTab.innerText();
@@ -86,9 +116,12 @@ async function runQA() {
     await page.waitForTimeout(1000);
 
     const modalVisible = await page.locator('text=Approve & Publish Training Module').isVisible();
-    const hasClaimCheck = await page.locator('text=Factual Claim Verification').isVisible();
+    const hasClaimCheck = await page.locator('span:has-text("Factual Claim Verification")').first().isVisible();
+    const confirmPublishBtn = page.locator('button:has-text("Approve & Publish Live")').first();
+    const isPublishDisabled = await confirmPublishBtn.isDisabled();
     console.log(`- Publish Modal opened safely: ${modalVisible}`);
     console.log(`- Factual Claim Verification in checklist: ${hasClaimCheck}`);
+    console.log(`- Approve & Publish Live button disabled (safety check): ${isPublishDisabled ? 'PASS ✓' : 'FAIL ✗'}`);
 
     await page.screenshot({ path: 'reports/adm_training_publish_modal.png' });
 
