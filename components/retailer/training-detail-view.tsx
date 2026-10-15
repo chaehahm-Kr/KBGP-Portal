@@ -3,8 +3,11 @@
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { TrainingProductDetail } from "@/lib/retailer/training";
-import { toggleProductTrainingAction } from "@/app/retailer/training/actions";
+import { TrainingProductDetail, QuizQuestionGradeResult } from "@/lib/retailer/training";
+import {
+  toggleProductTrainingAction,
+  submitRetailerQuizAction,
+} from "@/app/retailer/training/actions";
 
 interface TrainingDetailViewProps {
   product: TrainingProductDetail;
@@ -17,18 +20,56 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
   const [isPending, startTransition] = useTransition();
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
-  // Interactive Quiz State
+  // Interactive Quiz State: Server-authoritative grading & incorrect-only retries
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
+  const [questionResults, setQuestionResults] = useState<Record<number, QuizQuestionGradeResult>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [quizPassed, setQuizPassed] = useState(false);
+  const [quizScore, setQuizScore] = useState(0);
+  const [isSubmittingQuiz, startQuizTransition] = useTransition();
+
+  const hasQuiz = Array.isArray(product.quizQuestions) && product.quizQuestions.length > 0;
+  const allQuizAnswered = hasQuiz && product.quizQuestions.every((_, i) => selectedAnswers[i] !== undefined);
+
+  const incorrectCount = hasQuiz
+    ? product.quizQuestions.filter((_, idx) => questionResults[idx] && !questionResults[idx].isCorrect).length
+    : 0;
 
   const handleSelectAnswer = (qIndex: number, optionIndex: number) => {
-    if (quizSubmitted) return;
+    // If question was already graded correct, preserve it and keep it locked!
+    if (questionResults[qIndex]?.isCorrect) return;
     setSelectedAnswers((prev) => ({ ...prev, [qIndex]: optionIndex }));
+  };
+
+  const handleSubmitQuiz = () => {
+    if (!allQuizAnswered || isSubmittingQuiz) return;
+    startQuizTransition(async () => {
+      const res = await submitRetailerQuizAction(product.id, selectedAnswers);
+      if (res.success) {
+        setQuizSubmitted(true);
+        setQuizPassed(res.passed);
+        setQuizScore(res.score);
+        const resultMap: Record<number, QuizQuestionGradeResult> = {};
+        res.results.forEach((r) => {
+          resultMap[r.questionIndex] = r;
+        });
+        setQuestionResults(resultMap);
+        if (res.passed) {
+          setIsCompleted(true);
+          router.refresh();
+        }
+      } else {
+        alert(res.error || "Failed to submit assessment quiz.");
+      }
+    });
   };
 
   const handleResetQuiz = () => {
     setSelectedAnswers({});
+    setQuestionResults({});
     setQuizSubmitted(false);
+    setQuizPassed(false);
+    setQuizScore(0);
   };
 
   const handleToggleCompletion = (targetStatus: boolean) => {
@@ -52,13 +93,7 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
     : null;
 
   const currentImage = product.images[selectedImageIndex]?.url || product.thumbnailUrl;
-
-  const hasQuiz = Array.isArray(product.quizQuestions) && product.quizQuestions.length > 0;
-  const allQuizAnswered = hasQuiz && product.quizQuestions.every((_, i) => selectedAnswers[i] !== undefined);
-  const quizScore = hasQuiz
-    ? product.quizQuestions.reduce((acc, q, i) => acc + (selectedAnswers[i] === q.correctIndex ? 1 : 0), 0)
-    : 0;
-  const isQuizPassed = hasQuiz && quizSubmitted && quizScore === product.quizQuestions.length;
+  const isQuizPassed = hasQuiz && (quizPassed || (isCompleted && !quizSubmitted));
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-24">
@@ -143,7 +178,7 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
                 </Link>
               )}
             </>
-          ) : (
+          ) : !hasQuiz ? (
             <button
               type="button"
               disabled={isPending}
@@ -152,6 +187,10 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
             >
               <span>{isPending ? "Saving..." : "✓ Mark Training Complete"}</span>
             </button>
+          ) : (
+            <div className="text-[11px] font-bold text-blue-700 dark:text-blue-300 bg-blue-100/70 dark:bg-blue-950/70 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-900 text-center">
+              100% Quiz score required to complete
+            </div>
           )}
         </div>
       </div>
@@ -577,13 +616,26 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
             </div>
           )}
 
+          {/* Review banner if submitted but not passed */}
+          {quizSubmitted && !quizPassed && (
+            <div className="rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-4 space-y-1">
+              <div className="flex items-center gap-2 text-xs font-black text-amber-900 dark:text-amber-200">
+                <span>⚠️</span>
+                <span>Score: {quizScore} of {product.quizQuestions.length} correct</span>
+              </div>
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                Review the tips on the incorrect question(s) below. Correct questions are preserved — choose a new answer for the remaining question(s) and submit again.
+              </p>
+            </div>
+          )}
+
           {/* Quiz Questions List */}
           <div className="space-y-4">
             {product.quizQuestions.map((q, qIdx) => {
               const selected = selectedAnswers[qIdx];
-              const isAnswered = selected !== undefined;
-              const isCorrect = quizSubmitted && selected === q.correctIndex;
-              const isWrong = quizSubmitted && isAnswered && selected !== q.correctIndex;
+              const result = questionResults[qIdx];
+              const isCorrect = result?.isCorrect === true;
+              const isWrong = result && !result.isCorrect;
 
               return (
                 <div
@@ -598,9 +650,9 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
                 >
                   <div className="flex items-center justify-between text-[11px] font-bold text-zinc-500">
                     <span>QUESTION {qIdx + 1} OF {product.quizQuestions.length}</span>
-                    {quizSubmitted && (
+                    {result && (
                       <span className={isCorrect ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
-                        {isCorrect ? "✓ Correct" : "✕ Review Recommended"}
+                        {isCorrect ? "✓ Correct" : "✕ Review Recommended (Retry Available)"}
                       </span>
                     )}
                   </div>
@@ -616,11 +668,17 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
                         <button
                           key={optIdx}
                           type="button"
-                          disabled={quizSubmitted}
+                          disabled={isCorrect || isSubmittingQuiz}
                           onClick={() => handleSelectAnswer(qIdx, optIdx)}
                           className={`w-full text-left p-3 rounded-xl border text-xs flex items-center gap-2.5 transition-all ${
                             isOptionSelected
-                              ? "border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/50 text-indigo-950 dark:text-indigo-200 font-bold shadow-2xs"
+                              ? isCorrect
+                                ? "border-emerald-500 bg-emerald-100/70 dark:bg-emerald-950/60 text-emerald-950 dark:text-emerald-100 font-bold"
+                                : isWrong
+                                ? "border-rose-400 bg-rose-100/70 dark:bg-rose-950/50 text-rose-950 dark:text-rose-200 font-bold"
+                                : "border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/50 text-indigo-950 dark:text-indigo-200 font-bold shadow-2xs"
+                              : isCorrect
+                              ? "opacity-50 border-zinc-200 dark:border-zinc-800 cursor-not-allowed bg-zinc-50 dark:bg-zinc-800/40 text-zinc-500"
                               : "border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                           }`}
                         >
@@ -634,7 +692,7 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
                   </div>
 
                   {/* Feedback Explanation */}
-                  {quizSubmitted && (
+                  {result && (
                     <div
                       className={`p-3 rounded-xl border text-xs space-y-1 ${
                         isCorrect
@@ -645,7 +703,7 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
                       <span className="font-bold block">
                         {isCorrect ? "✓ Official Explanation:" : "💡 Review Tip:"}
                       </span>
-                      <p className="leading-relaxed">{q.explanation}</p>
+                      <p className="leading-relaxed">{result.explanation}</p>
                     </div>
                   )}
                 </div>
@@ -653,16 +711,31 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
             })}
           </div>
 
-          {/* Submit Quiz Button */}
-          {!quizSubmitted && (
-            <button
-              type="button"
-              disabled={!allQuizAnswered}
-              onClick={() => setQuizSubmitted(true)}
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs shadow-md transition-all active:scale-95"
-            >
-              Submit Quiz Answers ({Object.keys(selectedAnswers).length}/{product.quizQuestions.length})
-            </button>
+          {/* Submit Quiz / Retry Button */}
+          {!quizPassed && (
+            <div className="space-y-3">
+              {quizSubmitted && !quizPassed ? (
+                <button
+                  type="button"
+                  disabled={isSubmittingQuiz}
+                  onClick={handleSubmitQuiz}
+                  className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-bold text-xs shadow-md transition-all active:scale-95"
+                >
+                  {isSubmittingQuiz ? "Re-evaluating Answers..." : `Retry Incorrect Questions (${incorrectCount} remaining)`}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!allQuizAnswered || isSubmittingQuiz}
+                  onClick={handleSubmitQuiz}
+                  className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs shadow-md transition-all active:scale-95"
+                >
+                  {isSubmittingQuiz
+                    ? "Evaluating on Server..."
+                    : `Submit Quiz Answers (${Object.keys(selectedAnswers).length}/${product.quizQuestions.length})`}
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -699,7 +772,7 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
                 </Link>
               )}
             </div>
-          ) : (
+          ) : !hasQuiz ? (
             <button
               type="button"
               disabled={isPending}
@@ -708,6 +781,10 @@ export function TrainingDetailView({ product, storeId }: TrainingDetailViewProps
             >
               <span>{isPending ? "Saving..." : "✓ Mark Training Complete"}</span>
             </button>
+          ) : (
+            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+              Pass quiz to complete
+            </span>
           )}
         </div>
 

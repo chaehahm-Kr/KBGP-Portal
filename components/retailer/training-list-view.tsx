@@ -305,13 +305,13 @@ export function TrainingListView({
                         <span>Training Not Ready</span>
                       </button>
                     ) : product.trainingStatus === "preparing" ? (
-                      <Link
-                        href={detailUrl}
-                        className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/80 transition-colors shadow-2xs"
+                      <button
+                        type="button"
+                        disabled
+                        className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 bg-purple-50/60 dark:bg-purple-950/30 text-purple-400 dark:text-purple-400/80 cursor-not-allowed border border-purple-200/60 dark:border-purple-900/40"
                       >
-                        <span>Study Guide (Preparing)</span>
-                        <span>→</span>
-                      </Link>
+                        <span>⏳ Training Preparing</span>
+                      </button>
                     ) : product.isCompleted ? (
                       <Link
                         href={detailUrl}

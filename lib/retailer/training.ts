@@ -42,6 +42,15 @@ export interface TrainingQuizQuestion {
   explanation: string;
 }
 
+export interface TrainingQuizQuestionClient {
+  id?: string;
+  category?: string;
+  question: string;
+  options: string[];
+  correctIndex?: number;
+  explanation?: string;
+}
+
 export interface CustomerObjection {
   id: string;
   objection: string;
@@ -59,7 +68,7 @@ export interface TrainingProductDetail extends TrainingProductSummary {
   customerObjections: CustomerObjection[];
   importantNotes: string | null;
   storageHandlingSop: string | null;
-  quizQuestions: TrainingQuizQuestion[];
+  quizQuestions: TrainingQuizQuestionClient[];
   videoUrl: string | null;
   mediaAssets: EnrichedMediaAsset[];
   benefitGraphicUrl: string | null;
@@ -298,7 +307,7 @@ export async function getRetailerTrainingProducts(filters: {
     ) {
       trainingStatus = "preparing";
       trainingStatusLabel = "Training Preparing";
-      canStartTraining = true; // Available for study guide / preview mode
+      canStartTraining = false; // Strictly locked for Retailer Portal
     }
 
     allSummaries.push({
@@ -361,7 +370,8 @@ export async function getRetailerTrainingProducts(filters: {
  */
 export async function getRetailerTrainingDetail(
   productId: string,
-  storeId?: string
+  storeId?: string,
+  isAdminPreview: boolean = false
 ): Promise<TrainingProductDetail | null> {
   const session = await verifyRetailerSession();
   const adminClient = createAdminClient();
@@ -405,6 +415,27 @@ export async function getRetailerTrainingDetail(
     return null;
   }
 
+  // 2. Fetch training content from retailer_product_training_content
+  let tc: any = null;
+  try {
+    const { data } = await adminClient
+      .from("retailer_product_training_content")
+      .select("*")
+      .eq("product_id", productId)
+      .maybeSingle();
+    tc = data;
+  } catch (err) {
+    console.warn("Error fetching retailer training content:", err);
+  }
+
+  const isPublished = tc?.is_published === true && tc?.status === "published";
+
+  // STRICT PUBLICATION SECURITY ENFORCEMENT:
+  // Non-admin Retailer Portal sessions are strictly forbidden from accessing Draft / In-Review content.
+  if (!isAdminPreview && !isPublished) {
+    return null;
+  }
+
   const overrides = info.admin_overrides || {};
   const brand = (p.brands as any) || {};
   const brandName = brand.name || "K SELECT";
@@ -429,7 +460,7 @@ export async function getRetailerTrainingDetail(
     }
   }
 
-  // 2. Fetch enriched training content from retailer_product_training_content or training_draft
+  // Populate training content fields
   let trainingSummary = overrides.description || p.description || "Comprehensive K-Beauty product training guide.";
   let targetCustomer: string | null = null;
   let keyBenefits = defaultBulletPoints.filter(Boolean);
@@ -439,72 +470,54 @@ export async function getRetailerTrainingDetail(
   let sellingPoints: string[] = [
     "High customer satisfaction and gentle daily formulation",
     "Clean K-Beauty quality with proven consumer demand",
-    "Great cross-sell addition to any daily routine"
+    "Great cross-sell addition to any daily routine",
   ];
   let customerObjections: CustomerObjection[] = [];
   let storageHandlingSop: string | null = "Store at room temperature (15–25°C / 59–77°F). Keep away from direct sunlight.";
   let importantNotes: string | null = "For external use only. Store in a cool, dry place away from direct sunlight.";
-  let quizQuestions: TrainingQuizQuestion[] = [];
+  let rawQuizQuestions: TrainingQuizQuestion[] = [];
   let videoUrl: string | null = null;
-  let isPublished = false;
-  let trainingStatus: "published" | "preparing" | "unavailable" = "unavailable";
-  let trainingStatusLabel = "Training Not Available Yet";
+  let trainingStatus: "published" | "preparing" | "unavailable" = isPublished ? "published" : "preparing";
+  let trainingStatusLabel = isPublished ? "Published" : "Training Preparing";
 
-  // Check database table first
-  try {
-    const { data: tc } = await adminClient
-      .from("retailer_product_training_content")
-      .select("*")
-      .eq("product_id", productId)
-      .maybeSingle();
-
-    if (tc) {
-      isPublished = tc.is_published ?? (tc.status === "published");
-      trainingStatus = isPublished ? "published" : "preparing";
-      trainingStatusLabel = isPublished ? "Published" : "Training Preparing";
-
-      if (tc.training_summary) trainingSummary = tc.training_summary;
-      if (tc.target_customer) targetCustomer = tc.target_customer;
-      if (Array.isArray(tc.key_benefits) && tc.key_benefits.length > 0) keyBenefits = tc.key_benefits;
-      if (tc.how_to_use) howToUse = tc.how_to_use;
-      if (tc.key_ingredients) keyIngredients = tc.key_ingredients;
-      if (tc.pitch_15s) pitch15s = tc.pitch_15s;
-      if (Array.isArray(tc.selling_points) && tc.selling_points.length > 0) sellingPoints = tc.selling_points;
-      if (Array.isArray(tc.customer_objections) && tc.customer_objections.length > 0) customerObjections = tc.customer_objections;
-      if (tc.storage_handling_sop) storageHandlingSop = tc.storage_handling_sop;
-      if (tc.important_notes) importantNotes = tc.important_notes;
-      if (Array.isArray(tc.quiz_questions) && tc.quiz_questions.length > 0) quizQuestions = tc.quiz_questions;
-      if (tc.video_url) videoUrl = tc.video_url;
-    }
-  } catch {
-    // training content table might not exist yet; fallbacks used
+  if (tc) {
+    if (tc.training_summary) trainingSummary = tc.training_summary;
+    if (tc.target_customer) targetCustomer = tc.target_customer;
+    if (Array.isArray(tc.key_benefits) && tc.key_benefits.length > 0) keyBenefits = tc.key_benefits;
+    if (tc.how_to_use) howToUse = tc.how_to_use;
+    if (tc.key_ingredients) keyIngredients = tc.key_ingredients;
+    if (tc.pitch_15s) pitch15s = tc.pitch_15s;
+    if (Array.isArray(tc.selling_points) && tc.selling_points.length > 0) sellingPoints = tc.selling_points;
+    if (Array.isArray(tc.customer_objections) && tc.customer_objections.length > 0) customerObjections = tc.customer_objections;
+    if (tc.storage_handling_sop) storageHandlingSop = tc.storage_handling_sop;
+    if (tc.important_notes) importantNotes = tc.important_notes;
+    if (Array.isArray(tc.quiz_questions) && tc.quiz_questions.length > 0) rawQuizQuestions = tc.quiz_questions;
+    if (tc.video_url) videoUrl = tc.video_url;
   }
 
-  // Check draft in price_additional_info if fields are missing or not published
-  const draft = info.training_draft;
-  if (draft) {
-    if (trainingStatus === "unavailable") {
-      trainingStatus = "preparing";
-      trainingStatusLabel = "Training Preparing";
-    }
-    if (!tcSummaryHasContent(trainingSummary) && draft.productOverview) trainingSummary = draft.productOverview;
-    if ((!targetCustomer || targetCustomer === "") && draft.bestFor) targetCustomer = draft.bestFor;
-    if (keyBenefits.length === 0 && Array.isArray(draft.top3Benefits) && draft.top3Benefits.length > 0) {
-      keyBenefits = draft.top3Benefits;
-    }
-    if ((!howToUse || howToUse.includes("as directed")) && draft.howToUse) howToUse = draft.howToUse;
-    if ((!pitch15s || pitch15s.includes("Recommend this")) && draft.pitch15s) pitch15s = draft.pitch15s;
-    if (sellingPoints.length <= 3 && Array.isArray(draft.sellingPoints) && draft.sellingPoints.length > 0) {
-      sellingPoints = draft.sellingPoints;
-    }
-    if (customerObjections.length === 0 && Array.isArray(draft.customerObjections)) {
-      customerObjections = draft.customerObjections;
-    }
-    if ((!storageHandlingSop || storageHandlingSop.includes("room temperature")) && draft.storageHandlingSop) {
-      storageHandlingSop = draft.storageHandlingSop;
-    }
-    if (quizQuestions.length === 0 && Array.isArray(draft.quizQuestions) && draft.quizQuestions.length > 0) {
-      quizQuestions = draft.quizQuestions;
+  // Admin preview draft fallback
+  if (isAdminPreview) {
+    const draft = info.training_draft;
+    if (draft) {
+      if (!tcSummaryHasContent(trainingSummary) && draft.productOverview) trainingSummary = draft.productOverview;
+      if ((!targetCustomer || targetCustomer === "") && draft.bestFor) targetCustomer = draft.bestFor;
+      if (keyBenefits.length === 0 && Array.isArray(draft.top3Benefits) && draft.top3Benefits.length > 0) {
+        keyBenefits = draft.top3Benefits;
+      }
+      if ((!howToUse || howToUse.includes("as directed")) && draft.howToUse) howToUse = draft.howToUse;
+      if ((!pitch15s || pitch15s.includes("Recommend this")) && draft.pitch15s) pitch15s = draft.pitch15s;
+      if (sellingPoints.length <= 3 && Array.isArray(draft.sellingPoints) && draft.sellingPoints.length > 0) {
+        sellingPoints = draft.sellingPoints;
+      }
+      if (customerObjections.length === 0 && Array.isArray(draft.customerObjections)) {
+        customerObjections = draft.customerObjections;
+      }
+      if ((!storageHandlingSop || storageHandlingSop.includes("room temperature")) && draft.storageHandlingSop) {
+        storageHandlingSop = draft.storageHandlingSop;
+      }
+      if (rawQuizQuestions.length === 0 && Array.isArray(draft.quizQuestions) && draft.quizQuestions.length > 0) {
+        rawQuizQuestions = draft.quizQuestions;
+      }
     }
   }
 
@@ -552,7 +565,7 @@ export async function getRetailerTrainingDetail(
     }
   }
 
-  // 5. Query and sign Media Assets (Benefit Graphic, Infographic, Lifestyle Image, How-To Graphic, Videos)
+  // 5. Query and sign Media Assets: ONLY APPROVED ASSETS (strictly exclude draft/failed/rejected)
   const mediaAssets: EnrichedMediaAsset[] = [];
   let benefitGraphicUrl: string | null = null;
   let infographicUrl: string | null = null;
@@ -565,7 +578,8 @@ export async function getRetailerTrainingDetail(
       .from("product_media_assets")
       .select("id, asset_type, title, status, storage_path, content_data")
       .eq("product_id", productId)
-      .in("status", ["approved", "draft"])
+      .eq("status", "approved")
+      .not("storage_path", "is", null)
       .order("created_at", { ascending: false });
 
     if (dbAssets && dbAssets.length > 0) {
@@ -591,13 +605,13 @@ export async function getRetailerTrainingDetail(
             status: item.status,
           });
 
-          if (item.asset_type === "benefit_graphic" && (!benefitGraphicUrl || item.status === "approved")) {
+          if (item.asset_type === "benefit_graphic" && !benefitGraphicUrl) {
             benefitGraphicUrl = signedUrl;
-          } else if (item.asset_type === "infographic" && (!infographicUrl || item.status === "approved")) {
+          } else if (item.asset_type === "infographic" && !infographicUrl) {
             infographicUrl = signedUrl;
-          } else if (item.asset_type === "lifestyle_image" && (!lifestyleImageUrl || item.status === "approved")) {
+          } else if (item.asset_type === "lifestyle_image" && !lifestyleImageUrl) {
             lifestyleImageUrl = signedUrl;
-          } else if (item.asset_type === "how_to_graphic" && (!howToGraphicUrl || item.status === "approved")) {
+          } else if (item.asset_type === "how_to_graphic" && !howToGraphicUrl) {
             howToGraphicUrl = signedUrl;
           } else if (item.asset_type === "product_video" || item.asset_type === "how_to_video") {
             hasVideo = true;
@@ -610,7 +624,15 @@ export async function getRetailerTrainingDetail(
     console.warn("Error fetching media assets for training detail:", err);
   }
 
-  // 6. Calculate previous/next product in current Store assortment union set
+  // 6. Map quiz questions to client-safe representation (omit correctIndex and explanation for security)
+  const clientQuizQuestions: TrainingQuizQuestionClient[] = rawQuizQuestions.map((q, idx) => ({
+    id: q.id || `q_${idx + 1}`,
+    category: q.category,
+    question: q.question,
+    options: q.options || [],
+  }));
+
+  // 7. Calculate previous/next product in current Store assortment union set
   const { products: storeProducts } = await getRetailerTrainingProducts({ storeId });
   const currentIndex = storeProducts.findIndex((sp) => sp.id === productId);
   const totalCount = storeProducts.length;
@@ -634,7 +656,7 @@ export async function getRetailerTrainingDetail(
     completedAt,
     trainingStatus,
     trainingStatusLabel,
-    canStartTraining: trainingStatus !== "unavailable",
+    canStartTraining: isPublished,
     trainingSummary,
     targetCustomer,
     keyBenefits,
@@ -645,7 +667,7 @@ export async function getRetailerTrainingDetail(
     customerObjections,
     importantNotes,
     storageHandlingSop,
-    quizQuestions,
+    quizQuestions: clientQuizQuestions,
     videoUrl,
     mediaAssets,
     benefitGraphicUrl,
@@ -665,8 +687,145 @@ function tcSummaryHasContent(summary: string): boolean {
   return summary !== "" && !summary.includes("Comprehensive K-Beauty product training guide.");
 }
 
+export interface QuizQuestionGradeResult {
+  questionIndex: number;
+  isCorrect: boolean;
+  explanation: string;
+}
+
+export interface QuizSubmissionResponse {
+  success: boolean;
+  passed: boolean;
+  score: number;
+  total: number;
+  results: QuizQuestionGradeResult[];
+  completedAt?: string;
+  error?: string;
+}
+
 /**
- * Toggle user training completion for a product
+ * Server-authoritative assessment quiz grading
+ * Requires 100% correct to pass and mark verified completion.
+ * Never leaks the correct-answer keys before server evaluation.
+ */
+export async function submitRetailerQuiz(
+  productId: string,
+  userAnswers: Record<number, number>
+): Promise<QuizSubmissionResponse> {
+  const session = await verifyRetailerSession();
+  const adminClient = createAdminClient();
+
+  const { data: companyUser } = await adminClient
+    .from("company_users")
+    .select("company_id")
+    .eq("id", session.userId)
+    .maybeSingle();
+
+  const companyId = companyUser?.company_id;
+  if (!companyId) {
+    return {
+      success: false,
+      passed: false,
+      score: 0,
+      total: 0,
+      results: [],
+      error: "Company membership not found",
+    };
+  }
+
+  // Fetch authoritative published training content
+  const { data: tc, error } = await adminClient
+    .from("retailer_product_training_content")
+    .select("status, is_published, version, quiz_questions")
+    .eq("product_id", productId)
+    .maybeSingle();
+
+  if (error || !tc || tc.status !== "published" || tc.is_published !== true) {
+    return {
+      success: false,
+      passed: false,
+      score: 0,
+      total: 0,
+      results: [],
+      error: "Published training assessment not found for this product.",
+    };
+  }
+
+  const authoritativeQuestions: TrainingQuizQuestion[] = Array.isArray(tc.quiz_questions)
+    ? (tc.quiz_questions as any[])
+    : [];
+
+  if (authoritativeQuestions.length === 0) {
+    return {
+      success: false,
+      passed: false,
+      score: 0,
+      total: 0,
+      results: [],
+      error: "No assessment quiz configured for this product.",
+    };
+  }
+
+  const results: QuizQuestionGradeResult[] = [];
+  let correctCount = 0;
+
+  for (let i = 0; i < authoritativeQuestions.length; i++) {
+    const q = authoritativeQuestions[i];
+    const selected = userAnswers[i];
+    const isCorrect = typeof selected === "number" && selected === q.correctIndex;
+    if (isCorrect) correctCount++;
+
+    results.push({
+      questionIndex: i,
+      isCorrect,
+      explanation: q.explanation || "Please review the product study guide for more details.",
+    });
+  }
+
+  const total = authoritativeQuestions.length;
+  const passed = correctCount === total;
+
+  let completedAt: string | undefined;
+
+  if (passed) {
+    completedAt = new Date().toISOString();
+    // Persist verified completion in retailer_product_training_progress
+    try {
+      const { error: upsertErr } = await adminClient
+        .from("retailer_product_training_progress")
+        .upsert(
+          {
+            company_id: companyId,
+            user_id: session.userId,
+            product_id: productId,
+            status: "completed",
+            completed_at: completedAt,
+            updated_at: completedAt,
+          },
+          { onConflict: "user_id,product_id" }
+        );
+
+      if (upsertErr) {
+        console.error("Error saving verified training completion:", upsertErr);
+      }
+    } catch (err) {
+      console.error("Exception saving verified training progress:", err);
+    }
+  }
+
+  return {
+    success: true,
+    passed,
+    score: correctCount,
+    total,
+    results,
+    completedAt,
+  };
+}
+
+/**
+ * Toggle user training completion for a product.
+ * STRICT SECURITY: If a product has a published quiz, manual self-reporting bypass is forbidden.
  */
 export async function toggleRetailerTrainingCompletion(
   productId: string,
@@ -674,6 +833,22 @@ export async function toggleRetailerTrainingCompletion(
 ): Promise<{ success: boolean; error?: string }> {
   const session = await verifyRetailerSession();
   const adminClient = createAdminClient();
+
+  // If marking complete, check if the product has a published quiz requirement
+  if (completed) {
+    const { data: tc } = await adminClient
+      .from("retailer_product_training_content")
+      .select("status, is_published, quiz_questions")
+      .eq("product_id", productId)
+      .maybeSingle();
+
+    if (tc && tc.is_published && Array.isArray(tc.quiz_questions) && tc.quiz_questions.length > 0) {
+      return {
+        success: false,
+        error: "This product requires passing the verified knowledge assessment quiz.",
+      };
+    }
+  }
 
   const { data: companyUser } = await adminClient
     .from("company_users")

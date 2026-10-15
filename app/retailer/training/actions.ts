@@ -1,7 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { toggleRetailerTrainingCompletion } from "@/lib/retailer/training";
+import {
+  toggleRetailerTrainingCompletion,
+  submitRetailerQuiz,
+  QuizSubmissionResponse,
+} from "@/lib/retailer/training";
 
 export async function toggleProductTrainingAction(
   productId: string,
@@ -9,6 +13,22 @@ export async function toggleProductTrainingAction(
 ) {
   const res = await toggleRetailerTrainingCompletion(productId, completed);
   if (res.success) {
+    revalidatePath("/retailer/training");
+    revalidatePath(`/retailer/training/${productId}`);
+    revalidatePath("/training");
+    revalidatePath(`/training/${productId}`);
+    revalidatePath("/retailer");
+    revalidatePath("/");
+  }
+  return res;
+}
+
+export async function submitRetailerQuizAction(
+  productId: string,
+  answers: Record<number, number>
+): Promise<QuizSubmissionResponse> {
+  const res = await submitRetailerQuiz(productId, answers);
+  if (res.success && res.passed) {
     revalidatePath("/retailer/training");
     revalidatePath(`/retailer/training/${productId}`);
     revalidatePath("/training");
