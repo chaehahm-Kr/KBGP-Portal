@@ -12,6 +12,13 @@ export interface WeeklyReportStoreStatus {
   remainingUnits: number;
 }
 
+export type WeeklyInventoryItemStatus =
+  | "submitted"
+  | "baseline"
+  | "in_progress"
+  | "not_reported"
+  | "zero_stock";
+
 export interface WeeklyReportItem {
   productId: string;
   productName: string;
@@ -31,6 +38,7 @@ export interface WeeklyReportItem {
   
   // Weekly Stock & Movement
   reportedRemaining: number | null;
+  inventoryStatus: WeeklyInventoryItemStatus;
   previousRemaining: number | null;
   deliveredSincePrevious: number | null;
   estimatedUnitsSold: number | null;
@@ -48,6 +56,7 @@ export interface WeeklyReportItem {
   suggestedReorderQty: number;
   suggestedCases: number;
   reorderReason?: string;
+  reorderType?: "stock_based" | "velocity_based" | "needs_check" | "none";
   
   // Store Breakdown if company view
   storeCounts?: Array<{

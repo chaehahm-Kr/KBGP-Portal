@@ -16,6 +16,7 @@ import {
   WeeklyReportStoreStatus,
   WeeklyReportCoverageStatus,
   AvailableReportingWeek,
+  WeeklyInventoryItemStatus,
 } from "./weekly-report-types";
 
 /**
@@ -294,7 +295,103 @@ export async function getRetailerWeeklyReportData(params?: {
     });
   });
 
-  // 9. Collect all unique products in the submitted checks
+  // 9. Collect all unique products: union of Store Assortments, Confirmed Orders, and Weekly Checks
+  // A. Assortment products
+  let storeProductQuery = adminClient
+    .from("retailer_store_products")
+    .select("store_id, product_id, is_active")
+    .eq("company_id", companyId)
+    .eq("is_active", true);
+
+  if (selectedStoreId !== "all") {
+    storeProductQuery = storeProductQuery.eq("store_id", selectedStoreId);
+  } else if (validStoreIds.length > 0) {
+    storeProductQuery = storeProductQuery.in("store_id", validStoreIds);
+  }
+  const { data: storeProductRows, error: spError } = await storeProductQuery;
+  if (spError) {
+    console.error("Error fetching retailer_store_products for weekly report:", spError);
+  }
+
+  // B. Ordered products from valid non-draft orders
+  let orderItemsQuery = adminClient
+    .from("retailer_order_items")
+    .select(`
+      id,
+      product_id,
+      sku,
+      retailer_orders!inner (
+        id,
+        order_number,
+        company_id,
+        store_id,
+        order_status
+      )
+    `)
+    .eq("retailer_orders.company_id", companyId)
+    .neq("retailer_orders.order_status", "draft");
+
+  if (selectedStoreId !== "all") {
+    orderItemsQuery = orderItemsQuery.eq("retailer_orders.store_id", selectedStoreId);
+  } else if (validStoreIds.length > 0) {
+    orderItemsQuery = orderItemsQuery.in("retailer_orders.store_id", validStoreIds);
+  }
+  const { data: orderItemRows, error: orderItemsError } = await orderItemsQuery;
+  if (orderItemsError) {
+    console.error("Error fetching ordered items for weekly report:", orderItemsError);
+  }
+
+  // Track product-to-store associations
+  const productAssociatedStoreIds = new Map<string, Set<string>>();
+  const addProductStoreAssociation = (
+    productId: string | null | undefined,
+    storeId: string | null | undefined
+  ) => {
+    if (!productId) return;
+    if (!productAssociatedStoreIds.has(productId)) {
+      productAssociatedStoreIds.set(productId, new Set());
+    }
+    if (storeId) {
+      productAssociatedStoreIds.get(productId)!.add(storeId);
+    }
+  };
+
+  (storeProductRows || []).forEach((sp) => {
+    if (validStoreIds.includes(sp.store_id)) {
+      addProductStoreAssociation(sp.product_id, sp.store_id);
+    }
+  });
+
+  (orderItemRows || []).forEach((row: any) => {
+    const pId = row.product_id;
+    const sId = row.retailer_orders?.store_id;
+    if (sId && validStoreIds.includes(sId)) {
+      addProductStoreAssociation(pId, sId);
+    } else if (!sId) {
+      addProductStoreAssociation(pId, null);
+    }
+  });
+
+  relevantChecks.forEach((chk) => {
+    const chkItems = (chk.retailer_weekly_check_items as any[]) || [];
+    chkItems.forEach((ci) => {
+      addProductStoreAssociation(ci.product_id, chk.store_id);
+    });
+  });
+
+  // Filter products by selected store scope
+  const candidateProductIds: string[] = [];
+  for (const [pId, storeSet] of productAssociatedStoreIds.entries()) {
+    if (selectedStoreId === "all") {
+      candidateProductIds.push(pId);
+    } else {
+      if (storeSet.has(selectedStoreId)) {
+        candidateProductIds.push(pId);
+      }
+    }
+  }
+
+  // Map of submitted check items per product for this reporting week
   const productCheckItemsMap = new Map<string, any[]>();
   submittedRelevantChecks.forEach((chk) => {
     (chk.retailer_weekly_check_items || []).forEach((item: any) => {
@@ -309,7 +406,8 @@ export async function getRetailerWeeklyReportData(params?: {
     });
   });
 
-  const allRelevantProductIds = Array.from(productCheckItemsMap.keys());
+  // Filter to valid products present in catalog
+  const allRelevantProductIds = candidateProductIds.filter((pId) => productMap.has(pId));
   const imageMap = await resolveAuthoritativeProductImages(adminClient, allRelevantProductIds);
 
   // 10. Compute Product Items
@@ -423,6 +521,21 @@ export async function getRetailerWeeklyReportData(params?: {
       hasBaselineOnlyOverall = true;
     }
 
+    // Inventory status determination
+    let inventoryStatus: WeeklyInventoryItemStatus = "not_reported";
+    if (reportedRemaining !== null) {
+      if (reportedRemaining === 0) {
+        inventoryStatus = "zero_stock";
+      } else if (isBaseline && productUnitsSold === null) {
+        inventoryStatus = "baseline";
+      } else {
+        inventoryStatus = "submitted";
+      }
+    } else {
+      const hasInProgressCheck = relevantChecks.some((c) => c.status === "in_progress");
+      inventoryStatus = hasInProgressCheck ? "in_progress" : "not_reported";
+    }
+
     // Financial calculations
     let estimatedRetailSales: number | null = null;
     let estimatedGrossProfit: number | null = null;
@@ -456,28 +569,39 @@ export async function getRetailerWeeklyReportData(params?: {
     const orderMultiple = policy.orderMultiple || 6;
     const cartonPackQty = Number(rawProd.carton_pack_qty) || 12;
 
-    const projectedStock = (reportedRemaining ?? 0) + incomingQty;
-    const weeklyVelocity = productUnitsSold ?? 0;
-    // 4 weeks target supply based on weekly movement (or MOQ safety stock)
-    const targetDemand = weeklyVelocity > 0 ? weeklyVelocity * 4 : Math.max(moq, cartonPackQty);
-
     let reorderNeeded = false;
     let suggestedReorderQty = 0;
     let suggestedCases = 0;
     let reorderReason = "";
+    let reorderType: "stock_based" | "velocity_based" | "needs_check" | "none" = "none";
 
-    if (projectedStock < targetDemand) {
-      const rawNeed = targetDemand - projectedStock;
-      const normResult = normalizeReorderQuantity(rawNeed, moq, orderMultiple, true);
-      suggestedReorderQty = normResult.normalizedQty;
-      if (suggestedReorderQty > 0) {
-        reorderNeeded = true;
-        suggestedCases = Math.ceil(suggestedReorderQty / Math.max(1, cartonPackQty));
-        productsNeedingReorderCount += 1;
-        totalSuggestedReorderUnits += suggestedReorderQty;
-        reorderReason = projectedStock === 0
-          ? "Stockout risk — zero projected inventory"
-          : `Below target supply (${projectedStock} available vs ${targetDemand} needed)`;
+    // CRITICAL: Unreported inventory must NOT generate phantom reorders
+    if (reportedRemaining === null) {
+      reorderNeeded = false;
+      suggestedReorderQty = 0;
+      suggestedCases = 0;
+      reorderReason = "Needs Weekly Check — physical inventory not reported";
+      reorderType = "needs_check";
+    } else {
+      const projectedStock = reportedRemaining + incomingQty;
+      const weeklyVelocity = productUnitsSold ?? 0;
+      // 4 weeks target supply based on weekly movement (or MOQ safety stock)
+      const targetDemand = weeklyVelocity > 0 ? weeklyVelocity * 4 : Math.max(moq, cartonPackQty);
+
+      if (projectedStock < targetDemand) {
+        const rawNeed = targetDemand - projectedStock;
+        const normResult = normalizeReorderQuantity(rawNeed, moq, orderMultiple, true);
+        suggestedReorderQty = normResult.normalizedQty;
+        if (suggestedReorderQty > 0) {
+          reorderNeeded = true;
+          suggestedCases = Math.ceil(suggestedReorderQty / Math.max(1, cartonPackQty));
+          productsNeedingReorderCount += 1;
+          totalSuggestedReorderUnits += suggestedReorderQty;
+          reorderType = weeklyVelocity > 0 ? "velocity_based" : "stock_based";
+          reorderReason = projectedStock === 0
+            ? "Stockout risk — zero projected inventory"
+            : `Below target supply (${projectedStock} available vs ${targetDemand} needed)`;
+        }
       }
     }
 
@@ -499,6 +623,7 @@ export async function getRetailerWeeklyReportData(params?: {
       priceSource: srpResolution.source || "catalog_srp",
 
       reportedRemaining,
+      inventoryStatus,
       previousRemaining,
       deliveredSincePrevious,
       estimatedUnitsSold: productUnitsSold,
@@ -506,7 +631,9 @@ export async function getRetailerWeeklyReportData(params?: {
       estimatedGrossProfit,
       grossMarginPercent,
       hasBaselineOnly: isBaseline && productUnitsSold === null,
-      movementStatus: isBaseline && productUnitsSold === null ? "baseline" : "normal",
+      movementStatus: reportedRemaining === null
+        ? "no_data"
+        : (isBaseline && productUnitsSold === null ? "baseline" : "normal"),
 
       incomingQty,
       inTransitQty: incomingData.inTransit,
@@ -515,15 +642,23 @@ export async function getRetailerWeeklyReportData(params?: {
       suggestedReorderQty,
       suggestedCases,
       reorderReason,
+      reorderType,
       storeCounts,
     });
   }
 
-  // Sort items: products needing reorder first, then by sales descending
+  // Sort items: products needing reorder first, then by sales descending, then reported before unreported, then alphabetical
   items.sort((a, b) => {
     if (a.reorderNeeded && !b.reorderNeeded) return -1;
     if (!a.reorderNeeded && b.reorderNeeded) return 1;
-    return (b.estimatedRetailSales || 0) - (a.estimatedRetailSales || 0);
+
+    const salesDiff = (b.estimatedRetailSales || 0) - (a.estimatedRetailSales || 0);
+    if (salesDiff !== 0) return salesDiff;
+
+    if (a.reportedRemaining !== null && b.reportedRemaining === null) return -1;
+    if (a.reportedRemaining === null && b.reportedRemaining !== null) return 1;
+
+    return a.productName.localeCompare(b.productName);
   });
 
   const averageGrossMargin = totalEstimatedRetailSales > 0

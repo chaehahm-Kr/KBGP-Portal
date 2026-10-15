@@ -756,13 +756,16 @@ export async function generateWeeklyReportPdf(data: WeeklyReportData): Promise<U
       const textY = rowHeight > 22 ? y - 14 : y - 13;
 
       // 2. Remaining Units
-      const remText = item.reportedRemaining !== null ? `${formatQty(item.reportedRemaining)}` : "-";
+      const remText = item.reportedRemaining !== null
+        ? `${formatQty(item.reportedRemaining)}`
+        : "Not Reported";
+      const remSize = item.reportedRemaining !== null ? 7.2 : 6.0;
       currentPage.drawText(remText, {
-        x: colX + 12,
+        x: item.reportedRemaining !== null ? colX + 12 : colX + 4,
         y: textY,
-        size: 7.2,
-        font: helveticaBold,
-        color: item.reportedRemaining === 0 ? cAmber : cDark,
+        size: remSize,
+        font: item.reportedRemaining !== null ? helveticaBold : helvetica,
+        color: item.reportedRemaining === 0 ? cAmber : (item.reportedRemaining !== null ? cDark : cMuted),
       });
       colX += colWidths.remaining;
 
@@ -778,12 +781,16 @@ export async function generateWeeklyReportPdf(data: WeeklyReportData): Promise<U
       colX += colWidths.incoming;
 
       // 4. Est. Units Sold
-      const soldText = item.estimatedUnitsSold !== null ? `${formatQty(item.estimatedUnitsSold)}` : "-";
+      const soldText = item.estimatedUnitsSold !== null
+        ? `${formatQty(item.estimatedUnitsSold)}`
+        : item.reportedRemaining !== null
+        ? "Baseline"
+        : "-";
       currentPage.drawText(soldText, {
         x: colX + 12,
         y: textY,
         size: 7.2,
-        font: helveticaBold,
+        font: item.estimatedUnitsSold !== null ? helveticaBold : helvetica,
         color: item.estimatedUnitsSold !== null ? cDark : cMuted,
       });
       colX += colWidths.sold;
@@ -822,6 +829,14 @@ export async function generateWeeklyReportPdf(data: WeeklyReportData): Promise<U
           y: textY,
           size: 7.0,
           font: helveticaBold,
+          color: cAmber,
+        });
+      } else if (item.reportedRemaining === null) {
+        currentPage.drawText("Needs Check", {
+          x: colX + 6,
+          y: textY,
+          size: 6.8,
+          font: helvetica,
           color: cAmber,
         });
       } else {

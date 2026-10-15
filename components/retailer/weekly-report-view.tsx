@@ -631,10 +631,23 @@ export function WeeklyReportView({ initialData }: Props) {
 
                       {/* Remaining */}
                       <td className="py-3 px-3 text-right tabular-nums">
-                        <span className="font-bold text-zinc-900 dark:text-white text-sm">
-                          {item.reportedRemaining !== null ? item.reportedRemaining : "—"}
-                        </span>
-                        <span className="text-[10px] text-zinc-400 block">units</span>
+                        {item.reportedRemaining !== null ? (
+                          <>
+                            <span className="font-bold text-zinc-900 dark:text-white text-sm">
+                              {item.reportedRemaining}
+                            </span>
+                            <span className="text-[10px] text-zinc-400 block">
+                              {item.reportedRemaining === 0 ? "zero stock" : "units"}
+                            </span>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-end">
+                            <span className="inline-block px-1.5 py-0.5 rounded-sm text-[9px] font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                              Not Reported
+                            </span>
+                            <span className="text-[9px] text-zinc-400 block mt-0.5">uncounted</span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Est. Units Sold */}
@@ -646,10 +659,12 @@ export function WeeklyReportView({ initialData }: Props) {
                             </span>
                             <span className="text-[10px] text-zinc-400 block">sold</span>
                           </>
-                        ) : (
+                        ) : item.reportedRemaining !== null ? (
                           <span className="inline-block px-1.5 py-0.5 rounded-sm text-[9px] font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
                             Baseline
                           </span>
+                        ) : (
+                          <span className="text-zinc-400 font-normal">—</span>
                         )}
                       </td>
 
@@ -749,11 +764,45 @@ export function WeeklyReportView({ initialData }: Props) {
                               </button>
                             </div>
                           </div>
+                        ) : item.reportedRemaining === null ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="text-right">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                Needs Weekly Check
+                              </span>
+                              <span className="text-[10px] text-zinc-400 block mt-0.5">
+                                MOQ {item.moq} · Pack {item.cartonPackQty}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                min={item.moq || 1}
+                                step={item.orderMultiple || 1}
+                                value={currentQty}
+                                onChange={(e) =>
+                                  setProductOrderQty(item.productId, parseInt(e.target.value, 10) || item.moq, item)
+                                }
+                                className="w-16 px-2 py-1 text-xs font-bold text-center border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleAddToCart(item)}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700 transition-colors shrink-0 cursor-pointer"
+                                title="Order without weekly count"
+                              >
+                                + Add to Cart
+                              </button>
+                            </div>
+                          </div>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Sufficient Stock
-                          </span>
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              Sufficient Stock
+                            </span>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -798,6 +847,10 @@ export function WeeklyReportView({ initialData }: Props) {
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                             Reorder Needed
                           </span>
+                        ) : item.reportedRemaining === null ? (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                            Needs Weekly Check
+                          </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                             Stocked
@@ -818,14 +871,20 @@ export function WeeklyReportView({ initialData }: Props) {
                     <div>
                       <span className="text-[10px] text-zinc-400 block uppercase font-bold">Remaining</span>
                       <span className="font-bold text-zinc-900 dark:text-white">
-                        {item.reportedRemaining !== null ? `${item.reportedRemaining} units` : "—"}
+                        {item.reportedRemaining !== null
+                          ? `${item.reportedRemaining} units`
+                          : "Not Reported"}
                       </span>
                     </div>
 
                     <div>
                       <span className="text-[10px] text-zinc-400 block uppercase font-bold">Est. Sold</span>
                       <span className="font-bold text-zinc-900 dark:text-white">
-                        {item.estimatedUnitsSold !== null ? `${item.estimatedUnitsSold} sold` : "Baseline"}
+                        {item.estimatedUnitsSold !== null
+                          ? `${item.estimatedUnitsSold} sold`
+                          : item.reportedRemaining !== null
+                          ? "Baseline"
+                          : "—"}
                       </span>
                     </div>
 
@@ -850,7 +909,7 @@ export function WeeklyReportView({ initialData }: Props) {
                   )}
 
                   {/* Reorder Action Box */}
-                  {item.reorderNeeded && (
+                  {item.reorderNeeded ? (
                     <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-1.5">
@@ -892,7 +951,38 @@ export function WeeklyReportView({ initialData }: Props) {
                         </button>
                       </div>
                     </div>
-                  )}
+                  ) : item.reportedRemaining === null ? (
+                    <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-3">
+                      <div>
+                        <span className="text-xs font-bold text-amber-600 dark:text-amber-400 block">
+                          Needs Weekly Check
+                        </span>
+                        <span className="text-[10px] text-zinc-400 block">
+                          MOQ {item.moq} · Pack {item.cartonPackQty}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={item.moq || 1}
+                          step={item.orderMultiple || 1}
+                          value={currentQty}
+                          onChange={(e) =>
+                            setProductOrderQty(item.productId, parseInt(e.target.value, 10) || item.moq, item)
+                          }
+                          className="w-14 px-2 py-1 text-xs font-bold text-center border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddToCart(item)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-200 shadow-xs cursor-pointer"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })
