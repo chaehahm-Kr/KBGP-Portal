@@ -30,7 +30,6 @@ function wrapCanvasText(
   }
 
   if (currentLine && lines.length < maxLines) {
-    // If last line overflows, truncate with ellipsis
     let finalLine = currentLine;
     while (ctx.measureText(finalLine).width > maxWidth && finalLine.length > 3) {
       finalLine = finalLine.slice(0, -4).trim() + "...";
@@ -74,30 +73,29 @@ export async function renderPriceTagToCanvas(
   ctx.textBaseline = "middle";
 
   const brandUpper = (item.brandName || "K SELECT").toUpperCase();
-  // Truncate brand if too long
   let displayBrand = brandUpper;
-  while (ctx.measureText(displayBrand).width > 240 && displayBrand.length > 4) {
+  while (ctx.measureText(displayBrand).width > 220 && displayBrand.length > 4) {
     displayBrand = displayBrand.slice(0, -5).trim() + "...";
   }
   ctx.fillText(displayBrand, 14, 18);
 
   ctx.font = "bold 11px monospace, Courier";
   ctx.textAlign = "right";
-  ctx.fillText(item.sku || "KS-PROD", 370, 18);
+  ctx.fillText(item.sku || "KS-PROD", baseWidth - 14, 18);
 
   // Header Divider
   ctx.strokeStyle = "#000000";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(14, 28);
-  ctx.lineTo(370, 28);
+  ctx.lineTo(baseWidth - 14, 28);
   ctx.stroke();
 
   // 3. Middle Section: Product Name (wrapped up to 2 lines)
   ctx.font = "bold 13.5px system-ui, -apple-system, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
-  const nameLines = wrapCanvasText(ctx, item.productName, 356, 2);
+  const nameLines = wrapCanvasText(ctx, item.productName, baseWidth - 28, 2);
 
   let currentY = 34;
   for (const line of nameLines) {
@@ -108,47 +106,72 @@ export async function renderPriceTagToCanvas(
   // Bottom Section Divider
   ctx.beginPath();
   ctx.moveTo(14, 88);
-  ctx.lineTo(370, 88);
+  ctx.lineTo(baseWidth - 14, 88);
   ctx.stroke();
 
-  // 4. Bottom Left: Price Display
-  const isSale = item.isSaleActive && item.salePrice !== null && item.discountPercent !== null;
+  // 4. Bottom Left: Price Display (Matches price-tag-card.tsx presentation)
+  const isSale =
+    item.isSaleActive &&
+    item.salePrice !== null &&
+    item.salePrice > 0 &&
+    item.regularPrice !== null &&
+    item.regularPrice > 0 &&
+    item.salePrice < item.regularPrice;
+
+  const effectiveDiscount =
+    item.discountPercent !== null && item.discountPercent !== undefined
+      ? item.discountPercent
+      : isSale && item.regularPrice && item.salePrice
+      ? Math.round(((item.regularPrice - item.salePrice) / item.regularPrice) * 100)
+      : null;
 
   if (isSale) {
-    // Was regular price + strike-through
-    ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    const wasText = `Was $${item.regularPrice?.toFixed(2)}`;
-    ctx.fillText(wasText, 14, 106);
-
-    const wasMetrics = ctx.measureText(wasText);
-    ctx.beginPath();
-    ctx.moveTo(14, 106);
-    ctx.lineTo(14 + wasMetrics.width, 106);
-    ctx.stroke();
-
-    // Solid Black Pill for discount
-    const pillText = `SAVE ${item.discountPercent}%`;
-    ctx.font = "900 9px system-ui, -apple-system, sans-serif";
-    const pillMetrics = ctx.measureText(pillText);
-    const pillX = 14 + wasMetrics.width + 8;
-    const pillY = 98;
-    const pillW = pillMetrics.width + 8;
-    const pillH = 16;
-
+    // Solid Black Pill for "SALE"
     ctx.fillStyle = "#000000";
-    ctx.fillRect(pillX, pillY, pillW, pillH);
-
+    ctx.fillRect(14, 96, 36, 16);
     ctx.fillStyle = "#FFFFFF";
-    ctx.fillText(pillText, pillX + 4, pillY + 8);
+    ctx.font = "900 9px system-ui, -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("SALE", 32, 104);
+
+    // Bordered Pill for discount percentage
+    if (effectiveDiscount !== null) {
+      const pillText = `SAVE ${effectiveDiscount}%`;
+      ctx.font = "900 8.5px system-ui, -apple-system, sans-serif";
+      const pillW = ctx.measureText(pillText).width + 8;
+      ctx.strokeStyle = "#000000";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(54, 96, pillW, 16);
+      ctx.fillStyle = "#000000";
+      ctx.fillText(pillText, 54 + pillW / 2, 104);
+    }
 
     // Large Bold Sale Price
     ctx.fillStyle = "#000000";
-    ctx.font = "900 38px system-ui, -apple-system, sans-serif";
+    ctx.font = "900 36px system-ui, -apple-system, sans-serif";
+    ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText(`$${item.salePrice?.toFixed(2)}`, 14, 156);
-  } else if (item.hasStorePrice && item.regularPrice) {
+    const saleStr = `$${item.salePrice?.toFixed(2)}`;
+    ctx.fillText(saleStr, 14, 156);
+
+    // Strikethrough Regular Price
+    const saleWidth = ctx.measureText(saleStr).width;
+    const regStr = `$${item.regularPrice?.toFixed(2)}`;
+    ctx.font = "bold 13px system-ui, -apple-system, sans-serif";
+    ctx.fillStyle = "#000000";
+    const regX = 14 + saleWidth + 8;
+    const regY = 154;
+    ctx.fillText(regStr, regX, regY);
+
+    const regWidth = ctx.measureText(regStr).width;
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(regX - 1, regY - 5);
+    ctx.lineTo(regX + regWidth + 1, regY - 5);
+    ctx.stroke();
+  } else if (item.hasStorePrice && item.regularPrice && !item.isMsrpDefault) {
     // Confirmed Store Regular Price
     ctx.fillStyle = "#000000";
     ctx.font = "bold 10px system-ui, -apple-system, sans-serif";
@@ -159,37 +182,53 @@ export async function renderPriceTagToCanvas(
     ctx.font = "900 40px system-ui, -apple-system, sans-serif";
     ctx.textBaseline = "alphabetic";
     ctx.fillText(`$${item.regularPrice.toFixed(2)}`, 14, 156);
-  } else {
-    // Unconfirmed MSRP Guidance — Explicitly disambiguated
+  } else if (item.isMsrpDefault && item.regularPrice) {
+    // MSRP Default Regular Price
     ctx.fillStyle = "#000000";
     ctx.font = "bold 10px system-ui, -apple-system, sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText("MSRP GUIDANCE", 14, 104);
+    ctx.fillText("REGULAR", 14, 104);
 
-    // Dashed warning pill "SET PRICE"
+    // MSRP badge
     ctx.strokeStyle = "#000000";
     ctx.lineWidth = 1;
-    ctx.strokeRect(100, 96, 68, 16);
+    ctx.strokeRect(66, 96, 36, 16);
     ctx.font = "900 8.5px system-ui, -apple-system, sans-serif";
-    ctx.fillText("SET PRICE", 106, 104);
+    ctx.textAlign = "center";
+    ctx.fillText("MSRP", 84, 104);
 
-    ctx.font = "900 34px system-ui, -apple-system, sans-serif";
+    ctx.font = "900 40px system-ui, -apple-system, sans-serif";
+    ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText(`$${item.effectivePrice.toFixed(2)}`, 14, 156);
+    ctx.fillText(`$${item.regularPrice.toFixed(2)}`, 14, 156);
+  } else {
+    // Unpriced
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(14, 96, 68, 16);
+    ctx.font = "900 8.5px system-ui, -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("SET PRICE", 48, 104);
+
+    ctx.font = "bold 20px system-ui, -apple-system, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText("Not Priced", 14, 150);
   }
 
   // 5. Bottom Right: Canonical 12x12mm QR Code (96x96 px)
   if (item.qrDataUrl) {
     const qrImg = new Image();
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve) => {
       qrImg.onload = () => resolve();
       qrImg.onerror = () => resolve(); // continue even if QR load fails
       qrImg.src = item.qrDataUrl!;
     });
 
     const qrSize = 96; // 12mm at 203 DPI (8 dots/mm)
-    const qrX = 266;
+    const qrX = baseWidth - 14 - qrSize;
     const qrY = 96;
 
     ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
@@ -227,53 +266,126 @@ export async function exportPriceTagAsBlob(
 }
 
 /**
- * Mobile-First Export Action for NIIMBOT B1:
- * Tries Web Share API first so user can save directly to Photos/Files or open in NIIMBOT app.
- * Falls back gracefully to direct browser PNG download.
+ * Generate a safe, descriptive filename for 50x30mm price tag PNG.
+ * Example: KSELECT_Label_DR120-SB-001_50x30.png
  */
-export async function savePriceTagForNiimbot(
-  item: StoreProductTagItem
-): Promise<{ method: "share" | "download"; success: boolean }> {
+export function generatePriceTagFileName(
+  item: StoreProductTagItem,
+  storeName?: string
+): string {
+  const sanitize = (s: string) =>
+    s
+      .replace(/[^a-zA-Z0-9_-]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  const skuClean = sanitize(item.sku || "PROD");
+  const storeClean =
+    storeName && storeName !== "All Stores" ? `_${sanitize(storeName)}` : "";
+  return `KSELECT_Label_${skuClean}${storeClean}_50x30.png`;
+}
+
+/**
+ * Primary Direct Save / Download Action:
+ * Downloads the 50x30mm PNG label image directly to the client's Downloads folder.
+ * Uses native <a download> mechanism with Blob URL.
+ * NEVER invokes navigator.share() or opens the system sharing sheet.
+ */
+export async function downloadPriceTagImage(
+  item: StoreProductTagItem,
+  storeName?: string
+): Promise<{ success: boolean; fileName: string; sizeBytes: number }> {
   try {
     const blob = await exportPriceTagAsBlob(item, 2);
-    const fileName = `Label-${item.sku || "KSELECT"}-50x30mm.png`;
-    const file = new File([blob], fileName, { type: "image/png" });
-
-    // 1. Check Web Share API with files support (iOS Safari & Android Chrome)
-    if (
-      typeof navigator !== "undefined" &&
-      navigator.canShare &&
-      navigator.canShare({ files: [file] })
-    ) {
-      try {
-        await navigator.share({
-          title: `Price Tag - ${item.sku}`,
-          text: `50x30mm shelf label for ${item.productName}`,
-          files: [file],
-        });
-        return { method: "share", success: true };
-      } catch (shareErr: any) {
-        // If user cancelled share sheet, do not force redundant download
-        if (shareErr.name === "AbortError") {
-          return { method: "share", success: false };
-        }
-      }
-    }
-
-    // 2. Direct browser download fallback
+    const fileName = generatePriceTagFileName(item, storeName);
     const url = URL.createObjectURL(blob);
+
     const a = document.createElement("a");
     a.href = url;
     a.download = fileName;
+    a.rel = "noopener";
+
+    // On iOS Safari, target="_blank" allows direct viewing/saving if anchor download is restricted
+    const isIOS =
+      typeof navigator !== "undefined" &&
+      /iPad|iPhone|iPod/.test(navigator.userAgent || "");
+    if (isIOS) {
+      a.target = "_blank";
+    }
+
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
 
-    return { method: "download", success: true };
+    // Keep object URL active long enough for mobile download to initiate
+    setTimeout(() => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {}
+    }, 60000);
+
+    return { success: true, fileName, sizeBytes: blob.size };
   } catch (err) {
-    console.error("Error exporting price tag for NIIMBOT:", err);
+    console.error("Error downloading price tag image:", err);
     throw err;
+  }
+}
+
+/**
+ * Check if Web Share API is available in the current browser
+ */
+export function isWebShareSupported(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    typeof navigator.share === "function"
+  );
+}
+
+/**
+ * Separate Share Action:
+ * Explicitly triggers the native mobile sharing sheet only when the user taps "Share Image".
+ */
+export async function sharePriceTagImage(
+  item: StoreProductTagItem,
+  storeName?: string
+): Promise<{ success: boolean; shared: boolean; message?: string }> {
+  if (typeof navigator === "undefined" || !navigator.share) {
+    throw new Error("Web Share is not supported on this device/browser.");
+  }
+
+  const blob = await exportPriceTagAsBlob(item, 2);
+  const fileName = generatePriceTagFileName(item, storeName);
+  const file = new File([blob], fileName, { type: "image/png" });
+
+  if (
+    typeof navigator.canShare === "function" &&
+    navigator.canShare({ files: [file] })
+  ) {
+    try {
+      await navigator.share({
+        title: `K SELECT Price Tag - ${item.sku}`,
+        text: `50×30mm shelf tag for ${item.productName}`,
+        files: [file],
+      });
+      return { success: true, shared: true };
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        return { success: true, shared: false };
+      }
+      throw err;
+    }
+  } else {
+    try {
+      await navigator.share({
+        title: `K SELECT Price Tag - ${item.sku}`,
+        text: `50×30mm shelf tag for ${item.productName} (${item.sku})`,
+      });
+      return { success: true, shared: true, message: "Shared label details." };
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        return { success: true, shared: false };
+      }
+      throw new Error("File sharing is not supported by your browser's share sheet.");
+    }
   }
 }
 
@@ -285,7 +397,11 @@ export async function copyPriceTagImageToClipboard(
 ): Promise<boolean> {
   try {
     const blob = await exportPriceTagAsBlob(item, 2);
-    if (typeof navigator !== "undefined" && navigator.clipboard && (window as any).ClipboardItem) {
+    if (
+      typeof navigator !== "undefined" &&
+      navigator.clipboard &&
+      (window as any).ClipboardItem
+    ) {
       const itemToCopy = new (window as any).ClipboardItem({ "image/png": blob });
       await navigator.clipboard.write([itemToCopy]);
       return true;
@@ -295,4 +411,15 @@ export async function copyPriceTagImageToClipboard(
     console.warn("Clipboard copy not supported or failed:", err);
     return false;
   }
+}
+
+/**
+ * Backward compatibility alias: Calls direct download
+ */
+export async function savePriceTagForNiimbot(
+  item: StoreProductTagItem,
+  storeName?: string
+): Promise<{ method: "download"; success: boolean; fileName: string }> {
+  const res = await downloadPriceTagImage(item, storeName);
+  return { method: "download", success: res.success, fileName: res.fileName };
 }

@@ -11,8 +11,13 @@ import {
 import { PriceTagCard } from "@/components/retailer/price-tag-card";
 import { PriceTagModal } from "@/components/retailer/price-tag-modal";
 import {
-  savePriceTagForNiimbot,
+  exportPriceTagAsBlob,
+  downloadPriceTagImage,
+  sharePriceTagImage,
   copyPriceTagImageToClipboard,
+  isWebShareSupported,
+  generatePriceTagFileName,
+  savePriceTagForNiimbot,
 } from "@/lib/retailer/niimbot-export";
 
 interface PriceTagsDashboardProps {
@@ -49,6 +54,13 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [exportFeedback, setExportFeedback] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [canShare, setCanShare] = useState(false);
+  const [isPrintInfoOpen, setIsPrintInfoOpen] = useState(false);
+
+  React.useEffect(() => {
+    setCanShare(isWebShareSupported());
+  }, []);
 
   // Store selection choice modal for All Stores mode
   const [storeChoiceModalItem, setStoreChoiceModalItem] = useState<StoreProductTagItem | null>(null);
@@ -120,18 +132,35 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
   const selectedPrintItems = products.filter((p) => selectedProductIds.has(p.productId));
   const totalLabelsToPrint = selectedPrintItems.reduce((acc, it) => acc + getQty(it.productId), 0);
 
-  const handleExportSingleNiimbot = async (item: StoreProductTagItem) => {
+  const handleSaveImage = async (item: StoreProductTagItem) => {
     try {
       setIsExporting(true);
       setExportFeedback(null);
-      const res = await savePriceTagForNiimbot(item);
+      const res = await downloadPriceTagImage(item, selectedStoreName);
       if (res.success) {
-        setExportFeedback("📱 50×30mm label exported! Open NIIMBOT app → 50×30mm roll → Tap Image to print.");
+        setExportFeedback(
+          `💾 Downloaded "${res.fileName}" directly to your device! Open NIIMBOT app → 50×30mm roll → Tap Image to print.`
+        );
       }
     } catch (err: any) {
       setExportFeedback("Export failed. Please try again.");
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleShareImage = async (item: StoreProductTagItem) => {
+    try {
+      setIsSharing(true);
+      setExportFeedback(null);
+      const res = await sharePriceTagImage(item, selectedStoreName);
+      if (res.shared) {
+        setExportFeedback(res.message || "📤 Label shared successfully.");
+      }
+    } catch (err: any) {
+      setExportFeedback(err.message || "Failed to share image.");
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -141,7 +170,7 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
       if (ok) {
         setExportFeedback("📋 Label image copied to clipboard!");
       } else {
-        setExportFeedback("Clipboard not supported in this browser. Please use 'Save Label'.");
+        setExportFeedback("Clipboard not supported in this browser. Please use 'Save Image'.");
       }
     } catch {
       setExportFeedback("Failed to copy image.");
@@ -975,41 +1004,168 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
                   <span>How to print on NIIMBOT B1:</span>
                 </div>
                 <ol className="list-decimal list-inside space-y-1 text-zinc-600 dark:text-zinc-400 text-[11px] leading-relaxed">
-                  <li>Tap <strong>Save Label (50×30mm Image)</strong> below to download the tag image.</li>
+                  <li>Click <strong>Save Image</strong> below to download the 50×30mm label file directly to your device.</li>
                   <li>Open the official <strong>NIIMBOT</strong> smartphone app via Bluetooth.</li>
                   <li>Select label size <strong>50 × 30 mm</strong> and tap <strong>Image / Picture</strong>.</li>
-                  <li>Select the saved image and tap <strong>Print</strong>.</li>
+                  <li>Select the downloaded image from your device and tap <strong>Print</strong>.</li>
                 </ol>
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 bg-zinc-50/50 dark:bg-zinc-900/50">
-              <button
-                type="button"
-                onClick={() => handleCopyClipboard(previewingItem)}
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 cursor-pointer"
-              >
-                📋 Copy Image
-              </button>
+            {/* Footer with Distinct Save, Share, Print & Copy Actions */}
+            <div className="px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3 bg-zinc-50/50 dark:bg-zinc-900/50">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setPreviewingItem(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                  onClick={() => handleCopyClipboard(previewingItem)}
+                  className="px-3 py-2 rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                  title="Copy 50x30mm image to clipboard"
+                >
+                  📋 Copy
+                </button>
+                {canShare && (
+                  <button
+                    type="button"
+                    onClick={() => handleShareImage(previewingItem)}
+                    disabled={isSharing}
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                    title="Share label image via mobile sharing sheet"
+                  >
+                    <span>📤</span>
+                    <span>{isSharing ? "Sharing..." : "Share Image"}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsPrintInfoOpen(true)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors flex items-center gap-1.5"
+                  title="Print options and hardware guidance"
+                >
+                  <span>🖨️</span>
+                  <span>Print Label</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewingItem(null);
+                    setExportFeedback(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                 >
                   Close
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleExportSingleNiimbot(previewingItem)}
+                  onClick={() => handleSaveImage(previewingItem)}
                   disabled={isExporting}
                   className="px-5 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  title="Download 50x30mm PNG file directly to your device"
                 >
                   <span>💾</span>
-                  <span>Save Label Image</span>
+                  <span>{isExporting ? "Saving..." : "Save Image"}</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Hardware Dialog Modal */}
+      {isPrintInfoOpen && previewingItem && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setIsPrintInfoOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                  <span>🖨️</span>
+                  <span>Print 50×30mm Shelf Label</span>
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {previewingItem.brandName} • {previewingItem.sku}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPrintInfoOpen(false)}
+                className="w-7 h-7 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Option 1: NIIMBOT B1 Bluetooth Thermal Printer */}
+            <div className="p-4 rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-purple-950 dark:text-purple-200 flex items-center gap-1.5">
+                  <span>📱</span>
+                  <span>NIIMBOT B1 (Official Mobile Workflow)</span>
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-300">
+                  Recommended
+                </span>
+              </div>
+              <p className="text-[11px] text-purple-900/80 dark:text-purple-300/80 leading-relaxed">
+                1. Download the label file using <strong>Save Image</strong>.<br />
+                2. Open the official <strong>NIIMBOT</strong> app on your mobile device.<br />
+                3. Choose <strong>50 × 30 mm</strong> roll, tap <strong>Image</strong>, select the downloaded file, and tap <strong>Print</strong>.<br />
+                <em className="text-[10px] text-zinc-500 dark:text-zinc-400 block mt-1.5 font-normal">
+                  ℹ️ Direct WebBluetooth printing from browser is currently under development (Task RTP-PRICE-TAG-DIRECT-PRINT-001).
+                </em>
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPrintInfoOpen(false);
+                  handleSaveImage(previewingItem);
+                }}
+                className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white cursor-pointer transition-colors flex items-center justify-center gap-1.5 shadow-xs"
+              >
+                <span>💾</span>
+                <span>Download Label File for NIIMBOT App</span>
+              </button>
+            </div>
+
+            {/* Option 2: Standard Desktop / System Printer */}
+            <div className="p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                  <span>🖥️</span>
+                  <span>Standard Printer / Desktop Print</span>
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                Print this tag via your browser&apos;s standard print dialog for desktop laser, inkjet, or system-driver thermal printers.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPrintInfoOpen(false);
+                  window.print();
+                }}
+                className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-100 cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+              >
+                <span>🖨️</span>
+                <span>Open Browser Print Dialog</span>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setIsPrintInfoOpen(false)}
+                className="text-xs font-semibold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
