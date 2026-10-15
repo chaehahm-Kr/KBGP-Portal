@@ -130,6 +130,42 @@ export interface RetailerTrainingAnalyticsData {
 }
 
 // ==============================================================================
+// Authoritative Validation for Server-Verified Quiz Completions
+// ==============================================================================
+
+/**
+ * Shared Authoritative Validator for Server-Verified Quiz Completions
+ * Criteria per DEPLOY-STD-001 / ADM-TRAINING-P2-001-R1:
+ * - status === 'completed'
+ * - completed_at is not null
+ * - completion_type is NOT 'LEGACY_SELF_REPORTED'
+ * - If quiz score/total exist, quiz_score === quiz_total (100% server-graded pass)
+ */
+export function isServerVerifiedTrainingPass(progress: {
+  status?: string | null;
+  completed_at?: string | null;
+  completedAt?: string | null;
+  completion_type?: string | null;
+  quiz_score?: number | null;
+  quiz_total?: number | null;
+}): boolean {
+  if (progress.status !== "completed") return false;
+  const completedAt = progress.completed_at || progress.completedAt;
+  if (!completedAt) return false;
+  if (progress.completion_type === "LEGACY_SELF_REPORTED") return false;
+  if (
+    progress.quiz_score !== undefined &&
+    progress.quiz_score !== null &&
+    progress.quiz_total !== undefined &&
+    progress.quiz_total !== null &&
+    progress.quiz_total > 0
+  ) {
+    if (progress.quiz_score < progress.quiz_total) return false;
+  }
+  return true;
+}
+
+// ==============================================================================
 // Authoritative Computation Function
 // ==============================================================================
 
@@ -293,7 +329,8 @@ export async function computeRetailerTrainingAnalytics({
 
   // 3. Fetch Verified Employee Completions for this Company
   // Defensively handle progress query with or without completion_type column
-  const userCompletionsMap = new Map<string, Map<string, { completedAt: string; isLegacy?: boolean }>>();
+  type UserCompletionEntry = { completedAt: string; isVerified: boolean; isLegacy?: boolean };
+  const userCompletionsMap = new Map<string, Map<string, UserCompletionEntry>>();
   try {
     let progRows: any[] = [];
     const res = await adminClient
@@ -316,6 +353,7 @@ export async function computeRetailerTrainingAnalytics({
 
     (progRows || []).forEach((row) => {
       // Exclude unverified legacy completions from verified store coverage calculation
+      const isVerified = isServerVerifiedTrainingPass(row);
       const isLegacy = row.completion_type === "LEGACY_SELF_REPORTED";
       if (!userCompletionsMap.has(row.user_id)) {
         userCompletionsMap.set(row.user_id, new Map());
@@ -323,6 +361,7 @@ export async function computeRetailerTrainingAnalytics({
       userCompletionsMap.get(row.user_id)!.set(row.product_id, {
         completedAt: row.completed_at || new Date().toISOString(),
         isLegacy,
+        isVerified,
       });
     });
   } catch (err) {
@@ -408,8 +447,8 @@ export async function computeRetailerTrainingAnalytics({
 
       assignedUserIds.forEach((uId) => {
         const userComp = userCompletionsMap.get(uId)?.get(pId);
-        // Exclude legacy unverified self-reported records
-        if (userComp && !userComp.isLegacy) {
+        // Exclude legacy unverified self-reported records; require server-verified pass
+        if (userComp && userComp.isVerified) {
           const staffMember = assignedStaff.find((s) => s.id === uId);
           if (staffMember) {
             coveringStaff.push(staffMember.name);
@@ -511,7 +550,7 @@ export async function computeRetailerTrainingAnalytics({
         ? Array.from(employeeEligibleProductIds)
         : companyPublishedProductIds;
 
-    const userComps = userCompletionsMap.get(m.id) || new Map<string, { completedAt: string; isLegacy?: boolean }>();
+    const userComps = userCompletionsMap.get(m.id) || new Map<string, UserCompletionEntry>();
 
     let completedCount = 0;
     let latestDate: string | null = null;
@@ -525,7 +564,7 @@ export async function computeRetailerTrainingAnalytics({
       const p = productCatalogMap.get(pId);
       const tc = trainingContentMap.get(pId);
       const comp = userComps.get(pId);
-      const isComp = Boolean(comp && !comp.isLegacy);
+      const isComp = Boolean(comp && comp.isVerified);
 
       if (isComp) {
         completedCount++;
@@ -623,7 +662,7 @@ export async function computeRetailerTrainingAnalytics({
 
       assignedStaff.forEach((staff) => {
         const comp = userCompletionsMap.get(staff.id)?.get(pId);
-        if (comp && !comp.isLegacy) {
+        if (comp && comp.isVerified) {
           coveringEmployees.push(staff.name);
         }
       });
@@ -800,7 +839,7 @@ export async function computeBatchRetailersTrainingCoverage(
         .eq("status", "submitted"),
       adminClient
         .from("retailer_product_training_progress")
-        .select("company_id, user_id, product_id, status, completed_at")
+        .select("company_id, user_id, product_id, status, completed_at, completion_type, quiz_score, quiz_total")
         .in("company_id", companyIds)
         .in("product_id", publishedIdList)
         .eq("status", "completed")
@@ -881,9 +920,11 @@ export async function computeBatchRetailersTrainingCoverage(
       uMap.get(acc.user_id)!.stores.add(acc.store_id);
     });
 
-    // Build completions per company: companyId -> Map<productId, Set<userId>>
+    // Build verified completions per company: companyId -> Map<productId, Set<userId>>
     const companyCompletions = new Map<string, Map<string, Set<string>>>();
     (progRes.data || []).forEach((p: any) => {
+      // Exclude unverified legacy self-reported completions; require server-verified pass
+      if (!isServerVerifiedTrainingPass(p)) return;
       if (!companyCompletions.has(p.company_id)) companyCompletions.set(p.company_id, new Map());
       const pMap = companyCompletions.get(p.company_id)!;
       if (!pMap.has(p.product_id)) pMap.set(p.product_id, new Set());

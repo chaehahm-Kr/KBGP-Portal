@@ -43,9 +43,9 @@ export function Retailer360TrainingView({ training, companyName }: Props) {
   // Filtered gaps
   const filteredGaps = useMemo(() => {
     return gaps.filter((g) => {
-      if (gapFilter === "needs_training" && (g.status !== "needs_training" && g.status !== "partial")) return false;
-      if (gapFilter === "covered" && g.status !== "covered") return false;
-      if (gapFilter === "unavailable" && g.status !== "unavailable") return false;
+      if (gapFilter === "needs_training" && (g.trainingStatus !== "published" || (g.status !== "needs_training" && g.status !== "partial"))) return false;
+      if (gapFilter === "covered" && (g.trainingStatus !== "published" || g.status !== "covered")) return false;
+      if (gapFilter === "unavailable" && g.trainingStatus === "published") return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -59,9 +59,15 @@ export function Retailer360TrainingView({ training, companyName }: Props) {
     });
   }, [gaps, gapFilter, searchQuery]);
 
-  const needsTrainingGapsCount = gaps.filter((g) => g.status === "needs_training" || g.status === "partial").length;
-  const coveredGapsCount = gaps.filter((g) => g.status === "covered").length;
-  const unavailableGapsCount = gaps.filter((g) => g.status === "unavailable").length;
+  const needsTrainingProductsCount = gaps.filter(
+    (g) => g.trainingStatus === "published" && (g.status === "needs_training" || g.status === "partial")
+  ).length;
+  const coveredProductsCount = gaps.filter(
+    (g) => g.trainingStatus === "published" && g.status === "covered"
+  ).length;
+  const unavailableProductsCount = gaps.filter(
+    (g) => g.trainingStatus !== "published"
+  ).length;
 
   return (
     <div className="space-y-6 w-full text-left">
@@ -125,6 +131,9 @@ export function Retailer360TrainingView({ training, companyName }: Props) {
               <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
                 {summary.coveredPairsCount} / {summary.eligiblePairsCount}
               </span>
+              <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                Pairs
+              </span>
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
               {summary.coveredProductsCount} of {summary.eligiblePublishedProductsCount} distinct products covered
@@ -163,9 +172,14 @@ export function Retailer360TrainingView({ training, companyName }: Props) {
               >
                 {summary.trainingGapsCount}
               </span>
+              <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                Store/Product Pairs
+              </span>
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              {summary.trainingGapsCount === 0 ? "All carried products covered" : "Eligible pairs needing store staff training"}
+              {summary.trainingGapsCount === 0
+                ? "All carried products covered"
+                : "Eligible pairs needing store staff training (one product may require training in multiple stores)"}
             </p>
           </div>
         </div>
@@ -724,7 +738,7 @@ export function Retailer360TrainingView({ training, companyName }: Props) {
                   : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50"
               }`}
             >
-              Needs Training ({needsTrainingGapsCount})
+              Needs Training ({needsTrainingProductsCount} Products)
             </button>
             <button
               type="button"
@@ -735,7 +749,7 @@ export function Retailer360TrainingView({ training, companyName }: Props) {
                   : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50"
               }`}
             >
-              Covered ({coveredGapsCount})
+              Covered ({coveredProductsCount} Products)
             </button>
             <button
               type="button"
@@ -746,7 +760,7 @@ export function Retailer360TrainingView({ training, companyName }: Props) {
                   : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50"
               }`}
             >
-              Unavailable / Draft ({unavailableGapsCount})
+              Unavailable / Draft ({unavailableProductsCount} Products)
             </button>
           </div>
 
@@ -787,6 +801,7 @@ export function Retailer360TrainingView({ training, companyName }: Props) {
                     </tr>
                   ) : (
                     filteredGaps.map((g) => {
+                      const isPublished = g.trainingStatus === "published";
                       const uncoveredStores = g.eligibleStores.filter((s) => !s.isCovered);
                       return (
                         <tr key={g.productId} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30 transition-colors">
@@ -817,6 +832,10 @@ export function Retailer360TrainingView({ training, companyName }: Props) {
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                                 Draft
                               </span>
+                            ) : g.trainingStatus === "in_review" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                In Review
+                              </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
                                 Unavailable
@@ -825,44 +844,54 @@ export function Retailer360TrainingView({ training, companyName }: Props) {
                           </td>
 
                           <td className="py-3 px-4 text-center font-mono font-bold text-zinc-800 dark:text-zinc-200">
-                            {g.eligibleStoresCount}
+                            {isPublished ? g.eligibleStoresCount : <span className="text-zinc-400 font-normal">—</span>}
                           </td>
 
                           <td className="py-3 px-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            {g.coveredStoresCount}
+                            {isPublished ? g.coveredStoresCount : <span className="text-zinc-400 font-normal">—</span>}
                           </td>
 
                           <td className="py-3 px-3 text-center font-mono font-bold">
-                            {uncoveredStores.length > 0 ? (
-                              <span className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded">
-                                {uncoveredStores.length}
-                              </span>
+                            {isPublished ? (
+                              uncoveredStores.length > 0 ? (
+                                <span className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded">
+                                  {uncoveredStores.length}
+                                </span>
+                              ) : (
+                                <span className="text-zinc-400 font-normal">0</span>
+                              )
                             ) : (
-                              <span className="text-zinc-400">0</span>
+                              <span className="text-zinc-400 font-normal">—</span>
                             )}
                           </td>
 
                           <td className="py-3 px-4">
-                            <div className="flex flex-wrap gap-1.5 max-w-sm">
-                              {g.eligibleStores.map((st) => (
-                                <div
-                                  key={st.storeId}
-                                  className={`text-[10px] px-2 py-0.5 rounded flex items-center gap-1 border ${
-                                    st.isCovered
-                                      ? "bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300"
-                                      : "bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300"
-                                  }`}
-                                  title={
-                                    st.isCovered
-                                      ? `Covered by: ${st.coveringEmployees.join(", ")}`
-                                      : "No assigned staff has passed this module"
-                                  }
-                                >
-                                  <span>{st.isCovered ? "✓" : "✕"}</span>
-                                  <span className="font-semibold">{st.storeName}</span>
-                                </div>
-                              ))}
-                            </div>
+                            {isPublished ? (
+                              <div className="flex flex-wrap gap-1.5 max-w-sm">
+                                {g.eligibleStores.map((st) => (
+                                  <div
+                                    key={st.storeId}
+                                    className={`text-[10px] px-2 py-0.5 rounded flex items-center gap-1 border ${
+                                      st.isCovered
+                                        ? "bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300"
+                                        : "bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300"
+                                    }`}
+                                    title={
+                                      st.isCovered
+                                        ? `Covered by: ${st.coveringEmployees.join(", ")}`
+                                        : "No assigned staff has passed this module"
+                                    }
+                                  >
+                                    <span>{st.isCovered ? "✓" : "✕"}</span>
+                                    <span className="font-semibold">{st.storeName}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                                Training Not Available
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );
