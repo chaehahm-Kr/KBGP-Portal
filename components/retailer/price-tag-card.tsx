@@ -2,7 +2,10 @@
 
 import React from "react";
 import Image from "next/image";
-import { StoreProductTagItem, PHYSICAL_PRICE_TAG_DIMENSIONS } from "@/lib/retailer/store-pricing-types";
+import {
+  StoreProductTagItem,
+  resolveShelfTagTemplate,
+} from "@/lib/retailer/store-pricing-types";
 
 interface PriceTagCardProps {
   item: StoreProductTagItem;
@@ -11,41 +14,165 @@ interface PriceTagCardProps {
   scale?: number;
 }
 
-export function PriceTagCard({ item, className = "", isPrintVersion = false, scale }: PriceTagCardProps) {
+export function PriceTagCard({
+  item,
+  className = "",
+  isPrintVersion = false,
+  scale,
+}: PriceTagCardProps) {
   const {
     productName,
     brandName,
     sku,
-    hasStorePrice,
-    isMsrpDefault,
     regularPrice,
     salePrice,
     discountPercent,
-    isSaleActive,
-    effectivePrice,
-    priceBasis,
     qrDataUrl,
+    msrp,
   } = item;
 
-  const isSale =
-    isSaleActive &&
-    salePrice !== null &&
-    salePrice > 0 &&
-    regularPrice !== null &&
-    regularPrice > 0 &&
-    salePrice < regularPrice;
+  const template = resolveShelfTagTemplate(item);
+  const isSale = template === "sale_1e";
+
+  const effectiveRegularPrice =
+    regularPrice !== null && regularPrice > 0
+      ? regularPrice
+      : msrp > 0
+      ? msrp
+      : null;
 
   const effectiveDiscount =
     discountPercent !== null && discountPercent !== undefined
       ? discountPercent
-      : isSale && regularPrice && salePrice
-      ? Math.round(((regularPrice - salePrice) / regularPrice) * 100)
+      : isSale && effectiveRegularPrice && salePrice
+      ? Math.round(((effectiveRegularPrice - salePrice) / effectiveRegularPrice) * 100)
       : null;
+
+  const brandDisplay = (brandName || "K SELECT LAB").toUpperCase();
+  const skuDisplay = sku || "KS-PROD";
+  const nameLen = (productName || "").length;
+
+  if (isSale) {
+    // SALE 1e Template (Matches Attachment 2 & Claude PDF)
+    const nameFontSizeClass =
+      nameLen > 40
+        ? "text-[9.5px] leading-[1.12]"
+        : nameLen > 24
+        ? "text-[11px] leading-[1.15]"
+        : "text-[12.5px] leading-[1.18]";
+
+    const salePriceFontSizeClass =
+      (salePrice || 0) >= 100
+        ? "text-lg sm:text-xl"
+        : "text-xl sm:text-2xl";
+
+    return (
+      <div
+        className={`price-tag-container relative bg-white text-black border border-black rounded-lg flex select-none overflow-hidden ${
+          isPrintVersion
+            ? "print-tag-sheet"
+            : "shadow-sm aspect-[5/3] w-full max-w-[280px]"
+        } ${className}`}
+        style={{
+          width: isPrintVersion ? "50mm" : undefined,
+          height: isPrintVersion ? "30mm" : undefined,
+          maxWidth: isPrintVersion ? "50mm" : "280px",
+          maxHeight: isPrintVersion ? "30mm" : undefined,
+          boxSizing: "border-box",
+        }}
+      >
+        {/* Solid Vertical Black SALE Band (Far Left) */}
+        <div className="w-[18%] bg-black text-white flex items-center justify-center relative select-none self-stretch shrink-0">
+          <span className="font-black text-base sm:text-lg tracking-wider text-white rotate-[-90deg] whitespace-nowrap select-none">
+            SALE
+          </span>
+        </div>
+
+        {/* Main Content Area (Right of SALE Band) */}
+        <div className="flex-1 flex flex-col justify-between pl-2 pr-2 py-1.5 min-w-0">
+          {/* Header Row: Brand (Left) & SKU (Right) */}
+          <div className="flex items-center justify-between gap-1 leading-none border-b border-black pb-1">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-tight text-black truncate max-w-[65%]">
+              {brandDisplay}
+            </span>
+            <span className="text-[8.5px] sm:text-[9.5px] font-mono font-bold text-black shrink-0">
+              {skuDisplay}
+            </span>
+          </div>
+
+          {/* Body: Text column (left of QR) and QR column (right) */}
+          <div className="flex-1 flex items-stretch justify-between gap-1 pt-1 min-h-0">
+            {/* Text Stack */}
+            <div className="flex-1 flex flex-col justify-between min-w-0 pr-1">
+              {/* Product Name */}
+              <div className={`${nameFontSizeClass} font-bold text-black line-clamp-2 leading-tight`}>
+                {productName}
+              </div>
+
+              {/* Price Stack */}
+              <div className="space-y-0.5 pt-0.5">
+                {effectiveDiscount !== null && (
+                  <div className="inline-block self-start border border-black px-1.5 py-0.2 rounded-[2px] bg-white leading-none">
+                    <span className="font-black text-[7.5px] sm:text-[8.5px] text-black tracking-tight block">
+                      SAVE {effectiveDiscount}%
+                    </span>
+                  </div>
+                )}
+                <div className="text-[9px] sm:text-[10px] font-bold text-black line-through decoration-black decoration-[1.5px] leading-tight">
+                  ${effectiveRegularPrice?.toFixed(2)}
+                </div>
+                <div className={`${salePriceFontSizeClass} font-black text-black leading-none tracking-tight`}>
+                  ${salePrice?.toFixed(2)}
+                </div>
+              </div>
+            </div>
+
+            {/* QR Code Column */}
+            <div className="w-[32%] sm:w-[30%] flex flex-col items-center justify-end shrink-0 self-end pb-0.5">
+              <div className="w-full aspect-square relative bg-white">
+                {qrDataUrl ? (
+                  <Image
+                    src={qrDataUrl}
+                    alt={`QR code for ${productName}`}
+                    fill
+                    className="object-contain"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[7px] font-bold text-black">
+                    QR
+                  </div>
+                )}
+              </div>
+              <span className="text-[5.5px] sm:text-[6.5px] font-extrabold text-black tracking-tight mt-0.5 whitespace-nowrap text-center block">
+                SCAN FOR INFO
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // REGULAR 1c Template (Matches Attachment 1 & Claude PDF)
+  const nameFontSizeClass =
+    nameLen > 40
+      ? "text-[11px] leading-[1.15]"
+      : nameLen > 24
+      ? "text-[13px] leading-[1.18]"
+      : "text-[15px] leading-[1.2]";
+
+  const regularPriceFontSizeClass =
+    (effectiveRegularPrice || 0) >= 100
+      ? "text-2xl sm:text-3xl"
+      : "text-3xl sm:text-4xl";
 
   return (
     <div
-      className={`price-tag-container relative bg-white text-black border border-black rounded-lg p-2.5 flex flex-col justify-between select-none overflow-hidden ${
-        isPrintVersion ? "print-tag-sheet" : "shadow-sm aspect-[5/3] w-full max-w-[280px]"
+      className={`price-tag-container relative bg-white text-black border border-black rounded-lg p-2 sm:p-2.5 flex flex-col justify-between select-none overflow-hidden ${
+        isPrintVersion
+          ? "print-tag-sheet"
+          : "shadow-sm aspect-[5/3] w-full max-w-[280px]"
       } ${className}`}
       style={{
         width: isPrintVersion ? "50mm" : undefined,
@@ -55,86 +182,41 @@ export function PriceTagCard({ item, className = "", isPrintVersion = false, sca
         boxSizing: "border-box",
       }}
     >
-      {/* Top row: Brand & SKU */}
-      <div className="flex items-center justify-between gap-1 leading-none border-b border-black/15 pb-1">
-        <span className="text-[10px] font-black uppercase tracking-wider text-black truncate max-w-[65%]">
-          {brandName}
+      {/* Top Header: Brand (Left) & SKU (Right) */}
+      <div className="flex items-center justify-between gap-1 leading-none border-b border-black pb-1">
+        <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-tight text-black truncate max-w-[65%]">
+          {brandDisplay}
         </span>
-        <span className="text-[9px] font-mono font-bold text-black/80 flex-shrink-0">
-          {sku}
+        <span className="text-[9px] sm:text-[10px] font-mono font-bold text-black shrink-0">
+          {skuDisplay}
         </span>
       </div>
 
       {/* Middle row: Product Name (up to 2 lines) */}
       <div className="my-auto py-0.5">
-        <div className="text-[11px] font-bold text-black line-clamp-2 leading-tight">
+        <div className={`${nameFontSizeClass} font-bold text-black line-clamp-2 leading-tight`}>
           {productName}
         </div>
       </div>
 
-      {/* Bottom row: Price block + 12x12mm Canonical QR code */}
-      <div className="flex items-end justify-between gap-1.5 pt-1 border-t border-black/20">
-        {/* Price Display */}
+      {/* Bottom row: Large Selling Price (Left) + Scannable QR (Right) */}
+      <div className="flex items-end justify-between gap-1.5 pt-1">
+        {/* Large Selling Price (Clean, no SALE graphics, no MSRP/STORE labels) */}
         <div className="flex-1 min-w-0">
-          {isSale ? (
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-1">
-                <span className="px-1.5 py-0.2 rounded bg-black text-white text-[8px] font-black uppercase tracking-wider">
-                  SALE
-                </span>
-                {effectiveDiscount !== null && (
-                  <span className="px-1 py-0.2 rounded border border-black text-black text-[7.5px] font-black uppercase tracking-tight">
-                    SAVE {effectiveDiscount}%
-                  </span>
-                )}
-              </div>
-              <div className="flex items-baseline gap-1.5 mt-0.5">
-                <span className="text-xl sm:text-2xl font-black text-black leading-none tracking-tight">
-                  ${salePrice?.toFixed(2)}
-                </span>
-                <span className="text-[8.5px] text-black/70 line-through font-bold">
-                  ${regularPrice?.toFixed(2)}
-                </span>
-              </div>
-            </div>
-          ) : hasStorePrice && regularPrice && !isMsrpDefault ? (
-            <div className="space-y-0.5">
-              <div className="text-[7.5px] font-bold uppercase tracking-wider text-black/60">
-                STORE PRICE
-              </div>
-              <div className="text-xl sm:text-2xl font-black text-black leading-none tracking-tight">
-                ${regularPrice.toFixed(2)}
-              </div>
-            </div>
-          ) : isMsrpDefault && regularPrice ? (
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-1">
-                <span className="text-[7.5px] font-extrabold uppercase tracking-wider text-black/60">
-                  REGULAR
-                </span>
-                <span className="px-1 py-0.2 rounded bg-zinc-100 border border-black/30 text-[7px] font-bold uppercase tracking-tight text-black">
-                  MSRP
-                </span>
-              </div>
-              <div className="text-xl sm:text-2xl font-black text-black leading-none tracking-tight">
-                ${regularPrice.toFixed(2)}
-              </div>
+          {effectiveRegularPrice !== null ? (
+            <div className={`${regularPriceFontSizeClass} font-black text-black leading-none tracking-tight`}>
+              ${effectiveRegularPrice.toFixed(2)}
             </div>
           ) : (
-            <div className="space-y-0.5">
-              <div className="px-1 py-0.2 rounded border border-black/40 text-[7.5px] font-black uppercase tracking-tight text-black inline-block">
-                SET PRICE
-              </div>
-              <div className="text-sm font-bold text-black/40 leading-none">
-                Not Priced
-              </div>
+            <div className="text-base sm:text-lg font-bold text-black leading-none">
+              Set Price
             </div>
           )}
         </div>
 
-        {/* Canonical QR Code (12mm equivalent) */}
-        <div className="flex flex-col items-center flex-shrink-0">
-          <div className="w-10 h-10 sm:w-11 sm:h-11 relative bg-white p-0.5 border border-black rounded">
+        {/* Canonical QR Code + SCAN FOR INFO */}
+        <div className="w-[30%] sm:w-[28%] flex flex-col items-center shrink-0">
+          <div className="w-full aspect-square relative bg-white">
             {qrDataUrl ? (
               <Image
                 src={qrDataUrl}
@@ -144,12 +226,12 @@ export function PriceTagCard({ item, className = "", isPrintVersion = false, sca
                 unoptimized
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-[7px] font-bold text-black/40">
+              <div className="w-full h-full flex items-center justify-center text-[7px] font-bold text-black">
                 QR
               </div>
             )}
           </div>
-          <span className="text-[6.5px] font-bold text-black/70 tracking-tight mt-0.5">
+          <span className="text-[6px] sm:text-[7px] font-extrabold text-black tracking-tight mt-0.5 whitespace-nowrap text-center block">
             SCAN FOR INFO
           </span>
         </div>

@@ -1,5 +1,8 @@
 /**
  * Centralized Physical Price Tag Dimensions configuration (standard 50mm x 30mm NIIMBOT B1 shelf label)
+ * Exact 5:3 aspect ratio (50mm : 30mm = 5:3 = 1.6667)
+ * At 203 DPI (8 dots/mm): 400 dots wide x 240 dots high.
+ * 2x High-DPI Canvas Export: 800 x 480 pixels (mathematically exact 5:3).
  */
 export const PHYSICAL_PRICE_TAG_DIMENSIONS = {
   widthMm: 50,
@@ -8,10 +11,37 @@ export const PHYSICAL_PRICE_TAG_DIMENSIONS = {
   heightInches: 1.18,
   dpi: 203,
   dotsPerMm: 8,
-  pixelWidth: 384, // Printable width on NIIMBOT B1 / 50mm direct thermal (400 dots total, 384 printable)
-  pixelHeight: 240, // Printable height on NIIMBOT B1 / 30mm direct thermal (240 dots)
+  pixelWidth: 400, // Exact 50mm on NIIMBOT B1 thermal roll (50mm * 8 dots/mm = 400 dots)
+  pixelHeight: 240, // Exact 30mm on NIIMBOT B1 thermal roll (30mm * 8 dots/mm = 240 dots)
+  exportWidth: 800, // 2x High-DPI export width (800 x 480 px, exact 5:3)
+  exportHeight: 480, // 2x High-DPI export height
+  aspectRatio: "5:3",
   labelName: "Standard Shelf Fixture Tag (50mm × 30mm) / NIIMBOT B1",
 };
+
+export type ShelfTagTemplate = "regular_1c" | "sale_1e";
+
+/**
+ * Authoritative Store-Level Template Resolver
+ * REGULAR 1c: When there is no valid active SALE price strictly lower than regular price.
+ * SALE 1e: Applied ONLY when a valid active SALE price is strictly lower than regular price.
+ */
+export function resolveShelfTagTemplate(item: {
+  isSaleActive?: boolean;
+  salePrice?: number | null;
+  regularPrice?: number | null;
+}): ShelfTagTemplate {
+  const isSale =
+    Boolean(item.isSaleActive) &&
+    typeof item.salePrice === "number" &&
+    item.salePrice > 0 &&
+    typeof item.regularPrice === "number" &&
+    item.regularPrice > 0 &&
+    item.salePrice < item.regularPrice;
+
+  return isSale ? "sale_1e" : "regular_1c";
+}
+
 
 export interface StoreProductPriceRecord {
   id?: string;
