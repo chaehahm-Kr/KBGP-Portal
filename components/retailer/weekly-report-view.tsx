@@ -69,6 +69,8 @@ export function WeeklyReportView({ initialData }: Props) {
   const [showMethodology, setShowMethodology] = useState(false);
   const [addingProductIds, setAddingProductIds] = useState<Record<string, number>>({});
   const [cartSuccessFeedback, setCartSuccessFeedback] = useState<string | null>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const {
     reportingWeek,
@@ -162,6 +164,49 @@ export function WeeklyReportView({ initialData }: Props) {
     setTimeout(() => setCartSuccessFeedback(null), 3500);
   };
 
+  const handleDownloadPdf = async () => {
+    try {
+      setIsDownloadingPdf(true);
+      setDownloadError(null);
+
+      const params = new URLSearchParams();
+      if (reportingWeek) params.set("week", reportingWeek);
+      if (selectedStoreId && selectedStoreId !== "all") params.set("store", selectedStoreId);
+
+      const response = await fetch(`/api/retailer/reports/weekly/pdf?${params.toString()}`);
+
+      if (!response.ok) {
+        const errorJson = await response.json().catch(() => null);
+        throw new Error(errorJson?.error || `Failed to download PDF (${response.status})`);
+      }
+
+      // Extract filename from Content-Disposition if present
+      const disposition = response.headers.get("Content-Disposition");
+      let filename = `KSELECT_Weekly_Report_${reportingWeek || "Current"}.pdf`;
+      if (disposition && disposition.includes("filename=")) {
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) {
+          filename = match[1];
+        }
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      console.error("[Weekly Report PDF Download Error]", err);
+      setDownloadError(err?.message || "Failed to download PDF report. Please try again.");
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
   return (
     <div className="w-full space-y-5 pb-12">
       {/* Header & Title (Left-Aligned) */}
@@ -178,15 +223,61 @@ export function WeeklyReportView({ initialData }: Props) {
           </p>
         </div>
 
-        {/* Action Link to Weekly Inventory */}
-        <Link
-          href="/check"
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 shadow-xs transition-colors self-start md:self-auto cursor-pointer"
-        >
-          <span>📱</span>
-          <span>Submit Weekly Inventory</span>
-        </Link>
+        {/* Action Buttons: Download PDF & Submit Weekly Inventory */}
+        <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+          {/* Download PDF Button */}
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={isDownloadingPdf}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-300 dark:border-zinc-700 shadow-xs transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Download authoritative print-ready report in US Letter PDF format"
+          >
+            {isDownloadingPdf ? (
+              <>
+                <svg className="animate-spin h-3.5 w-3.5 text-zinc-600 dark:text-zinc-300" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Generating PDF...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5 text-zinc-600 dark:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>Download PDF</span>
+              </>
+            )}
+          </button>
+
+          {/* Action Link to Weekly Inventory */}
+          <Link
+            href="/check"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 shadow-xs transition-colors cursor-pointer"
+          >
+            <span>📱</span>
+            <span>Submit Weekly Inventory</span>
+          </Link>
+        </div>
       </div>
+
+      {/* Download Error Feedback Notification */}
+      {downloadError && (
+        <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-rose-500 font-bold">✕</span>
+            <span>{downloadError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDownloadError(null)}
+            className="text-xs font-semibold text-rose-700 dark:text-rose-300 hover:underline cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Cart Feedback Notification */}
       {cartSuccessFeedback && (
