@@ -8,7 +8,9 @@ import type {
   TrainingSourceReadiness,
   TrainingVersionType,
   TrainingSectionKey,
+  ClaimVerificationItem,
 } from "@/lib/training/training-types";
+import { verifyTrainingContentClaims } from "@/lib/training/source-readiness";
 import {
   getAdminTrainingModule,
   generateAiTrainingAction,
@@ -38,8 +40,68 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
   const [saveStatus, setSaveStatus] = useState<"saved" | "unsaved" | "saving" | "error">("saved");
   const [regeneratingSection, setRegeneratingSection] = useState<TrainingSectionKey | null>(null);
+  const [highlightedTarget, setHighlightedTarget] = useState<{
+    fieldTarget: string;
+    reason?: string;
+    severity?: "blocking" | "warning";
+  } | null>(null);
 
   const [isPending, startTransition] = useTransition();
+
+  // In-Memory Revalidation on Content/Quiz changes
+  const handleModuleChange = (updated: TrainingModuleData) => {
+    if (context) {
+      updated.contentVerification = verifyTrainingContentClaims(updated, context);
+    }
+    setModule(updated);
+    setSaveStatus("unsaved");
+
+    // Clear highlightedTarget if the target field was just modified and is now verified
+    if (highlightedTarget && context) {
+      const stillFlagged = updated.contentVerification?.claims.some(
+        (c) => c.fieldTarget === highlightedTarget.fieldTarget && (c.status === "unsupported" || c.status === "needs_review")
+      );
+      if (!stillFlagged) {
+        setHighlightedTarget(null);
+      }
+    }
+  };
+
+  // Deep Navigation from Publish Modal or Source Readiness card
+  const handleNavigateToIssue = (issue: ClaimVerificationItem) => {
+    setIsPublishModalOpen(false);
+
+    const isQuiz = issue.sectionKey === "quizQuestions" || issue.fieldTarget?.startsWith("field-quiz");
+    const targetTab = isQuiz ? "quiz" : "content";
+    setActiveTab(targetTab);
+
+    if (issue.fieldTarget) {
+      setHighlightedTarget({
+        fieldTarget: issue.fieldTarget,
+        reason: issue.reason,
+        severity: issue.severity,
+      });
+
+      setTimeout(() => {
+        const el = document.getElementById(issue.fieldTarget!);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus();
+        }
+      }, 150);
+    }
+  };
+
+  // Explicit claim re-check
+  const handleRecheckClaims = () => {
+    if (!module || !context) return;
+    const rechecked = verifyTrainingContentClaims(module, context);
+    setModule({ ...module, contentVerification: rechecked });
+    setStatusMessage({
+      text: `Claims re-evaluated against catalog: ${rechecked.verifiedCount} verified, ${rechecked.unsupportedCount} blocking issues.`,
+      type: rechecked.unsupportedCount === 0 ? "success" : "info",
+    });
+  };
 
   // Load initial module state
   useEffect(() => {
@@ -432,18 +494,18 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
                 <TrainingSourceReadinessCard
                   readiness={sourceReadiness}
                   verification={module.contentVerification}
+                  onRefresh={handleRecheckClaims}
+                  onNavigateToIssue={handleNavigateToIssue}
                 />
               )}
               <TrainingContentEditor
                 module={module}
-                onChange={(updated) => {
-                  setModule(updated);
-                  setSaveStatus("unsaved");
-                }}
+                onChange={handleModuleChange}
                 onRegenerateSection={handleRegenerateSection}
                 isRegeneratingSection={regeneratingSection}
                 saveStatus={saveStatus}
                 disabled={isPending}
+                highlightedTarget={highlightedTarget}
               />
             </div>
           )}
@@ -454,10 +516,11 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
               <TrainingQuizEditor
                 questions={module.quizQuestions}
                 onChange={(qs) => {
-                  setModule({ ...module, quizQuestions: qs });
-                  setSaveStatus("unsaved");
+                  const updated = { ...module, quizQuestions: qs };
+                  handleModuleChange(updated);
                 }}
                 disabled={isPending}
+                highlightedTarget={highlightedTarget}
               />
             </div>
           )}
@@ -468,6 +531,8 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
               <TrainingSourceReadinessCard
                 readiness={sourceReadiness}
                 verification={module.contentVerification}
+                onRefresh={handleRecheckClaims}
+                onNavigateToIssue={handleNavigateToIssue}
               />
             </div>
           )}
@@ -516,6 +581,7 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
           onClose={() => setIsPublishModalOpen(false)}
           onConfirmPublish={handleConfirmPublish}
           isPending={isPending}
+          onNavigateToIssue={handleNavigateToIssue}
         />
       )}
     </div>

@@ -7,6 +7,11 @@ interface TrainingQuizEditorProps {
   questions: QuizQuestionItem[];
   onChange: (updated: QuizQuestionItem[]) => void;
   disabled?: boolean;
+  highlightedTarget?: {
+    fieldTarget: string;
+    reason?: string;
+    severity?: "blocking" | "warning";
+  } | null;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -17,7 +22,27 @@ const CATEGORY_LABELS: Record<string, string> = {
   precaution: "Precaution (주의사항)",
 };
 
-export function TrainingQuizEditor({ questions, onChange, disabled = false }: TrainingQuizEditorProps) {
+export function TrainingQuizEditor({
+  questions,
+  onChange,
+  disabled = false,
+  highlightedTarget = null,
+}: TrainingQuizEditorProps) {
+  const isTarget = (id: string) => highlightedTarget?.fieldTarget === id;
+  const getHighlightClass = (id: string) =>
+    isTarget(id)
+      ? "ring-2 ring-rose-500 border-rose-500 dark:border-rose-500 shadow-md animate-pulse"
+      : "";
+
+  const renderNotice = (id: string) => {
+    if (!isTarget(id) || !highlightedTarget?.reason) return null;
+    return (
+      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs font-medium animate-in fade-in mt-1">
+        <span className="font-bold">⚠️ Quiz Issue:</span>
+        <span>{highlightedTarget.reason}</span>
+      </div>
+    );
+  };
   const handleQuestionTextChange = (index: number, text: string) => {
     const updated = [...questions];
     updated[index] = { ...updated[index], question: text };
@@ -185,13 +210,17 @@ export function TrainingQuizEditor({ questions, onChange, disabled = false }: Tr
                 Question Prompt:
               </label>
               <input
+                id={`field-quiz-${qIdx}-question`}
                 type="text"
                 disabled={disabled}
                 value={q.question}
                 onChange={(e) => handleQuestionTextChange(qIdx, e.target.value)}
                 placeholder="Enter clear, staff-relevant question..."
-                className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-3 text-zinc-900 dark:text-zinc-100 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className={`w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-3 text-zinc-900 dark:text-zinc-100 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all ${getHighlightClass(
+                  `field-quiz-${qIdx}-question`
+                )}`}
               />
+              {renderNotice(`field-quiz-${qIdx}-question`)}
             </div>
 
             {/* 3 Answer Options */}
@@ -203,42 +232,45 @@ export function TrainingQuizEditor({ questions, onChange, disabled = false }: Tr
                 {q.options.map((opt, optIdx) => {
                   const isCorrect = q.correctIndex === optIdx;
                   return (
-                    <div
-                      key={optIdx}
-                      className={`flex items-center gap-2 p-2 rounded-xl border transition-colors ${
-                        isCorrect
-                          ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800"
-                          : "bg-zinc-50/60 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => handleCorrectOptionChange(qIdx, optIdx)}
-                        className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 cursor-pointer ${
+                    <div key={optIdx} className="space-y-1">
+                      <div
+                        className={`flex items-center gap-2 p-2 rounded-xl border transition-colors ${
                           isCorrect
-                            ? "bg-emerald-600 text-white shadow-xs"
-                            : "border border-zinc-300 dark:border-zinc-600 text-zinc-400 hover:border-emerald-500"
-                        }`}
-                        title={isCorrect ? "Correct answer" : "Click to set as correct answer"}
+                            ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800"
+                            : "bg-zinc-50/60 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700"
+                        } ${getHighlightClass(`field-quiz-${qIdx}-opt-${optIdx}`)}`}
                       >
-                        {isCorrect ? "✓" : String.fromCharCode(65 + optIdx)}
-                      </button>
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => handleCorrectOptionChange(qIdx, optIdx)}
+                          className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 cursor-pointer ${
+                            isCorrect
+                              ? "bg-emerald-600 text-white shadow-xs"
+                              : "border border-zinc-300 dark:border-zinc-600 text-zinc-400 hover:border-emerald-500"
+                          }`}
+                          title={isCorrect ? "Correct answer" : "Click to set as correct answer"}
+                        >
+                          {isCorrect ? "✓" : String.fromCharCode(65 + optIdx)}
+                        </button>
 
-                      <input
-                        type="text"
-                        disabled={disabled}
-                        value={opt}
-                        onChange={(e) => handleOptionChange(qIdx, optIdx, e.target.value)}
-                        placeholder={`Option ${String.fromCharCode(65 + optIdx)}...`}
-                        className="flex-1 text-xs bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none"
-                      />
+                        <input
+                          id={`field-quiz-${qIdx}-opt-${optIdx}`}
+                          type="text"
+                          disabled={disabled}
+                          value={opt}
+                          onChange={(e) => handleOptionChange(qIdx, optIdx, e.target.value)}
+                          placeholder={`Option ${String.fromCharCode(65 + optIdx)}...`}
+                          className="flex-1 text-xs bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none"
+                        />
 
-                      {isCorrect && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tight bg-emerald-600 text-white shrink-0">
-                          Correct Answer
-                        </span>
-                      )}
+                        {isCorrect && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tight bg-emerald-600 text-white shrink-0">
+                            Correct Answer
+                          </span>
+                        )}
+                      </div>
+                      {renderNotice(`field-quiz-${qIdx}-opt-${optIdx}`)}
                     </div>
                   );
                 })}
@@ -251,13 +283,17 @@ export function TrainingQuizEditor({ questions, onChange, disabled = false }: Tr
                 <span>💡</span> Educational Feedback & Explanation (Shown on Answer Review / Retries):
               </label>
               <textarea
+                id={`field-quiz-${qIdx}-explanation`}
                 rows={2}
                 disabled={disabled}
                 value={q.explanation}
                 onChange={(e) => handleExplanationChange(qIdx, e.target.value)}
                 placeholder="Explain why this answer is correct and provide practical retail context..."
-                className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className={`w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all ${getHighlightClass(
+                  `field-quiz-${qIdx}-explanation`
+                )}`}
               />
+              {renderNotice(`field-quiz-${qIdx}-explanation`)}
             </div>
           </div>
         ))}

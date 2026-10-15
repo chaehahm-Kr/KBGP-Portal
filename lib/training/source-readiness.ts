@@ -7,6 +7,7 @@ import type {
   ContentVerificationSummary,
   ClaimVerificationItem,
   ClaimVerificationStatus,
+  TrainingSectionKey,
 } from "./training-types";
 
 /**
@@ -239,6 +240,18 @@ export function evaluateTrainingSourceReadiness(
  * Perform Factual Claim Verification & Source Attribution
  * Separates Source Readiness (data completeness) from Content Verification (factual backing of generated claims).
  */
+/**
+ * Perform Comprehensive Factual Claim Verification & Source Attribution
+ * Inspects the entire Training Module and Assessment Quiz field-by-field:
+ * - Product Overview
+ * - Top 3 Benefits
+ * - Best For
+ * - How to Use
+ * - Selling Points & 15-Second Pitch
+ * - Customer Objections & Answers
+ * - Storage & Handling SOP
+ * - Quiz Questions (prompts, all 3 options, and educational explanations)
+ */
 export function verifyTrainingContentClaims(
   module: TrainingModuleData,
   context: GroundedTrainingContext
@@ -260,20 +273,7 @@ export function verifyTrainingContentClaims(
     catalogHowToUse,
   ].join(" ");
 
-  const allModuleText = [
-    module.productOverview,
-    ...module.top3Benefits,
-    module.bestFor,
-    module.howToUse,
-    ...module.sellingPoints,
-    module.pitch15s,
-    ...module.customerObjections.map((o) => `${o.objection} ${o.answer}`),
-    module.storageHandlingSop,
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  // Helper to locate evidence
+  // Helper to locate evidence in catalog sources
   const findEvidence = (query: string): { found: boolean; source: string; snippet?: string } => {
     const q = query.toLowerCase();
     for (let i = 0; i < context.bulletPoints.length; i++) {
@@ -299,173 +299,358 @@ export function verifyTrainingContentClaims(
         snippet: context.ingredientsText.slice(0, 100),
       };
     }
+    if (context.howToUse && catalogHowToUse.includes(q)) {
+      return {
+        found: true,
+        source: "Product Catalog > products.how_to_use",
+        snippet: context.howToUse.slice(0, 100),
+      };
+    }
     return { found: false, source: "Needs Verification" };
   };
 
-  // 1. High-Risk Claim: Dermatologist Tested
-  if (allModuleText.includes("dermatologist") || allModuleText.includes("dermatologist-tested")) {
-    const ev = findEvidence("dermatologist");
-    if (ev.found) {
-      claims.push({
-        id: "claim_derm",
-        claim: "Dermatologist-tested formulation",
-        status: "verified",
-        sourceCategory: ev.source,
-        evidenceSnippet: ev.snippet,
-      });
-    } else {
-      claims.push({
-        id: "claim_derm",
-        claim: "Dermatologist-tested claim",
-        status: "unsupported",
-        sourceCategory: "Needs Verification (No clinical audit record)",
-        qualificationNote: "The term 'dermatologist-tested' requires explicit clinical trial documentation in the catalog before publication.",
-        isForbiddenPhrase: true,
-      });
-      unsupportedWarnings.push("Claim 'Dermatologist-tested' has no supporting clinical document in catalog.");
-    }
+  // Inspectable field descriptor
+  interface InspectedField {
+    sectionKey: TrainingSectionKey;
+    location: string;
+    fieldTarget: string;
+    text: string;
   }
 
-  // 2. High-Risk Claim: Clinically Proven
-  if (allModuleText.includes("clinically proven") || allModuleText.includes("clinical trial")) {
-    const ev = findEvidence("clinically proven");
-    if (ev.found) {
-      claims.push({
-        id: "claim_clinical",
-        claim: "Clinically proven efficacy",
-        status: "verified",
-        sourceCategory: ev.source,
-        evidenceSnippet: ev.snippet,
-      });
-    } else {
-      claims.push({
-        id: "claim_clinical",
-        claim: "Clinically proven claim",
-        status: "unsupported",
-        sourceCategory: "Needs Verification (No trial data)",
-        qualificationNote: "'Clinically proven' statements are forbidden without certified third-party testing documentation.",
-        isForbiddenPhrase: true,
-      });
-      unsupportedWarnings.push("Claim 'Clinically proven' lacks third-party trial backing.");
-    }
-  }
+  // 1. Gather all inspectable fields across Training Content
+  const fieldsToInspect: InspectedField[] = [
+    {
+      sectionKey: "productOverview",
+      location: "Training Content > 1. Product Overview",
+      fieldTarget: "field-productOverview",
+      text: module.productOverview || "",
+    },
+    ...module.top3Benefits.map((b, idx) => ({
+      sectionKey: "top3Benefits" as TrainingSectionKey,
+      location: `Training Content > 2. Top 3 Benefits (Benefit #${idx + 1})`,
+      fieldTarget: `field-top3Benefits-${idx}`,
+      text: b || "",
+    })),
+    {
+      sectionKey: "bestFor",
+      location: "Training Content > 3. Best For (Target Customer)",
+      fieldTarget: "field-bestFor",
+      text: module.bestFor || "",
+    },
+    {
+      sectionKey: "howToUse",
+      location: "Training Content > 4. How to Use Instructions",
+      fieldTarget: "field-howToUse",
+      text: module.howToUse || "",
+    },
+    {
+      sectionKey: "pitch15s",
+      location: "Training Content > 5. 15-Second Counter Pitch",
+      fieldTarget: "field-pitch15s",
+      text: module.pitch15s || "",
+    },
+    ...module.sellingPoints.map((sp, idx) => ({
+      sectionKey: "sellingPoints" as TrainingSectionKey,
+      location: `Training Content > 5. Selling Point #${idx + 1}`,
+      fieldTarget: `field-sellingPoints-${idx}`,
+      text: sp || "",
+    })),
+    ...module.customerObjections.flatMap((obj, idx) => [
+      {
+        sectionKey: "customerObjections" as TrainingSectionKey,
+        location: `Training Content > 6. Customer Objection #${idx + 1}`,
+        fieldTarget: `field-customerObjections-${idx}-objection`,
+        text: obj.objection || "",
+      },
+      {
+        sectionKey: "customerObjections" as TrainingSectionKey,
+        location: `Training Content > 6. Customer Objection Answer #${idx + 1}`,
+        fieldTarget: `field-customerObjections-${idx}-answer`,
+        text: obj.answer || "",
+      },
+    ]),
+    {
+      sectionKey: "storageHandlingSop",
+      location: "Training Content > 7. Storage & Handling SOP",
+      fieldTarget: "field-storageHandlingSop",
+      text: module.storageHandlingSop || "",
+    },
+  ];
 
-  // 3. High-Risk Claim: Instant Skin Barrier Restoration
-  if (allModuleText.includes("instant barrier restoration") || allModuleText.includes("instantly restores barrier")) {
-    claims.push({
-      id: "claim_instant_barrier",
-      claim: "Instant skin barrier restoration",
-      status: "needs_review",
-      sourceCategory: "Product Specifications > Melting Capsules",
-      qualificationNote: "Capsules melt immediately for instant smoothing/shielding, but biological lipid barrier repair takes ongoing use. Rephrase to 'instant moisture shield' or 'immediate smoothing'.",
+  // 2. Gather all inspectable fields across Assessment Quiz
+  (module.quizQuestions || []).forEach((q, qIdx) => {
+    fieldsToInspect.push({
+      sectionKey: "quizQuestions",
+      location: `Assessment Quiz > Question ${qIdx + 1} (Prompt)`,
+      fieldTarget: `field-quiz-${qIdx}-question`,
+      text: q.question || "",
     });
-    unsupportedWarnings.push("Claim 'Instant barrier restoration' should be qualified as instant hydration/smoothing shield.");
-  }
-
-  // 4. High-Risk Claim: FDA Approved
-  if (allModuleText.includes("fda approved") || allModuleText.includes("fda-approved")) {
-    claims.push({
-      id: "claim_fda",
-      claim: "FDA Approved cosmetic claim",
-      status: "unsupported",
-      sourceCategory: "Needs Verification",
-      qualificationNote: "US FDA does not approve cosmetic products; only ingredients and labeling are regulated. Remove FDA approval claims.",
-      isForbiddenPhrase: true,
+    (q.options || []).forEach((opt, optIdx) => {
+      const isCorrect = q.correctIndex === optIdx;
+      fieldsToInspect.push({
+        sectionKey: "quizQuestions",
+        location: `Assessment Quiz > Question ${qIdx + 1} (Option ${String.fromCharCode(65 + optIdx)}${isCorrect ? " - Correct" : ""})`,
+        fieldTarget: `field-quiz-${qIdx}-opt-${optIdx}`,
+        text: opt || "",
+      });
     });
-    unsupportedWarnings.push("Cosmetic products cannot claim 'FDA Approved'.");
-  }
+    fieldsToInspect.push({
+      sectionKey: "quizQuestions",
+      location: `Assessment Quiz > Question ${qIdx + 1} (Explanation)`,
+      fieldTarget: `field-quiz-${qIdx}-explanation`,
+      text: q.explanation || "",
+    });
+  });
 
-  // 5. Specific Metric Claim: Multi-Hour Hydration (e.g. 120-hour)
-  if (allModuleText.includes("120-hour") || allModuleText.includes("120 hour") || allModuleText.includes("120hr")) {
-    const ev = findEvidence("120");
-    if (ev.found) {
-      claims.push({
-        id: "claim_120h",
-        claim: "120-hour moisture retention",
-        status: "verified",
-        sourceCategory: ev.source,
-        evidenceSnippet: ev.snippet,
-        qualificationNote: "Qualified as tested formulation moisture retention up to 120 hours.",
-      });
-    } else {
-      claims.push({
-        id: "claim_120h",
-        claim: "120-hour moisture retention",
-        status: "needs_review",
-        sourceCategory: "Needs Verification",
-        qualificationNote: "Multi-hour duration claims must be backed by catalog specifications.",
-      });
+  // Track checked signatures to avoid duplicated issue cards for the exact same field+rule
+  const seenRuleField = new Set<string>();
+
+  // 3. Field-by-field claim checks
+  for (const f of fieldsToInspect) {
+    const rawText = f.text.trim();
+    if (!rawText) continue;
+    const lower = rawText.toLowerCase();
+
+    // Check A: High-Risk Dermatologist-Tested / Clinical Trials
+    if (
+      lower.includes("dermatologist") ||
+      lower.includes("dermatologist-tested") ||
+      lower.includes("clinically proven") ||
+      lower.includes("clinical trial") ||
+      lower.includes("clinically tested") ||
+      lower.includes("clinically verified")
+    ) {
+      const sig = `derm_${f.fieldTarget}`;
+      if (!seenRuleField.has(sig)) {
+        seenRuleField.add(sig);
+        const ev = findEvidence("dermatologist") || findEvidence("clinically proven") || findEvidence("clinical");
+        if (ev.found) {
+          claims.push({
+            id: `claim_${sig}`,
+            claim: "Dermatologist-tested / Clinical claim",
+            status: "verified",
+            location: f.location,
+            sectionKey: f.sectionKey,
+            fieldTarget: f.fieldTarget,
+            sourceCategory: ev.source,
+            evidenceSnippet: ev.snippet,
+            qualificationNote: "Supported by clinical documentation in catalog.",
+          });
+        } else {
+          claims.push({
+            id: `claim_${sig}`,
+            claim: lower.includes("dermatologist") ? "Dermatologist-tested" : "Clinically proven efficacy",
+            status: "unsupported",
+            severity: "blocking",
+            location: f.location,
+            sectionKey: f.sectionKey,
+            fieldTarget: f.fieldTarget,
+            reason: "Supporting clinical trial or dermatologist documentation not identified in catalog sources.",
+            action: "Revise wording to remove clinical test claim or attach verified trial record.",
+            sourceCategory: "Needs Verification (No clinical audit record)",
+            qualificationNote: "The term 'dermatologist-tested' or 'clinically proven' requires explicit certified trial documentation.",
+            isForbiddenPhrase: true,
+          });
+          unsupportedWarnings.push(
+            `[${f.location}]: Unsupported claim requires clinical audit record in catalog.`
+          );
+        }
+      }
+    }
+
+    // Check B: FDA Approved (Cosmetics are not FDA approved by law)
+    if (lower.includes("fda approved") || lower.includes("fda-approved") || lower.includes("fda certified")) {
+      const sig = `fda_${f.fieldTarget}`;
+      if (!seenRuleField.has(sig)) {
+        seenRuleField.add(sig);
+        claims.push({
+          id: `claim_${sig}`,
+          claim: "FDA Approved cosmetic claim",
+          status: "unsupported",
+          severity: "blocking",
+          location: f.location,
+          sectionKey: f.sectionKey,
+          fieldTarget: f.fieldTarget,
+          reason: "US FDA does not approve cosmetic products; only ingredients and labeling are regulated.",
+          action: "Remove FDA approval claim.",
+          sourceCategory: "Needs Verification (Regulatory restriction)",
+          qualificationNote: "Cosmetic products cannot make 'FDA Approved' claims under 21 CFR.",
+          isForbiddenPhrase: true,
+        });
+        unsupportedWarnings.push(`[${f.location}]: Cosmetic products cannot claim 'FDA Approved'.`);
+      }
+    }
+
+    // Check C: Instant Barrier Restoration
+    if (
+      lower.includes("instant barrier restoration") ||
+      lower.includes("instantly restores barrier") ||
+      lower.includes("immediate barrier repair") ||
+      lower.includes("barrier restoration instantly")
+    ) {
+      const sig = `instant_${f.fieldTarget}`;
+      if (!seenRuleField.has(sig)) {
+        seenRuleField.add(sig);
+        claims.push({
+          id: `claim_${sig}`,
+          claim: "Instant barrier restoration",
+          status: "needs_review",
+          severity: "warning",
+          location: f.location,
+          sectionKey: f.sectionKey,
+          fieldTarget: f.fieldTarget,
+          reason: "Biological lipid barrier repair requires ongoing physiological use. Melting capsules provide immediate moisture shielding and surface smoothing.",
+          action: "Rephrase to 'instant moisture shield' or 'immediate surface smoothing'.",
+          sourceCategory: "Product Specifications > Melting Capsules",
+          qualificationNote: "Qualify as instant moisture shield rather than permanent instant biological barrier repair.",
+        });
+      }
+    }
+
+    // Check D: Multi-Hour Moisture Duration (e.g. 120-hour, 72-hour)
+    const durationMatch = lower.match(/\b(\d{2,3})[- ](?:hour|hr)\b/);
+    if (durationMatch) {
+      const hours = durationMatch[1];
+      const sig = `duration_${hours}_${f.fieldTarget}`;
+      if (!seenRuleField.has(sig)) {
+        seenRuleField.add(sig);
+        const ev = findEvidence(hours);
+        if (ev.found) {
+          claims.push({
+            id: `claim_${sig}`,
+            claim: `${hours}-hour moisture retention`,
+            status: "verified",
+            location: f.location,
+            sectionKey: f.sectionKey,
+            fieldTarget: f.fieldTarget,
+            sourceCategory: ev.source,
+            evidenceSnippet: ev.snippet,
+            qualificationNote: `Qualified as tested formulation moisture retention up to ${hours} hours.`,
+          });
+        } else {
+          claims.push({
+            id: `claim_${sig}`,
+            claim: `${hours}-hour moisture duration claim`,
+            status: "needs_review",
+            severity: "warning",
+            location: f.location,
+            sectionKey: f.sectionKey,
+            fieldTarget: f.fieldTarget,
+            reason: `Multi-hour duration claims (${hours} hours) must be explicitly backed by catalog specifications.`,
+            action: `Confirm ${hours}-hour test in catalog or describe as long-lasting daily hydration.`,
+            sourceCategory: "Needs Verification",
+          });
+        }
+      }
+    }
+
+    // Check E: Specific Complex / Active Ingredient Counts (e.g. 5-ceramide, 10-peptide)
+    const complexMatch = lower.match(/\b(\d+)[- ](ceramide|peptide|hyaluronic|vitamin|collagen|cica)\b/);
+    if (complexMatch) {
+      const complexTerm = `${complexMatch[1]}-${complexMatch[2]}`;
+      const sig = `complex_${complexTerm}_${f.fieldTarget}`;
+      if (!seenRuleField.has(sig)) {
+        seenRuleField.add(sig);
+        const ev = findEvidence(complexTerm) || findEvidence(complexMatch[2]);
+        if (ev.found) {
+          claims.push({
+            id: `claim_${sig}`,
+            claim: `${complexTerm} active complex`,
+            status: "verified",
+            location: f.location,
+            sectionKey: f.sectionKey,
+            fieldTarget: f.fieldTarget,
+            sourceCategory: ev.source,
+            evidenceSnippet: ev.snippet,
+            qualificationNote: `Matches active ${complexMatch[2]} complex in catalog.`,
+          });
+        } else {
+          claims.push({
+            id: `claim_${sig}`,
+            claim: `${complexTerm} active complex`,
+            status: "needs_review",
+            severity: "warning",
+            location: f.location,
+            sectionKey: f.sectionKey,
+            fieldTarget: f.fieldTarget,
+            reason: `Verify exact ${complexMatch[2]} counts in ingredients before making specific numerical claim.`,
+            action: "Check ingredients list or describe as active complex.",
+            sourceCategory: "Needs Verification",
+          });
+        }
+      }
+    }
+
+    // Check F: Hypoallergenic Formulation
+    if (lower.includes("hypoallergenic")) {
+      const sig = `hypo_${f.fieldTarget}`;
+      if (!seenRuleField.has(sig)) {
+        seenRuleField.add(sig);
+        const ev = findEvidence("hypoallergenic");
+        if (ev.found) {
+          claims.push({
+            id: `claim_${sig}`,
+            claim: "Hypoallergenic formulation",
+            status: "verified",
+            location: f.location,
+            sectionKey: f.sectionKey,
+            fieldTarget: f.fieldTarget,
+            sourceCategory: ev.source,
+            evidenceSnippet: ev.snippet,
+          });
+        } else {
+          claims.push({
+            id: `claim_${sig}`,
+            claim: "Hypoallergenic formulation",
+            status: "needs_review",
+            severity: "warning",
+            location: f.location,
+            sectionKey: f.sectionKey,
+            fieldTarget: f.fieldTarget,
+            reason: "Do not infer hypoallergenic status without explicit supplier or catalog documentation.",
+            action: "Verify supplier sensitive-skin certification or describe formulation as gentle.",
+            sourceCategory: "Needs Verification",
+          });
+        }
+      }
+    }
+
+    // Check G: Pediatric / Age Suitability (Ages 3+ / Children)
+    if (lower.includes("ages 3+") || lower.includes("age 3+") || lower.includes("children")) {
+      const sig = `ages_${f.fieldTarget}`;
+      if (!seenRuleField.has(sig)) {
+        seenRuleField.add(sig);
+        const ev = findEvidence("ages 3+") || findEvidence("3+") || findEvidence("children");
+        if (ev.found) {
+          claims.push({
+            id: `claim_${sig}`,
+            claim: "Tested gentle for Ages 3+",
+            status: "verified",
+            location: f.location,
+            sectionKey: f.sectionKey,
+            fieldTarget: f.fieldTarget,
+            sourceCategory: ev.source,
+            evidenceSnippet: ev.snippet,
+          });
+        } else {
+          claims.push({
+            id: `claim_${sig}`,
+            claim: "Child / Age 3+ suitability claim",
+            status: "needs_review",
+            severity: "warning",
+            location: f.location,
+            sectionKey: f.sectionKey,
+            fieldTarget: f.fieldTarget,
+            reason: "Child and pediatric suitability claims require explicit manufacturer confirmation.",
+            action: "Verify age suitability in catalog or qualify for adult and teen use.",
+            sourceCategory: "Needs Verification",
+          });
+        }
+      }
     }
   }
 
-  // 6. Specific Formulation Claim: 5-Ceramide Complex
-  if (allModuleText.includes("5-ceramide") || allModuleText.includes("5 ceramide") || allModuleText.includes("five ceramide")) {
-    const ev = findEvidence("5-ceramide") || findEvidence("ceramide");
-    if (ev.found) {
-      claims.push({
-        id: "claim_5ceramide",
-        claim: "5-Ceramide complex with visible capsules",
-        status: "verified",
-        sourceCategory: ev.source,
-        evidenceSnippet: ev.snippet,
-        qualificationNote: "Matches active ceramide complex with visible melting beads in catalog.",
-      });
-    } else {
-      claims.push({
-        id: "claim_5ceramide",
-        claim: "5-Ceramide complex",
-        status: "needs_review",
-        sourceCategory: "Needs Verification",
-        qualificationNote: "Verify exact ceramide counts in ingredients before making specific numerical claim.",
-      });
-    }
-  }
-
-  // 7. Safety / Sensitivity Claim: Hypoallergenic
-  if (allModuleText.includes("hypoallergenic")) {
-    const ev = findEvidence("hypoallergenic");
-    if (ev.found) {
-      claims.push({
-        id: "claim_hypo",
-        claim: "Hypoallergenic formulation",
-        status: "verified",
-        sourceCategory: ev.source,
-        evidenceSnippet: ev.snippet,
-      });
-    } else {
-      claims.push({
-        id: "claim_hypo",
-        claim: "Hypoallergenic formulation",
-        status: "needs_review",
-        sourceCategory: "Needs Verification",
-        qualificationNote: "Do not infer hypoallergenic status without explicit supplier or catalog documentation.",
-      });
-    }
-  }
-
-  // 8. Age Suitability Claim: Ages 3+ / Children
-  if (allModuleText.includes("ages 3+") || allModuleText.includes("age 3+") || allModuleText.includes("children")) {
-    const ev = findEvidence("ages 3+") || findEvidence("3+");
-    if (ev.found) {
-      claims.push({
-        id: "claim_ages",
-        claim: "Tested gentle for Ages 3+",
-        status: "verified",
-        sourceCategory: ev.source,
-        evidenceSnippet: ev.snippet,
-      });
-    } else {
-      claims.push({
-        id: "claim_ages",
-        claim: "Child/Age 3+ suitability claim",
-        status: "needs_review",
-        sourceCategory: "Needs Verification",
-        qualificationNote: "Child safety claims require manufacturer confirmation.",
-      });
-    }
-  }
-
-  // 9. Core Benefits Attribution (Top 3 Benefits)
+  // 4. Section Grounding Baseline: Top 3 Benefits Attribution
   module.top3Benefits.forEach((benefit, idx) => {
     if (!benefit || benefit.trim().length === 0) return;
     const words = benefit.toLowerCase().split(/\s+/).filter((w) => w.length > 4);
@@ -476,21 +661,33 @@ export function verifyTrainingContentClaims(
       id: `claim_benefit_${idx + 1}`,
       claim: `Benefit #${idx + 1}: ${benefit.length > 60 ? benefit.slice(0, 57) + "..." : benefit}`,
       status: isGrounded ? "verified" : "needs_review",
+      severity: isGrounded ? undefined : "warning",
+      location: `Training Content > 2. Top 3 Benefits (Benefit #${idx + 1})`,
+      sectionKey: "top3Benefits",
+      fieldTarget: `field-top3Benefits-${idx}`,
       sourceCategory: isGrounded ? "Product Catalog > Key Features" : "Needs Verification (Generated text)",
       evidenceSnippet: isGrounded ? `Keywords supported by catalog facts (${matchCount}/${words.length} key terms matched)` : undefined,
       qualificationNote: isGrounded ? undefined : "Ensure benefit aligns with official manufacturer claims.",
+      reason: isGrounded ? undefined : "Benefit terminology should be aligned with catalog features.",
+      action: isGrounded ? undefined : "Verify key terms match catalog specifications.",
     });
   });
 
-  // 10. Best For / Target Customer Attribution
+  // 5. Section Grounding Baseline: Best For / Target Customer Attribution
   if (module.bestFor && module.bestFor.trim().length > 0) {
     const hasSkinAttr = allCatalogText.includes("skin") || allCatalogText.includes("hair") || allCatalogText.includes("dry") || allCatalogText.includes("sensitive");
     claims.push({
       id: "claim_best_for",
       claim: `Target Customer: ${module.bestFor.length > 60 ? module.bestFor.slice(0, 57) + "..." : module.bestFor}`,
       status: hasSkinAttr ? "verified" : "needs_review",
+      severity: hasSkinAttr ? undefined : "warning",
+      location: "Training Content > 3. Best For (Target Customer)",
+      sectionKey: "bestFor",
+      fieldTarget: "field-bestFor",
       sourceCategory: "Product Specifications > Category Profile",
       evidenceSnippet: hasSkinAttr ? "Grounded in catalog product category and skin suitability" : undefined,
+      reason: hasSkinAttr ? undefined : "Target customer concerns should align with product category.",
+      action: hasSkinAttr ? undefined : "Ensure target profile matches category characteristics.",
     });
   }
 

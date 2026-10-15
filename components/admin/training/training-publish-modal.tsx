@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import type { TrainingModuleData, TrainingVersionType } from "@/lib/training/training-types";
+import type {
+  TrainingModuleData,
+  TrainingVersionType,
+  ClaimVerificationItem,
+} from "@/lib/training/training-types";
 
 interface TrainingPublishModalProps {
   module: TrainingModuleData;
@@ -9,6 +13,7 @@ interface TrainingPublishModalProps {
   onClose: () => void;
   onConfirmPublish: (versionType: TrainingVersionType) => Promise<void>;
   isPending: boolean;
+  onNavigateToIssue?: (issue: ClaimVerificationItem) => void;
 }
 
 export function TrainingPublishModal({
@@ -17,13 +22,18 @@ export function TrainingPublishModal({
   onClose,
   onConfirmPublish,
   isPending,
+  onNavigateToIssue,
 }: TrainingPublishModalProps) {
   const [versionType, setVersionType] = useState<TrainingVersionType>("minor");
 
   if (!isOpen) return null;
 
-  // Validation checks
-  const unsupportedCount = module.contentVerification?.unsupportedCount || 0;
+  // Validation checks & blocking issues
+  const blockingIssues = (module.contentVerification?.claims || []).filter(
+    (c) => c.status === "unsupported" || c.severity === "blocking"
+  );
+  const unsupportedCount = blockingIssues.length > 0 ? blockingIssues.length : (module.contentVerification?.unsupportedCount || 0);
+
   const checks = [
     { label: "1. Product Overview", passed: Boolean(module.productOverview?.trim()) },
     { label: "2. Top 3 Benefits", passed: module.top3Benefits.length === 3 && module.top3Benefits.every((b) => Boolean(b?.trim())) },
@@ -93,6 +103,52 @@ export function TrainingPublishModal({
             ✕
           </button>
         </div>
+
+        {/* Blocking Issues Alert & Deep Navigation ("View & Fix") */}
+        {blockingIssues.length > 0 && (
+          <div className="space-y-2 p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-black text-rose-800 dark:text-rose-200">
+                <span>🚫</span>
+                <span>Blocking Claim Issues ({blockingIssues.length})</span>
+              </div>
+              <span className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">
+                Must resolve or remove to publish
+              </span>
+            </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {blockingIssues.map((issue) => (
+                <div
+                  key={issue.id}
+                  className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-rose-200/70 dark:border-rose-900/50 flex items-start justify-between gap-3 text-xs shadow-2xs"
+                >
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">
+                        {issue.location || issue.sectionKey}
+                      </span>
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                        &ldquo;{issue.claim}&rdquo;
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-rose-600 dark:text-rose-400 leading-snug">
+                      {issue.reason || "Not backed by authoritative catalog records."}
+                    </p>
+                  </div>
+                  {onNavigateToIssue && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigateToIssue(issue)}
+                      className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-2xs transition-colors cursor-pointer"
+                    >
+                      View &amp; Fix →
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Validation Checklist */}
         <div className="space-y-2">

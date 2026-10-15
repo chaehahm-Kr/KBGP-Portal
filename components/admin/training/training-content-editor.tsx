@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import type {
   TrainingModuleData,
   CustomerObjectionItem,
@@ -14,6 +14,11 @@ interface TrainingContentEditorProps {
   isRegeneratingSection?: TrainingSectionKey | null;
   saveStatus?: "saved" | "unsaved" | "saving" | "error";
   disabled?: boolean;
+  highlightedTarget?: {
+    fieldTarget: string;
+    reason?: string;
+    severity?: "blocking" | "warning";
+  } | null;
 }
 
 export function TrainingContentEditor({
@@ -23,6 +28,7 @@ export function TrainingContentEditor({
   isRegeneratingSection = null,
   saveStatus = "saved",
   disabled = false,
+  highlightedTarget = null,
 }: TrainingContentEditorProps) {
   // Collapsible group states (all open by default for comprehensive editing)
   const [openGroups, setOpenGroups] = useState({
@@ -30,6 +36,44 @@ export function TrainingContentEditor({
     selling: true,
     safety: true,
   });
+
+  // Auto-expand group containing the highlighted issue target
+  useEffect(() => {
+    if (!highlightedTarget?.fieldTarget) return;
+    const target = highlightedTarget.fieldTarget;
+    if (
+      target === "field-productOverview" ||
+      target.startsWith("field-top3Benefits") ||
+      target === "field-bestFor"
+    ) {
+      setOpenGroups((prev) => ({ ...prev, basics: true }));
+    } else if (
+      target === "field-howToUse" ||
+      target === "field-pitch15s" ||
+      target.startsWith("field-sellingPoints") ||
+      target.startsWith("field-customerObjections")
+    ) {
+      setOpenGroups((prev) => ({ ...prev, selling: true }));
+    } else if (target === "field-storageHandlingSop") {
+      setOpenGroups((prev) => ({ ...prev, safety: true }));
+    }
+  }, [highlightedTarget]);
+
+  const isTarget = (id: string) => highlightedTarget?.fieldTarget === id;
+  const getHighlightClass = (id: string) =>
+    isTarget(id)
+      ? "ring-2 ring-rose-500 border-rose-500 dark:border-rose-500 shadow-md animate-pulse"
+      : "";
+
+  const renderNotice = (id: string) => {
+    if (!isTarget(id) || !highlightedTarget?.reason) return null;
+    return (
+      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs font-medium animate-in fade-in mt-1">
+        <span className="font-bold">⚠️ Claim Issue:</span>
+        <span>{highlightedTarget.reason}</span>
+      </div>
+    );
+  };
 
   const toggleGroup = (group: "basics" | "selling" | "safety") => {
     setOpenGroups((prev) => ({ ...prev, [group]: !prev[group] }));
@@ -247,13 +291,17 @@ export function TrainingContentEditor({
                 </div>
               </div>
               <textarea
+                id="field-productOverview"
                 rows={3}
                 disabled={disabled}
                 value={module.productOverview}
                 onChange={handleOverviewChange}
                 placeholder="Concise, factual product overview..."
-                className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                className={`w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed transition-all ${getHighlightClass(
+                  "field-productOverview"
+                )}`}
               />
+              {renderNotice("field-productOverview")}
             </div>
 
             {/* 2. TOP 3 BENEFITS */}
@@ -283,18 +331,24 @@ export function TrainingContentEditor({
               </div>
               <div className="space-y-2">
                 {module.top3Benefits.map((benefit, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-bold text-xs flex items-center justify-center shrink-0">
-                      {idx + 1}
-                    </span>
-                    <input
-                      type="text"
-                      disabled={disabled}
-                      value={benefit}
-                      onChange={(e) => handleBenefitChange(idx, e.target.value)}
-                      placeholder={`Benefit #${idx + 1}...`}
-                      className="flex-1 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 px-3 py-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                  <div key={idx} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-bold text-xs flex items-center justify-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <input
+                        id={`field-top3Benefits-${idx}`}
+                        type="text"
+                        disabled={disabled}
+                        value={benefit}
+                        onChange={(e) => handleBenefitChange(idx, e.target.value)}
+                        placeholder={`Benefit #${idx + 1}...`}
+                        className={`flex-1 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 px-3 py-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${getHighlightClass(
+                          `field-top3Benefits-${idx}`
+                        )}`}
+                      />
+                    </div>
+                    {renderNotice(`field-top3Benefits-${idx}`)}
                   </div>
                 ))}
               </div>
@@ -326,13 +380,17 @@ export function TrainingContentEditor({
                 </div>
               </div>
               <textarea
+                id="field-bestFor"
                 rows={2}
                 disabled={disabled}
                 value={module.bestFor}
                 onChange={handleBestForChange}
                 placeholder="Appropriate customer profiles, skin concerns, or usage occasions..."
-                className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                className={`w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed transition-all ${getHighlightClass(
+                  "field-bestFor"
+                )}`}
               />
+              {renderNotice("field-bestFor")}
             </div>
           </div>
         )}
@@ -398,13 +456,17 @@ export function TrainingContentEditor({
                 </div>
               </div>
               <textarea
+                id="field-howToUse"
                 rows={3}
                 disabled={disabled}
                 value={module.howToUse}
                 onChange={handleHowToUseChange}
                 placeholder="Step 1, Step 2, routine placement, daytime sunscreen note..."
-                className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed font-mono"
+                className={`w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed font-mono transition-all ${getHighlightClass(
+                  "field-howToUse"
+                )}`}
               />
+              {renderNotice("field-howToUse")}
             </div>
 
             {/* 5. SELLING POINTS & 15S PITCH */}
@@ -437,13 +499,17 @@ export function TrainingContentEditor({
                   <span>15-Second Spoken Pitch (점원이 고객에게 바로 말할 수 있는 한 문장)</span>
                 </label>
                 <textarea
+                  id="field-pitch15s"
                   rows={2}
                   disabled={disabled}
                   value={module.pitch15s}
                   onChange={handlePitchChange}
                   placeholder="This is [Product] from [Brand] — customers love it because..."
-                  className="w-full text-xs rounded-xl border border-purple-200 dark:border-purple-800 bg-white dark:bg-zinc-800 p-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-purple-500 leading-relaxed font-medium"
+                  className={`w-full text-xs rounded-xl border border-purple-200 dark:border-purple-800 bg-white dark:bg-zinc-800 p-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-purple-500 leading-relaxed font-medium transition-all ${getHighlightClass(
+                    "field-pitch15s"
+                  )}`}
                 />
+                {renderNotice("field-pitch15s")}
               </div>
 
               {/* Bullet Points Talk Tracks */}
@@ -452,27 +518,33 @@ export function TrainingContentEditor({
                   Key Counter Talk-Tracks (3개 핵심 권유 포인트):
                 </label>
                 {module.sellingPoints.map((sp, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <span className="text-zinc-400 text-xs font-bold">•</span>
-                    <input
-                      type="text"
-                      disabled={disabled}
-                      value={sp}
-                      onChange={(e) => handleSellingPointChange(idx, e.target.value)}
-                      placeholder={`Selling Point #${idx + 1}...`}
-                      className="flex-1 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    {module.sellingPoints.length > 1 && (
-                      <button
-                        type="button"
+                  <div key={idx} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-zinc-400 text-xs font-bold">•</span>
+                      <input
+                        id={`field-sellingPoints-${idx}`}
+                        type="text"
                         disabled={disabled}
-                        onClick={() => handleRemoveSellingPoint(idx)}
-                        className="text-zinc-400 hover:text-rose-500 text-xs px-2 py-1"
-                        title="Remove point"
-                      >
-                        ✕
-                      </button>
-                    )}
+                        value={sp}
+                        onChange={(e) => handleSellingPointChange(idx, e.target.value)}
+                        placeholder={`Selling Point #${idx + 1}...`}
+                        className={`flex-1 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${getHighlightClass(
+                          `field-sellingPoints-${idx}`
+                        )}`}
+                      />
+                      {module.sellingPoints.length > 1 && (
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => handleRemoveSellingPoint(idx)}
+                          className="text-zinc-400 hover:text-rose-500 text-xs px-2 py-1"
+                          title="Remove point"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    {renderNotice(`field-sellingPoints-${idx}`)}
                   </div>
                 ))}
                 {module.sellingPoints.length < 5 && (
@@ -550,26 +622,34 @@ export function TrainingContentEditor({
                           Customer Question / Concern:
                         </label>
                         <input
+                          id={`field-customerObjections-${idx}-objection`}
                           type="text"
                           disabled={disabled}
                           value={obj.objection}
                           onChange={(e) => handleObjectionChange(idx, "objection", e.target.value)}
                           placeholder="e.g. Will this clog my pores or make my skin look oily?"
-                          className="w-full text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className={`w-full text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${getHighlightClass(
+                            `field-customerObjections-${idx}-objection`
+                          )}`}
                         />
+                        {renderNotice(`field-customerObjections-${idx}-objection`)}
                       </div>
                       <div>
                         <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">
                           Staff Factual Answer:
                         </label>
                         <textarea
+                          id={`field-customerObjections-${idx}-answer`}
                           rows={2}
                           disabled={disabled}
                           value={obj.answer}
                           onChange={(e) => handleObjectionChange(idx, "answer", e.target.value)}
                           placeholder="Factual answer grounded in product specifications..."
-                          className="w-full text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                          className={`w-full text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed transition-all ${getHighlightClass(
+                            `field-customerObjections-${idx}-answer`
+                          )}`}
                         />
+                        {renderNotice(`field-customerObjections-${idx}-answer`)}
                       </div>
                     </div>
                   ))}
@@ -640,13 +720,17 @@ export function TrainingContentEditor({
                 </div>
               </div>
               <textarea
+                id="field-storageHandlingSop"
                 rows={3}
                 disabled={disabled}
                 value={module.storageHandlingSop}
                 onChange={handleStorageChange}
                 placeholder="Store at room temperature (15°C–25°C) away from direct sunlight..."
-                className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed font-mono"
+                className={`w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed font-mono transition-all ${getHighlightClass(
+                  "field-storageHandlingSop"
+                )}`}
               />
+              {renderNotice("field-storageHandlingSop")}
             </div>
           </div>
         )}

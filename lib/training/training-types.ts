@@ -14,13 +14,21 @@ export type TrainingSectionKey =
   | "storageHandlingSop"
   | "quizQuestions";
 
+export type ClaimVerificationSeverity = "blocking" | "warning";
+
 export interface ClaimVerificationItem {
   id: string;
   claim: string;
   status: ClaimVerificationStatus;
+  severity?: ClaimVerificationSeverity; // "blocking" if unsupported, "warning" if needs_review
+  location?: string; // Human readable location, e.g. "Training Content > 1. Product Overview"
+  sectionKey?: TrainingSectionKey; // Target section
+  fieldTarget?: string; // Stable DOM/field locator, e.g. "field-productOverview"
+  reason?: string; // Human explanation of why claim requires review
+  action?: string; // Suggested corrective action
   sourceCategory: string; // e.g. "Catalog Master > Ingredients", "admin_overrides.bullet_points"
   evidenceSnippet?: string;
-  qualificationNote?: string; // Missing or required qualification notes (e.g. "Tested formulation vs permanent clinical claim")
+  qualificationNote?: string; // Missing or required qualification notes
   isForbiddenPhrase?: boolean; // Clinical trials, dermatologist tested, etc. without record
 }
 

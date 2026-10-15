@@ -6,18 +6,21 @@ import type {
   SourceReadinessScore,
   ContentVerificationSummary,
   ClaimVerificationStatus,
+  ClaimVerificationItem,
 } from "@/lib/training/training-types";
 
 interface SourceReadinessCardProps {
   readiness: TrainingSourceReadiness;
   verification?: ContentVerificationSummary;
   onRefresh?: () => void;
+  onNavigateToIssue?: (issue: ClaimVerificationItem) => void;
 }
 
 export function TrainingSourceReadinessCard({
   readiness,
   verification,
   onRefresh,
+  onNavigateToIssue,
 }: SourceReadinessCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<"readiness" | "verification">("readiness");
@@ -114,10 +117,21 @@ export function TrainingSourceReadinessCard({
         </div>
 
         <div className="flex items-center gap-2 self-end lg:self-center">
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+              title="Re-verify all generated claims against current product catalog specifications"
+            >
+              <span>🔄</span>
+              <span>Recheck Claims</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/30"
+            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/30 cursor-pointer"
           >
             {isExpanded ? "Collapse Details ▲" : "Review Breakdown & Sources ▼"}
           </button>
@@ -230,7 +244,7 @@ export function TrainingSourceReadinessCard({
                   return (
                     <div
                       key={claim.id}
-                      className={`rounded-xl border p-3 space-y-1.5 ${
+                      className={`rounded-xl border p-3 space-y-2 ${
                         claim.status === "unsupported"
                           ? "border-rose-200 bg-rose-50/40 dark:border-rose-900/60 dark:bg-rose-950/20"
                           : claim.status === "needs_review"
@@ -239,25 +253,62 @@ export function TrainingSourceReadinessCard({
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{claim.claim}</span>
-                        <span
-                          className={`inline-flex items-center gap-0.5 px-2 py-0.2 rounded text-[9px] font-bold uppercase border shrink-0 ${cBadge.bg}`}
-                        >
-                          {cBadge.icon} {cBadge.label}
-                        </span>
+                        <div className="space-y-1">
+                          {claim.location && (
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-zinc-200/80 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                              {claim.location}
+                            </span>
+                          )}
+                          <div className="font-bold text-zinc-900 dark:text-zinc-100">{claim.claim}</div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span
+                            className={`inline-flex items-center gap-0.5 px-2 py-0.2 rounded text-[9px] font-bold uppercase border ${cBadge.bg}`}
+                          >
+                            {cBadge.icon} {cBadge.label}
+                          </span>
+                          {claim.severity === "blocking" && (
+                            <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-tight bg-rose-600 text-white">
+                              BLOCKING
+                            </span>
+                          )}
+                        </div>
                       </div>
+
                       <div className="text-[10px] text-zinc-500 font-mono">
                         Authoritative Source: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{claim.sourceCategory}</span>
                       </div>
+
                       {claim.evidenceSnippet && (
                         <p className="text-[11px] text-zinc-600 dark:text-zinc-400 italic">
                           &ldquo;{claim.evidenceSnippet}&rdquo;
                         </p>
                       )}
-                      {claim.qualificationNote && (
+
+                      {claim.reason && (
+                        <div className="text-[11px] text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 p-2 rounded-lg border border-rose-200/60 dark:border-rose-900/40">
+                          <span className="font-bold">Issue: </span>
+                          <span>{claim.reason}</span>
+                        </div>
+                      )}
+
+                      {claim.qualificationNote && !claim.reason && (
                         <div className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/50 p-2 rounded-lg">
                           <span className="font-bold">Reviewer Note: </span>
                           <span>{claim.qualificationNote}</span>
+                        </div>
+                      )}
+
+                      {(claim.status === "unsupported" || claim.status === "needs_review") && onNavigateToIssue && (
+                        <div className="pt-1 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => onNavigateToIssue(claim)}
+                            className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>View &amp; Fix</span>
+                            <span>→</span>
+                          </button>
                         </div>
                       )}
                     </div>

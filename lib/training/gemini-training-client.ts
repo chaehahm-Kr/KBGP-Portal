@@ -72,7 +72,8 @@ REQUIRED SECTIONS:
    Each question must have:
    - category: "benefits" | "customer_fit" | "usage_selling"
    - question: Clear question string.
-   - options: Array of exactly 3 plausible options (1 correct, 2 plausible distractors).
+   - options: Array of exactly 3 plausible options (1 unambiguous correct answer, 2 plausible customer misunderstandings).
+     IMPORTANT: NEVER generate absurd distractors (e.g. mixing with rubbing alcohol, boiling water, pumice stones, chemical peels). Prefer realistic counter misunderstandings.
    - correctIndex: 0, 1, or 2 indicating the correct option.
    - explanation: Concise educational feedback explaining why the correct answer is right and why it matters at the counter.
 
@@ -360,8 +361,8 @@ export function generateDeterministicGroundedTraining(
       question: `What is the primary customer benefit of ${context.productName}?`,
       options: [
         top3[0],
-        "A heavy oil-based mask that requires rinsing after 10 minutes",
-        "An abrasive scrub that removes natural skin oils",
+        "A rinse-off clay mask that must be washed away after 10 minutes",
+        "An abrasive exfoliating scrub designed only for weekly deep peeling",
       ],
       correctIndex: 0,
       explanation: `Staff should emphasize that ${context.productName} provides verified hydration and barrier protection without stripping skin moisture.`,
@@ -372,8 +373,8 @@ export function generateDeterministicGroundedTraining(
       question: `Which customer profile is ${context.productName} best suited for?`,
       options: [
         "Customers looking for deep hydration and barrier support for sensitive or dry skin",
-        "Customers wanting heavy waterproof oil grease for stage makeup",
-        "Only customers seeking harsh chemical peeling treatments",
+        "Customers with oily skin seeking oil-control and mattifying powders",
+        "Customers looking strictly for waterproof makeup setting spray",
       ],
       correctIndex: 0,
       explanation: `Recommending ${context.productName} to customers seeking gentle barrier care and hydration ensures the highest satisfaction and repeat purchases.`,
@@ -384,8 +385,8 @@ export function generateDeterministicGroundedTraining(
       question: `How should store employees advise customers to use ${context.productName}?`,
       options: [
         "Apply morning and night after cleansing/serum, and follow with sunscreen in the morning",
-        "Apply only once a month before washing with boiling water",
-        "Mix with rubbing alcohol before applying to face",
+        "Apply only on dry spots once every two weeks as an emergency spot treatment",
+        "Wash off with water immediately after application instead of letting it absorb",
       ],
       correctIndex: 0,
       explanation: `Consistent twice-daily application with daytime sun protection gives customers the best results from Korean barrier care.`,
