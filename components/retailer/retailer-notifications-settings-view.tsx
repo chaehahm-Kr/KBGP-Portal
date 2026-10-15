@@ -321,10 +321,10 @@ export function RetailerNotificationsSettingsView({ initialState }: Props) {
             <div>
               <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
                 <span>👥</span>
-                <span>Authorized Report Recipients</span>
+                <span>Report Recipients Roster</span>
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Manage which store owners, buyers, and managers receive weekly performance reports.
+                Manage who receives your company&apos;s weekly performance and replenishment reports. Authorized recipients may include store leadership, external accounting advisors, or business partners.
               </p>
             </div>
 
@@ -343,55 +343,73 @@ export function RetailerNotificationsSettingsView({ initialState }: Props) {
           {isAddingMode && canManageRecipients && (
             <form
               onSubmit={handleAddRecipient}
-              className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200 dark:border-zinc-700 space-y-3"
+              className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200 dark:border-zinc-700 space-y-3.5"
             >
-              <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                Add Store Leadership Recipient
-              </div>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                Select an existing store manager, buyer, or owner from your organization, or specify their registered email. For confidential financial data protection, external unverified users must first be invited to your team under Settings &gt; Team.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">
-                    Select Organization Member
-                  </label>
-                  <select
-                    value={selectedUserId}
-                    onChange={(e) => {
-                      setSelectedUserId(e.target.value);
-                      if (e.target.value) setCustomEmail("");
-                    }}
-                    className="w-full text-xs rounded-xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">-- Choose verified team member --</option>
-                    {availableTeamMembers.map((tm) => (
-                      <option key={tm.id} value={tm.id}>
-                        {tm.name} ({tm.email}) — {tm.role}
-                      </option>
-                    ))}
-                  </select>
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                  Add Email Recipient
                 </div>
+                <span className="text-[10px] text-zinc-400">
+                  Unrestricted destination • Team or External
+                </span>
+              </div>
 
+              {/* Informational Notice */}
+              <div className="p-3 rounded-lg bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <span className="shrink-0 text-sm">ℹ️</span>
+                <span className="leading-relaxed">
+                  Weekly reports may contain confidential business information. Only add recipients you authorize to receive your company&apos;s reports.
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {/* Primary Entry Method: Email Input */}
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">
-                    Or Enter Member Email
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                    Recipient Email Address (Required)
                   </label>
                   <input
                     type="email"
-                    placeholder="manager@yourstore.com"
+                    placeholder="e.g. cfo@external-audit.com, manager@yourstore.com, or partner@gmail.com"
                     value={customEmail}
                     onChange={(e) => {
                       setCustomEmail(e.target.value);
-                      if (e.target.value) setSelectedUserId("");
+                      if (selectedUserId) setSelectedUserId("");
                     }}
-                    className="w-full text-xs rounded-xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    className="w-full text-xs rounded-xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3.5 py-2.5 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                   />
+                  <p className="text-[10.5px] text-zinc-400 mt-1">
+                    Accepts personal emails, external accounting firms, business partners, or internal staff. Receiving a report does not grant portal account access.
+                  </p>
                 </div>
+
+                {/* Optional Convenience Selector */}
+                {availableTeamMembers.length > 0 && (
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                      Or Select Existing Team Member (Optional convenience)
+                    </label>
+                    <select
+                      value={selectedUserId}
+                      onChange={(e) => {
+                        setSelectedUserId(e.target.value);
+                        const member = availableTeamMembers.find((m) => m.id === e.target.value);
+                        if (member) setCustomEmail(member.email);
+                      }}
+                      className="w-full text-xs rounded-xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">-- Select team member (optional) --</option>
+                      {availableTeamMembers.map((tm) => (
+                        <option key={tm.id} value={tm.id}>
+                          {tm.name} ({tm.email}) — {tm.role.replace("_", " ")}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-200/60 dark:border-zinc-700/60">
                 <button
                   type="button"
                   onClick={() => {
@@ -408,7 +426,7 @@ export function RetailerNotificationsSettingsView({ initialState }: Props) {
                   disabled={isPending || (!selectedUserId && !customEmail)}
                   className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
                 >
-                  {isPending ? "Adding..." : "Confirm Recipient"}
+                  {isPending ? "Adding..." : "+ Add Recipient"}
                 </button>
               </div>
             </form>
@@ -419,8 +437,8 @@ export function RetailerNotificationsSettingsView({ initialState }: Props) {
             <table className="w-full text-left text-xs">
               <thead className="bg-zinc-50 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-800 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
                 <tr>
-                  <th className="py-2.5 px-3">Team Member</th>
-                  <th className="py-2.5 px-3">Role</th>
+                  <th className="py-2.5 px-3">Recipient</th>
+                  <th className="py-2.5 px-3">Type</th>
                   <th className="py-2.5 px-3 text-center">Status</th>
                   <th className="py-2.5 px-3 text-center">Delivery</th>
                   {canManageRecipients && (
@@ -463,11 +481,17 @@ export function RetailerNotificationsSettingsView({ initialState }: Props) {
                         </div>
                       </td>
 
-                      {/* Role */}
+                      {/* Type / Role */}
                       <td className="py-2.5 px-3">
-                        <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold capitalize bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                          {rec.role.replace("_", " ")}
-                        </span>
+                        {rec.isExternal ? (
+                          <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                            External Recipient
+                          </span>
+                        ) : (
+                          <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold capitalize bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                            {rec.role.replace("_", " ")}
+                          </span>
+                        )}
                       </td>
 
                       {/* Status */}
@@ -536,13 +560,13 @@ export function RetailerNotificationsSettingsView({ initialState }: Props) {
             <span>Confidential Financial Data & Operational Policy</span>
           </div>
           <p>
-            • <strong>Default Off & Explicit Consent:</strong> Automated email delivery is <strong>OFF by default</strong>. Reports are delivered only to verified store owners, buyers, and managers who explicitly enable receipt.
+            • <strong>Default Off & Explicit Consent:</strong> Automated email delivery is <strong>OFF by default</strong>. Adding a recipient does not enable delivery until the Retailer explicitly activates weekly reports.
           </p>
           <p>
-            • <strong>Role-Based Access:</strong> Weekly reports contain sensitive estimated retail margins, store movement, and replenishment data. Only verified leadership team members may be authorized.
+            • <strong>Recipient Management:</strong> Only authorized store leadership (Owner or Buyer) may manage report distribution. External email recipients receive reports via email only and do not gain portal accounts, store access, or company membership.
           </p>
           <p>
-            • <strong>Production Broadcast Calendar:</strong> Automated weekly email dispatches remain pending official K SELECT dispatch calendar activation. All recipient settings are securely preserved.
+            • <strong>Production Broadcast Safeguard:</strong> Automated weekly email dispatches remain pending official K SELECT dispatch calendar activation. All recipient settings are securely preserved.
           </p>
         </div>
       </div>
