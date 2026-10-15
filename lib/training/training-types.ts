@@ -1,6 +1,38 @@
 export type TrainingLifecycleStatus = "draft" | "in_review" | "published" | "archived";
 export type TrainingVersionType = "minor" | "major";
 export type SourceReadinessScore = "ready" | "needs_review" | "insufficient";
+export type ClaimVerificationStatus = "verified" | "needs_review" | "unsupported";
+
+export type TrainingSectionKey =
+  | "productOverview"
+  | "top3Benefits"
+  | "bestFor"
+  | "howToUse"
+  | "sellingPoints"
+  | "pitch15s"
+  | "customerObjections"
+  | "storageHandlingSop"
+  | "quizQuestions";
+
+export interface ClaimVerificationItem {
+  id: string;
+  claim: string;
+  status: ClaimVerificationStatus;
+  sourceCategory: string; // e.g. "Catalog Master > Ingredients", "admin_overrides.bullet_points"
+  evidenceSnippet?: string;
+  qualificationNote?: string; // Missing or required qualification notes (e.g. "Tested formulation vs permanent clinical claim")
+  isForbiddenPhrase?: boolean; // Clinical trials, dermatologist tested, etc. without record
+}
+
+export interface ContentVerificationSummary {
+  overallStatus: ClaimVerificationStatus;
+  totalClaimsChecked: number;
+  verifiedCount: number;
+  needsReviewCount: number;
+  unsupportedCount: number;
+  claims: ClaimVerificationItem[];
+  unsupportedWarnings: string[];
+}
 
 export interface SourceReadinessItem {
   id: string;
@@ -74,6 +106,7 @@ export interface TrainingModuleData {
   // Source readiness snapshot
   sourceReadiness?: TrainingSourceReadiness;
   sourceRefs?: string[];
+  contentVerification?: ContentVerificationSummary;
 
   // Publishing & Audit Metadata
   isPublished: boolean;

@@ -8,7 +8,7 @@ import { resolveProductCategoryBranch, type CategoryItem } from "@/lib/product/c
 
 export type ContentOverallStatus = "published" | "ready" | "in_progress" | "needs_attention" | "not_started";
 export type CustomerPageStatus = "published" | "draft" | "missing" | "not_started";
-export type TrainingStatus = "ready" | "in_progress" | "missing";
+export type TrainingStatus = "published" | "draft" | "in_review" | "archived" | "no_training" | "ready" | "in_progress" | "missing";
 export type MediaStatus = "complete" | "partial" | "missing";
 export type FaqStatus = "ready" | "draft" | "empty";
 export type ReviewStatus = "active" | "pending" | "none";
@@ -146,6 +146,24 @@ export async function getContentStatusProducts(): Promise<{
     console.warn("[getContentStatusProducts] Warning fetching product_faqs:", err);
   }
 
+  // 5.6 Fetch authoritative Training status from retailer_product_training_content
+  const trainingByProduct = new Map<string, { status: string; is_published: boolean }>();
+  try {
+    const { data: rawTraining } = await adminSupabase
+      .from("retailer_product_training_content")
+      .select("product_id, status, is_published");
+    if (rawTraining) {
+      for (const t of rawTraining) {
+        trainingByProduct.set(t.product_id, {
+          status: t.status || (t.is_published ? "published" : "draft"),
+          is_published: Boolean(t.is_published),
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("[getContentStatusProducts] Warning fetching training content:", err);
+  }
+
   // 6. Build product items
   const products: ContentProductItem[] = await Promise.all(
     rawProducts.map(async (p) => {
@@ -214,9 +232,28 @@ export async function getContentStatusProducts(): Promise<{
         customerPageStatus = "missing";
       }
 
-      // Training status
-      const trainingStatus: TrainingStatus =
-        contentMeta.training_status || (info.training_ready ? "ready" : "missing");
+      // Authoritative Training status (Published, Draft, In Review, Archived, or Missing)
+      const tRecord = trainingByProduct.get(p.id);
+      let trainingStatus: TrainingStatus = "missing";
+      if (tRecord) {
+        if (tRecord.status === "published" || tRecord.is_published) {
+          trainingStatus = "published";
+        } else if (tRecord.status === "in_review") {
+          trainingStatus = "in_review";
+        } else if (tRecord.status === "archived") {
+          trainingStatus = "archived";
+        } else {
+          trainingStatus = "draft";
+        }
+      } else if (info.training_draft) {
+        trainingStatus = "draft";
+      } else if (contentMeta.training_status) {
+        trainingStatus = contentMeta.training_status;
+      } else if (info.training_ready) {
+        trainingStatus = "ready";
+      } else {
+        trainingStatus = "missing";
+      }
 
       // Authoritative FAQ status from product_faqs (Ready, Draft, Empty)
       const faqStats = faqsByProduct.get(p.id);

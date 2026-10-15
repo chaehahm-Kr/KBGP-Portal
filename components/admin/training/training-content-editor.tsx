@@ -1,16 +1,41 @@
 "use client";
 
-import React from "react";
-import type { TrainingModuleData, CustomerObjectionItem } from "@/lib/training/training-types";
+import React, { useState } from "react";
+import type {
+  TrainingModuleData,
+  CustomerObjectionItem,
+  TrainingSectionKey,
+} from "@/lib/training/training-types";
 
 interface TrainingContentEditorProps {
   module: TrainingModuleData;
   onChange: (updated: TrainingModuleData) => void;
+  onRegenerateSection?: (sectionKey: TrainingSectionKey) => Promise<void>;
+  isRegeneratingSection?: TrainingSectionKey | null;
+  saveStatus?: "saved" | "unsaved" | "saving" | "error";
   disabled?: boolean;
 }
 
-export function TrainingContentEditor({ module, onChange, disabled = false }: TrainingContentEditorProps) {
-  // Calculate total word count and estimated reading time
+export function TrainingContentEditor({
+  module,
+  onChange,
+  onRegenerateSection,
+  isRegeneratingSection = null,
+  saveStatus = "saved",
+  disabled = false,
+}: TrainingContentEditorProps) {
+  // Collapsible group states (all open by default for comprehensive editing)
+  const [openGroups, setOpenGroups] = useState({
+    basics: true,
+    selling: true,
+    safety: true,
+  });
+
+  const toggleGroup = (group: "basics" | "selling" | "safety") => {
+    setOpenGroups((prev) => ({ ...prev, [group]: !prev[group] }));
+  };
+
+  // Word count & brevity tracker
   const allText = [
     module.productOverview,
     ...module.top3Benefits,
@@ -25,6 +50,7 @@ export function TrainingContentEditor({ module, onChange, disabled = false }: Tr
   const wordCount = allText.trim().split(/\s+/).filter(Boolean).length;
   const estimatedSeconds = Math.round((wordCount / 160) * 60);
 
+  // Field change handlers
   const handleOverviewChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange({ ...module, productOverview: e.target.value });
   };
@@ -90,296 +116,540 @@ export function TrainingContentEditor({ module, onChange, disabled = false }: Tr
     onChange({ ...module, storageHandlingSop: e.target.value });
   };
 
+  // Safe Section Regeneration with explicit prompt
+  const requestSectionRegenerate = async (sectionKey: TrainingSectionKey, sectionLabel: string) => {
+    if (!onRegenerateSection) return;
+    const confirmed = window.confirm(
+      `Regenerate "${sectionLabel}" with AI?\n\nThis will replace the current text of this section only, preserving your manual edits on all other sections.`
+    );
+    if (confirmed) {
+      await onRegenerateSection(sectionKey);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Read Time & Brevity Indicator */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50">
+      {/* Top Banner: Brevity Tracker + Save Status */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50">
         <div className="flex items-center gap-2.5">
           <span className="text-xl">⏱️</span>
           <div>
-            <div className="text-xs font-black text-indigo-950 dark:text-indigo-200">
-              Mobile Learning Brevity Tracker
+            <div className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
+              <span>Mobile Learning Brevity Tracker</span>
+              <span className="text-[10px] font-mono text-zinc-500">
+                ({wordCount} words · ~{estimatedSeconds}s read)
+              </span>
             </div>
             <p className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80">
-              Target: 60–90 seconds essential reading for busy store employees.
+              Target: 60–90 seconds essential reading for Beauty Supply store staff.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono font-bold text-zinc-600 dark:text-zinc-400">
-            {wordCount} words
-          </span>
+
+        <div className="flex items-center gap-3">
+          {/* Save Status Pill */}
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border bg-white dark:bg-zinc-800 shadow-2xs">
+            {saveStatus === "saving" && (
+              <>
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+                <span className="text-indigo-600 dark:text-indigo-400">Saving Draft...</span>
+              </>
+            )}
+            {saveStatus === "saved" && (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-emerald-700 dark:text-emerald-400">Saved</span>
+              </>
+            )}
+            {saveStatus === "unsaved" && (
+              <>
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <span className="text-amber-700 dark:text-amber-400">Unsaved Changes</span>
+              </>
+            )}
+            {saveStatus === "error" && (
+              <>
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                <span className="text-rose-700 dark:text-rose-400">Save Failed</span>
+              </>
+            )}
+          </div>
+
           <span
-            className={`px-3 py-1 rounded-lg text-xs font-black uppercase ${
+            className={`px-3 py-1 rounded-xl text-xs font-black uppercase ${
               estimatedSeconds <= 90
                 ? "bg-emerald-500 text-white shadow-xs"
                 : "bg-amber-500 text-white"
             }`}
           >
-            ~{estimatedSeconds}s Read Time ({estimatedSeconds <= 90 ? "Optimal" : "Longer"})
+            {estimatedSeconds <= 90 ? "Optimal Length" : "Longer Read"}
           </span>
         </div>
       </div>
 
-      {/* 1. PRODUCT OVERVIEW */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-3 shadow-xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
-              1
+      {/* ========================================================================= */}
+      {/* GROUP 1: PRODUCT BASICS (Overview, Top 3 Benefits, Best For)              */}
+      {/* ========================================================================= */}
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs overflow-hidden">
+        <button
+          type="button"
+          onClick={() => toggleGroup("basics")}
+          className="w-full flex items-center justify-between p-4 sm:p-5 bg-zinc-50/70 dark:bg-zinc-850/50 border-b border-zinc-200 dark:border-zinc-800 text-left hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-sm">
+              🏷️
             </span>
-            <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
-              Product Overview (제품 핵심 요약)
-            </label>
-          </div>
-          <span className="text-[11px] text-zinc-400">1–2 concise sentences</span>
-        </div>
-        <textarea
-          rows={3}
-          disabled={disabled}
-          value={module.productOverview}
-          onChange={handleOverviewChange}
-          placeholder="Concise, factual product overview..."
-          className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-      </div>
-
-      {/* 2. TOP 3 BENEFITS */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-3 shadow-xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
-              2
-            </span>
-            <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
-              Top 3 Benefits (3대 핵심 효능)
-            </label>
-          </div>
-          <span className="text-[11px] text-zinc-400">Customer-relevant advantages</span>
-        </div>
-        <div className="space-y-2.5">
-          {module.top3Benefits.map((benefit, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-bold text-xs flex items-center justify-center shrink-0">
-                {idx + 1}
-              </span>
-              <input
-                type="text"
-                disabled={disabled}
-                value={benefit}
-                onChange={(e) => handleBenefitChange(idx, e.target.value)}
-                placeholder={`Benefit #${idx + 1}...`}
-                className="flex-1 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 3. BEST FOR / TARGET CUSTOMER */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-3 shadow-xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
-              3
-            </span>
-            <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
-              Best For / Target Customer (추천 대상 및 피부/헤어 타입)
-            </label>
-          </div>
-          <span className="text-[11px] text-zinc-400">Who should buy this</span>
-        </div>
-        <textarea
-          rows={2}
-          disabled={disabled}
-          value={module.bestFor}
-          onChange={handleBestForChange}
-          placeholder="Appropriate customer profiles, skin concerns, or usage occasions..."
-          className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-      </div>
-
-      {/* 4. HOW TO USE */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-3 shadow-xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
-              4
-            </span>
-            <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
-              How to Use (사용법 및 순서)
-            </label>
-          </div>
-          <span className="text-[11px] text-zinc-400">Step-by-step application</span>
-        </div>
-        <textarea
-          rows={3}
-          disabled={disabled}
-          value={module.howToUse}
-          onChange={handleHowToUseChange}
-          placeholder="Step 1, Step 2, routine placement, daytime sunscreen note..."
-          className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-      </div>
-
-      {/* 5. SELLING POINTS & 15-SECOND PITCH */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-4 shadow-xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
-              5
-            </span>
-            <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
-              Selling Points & 15-Second Counter Pitch (세일즈 훅 & 상담 스피치)
-            </label>
-          </div>
-          <button
-            type="button"
-            disabled={disabled || module.sellingPoints.length >= 5}
-            onClick={handleAddSellingPoint}
-            className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50"
-          >
-            + Add Point
-          </button>
-        </div>
-
-        {/* 15-Second Pitch Highlight Box */}
-        <div className="rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/60 p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
-              <span>🗣️</span> 15-Second Counter Pitch (매장 즉석 추천 멘트)
-            </span>
-            <span className="text-[10px] text-amber-700 dark:text-amber-300 font-mono">
-              Staff Spoken Script
-            </span>
-          </div>
-          <textarea
-            rows={2}
-            disabled={disabled}
-            value={module.pitch15s}
-            onChange={handlePitchChange}
-            placeholder="Conversational recommendation script staff can say out loud..."
-            className="w-full text-xs rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-zinc-900 p-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
-          />
-        </div>
-
-        {/* Bullet selling points */}
-        <div className="space-y-2">
-          <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block">
-            Counter Talk-Tracks & Quick Facts:
-          </span>
-          {module.sellingPoints.map((sp, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <span className="text-indigo-500 font-bold">•</span>
-              <input
-                type="text"
-                disabled={disabled}
-                value={sp}
-                onChange={(e) => handleSellingPointChange(idx, e.target.value)}
-                placeholder="Talk-track point..."
-                className="flex-1 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              {module.sellingPoints.length > 1 && (
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => handleRemoveSellingPoint(idx)}
-                  className="text-xs text-zinc-400 hover:text-rose-500 px-1.5"
-                  title="Remove point"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 6. CUSTOMER OBJECTIONS & ANSWERS */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-4 shadow-xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
-              6
-            </span>
-            <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
-              Customer Objections & Answers (고객 질문 및 의문 응대)
-            </label>
-          </div>
-          <button
-            type="button"
-            disabled={disabled || module.customerObjections.length >= 4}
-            onClick={handleAddObjection}
-            className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50"
-          >
-            + Add Objection Q&A
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          {module.customerObjections.map((item, idx) => (
-            <div
-              key={item.id || idx}
-              className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/40 space-y-2 relative"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                  Customer Question #{idx + 1}
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-wide">
+                  Group 1: Product Basics (기본 정보)
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300">
+                  Sections 1–3
                 </span>
-                {module.customerObjections.length > 1 && (
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => handleRemoveObjection(idx)}
-                    className="text-xs text-zinc-400 hover:text-rose-500"
-                    title="Remove objection"
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
-              <input
-                type="text"
+              <p className="text-[11px] text-zinc-500 mt-0.5">
+                Product Overview, Top 3 Verified Benefits, and Target Customer Suitability.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-bold text-zinc-400 px-2 py-1">
+            {openGroups.basics ? "Collapse ▲" : "Expand ▼"}
+          </span>
+        </button>
+
+        {openGroups.basics && (
+          <div className="p-5 sm:p-6 space-y-6">
+            {/* 1. PRODUCT OVERVIEW */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
+                    1
+                  </span>
+                  <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+                    Product Overview (제품 핵심 요약)
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-zinc-400">1–2 concise sentences</span>
+                  {onRegenerateSection && (
+                    <button
+                      type="button"
+                      disabled={disabled || isRegeneratingSection === "productOverview"}
+                      onClick={() => requestSectionRegenerate("productOverview", "Product Overview")}
+                      className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 disabled:opacity-50"
+                    >
+                      {isRegeneratingSection === "productOverview" ? "Regenerating..." : "✨ Regenerate"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <textarea
+                rows={3}
                 disabled={disabled}
-                value={item.objection}
-                onChange={(e) => handleObjectionChange(idx, "objection", e.target.value)}
-                placeholder="e.g. Will this feel greasy under my makeup?"
-                className="w-full text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-zinc-100 font-medium"
+                value={module.productOverview}
+                onChange={handleOverviewChange}
+                placeholder="Concise, factual product overview..."
+                className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"
               />
+            </div>
+
+            {/* 2. TOP 3 BENEFITS */}
+            <div className="space-y-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
+                    2
+                  </span>
+                  <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+                    Top 3 Benefits (3대 핵심 효능)
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-zinc-400">Customer-facing advantages</span>
+                  {onRegenerateSection && (
+                    <button
+                      type="button"
+                      disabled={disabled || isRegeneratingSection === "top3Benefits"}
+                      onClick={() => requestSectionRegenerate("top3Benefits", "Top 3 Benefits")}
+                      className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 disabled:opacity-50"
+                    >
+                      {isRegeneratingSection === "top3Benefits" ? "Regenerating..." : "✨ Regenerate"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-2">
+                {module.top3Benefits.map((benefit, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-bold text-xs flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <input
+                      type="text"
+                      disabled={disabled}
+                      value={benefit}
+                      onChange={(e) => handleBenefitChange(idx, e.target.value)}
+                      placeholder={`Benefit #${idx + 1}...`}
+                      className="flex-1 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 px-3 py-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. BEST FOR / TARGET CUSTOMER */}
+            <div className="space-y-2 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
+                    3
+                  </span>
+                  <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+                    Best For / Target Customer (추천 대상 및 피부/헤어 타입)
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-zinc-400">Who should buy this</span>
+                  {onRegenerateSection && (
+                    <button
+                      type="button"
+                      disabled={disabled || isRegeneratingSection === "bestFor"}
+                      onClick={() => requestSectionRegenerate("bestFor", "Target Customer (Best For)")}
+                      className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 disabled:opacity-50"
+                    >
+                      {isRegeneratingSection === "bestFor" ? "Regenerating..." : "✨ Regenerate"}
+                    </button>
+                  )}
+                </div>
+              </div>
               <textarea
                 rows={2}
                 disabled={disabled}
-                value={item.answer}
-                onChange={(e) => handleObjectionChange(idx, "answer", e.target.value)}
-                placeholder="Factual staff response..."
-                className="w-full text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-2.5 text-zinc-900 dark:text-zinc-100"
+                value={module.bestFor}
+                onChange={handleBestForChange}
+                placeholder="Appropriate customer profiles, skin concerns, or usage occasions..."
+                className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"
               />
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* 7. STORAGE & HANDLING SOP */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-3 shadow-xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
-              7
+      {/* ========================================================================= */}
+      {/* GROUP 2: SELLING GUIDE (How to Use, Selling Points, Pitch, Objections)    */}
+      {/* ========================================================================= */}
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs overflow-hidden">
+        <button
+          type="button"
+          onClick={() => toggleGroup("selling")}
+          className="w-full flex items-center justify-between p-4 sm:p-5 bg-zinc-50/70 dark:bg-zinc-850/50 border-b border-zinc-200 dark:border-zinc-800 text-left hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold text-sm">
+              💬
             </span>
-            <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
-              Storage & Handling SOP (보관 조건, 유통기한 및 취급 지침)
-            </label>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-wide">
+                  Group 2: Selling Guide (매장 응대 가이드)
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300">
+                  Sections 4–6
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-0.5">
+                How to Use Instructions, 15-Second Pitch, Talk-Tracks & Practical Customer Q&A.
+              </p>
+            </div>
           </div>
-          <span className="text-[11px] text-zinc-400">Safety & shelf storage</span>
-        </div>
-        <textarea
-          rows={2}
-          disabled={disabled}
-          value={module.storageHandlingSop}
-          onChange={handleStorageChange}
-          placeholder="Storage temperature, container handling, shelf life notes, general precautions..."
-          className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
+          <span className="text-xs font-bold text-zinc-400 px-2 py-1">
+            {openGroups.selling ? "Collapse ▲" : "Expand ▼"}
+          </span>
+        </button>
+
+        {openGroups.selling && (
+          <div className="p-5 sm:p-6 space-y-6">
+            {/* 4. HOW TO USE */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
+                    4
+                  </span>
+                  <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+                    How to Use (사용법 및 루틴 순서)
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-zinc-400">Step-by-step instructions</span>
+                  {onRegenerateSection && (
+                    <button
+                      type="button"
+                      disabled={disabled || isRegeneratingSection === "howToUse"}
+                      onClick={() => requestSectionRegenerate("howToUse", "How to Use")}
+                      className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 disabled:opacity-50"
+                    >
+                      {isRegeneratingSection === "howToUse" ? "Regenerating..." : "✨ Regenerate"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <textarea
+                rows={3}
+                disabled={disabled}
+                value={module.howToUse}
+                onChange={handleHowToUseChange}
+                placeholder="Step 1, Step 2, routine placement, daytime sunscreen note..."
+                className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed font-mono"
+              />
+            </div>
+
+            {/* 5. SELLING POINTS & 15S PITCH */}
+            <div className="space-y-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
+                    5
+                  </span>
+                  <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+                    Selling Points & 15-Second Counter Pitch (카운터 세일즈 토크)
+                  </label>
+                </div>
+                {onRegenerateSection && (
+                  <button
+                    type="button"
+                    disabled={disabled || isRegeneratingSection === "pitch15s"}
+                    onClick={() => requestSectionRegenerate("pitch15s", "15-Second Pitch")}
+                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 disabled:opacity-50"
+                  >
+                    {isRegeneratingSection === "pitch15s" ? "Regenerating..." : "✨ Regenerate Pitch"}
+                  </button>
+                )}
+              </div>
+
+              {/* 15s Pitch Callout Box */}
+              <div className="p-3.5 rounded-xl bg-purple-50/40 dark:bg-purple-950/20 border border-purple-200/60 dark:border-purple-900/40 space-y-1.5">
+                <label className="text-[11px] font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
+                  <span>⚡</span>
+                  <span>15-Second Spoken Pitch (점원이 고객에게 바로 말할 수 있는 한 문장)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  disabled={disabled}
+                  value={module.pitch15s}
+                  onChange={handlePitchChange}
+                  placeholder="This is [Product] from [Brand] — customers love it because..."
+                  className="w-full text-xs rounded-xl border border-purple-200 dark:border-purple-800 bg-white dark:bg-zinc-800 p-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-purple-500 leading-relaxed font-medium"
+                />
+              </div>
+
+              {/* Bullet Points Talk Tracks */}
+              <div className="space-y-2 pt-1">
+                <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 block">
+                  Key Counter Talk-Tracks (3개 핵심 권유 포인트):
+                </label>
+                {module.sellingPoints.map((sp, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="text-zinc-400 text-xs font-bold">•</span>
+                    <input
+                      type="text"
+                      disabled={disabled}
+                      value={sp}
+                      onChange={(e) => handleSellingPointChange(idx, e.target.value)}
+                      placeholder={`Selling Point #${idx + 1}...`}
+                      className="flex-1 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    {module.sellingPoints.length > 1 && (
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => handleRemoveSellingPoint(idx)}
+                        className="text-zinc-400 hover:text-rose-500 text-xs px-2 py-1"
+                        title="Remove point"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {module.sellingPoints.length < 5 && (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={handleAddSellingPoint}
+                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline pt-1 block"
+                  >
+                    + Add Selling Point
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 6. CUSTOMER OBJECTIONS & ANSWERS */}
+            <div className="space-y-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
+                    6
+                  </span>
+                  <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+                    Customer Objections & Answers (고객 자주 묻는 질문 및 반론 응대)
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  {onRegenerateSection && (
+                    <button
+                      type="button"
+                      disabled={disabled || isRegeneratingSection === "customerObjections"}
+                      onClick={() => requestSectionRegenerate("customerObjections", "Customer Objections")}
+                      className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 disabled:opacity-50"
+                    >
+                      {isRegeneratingSection === "customerObjections" ? "Regenerating..." : "✨ Regenerate Q&A"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={handleAddObjection}
+                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    + Add Q&A
+                  </button>
+                </div>
+              </div>
+
+              {module.customerObjections.length === 0 ? (
+                <div className="p-4 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 text-center text-xs text-zinc-400">
+                  No objections added yet. Click &ldquo;+ Add Q&A&rdquo; or &ldquo;✨ Regenerate Q&A&rdquo; to suggest customer questions.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {module.customerObjections.map((obj, idx) => (
+                    <div
+                      key={obj.id || idx}
+                      className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-2.5 bg-zinc-50/50 dark:bg-zinc-850/40"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                          Q&A #{idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => handleRemoveObjection(idx)}
+                          className="text-xs text-rose-500 hover:text-rose-700 font-bold"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">
+                          Customer Question / Concern:
+                        </label>
+                        <input
+                          type="text"
+                          disabled={disabled}
+                          value={obj.objection}
+                          onChange={(e) => handleObjectionChange(idx, "objection", e.target.value)}
+                          placeholder="e.g. Will this clog my pores or make my skin look oily?"
+                          className="w-full text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">
+                          Staff Factual Answer:
+                        </label>
+                        <textarea
+                          rows={2}
+                          disabled={disabled}
+                          value={obj.answer}
+                          onChange={(e) => handleObjectionChange(idx, "answer", e.target.value)}
+                          placeholder="Factual answer grounded in product specifications..."
+                          className="w-full text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* GROUP 3: HANDLING & SAFETY (Storage SOP, Precautions)                     */}
+      {/* ========================================================================= */}
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs overflow-hidden">
+        <button
+          type="button"
+          onClick={() => toggleGroup("safety")}
+          className="w-full flex items-center justify-between p-4 sm:p-5 bg-zinc-50/70 dark:bg-zinc-850/50 border-b border-zinc-200 dark:border-zinc-800 text-left hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">
+              🛡️
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-wide">
+                  Group 3: Handling & Safety (보관 및 주의사항)
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
+                  Section 7
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-0.5">
+                Storage Conditions, Temperature Requirements, Container Care & Employee Handling SOP.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-bold text-zinc-400 px-2 py-1">
+            {openGroups.safety ? "Collapse ▲" : "Expand ▼"}
+          </span>
+        </button>
+
+        {openGroups.safety && (
+          <div className="p-5 sm:p-6 space-y-4">
+            {/* 7. STORAGE & HANDLING SOP */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-zinc-900 text-white text-xs font-bold flex items-center justify-center">
+                    7
+                  </span>
+                  <label className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+                    Storage & Handling SOP (보관 및 취급 표준)
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-zinc-400">Temperature & shelf life</span>
+                  {onRegenerateSection && (
+                    <button
+                      type="button"
+                      disabled={disabled || isRegeneratingSection === "storageHandlingSop"}
+                      onClick={() => requestSectionRegenerate("storageHandlingSop", "Storage SOP")}
+                      className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 disabled:opacity-50"
+                    >
+                      {isRegeneratingSection === "storageHandlingSop" ? "Regenerating..." : "✨ Regenerate"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <textarea
+                rows={3}
+                disabled={disabled}
+                value={module.storageHandlingSop}
+                onChange={handleStorageChange}
+                placeholder="Store at room temperature (15°C–25°C) away from direct sunlight..."
+                className="w-full text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-800 p-3.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed font-mono"
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

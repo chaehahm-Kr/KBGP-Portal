@@ -7,10 +7,12 @@ import type {
   GroundedTrainingContext,
   TrainingSourceReadiness,
   TrainingVersionType,
+  TrainingSectionKey,
 } from "@/lib/training/training-types";
 import {
   getAdminTrainingModule,
   generateAiTrainingAction,
+  regenerateTrainingSectionAction,
   saveTrainingDraftAction,
   submitTrainingForReviewAction,
   publishTrainingModuleAction,
@@ -34,6 +36,8 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<"content" | "quiz" | "readiness" | "preview" | "audit">("content");
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"saved" | "unsaved" | "saving" | "error">("saved");
+  const [regeneratingSection, setRegeneratingSection] = useState<TrainingSectionKey | null>(null);
 
   const [isPending, startTransition] = useTransition();
 
@@ -61,6 +65,18 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
     };
   }, [product.id]);
 
+  // Warn on page leave if unsaved changes exist
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (saveStatus === "unsaved") {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [saveStatus]);
+
   // AI Generation Handler
   const handleGenerateAi = () => {
     startTransition(async () => {
@@ -68,6 +84,7 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
       const res = await generateAiTrainingAction(product.id);
       if (res.success && res.module) {
         setModule(res.module);
+        setSaveStatus("unsaved");
         setStatusMessage({
           text: `Training draft generated successfully using ${res.provider || "Grounded AI"} (${res.model || "v1"}). Review and edit below.`,
           type: "success",
@@ -78,15 +95,39 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
     });
   };
 
+  // Section-by-Section AI Regeneration Handler
+  const handleRegenerateSection = async (sectionKey: TrainingSectionKey) => {
+    if (!module) return;
+    setRegeneratingSection(sectionKey);
+    try {
+      const res = await regenerateTrainingSectionAction(product.id, sectionKey, module);
+      if (res.success && res.updatedModule) {
+        setModule(res.updatedModule);
+        setSaveStatus("unsaved");
+        setStatusMessage({
+          text: `Section "${sectionKey}" regenerated successfully with verified facts. Remember to save draft.`,
+          type: "success",
+        });
+      } else {
+        setStatusMessage({ text: res.error || "Failed to regenerate section", type: "error" });
+      }
+    } finally {
+      setRegeneratingSection(null);
+    }
+  };
+
   // Save Draft Handler
   const handleSaveDraft = () => {
     if (!module) return;
+    setSaveStatus("saving");
     startTransition(async () => {
       setStatusMessage({ text: "Saving draft...", type: "info" });
       const res = await saveTrainingDraftAction(product.id, module);
       if (res.success) {
+        setSaveStatus("saved");
         setStatusMessage({ text: "Draft saved successfully.", type: "success" });
       } else {
+        setSaveStatus("error");
         setStatusMessage({ text: res.error || "Failed to save draft", type: "error" });
       }
     });
@@ -387,8 +428,23 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
           {/* TAB 1: CONTENT EDITOR */}
           {activeTab === "content" && (
             <div className="space-y-6">
-              {sourceReadiness && <TrainingSourceReadinessCard readiness={sourceReadiness} />}
-              <TrainingContentEditor module={module} onChange={setModule} disabled={isPending} />
+              {sourceReadiness && (
+                <TrainingSourceReadinessCard
+                  readiness={sourceReadiness}
+                  verification={module.contentVerification}
+                />
+              )}
+              <TrainingContentEditor
+                module={module}
+                onChange={(updated) => {
+                  setModule(updated);
+                  setSaveStatus("unsaved");
+                }}
+                onRegenerateSection={handleRegenerateSection}
+                isRegeneratingSection={regeneratingSection}
+                saveStatus={saveStatus}
+                disabled={isPending}
+              />
             </div>
           )}
 
@@ -397,7 +453,10 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
             <div className="space-y-6">
               <TrainingQuizEditor
                 questions={module.quizQuestions}
-                onChange={(qs) => setModule({ ...module, quizQuestions: qs })}
+                onChange={(qs) => {
+                  setModule({ ...module, quizQuestions: qs });
+                  setSaveStatus("unsaved");
+                }}
                 disabled={isPending}
               />
             </div>
@@ -406,7 +465,10 @@ export function TrainingWorkspace({ product }: TrainingWorkspaceProps) {
           {/* TAB 3: SOURCE READINESS */}
           {activeTab === "readiness" && sourceReadiness && (
             <div className="space-y-4">
-              <TrainingSourceReadinessCard readiness={sourceReadiness} />
+              <TrainingSourceReadinessCard
+                readiness={sourceReadiness}
+                verification={module.contentVerification}
+              />
             </div>
           )}
 

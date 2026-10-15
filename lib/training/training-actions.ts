@@ -8,9 +8,10 @@ import type {
   GroundedTrainingContext,
   TrainingSourceReadiness,
   TrainingVersionType,
+  TrainingSectionKey,
 } from "./training-types";
-import { evaluateTrainingSourceReadiness } from "./source-readiness";
-import { generateTrainingWithAi as clientGenerateAi } from "./gemini-training-client";
+import { evaluateTrainingSourceReadiness, verifyTrainingContentClaims } from "./source-readiness";
+import { generateTrainingWithAi as clientGenerateAi, generateSingleSectionWithAi } from "./gemini-training-client";
 
 /**
  * Fetch authoritative Product Context for training generation
@@ -251,16 +252,20 @@ export async function getAdminTrainingModule(productId: string): Promise<{
       versionHistory: existingRow.version_history || [],
     };
 
+    mod.contentVerification = verifyTrainingContentClaims(mod, context);
+
     return { module: mod, sourceReadiness, context };
   }
 
   // If draft exists in price_additional_info
   if (draftData) {
+    const draftMod: TrainingModuleData = {
+      ...draftData,
+      sourceReadiness,
+    };
+    draftMod.contentVerification = verifyTrainingContentClaims(draftMod, context);
     return {
-      module: {
-        ...draftData,
-        sourceReadiness,
-      },
+      module: draftMod,
       sourceReadiness,
       context,
     };
@@ -287,6 +292,9 @@ export async function generateAiTrainingAction(productId: string): Promise<{
     }
 
     const res = await clientGenerateAi(context);
+    if (res.success && res.module) {
+      res.module.contentVerification = verifyTrainingContentClaims(res.module, context);
+    }
     return {
       success: res.success,
       module: res.module,
@@ -297,6 +305,47 @@ export async function generateAiTrainingAction(productId: string): Promise<{
   } catch (err: any) {
     console.error("[generateAiTrainingAction] Exception:", err);
     return { success: false, error: err.message || "Failed to generate AI training draft" };
+  }
+}
+
+/**
+ * Regenerate an individual section of the Training Module
+ * Preserves all other manually edited fields
+ */
+export async function regenerateTrainingSectionAction(
+  productId: string,
+  sectionKey: TrainingSectionKey,
+  currentModule: TrainingModuleData
+): Promise<{
+  success: boolean;
+  updatedModule?: TrainingModuleData;
+  error?: string;
+}> {
+  try {
+    await verifyAdminSession();
+    const context = await getGroundedProductContext(productId);
+    if (!context) {
+      return { success: false, error: "Product context not found" };
+    }
+
+    const res = await generateSingleSectionWithAi(sectionKey, context, currentModule);
+    if (!res.success) {
+      return { success: false, error: res.error || "Failed to regenerate section" };
+    }
+
+    const updated: TrainingModuleData = {
+      ...currentModule,
+      [sectionKey]: res.updatedValue,
+    };
+    updated.contentVerification = verifyTrainingContentClaims(updated, context);
+
+    return {
+      success: true,
+      updatedModule: updated,
+    };
+  } catch (err: any) {
+    console.error("[regenerateTrainingSectionAction] Error:", err);
+    return { success: false, error: err.message || "Failed to regenerate section" };
   }
 }
 
@@ -471,6 +520,27 @@ export async function publishTrainingModuleAction(
     }
     if (!moduleData.sellingPoints || moduleData.sellingPoints.length === 0) {
       return { success: false, error: "Section 5: At least one Selling Point is required." };
+    }
+    if (!moduleData.pitch15s?.trim()) {
+      return { success: false, error: "Section 5: 15-Second Counter Pitch is required." };
+    }
+    if (!moduleData.customerObjections || moduleData.customerObjections.length === 0) {
+      return { success: false, error: "Section 6: At least one Customer Objection & Answer is required." };
+    }
+    if (!moduleData.storageHandlingSop?.trim()) {
+      return { success: false, error: "Section 7: Storage & Handling SOP is required." };
+    }
+
+    // Factual Claim Verification Check: Block if ungrounded clinical/safety claims detected
+    const context = await getGroundedProductContext(productId);
+    if (context) {
+      const claimVer = verifyTrainingContentClaims(moduleData, context);
+      if (claimVer.unsupportedCount > 0) {
+        return {
+          success: false,
+          error: `Publishing blocked: ${claimVer.unsupportedCount} unsupported claim(s) detected: ${claimVer.unsupportedWarnings.join(" | ")}. Please resolve in the Training Content Editor before publishing.`,
+        };
+      }
     }
 
     // Quiz Validation: At least 3 questions, each with 3 options and exactly 1 correct answer

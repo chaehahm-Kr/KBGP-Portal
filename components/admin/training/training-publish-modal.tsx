@@ -23,19 +23,35 @@ export function TrainingPublishModal({
   if (!isOpen) return null;
 
   // Validation checks
+  const unsupportedCount = module.contentVerification?.unsupportedCount || 0;
   const checks = [
     { label: "1. Product Overview", passed: Boolean(module.productOverview?.trim()) },
     { label: "2. Top 3 Benefits", passed: module.top3Benefits.length === 3 && module.top3Benefits.every((b) => Boolean(b?.trim())) },
     { label: "3. Best For (Target Customer)", passed: Boolean(module.bestFor?.trim()) },
     { label: "4. How to Use Instructions", passed: Boolean(module.howToUse?.trim()) },
     { label: "5. Selling Points & 15s Pitch", passed: Boolean(module.pitch15s?.trim()) && module.sellingPoints.length > 0 },
-    { label: "6. Customer Objections & Answers", passed: module.customerObjections.length > 0 },
+    { label: "6. Customer Objections & Answers", passed: module.customerObjections.length > 0 && module.customerObjections.every(o => o.objection.trim() && o.answer.trim()) },
     { label: "7. Storage & Handling SOP", passed: Boolean(module.storageHandlingSop?.trim()) },
     {
-      label: `Assessment: ${module.quizQuestions.length} Questions (3+ required, 3 options each)`,
-      passed: module.quizQuestions.length >= 3 && module.quizQuestions.every(
-        (q) => q.question?.trim() && q.options.length === 3 && q.options.every((opt) => opt?.trim()) && typeof q.correctIndex === "number"
-      ),
+      label: `Assessment: ${module.quizQuestions.length} Questions (3–5 required, 3 options each with explanation)`,
+      passed:
+        module.quizQuestions.length >= 3 &&
+        module.quizQuestions.length <= 5 &&
+        module.quizQuestions.every(
+          (q) =>
+            q.question?.trim() &&
+            q.options.length === 3 &&
+            q.options.every((opt) => opt?.trim()) &&
+            typeof q.correctIndex === "number" &&
+            q.correctIndex >= 0 &&
+            q.correctIndex <= 2 &&
+            Boolean(q.explanation?.trim())
+        ),
+    },
+    {
+      label: "Factual Claim Verification",
+      passed: unsupportedCount === 0,
+      note: unsupportedCount > 0 ? `${unsupportedCount} ungrounded claim(s) must be reviewed or removed before publishing` : undefined,
     },
   ];
 
@@ -85,13 +101,18 @@ export function TrainingPublishModal({
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-zinc-50 dark:bg-zinc-850 p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800">
             {checks.map((c, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className={c.passed ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
-                  {c.passed ? "✓" : "✕"}
-                </span>
-                <span className={`text-[11px] ${c.passed ? "text-zinc-700 dark:text-zinc-300" : "text-rose-600 font-bold"}`}>
-                  {c.label}
-                </span>
+              <div key={i} className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className={c.passed ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
+                    {c.passed ? "✓" : "✕"}
+                  </span>
+                  <span className={`text-[11px] ${c.passed ? "text-zinc-700 dark:text-zinc-300" : "text-rose-600 font-bold"}`}>
+                    {c.label}
+                  </span>
+                </div>
+                {c.note && !c.passed && (
+                  <span className="text-[10px] text-rose-500 font-medium pl-4 leading-tight">{c.note}</span>
+                )}
               </div>
             ))}
           </div>

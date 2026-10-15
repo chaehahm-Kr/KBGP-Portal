@@ -154,11 +154,28 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
       name: "Training",
       labelKo: "교육 자료 / SOP",
       icon: BookOpenIcon,
-      badge: product.training_status.toUpperCase(),
+      badge:
+        product.training_status === "published"
+          ? "PUBLISHED"
+          : product.training_status === "in_review"
+          ? "IN REVIEW"
+          : product.training_status === "draft"
+          ? "DRAFT"
+          : product.training_status === "archived"
+          ? "ARCHIVED"
+          : product.training_status === "ready"
+          ? "READY"
+          : "NO TRAINING",
       badgeColor:
-        product.training_status === "ready"
+        product.training_status === "published"
           ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
-          : "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400",
+          : product.training_status === "in_review"
+          ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
+          : product.training_status === "draft"
+          ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+          : product.training_status === "archived"
+          ? "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+          : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400",
     },
     {
       id: "media-assets",

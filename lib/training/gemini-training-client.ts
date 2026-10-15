@@ -3,6 +3,7 @@ import type {
   TrainingModuleData,
   QuizQuestionItem,
   CustomerObjectionItem,
+  TrainingSectionKey,
 } from "./training-types";
 import { evaluateTrainingSourceReadiness, extractCategoryAttributes } from "./source-readiness";
 
@@ -292,24 +293,59 @@ export function generateDeterministicGroundedTraining(
     : "1. Apply an appropriate amount morning and night after cleansing.\n2. Gently smooth over face and neck until absorbed.\n3. Follow with sunscreen in the morning.";
 
   // 5. Selling Points & 15s Pitch
-  const sellingPoints = [
-    "Highlights authentic Korean skincare formulation with proven daily satisfaction",
-    "Visible calming and smoothing effect without heavy or greasy residue",
-    "Easy cross-sell with daily toners, cleansers, and morning SPF",
+  const branch = (context.categoryBranch || context.categoryName || "").toUpperCase();
+  let defaultSellingPoints = [
+    `Authentic Korean formulation with high customer repurchase satisfaction`,
+    `Pleasant lightweight texture that absorbs cleanly without heavy residue`,
+    `Easy to recommend and cross-sell in daily beauty care routines`,
   ];
-  const pitch15s = `This is ${context.brandName}'s ${context.productName} — customers love it because it delivers intense hydration while feeling completely lightweight, making it an easy favorite for daily routines!`;
+  let pitch15s = "";
 
-  // 6. Customer Objections & Answers
+  if (branch.includes("HAIR") || branch.includes("SCALP")) {
+    defaultSellingPoints = [
+      "Concentrated nourishing ingredients target split ends and heat damage",
+      "Noticeably restores hair softness and shine after just one use",
+      "Pairs naturally with customer daily shampoo and styling routines",
+    ];
+    pitch15s = `This is ${context.productName} by ${context.brandName} — an intensive salon-quality hair treatment that restores softness and shine without weighing hair down!`;
+  } else if (branch.includes("MAKEUP") || branch.includes("COLOR") || branch.includes("LIP")) {
+    defaultSellingPoints = [
+      "Versatile, buildable formula designed for effortless application",
+      "Creates a healthy, natural dewy glow that flatters diverse skin tones",
+      "Compact size makes it an ideal impulse purchase at the counter",
+    ];
+    pitch15s = `This is ${context.productName} by ${context.brandName} — it gives a fresh, natural dewy glow and applies effortlessly on lips and cheeks!`;
+  } else if (branch.includes("CLEANSER")) {
+    defaultSellingPoints = [
+      "Effectively removes impurities without stripping natural skin moisture",
+      "Gentle foam texture leaves skin feeling clean, soft, and balanced",
+      "Essential first step for any morning and evening skincare regimen",
+    ];
+    pitch15s = `This is ${context.productName} by ${context.brandName} — it thoroughly cleanses away dirt and makeup while keeping skin feeling soft and balanced!`;
+  } else {
+    // Default Skincare
+    if (context.bulletPoints.length > 0) {
+      pitch15s = `This is ${context.productName} from ${context.brandName} — customers love it because it delivers focused hydration while feeling completely lightweight, making it an everyday essential!`;
+    } else {
+      pitch15s = `This is ${context.productName} by ${context.brandName} — an authentic K-Beauty staple crafted for daily nourishment and healthy skin!`;
+    }
+  }
+
+  const sellingPoints = context.bulletPoints.length >= 3
+    ? [context.bulletPoints[0], context.bulletPoints[1], context.bulletPoints[2]]
+    : defaultSellingPoints;
+
+  // 6. Customer Objections & Answers (Practical & Factual, Zero Fabricated Clinical Claims)
   const objections: CustomerObjectionItem[] = [
     {
       id: "obj_1",
-      objection: "Will this product leave my skin feeling oily or heavy under makeup?",
-      answer: "No, the hybrid formula is engineered to absorb quickly into the skin, leaving a protective, non-sticky finish that layers smoothly under makeup and sunscreen.",
+      objection: "Will this product leave a sticky or heavy residue on my skin?",
+      answer: "No, it is formulated to absorb cleanly into the skin, leaving a comfortable, non-greasy finish that layers easily with other products.",
     },
     {
       id: "obj_2",
-      objection: "Can I recommend this to someone with sensitive or reactive skin?",
-      answer: `Yes, ${context.productName} is formulated to be gentle, hypoallergenic, and non-comedogenic for daily barrier support.`,
+      objection: "How should I introduce this into my current beauty routine?",
+      answer: "Store staff can advise applying it after cleansing as directed. For best results, use consistently morning and night.",
     },
   ];
 
@@ -374,4 +410,35 @@ export function generateDeterministicGroundedTraining(
     sourceRefs: ["Catalog Specifications", "admin_overrides.bullet_points", "products.how_to_use"],
     isPublished: false,
   };
+}
+
+/**
+ * Regenerate a single section with AI or deterministic synthesis
+ * Preserves all other manually edited sections untouched
+ */
+export async function generateSingleSectionWithAi(
+  sectionKey: TrainingSectionKey,
+  context: GroundedTrainingContext,
+  existingModule: TrainingModuleData
+): Promise<{ success: boolean; updatedValue: any; provider?: string; error?: string }> {
+  try {
+    const readiness = evaluateTrainingSourceReadiness(context);
+    const categoryAttrs = extractCategoryAttributes(context);
+
+    // Call full generation and pick just the target section
+    const fullRes = await generateTrainingWithAi(context);
+    if (!fullRes.success || !fullRes.module) {
+      return { success: false, updatedValue: null, error: fullRes.error || "Generation failed" };
+    }
+
+    const val = (fullRes.module as any)[sectionKey];
+    return {
+      success: true,
+      updatedValue: val,
+      provider: fullRes.provider,
+    };
+  } catch (err: any) {
+    console.error("[generateSingleSectionWithAi] Error:", err);
+    return { success: false, updatedValue: null, error: err.message };
+  }
 }

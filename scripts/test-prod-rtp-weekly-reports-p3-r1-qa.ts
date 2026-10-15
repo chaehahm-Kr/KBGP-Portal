@@ -30,10 +30,10 @@ async function runWeeklyReportsP3R1QA() {
     const diag = await diagRes?.json();
     console.log(`  Live Production SHA: ${diag?.deployment?.commitSha}`);
     console.log(`  Live Deployment URL: ${diag?.deployment?.deploymentUrl}`);
-    if (!diag?.deployment?.commitSha?.startsWith("024cfe4") && !diag?.deployment?.commitSha?.startsWith("8dbb3b2")) {
-      throw new Error(`Commit SHA mismatch! Expected 024cfe4 or 8dbb3b2, got ${diag?.deployment?.commitSha}`);
+    if (!diag?.deployment?.commitSha?.startsWith("c019d17") && !diag?.deployment?.commitSha?.startsWith("024cfe4") && !diag?.deployment?.commitSha?.startsWith("8dbb3b2")) {
+      throw new Error(`Commit SHA mismatch! Expected c019d17, got ${diag?.deployment?.commitSha}`);
     }
-    console.log("  ✓ Commit SHA verified (024cfe4)");
+    console.log(`  ✓ Commit SHA verified (${diag?.deployment?.commitSha?.slice(0, 7)})`);
 
     // -------------------------------------------------------------------------
     // 2. Retailer Login
