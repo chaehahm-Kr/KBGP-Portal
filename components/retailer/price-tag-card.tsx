@@ -8,9 +8,10 @@ interface PriceTagCardProps {
   item: StoreProductTagItem;
   className?: string;
   isPrintVersion?: boolean;
+  scale?: number;
 }
 
-export function PriceTagCard({ item, className = "", isPrintVersion = false }: PriceTagCardProps) {
+export function PriceTagCard({ item, className = "", isPrintVersion = false, scale }: PriceTagCardProps) {
   const {
     productName,
     brandName,

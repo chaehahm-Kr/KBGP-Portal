@@ -29,6 +29,22 @@ export interface StoreProductPriceRecord {
   updatedAt: string | null;
 }
 
+export interface StorePriceBreakdownItem {
+  storeId: string;
+  storeName: string;
+  regularPrice: number | null;
+  salePrice: number | null;
+  discountPercent: number | null;
+  isSaleActive: boolean;
+  hasStorePrice: boolean;
+  effectivePrice: number;
+  priceBasis: "store_sale" | "store_regular" | "msrp";
+  regularGrossProfit: number | null;
+  regularGrossMarginPercent: number | null;
+  saleGrossProfit: number | null;
+  saleGrossMarginPercent: number | null;
+}
+
 export interface StoreProductTagItem {
   productId: string;
   productName: string;
@@ -40,10 +56,16 @@ export interface StoreProductTagItem {
   category: string;
   categoryLabel: string;
   cartonPackQty: number;
+
+  // Wholesale Cost & Source Attribution
   wholesalePrice: number | null; // Suppressed (null) for employee role to protect wholesale pricing
-  msrp: number; // Suggested Retail Price guidance
-  
-  // Store Price info
+  wholesaleCostSource?: "invoice" | "order" | "curation" | "none";
+  wholesaleCostLabel?: string | null; // e.g. "Last Purchase: $4.75"
+
+  msrp: number; // Suggested Retail Price guidance (> 0)
+  hasMsrp: boolean;
+
+  // Store Price info (Single Store or Primary View)
   hasStorePrice: boolean;
   regularPrice: number | null;
   salePrice: number | null;
@@ -53,6 +75,16 @@ export interface StoreProductTagItem {
   isSaleActive: boolean;
   effectivePrice: number; // Active sale price, regular store price, or MSRP fallback
   priceBasis: "store_sale" | "store_regular" | "msrp";
+
+  // Profitability (Unit-level merchandise margin)
+  regularGrossProfit: number | null;
+  regularGrossMarginPercent: number | null;
+  saleGrossProfit: number | null;
+  saleGrossMarginPercent: number | null;
+
+  // All Stores Breakdown
+  storeBreakdowns?: StorePriceBreakdownItem[];
+  storesAvailableCount?: number;
 
   // Product Eligibility & Fulfillment Status
   tagStatus: "in_stock" | "incoming";
@@ -67,7 +99,8 @@ export interface StorePricingDashboardData {
   companyId: string;
   userRole: string;
   canEditPrice: boolean;
-  selectedStoreId: string;
+  isAllStores: boolean;
+  selectedStoreId: string; // "all" or specific store UUID
   selectedStoreName: string;
   stores: Array<{ id: string; name: string }>;
   products: StoreProductTagItem[];
@@ -102,4 +135,31 @@ export function isSalePriceActive(
   if (saleStartDate && todayStr < saleStartDate) return false;
   if (saleEndDate && todayStr > saleEndDate) return false;
   return true;
+}
+
+/**
+ * Calculate Unit-Level Gross Profit and Gross Margin Percentage
+ * Gross Profit = Selling Price - Wholesale Cost
+ * Gross Margin % = (Gross Profit / Selling Price) * 100
+ * Denominator is strictly Selling Price (NOT cost, NOT markup)
+ */
+export function calculateGrossProfitMetrics(
+  sellingPrice: number | null,
+  wholesaleCost: number | null
+): { grossProfit: number | null; grossMarginPercent: number | null } {
+  if (
+    sellingPrice === null ||
+    sellingPrice === undefined ||
+    sellingPrice <= 0 ||
+    wholesaleCost === null ||
+    wholesaleCost === undefined ||
+    wholesaleCost <= 0
+  ) {
+    return { grossProfit: null, grossMarginPercent: null };
+  }
+
+  const grossProfit = Number((sellingPrice - wholesaleCost).toFixed(2));
+  const grossMarginPercent = Number(((grossProfit / sellingPrice) * 100).toFixed(1));
+
+  return { grossProfit, grossMarginPercent };
 }
