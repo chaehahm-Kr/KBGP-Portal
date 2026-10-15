@@ -135,8 +135,7 @@ async function runWeeklyReportsP3R2QA() {
     const testExternalEmail = `external.advisor.${Date.now()}@gmail.com`;
     console.log(`\n[Test 7] Adding External Recipient: ${testExternalEmail}...`);
     await emailInput.fill(testExternalEmail);
-
-    const submitBtn = page.locator("button:has-text('+ Add Recipient')").nth(1); // button inside form
+    const submitBtn = page.locator('form button[type="submit"]').first();
     await submitBtn.click();
     await page.waitForTimeout(2000);
 
@@ -173,28 +172,33 @@ async function runWeeklyReportsP3R2QA() {
     // 9. Test Toggle Delivery (Pause / Re-enable) for External Recipient
     // -------------------------------------------------------------------------
     console.log("\n[Test 9] Testing Toggle Delivery Pause & Re-enable for External Recipient...");
-    const pauseBtn = persistedRow.locator("button:has-text('Pause')").first();
-    if (await pauseBtn.isVisible()) {
-      await pauseBtn.click();
+    const deliveryToggleBtn = persistedRow.locator("button:has-text('Enabled')").first();
+    const hasToggleBtn = await deliveryToggleBtn.isVisible();
+    console.log("  Initial 'Enabled' delivery button visible:", hasToggleBtn);
+    if (hasToggleBtn) {
+      await deliveryToggleBtn.click();
       await page.waitForTimeout(2000);
 
-      // Verify status changed to Paused / Enable button visible
-      const enableBtn = persistedRow.locator("button:has-text('Enable')").first();
-      console.log("  Enable button visible after pause:", await enableBtn.isVisible());
+      // Now verify paused button appears
+      const pausedBtn = page.locator(`table tbody tr:has-text('${testExternalEmail}') button:has-text('Paused')`).first();
+      await pausedBtn.waitFor({ state: "visible", timeout: 10000 });
+      console.log("  ✓ Delivery status changed to Paused.");
 
       // Reload to verify persistence of paused state
       await page.reload({ waitUntil: "networkidle" });
       await page.waitForTimeout(2000);
 
-      const reloadedEnableBtn = page.locator(`table tbody tr:has-text('${testExternalEmail}') button:has-text('Enable')`).first();
-      if (!(await reloadedEnableBtn.isVisible())) {
+      const reloadedPausedBtn = page.locator(`table tbody tr:has-text('${testExternalEmail}') button:has-text('Paused')`).first();
+      if (!(await reloadedPausedBtn.isVisible())) {
         throw new Error("Paused state did not persist across reload!");
       }
       console.log("  ✓ Delivery pause toggle persisted across reload.");
 
       // Re-enable
-      await reloadedEnableBtn.click();
+      await reloadedPausedBtn.click();
       await page.waitForTimeout(2000);
+      const reloadedEnabledBtn = page.locator(`table tbody tr:has-text('${testExternalEmail}') button:has-text('Enabled')`).first();
+      await reloadedEnabledBtn.waitFor({ state: "visible", timeout: 10000 });
       console.log("  ✓ Delivery re-enabled successfully.");
     }
 
@@ -208,17 +212,12 @@ async function runWeeklyReportsP3R2QA() {
 
     const dupEmailInput = page.locator('input[type="email"]').first();
     await dupEmailInput.fill(testExternalEmail);
-    const dupSubmitBtn = page.locator("button:has-text('+ Add Recipient')").nth(1);
+    const dupSubmitBtn = page.locator('form button[type="submit"]').first();
     await dupSubmitBtn.click();
-    await page.waitForTimeout(1000);
 
     const dupError = page.locator("text=already registered as an active report recipient").first();
-    const hasDupError = await dupError.isVisible();
-    console.log(`  Duplicate error message visible: ${hasDupError}`);
-    if (!hasDupError) {
-      throw new Error("Duplicate email was not rejected with proper error message!");
-    }
-    console.log("  ✓ Duplicate prevention validated.");
+    await dupError.waitFor({ state: "visible", timeout: 15000 });
+    console.log("  ✓ Duplicate prevention validated with error message.");
 
     // Close form
     await page.locator("button:has-text('✕ Close')").first().click();
@@ -231,14 +230,8 @@ async function runWeeklyReportsP3R2QA() {
     const targetRow = page.locator(`table tbody tr:has-text('${testExternalEmail}')`).first();
     const removeBtn = targetRow.locator("button:has-text('Remove')").first();
     await removeBtn.click();
-    await page.waitForTimeout(2000);
-
-    // Verify row removed
-    const removedCheck = await page.locator(`table tbody tr:has-text('${testExternalEmail}')`).count();
-    console.log(`  Recipient count in table after remove: ${removedCheck}`);
-    if (removedCheck !== 0) {
-      throw new Error("Recipient row still present immediately after remove!");
-    }
+    await targetRow.waitFor({ state: "detached", timeout: 15000 });
+    console.log("  ✓ Recipient row detached from table.");
 
     // Reload to verify persistence of removal
     await page.reload({ waitUntil: "networkidle" });

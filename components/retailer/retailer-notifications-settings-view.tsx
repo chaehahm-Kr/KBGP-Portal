@@ -128,11 +128,13 @@ export function RetailerNotificationsSettingsView({ initialState }: Props) {
       const res = await removeWeeklyReportRecipientAction(recipientId);
       if (res.success) {
         setRecipients((prev) =>
-          prev.map((r) =>
-            r.id === recipientId
-              ? { ...r, optIn: false, status: "disabled", optedInAt: null }
-              : r
-          )
+          recipientId.startsWith("ext_")
+            ? prev.filter((r) => r.id !== recipientId)
+            : prev.map((r) =>
+                r.id === recipientId
+                  ? { ...r, optIn: false, status: "disabled", optedInAt: null }
+                  : r
+              )
         );
 
         const isSelf = recipients.find((r) => r.id === recipientId)?.isCurrentUser;
