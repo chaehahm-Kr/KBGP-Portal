@@ -8,6 +8,8 @@ import type {
   AdminStoreOperationsData,
   AdminStoreInventoryItem,
   AdminStoreInventoryOverview,
+  AdminStoreOrderItem,
+  AdminStoreOrdersOverview,
 } from "@/lib/retailer/admin-store-operations";
 
 interface StoreOperationsViewProps {
@@ -33,12 +35,91 @@ interface TabDefinition {
 const DETAIL_TABS: TabDefinition[] = [
   { key: "overview", label: "Overview", phaseLabel: "Phase 1 (Active)" },
   { key: "inventory", label: "Inventory & Reorder", phaseLabel: "Phase 2 (Active)" },
-  { key: "orders", label: "Orders & Deliveries", badge: "Phase 3", phaseLabel: "Phase 3 (Planned)" },
+  { key: "orders", label: "Orders & Deliveries", phaseLabel: "Phase 2 (Active)" },
   { key: "sales", label: "Sales & Performance", badge: "Phase 4", phaseLabel: "Phase 4 (Planned)" },
   { key: "training", label: "Staff & Training", badge: "Phase 5", phaseLabel: "Phase 5 (Planned)" },
   { key: "fixtures", label: "Fixtures & Placements", badge: "Future", phaseLabel: "Future Phase (Planned)" },
   { key: "activities", label: "Store Activities", badge: "Future", phaseLabel: "Future Phase (Planned)" },
 ];
+
+function formatOrderCurrency(amount: number): string {
+  return `$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatOrderDate(dateStr?: string | null): string {
+  if (!dateStr) return "N/A";
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatOrderDateTime(dateStr?: string | null): string {
+  if (!dateStr) return "N/A";
+  try {
+    const d = new Date(dateStr);
+    return `${d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })} ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+function getOrderStatusBadgeClasses(status: string): string {
+  const s = status.toLowerCase();
+  switch (s) {
+    case "submitted":
+      return "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300";
+    case "confirmed":
+      return "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:border-purple-800 dark:text-purple-300";
+    case "processing":
+      return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300";
+    case "partially_shipped":
+      return "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:border-orange-800 dark:text-orange-300";
+    case "shipped":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300";
+    case "delivered":
+      return "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:border-teal-800 dark:text-teal-300";
+    case "cancelled":
+    case "partially_cancelled":
+      return "bg-zinc-100 text-zinc-500 border-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400";
+    default:
+      return "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300";
+  }
+}
+
+function formatOrderStatusName(status: string): string {
+  const s = status.toLowerCase();
+  switch (s) {
+    case "submitted":
+      return "Submitted";
+    case "confirmed":
+      return "Confirmed";
+    case "processing":
+      return "Processing";
+    case "partially_shipped":
+      return "Partially Shipped";
+    case "shipped":
+      return "Shipped";
+    case "delivered":
+      return "Delivered";
+    case "cancelled":
+      return "Cancelled";
+    case "partially_cancelled":
+      return "Partially Cancelled";
+    default:
+      return status.charAt(0).toUpperCase() + status.slice(1);
+  }
+}
 
 export function StoreOperationsView({ data }: StoreOperationsViewProps) {
   const router = useRouter();
@@ -164,6 +245,66 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
 
     return items;
   }, [storeInventory, inventorySearch, inventoryFilter, inventorySort]);
+
+  // Orders Tab Search, Filter and Sort States
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string>("ALL");
+  const [orderSort, setOrderSort] = useState<"DATE_DESC" | "DATE_ASC" | "AMOUNT_DESC" | "AMOUNT_ASC" | "UNITS_DESC">("DATE_DESC");
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+
+  const storeOrders = useMemo<AdminStoreOrdersOverview | null>(() => {
+    if (!selectedStoreId || !data.storeOrdersMap) return null;
+    return data.storeOrdersMap[selectedStoreId] || null;
+  }, [selectedStoreId, data.storeOrdersMap]);
+
+  const filteredStoreOrders = useMemo<AdminStoreOrderItem[]>(() => {
+    if (!storeOrders?.orders) return [];
+    let orders = [...storeOrders.orders];
+
+    // Search filter
+    if (orderSearch.trim()) {
+      const q = orderSearch.toLowerCase().trim();
+      orders = orders.filter((o) => {
+        const matchNumber = o.orderNumber.toLowerCase().includes(q);
+        const matchTracking = o.fulfillments.some((f) =>
+          (f.trackingNumber && f.trackingNumber.toLowerCase().includes(q)) ||
+          (f.carrier && f.carrier.toLowerCase().includes(q)) ||
+          f.boxes.some((b) => b.trackingNumber && b.trackingNumber.toLowerCase().includes(q))
+        );
+        const matchItem = o.items.some((it) =>
+          it.productName.toLowerCase().includes(q) ||
+          it.sku.toLowerCase().includes(q) ||
+          (it.brandName && it.brandName.toLowerCase().includes(q))
+        );
+        return matchNumber || matchTracking || matchItem;
+      });
+    }
+
+    // Status filter
+    if (orderStatusFilter !== "ALL") {
+      orders = orders.filter((o) => o.orderStatus.toLowerCase() === orderStatusFilter.toLowerCase());
+    }
+
+    // Sort
+    orders.sort((a, b) => {
+      switch (orderSort) {
+        case "DATE_DESC":
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case "DATE_ASC":
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case "AMOUNT_DESC":
+          return b.totalAmount - a.totalAmount;
+        case "AMOUNT_ASC":
+          return a.totalAmount - b.totalAmount;
+        case "UNITS_DESC":
+          return b.totalOrderedUnits - a.totalOrderedUnits;
+        default:
+          return 0;
+      }
+    });
+
+    return orders;
+  }, [storeOrders, orderSearch, orderStatusFilter, orderSort]);
 
   // Filtered stores for list
   const filteredStores = useMemo(() => {
@@ -1005,28 +1146,618 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
             </div>
           )}
 
-          {/* TAB 3: ORDERS & DELIVERIES */}
+          {/* TAB 3: ORDERS & DELIVERIES (Active Phase 2 Integration) */}
           {activeTab === "orders" && (
-            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4" data-testid="tab-content-orders">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-300">
-                  Phase 3 Planned
-                </span>
-                <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
-                  Store Destination Orders & Dispatch Tracking
-                </h3>
-              </div>
-              <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed max-w-2xl">
-                Direct store order routing, carrier package box tracking, and proof-of-delivery receipts will be consolidated in Phase 3. Orders placed for this store are authoritatively recorded in the orders ledger.
-              </p>
-              <div className="pt-2">
-                <Link
-                  href={`/admin/retailers/${selectedStore.companyId}?tab=orders`}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 text-xs font-bold transition-all shadow-xs"
+            <div className="space-y-6" data-testid="tab-content-orders">
+              {/* If no orders data or 0 orders found for this store */}
+              {!storeOrders || storeOrders.orders.length === 0 ? (
+                <div
+                  className="rounded-xl border border-zinc-200 bg-white p-8 text-center shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4"
+                  data-testid="orders-empty-state"
                 >
-                  <span>View Authoritative Orders in Retailer 360° ↗</span>
-                </Link>
-              </div>
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 text-xl">
+                    🚚
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-zinc-950 dark:text-white" data-testid="orders-empty-state-title">
+                      No Orders Recorded for This Store
+                    </h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
+                      No wholesale or replenishment orders have been routed to {selectedStore.name} yet. When an order is placed with this store as the shipping destination, it will be displayed here automatically.
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <Link
+                      href={`/admin/retailers/${selectedStore.companyId}?tab=orders`}
+                      data-testid="orders-empty-retailer-360-link"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 text-xs font-semibold transition-all shadow-xs"
+                    >
+                      <span>View Company Orders in Retailer 360° ↗</span>
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* 4 Summary KPI Cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {/* KPI 1: Total Orders */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-orders-total"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Total Orders
+                      </span>
+                      <p className="text-lg font-bold text-zinc-900 dark:text-white font-mono">
+                        {storeOrders.totalOrdersCount}
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        Store destination orders
+                      </span>
+                    </div>
+
+                    {/* KPI 2: Open / In Progress Orders */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-orders-open"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Open / In Progress
+                      </span>
+                      <p
+                        className={`text-lg font-bold font-mono ${
+                          storeOrders.openOrdersCount > 0
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-zinc-900 dark:text-white"
+                        }`}
+                      >
+                        {storeOrders.openOrdersCount}
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        Submitted, confirmed, or processing
+                      </span>
+                    </div>
+
+                    {/* KPI 3: Shipped / Dispatched Orders */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-orders-shipped"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Shipped / Dispatched
+                      </span>
+                      <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                        {storeOrders.shippedOrdersCount}
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        Fulfillments dispatched or delivered
+                      </span>
+                    </div>
+
+                    {/* KPI 4: Orders With Remaining Units */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-orders-remaining"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Remaining Unshipped
+                      </span>
+                      <p
+                        className={`text-lg font-bold font-mono ${
+                          storeOrders.ordersWithRemainingUnitsCount > 0
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-zinc-900 dark:text-white"
+                        }`}
+                      >
+                        {storeOrders.ordersWithRemainingUnitsCount} Orders
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        {storeOrders.ordersWithRemainingUnitsCount > 0
+                          ? "Orders with pending quantity"
+                          : "All ordered units fulfilled"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Search, Filter & Sort Controls */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-zinc-50 dark:bg-zinc-900/60 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                    {/* Search Input */}
+                    <div className="relative flex-1 min-w-[200px]">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-zinc-400 text-xs">
+                        🔍
+                      </span>
+                      <input
+                        type="text"
+                        value={orderSearch}
+                        onChange={(e) => setOrderSearch(e.target.value)}
+                        placeholder="Search order #, carrier tracking, product, SKU..."
+                        data-testid="orders-search-input"
+                        className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                      />
+                      {orderSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setOrderSearch("")}
+                          className="absolute inset-y-0 right-0 flex items-center pr-2.5 text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      {/* Filter Select */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-semibold text-zinc-500 uppercase">Status:</span>
+                        <select
+                          value={orderStatusFilter}
+                          onChange={(e) => setOrderStatusFilter(e.target.value)}
+                          data-testid="orders-filter-select"
+                          className="px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none cursor-pointer"
+                        >
+                          <option value="ALL">All Statuses ({storeOrders.orders.length})</option>
+                          <option value="submitted">Submitted</option>
+                          <option value="confirmed">Confirmed</option>
+                          <option value="processing">Processing</option>
+                          <option value="partially_shipped">Partially Shipped</option>
+                          <option value="shipped">Shipped</option>
+                          <option value="delivered">Delivered</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </div>
+
+                      {/* Sort Select */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-semibold text-zinc-500 uppercase">Sort:</span>
+                        <select
+                          value={orderSort}
+                          onChange={(e) => setOrderSort(e.target.value as any)}
+                          data-testid="orders-sort-select"
+                          className="px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none cursor-pointer"
+                        >
+                          <option value="DATE_DESC">Order Date (Newest First)</option>
+                          <option value="DATE_ASC">Order Date (Oldest First)</option>
+                          <option value="AMOUNT_DESC">Total Amount (High → Low)</option>
+                          <option value="AMOUNT_ASC">Total Amount (Low → High)</option>
+                          <option value="UNITS_DESC">Ordered Units (High → Low)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Orders Table */}
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs overflow-hidden">
+                    <div className="overflow-x-auto scrollbar-thin">
+                      <table className="w-full text-left text-xs" data-testid="orders-table">
+                        <thead className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/75 dark:bg-zinc-800/40 text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                          <tr>
+                            <th className="py-3 px-3 min-w-[170px]">Order Number & Date</th>
+                            <th className="py-3 px-3 min-w-[120px]">Order Status</th>
+                            <th className="py-3 px-3 min-w-[160px]">Items & Units</th>
+                            <th className="py-3 px-3 text-right min-w-[110px]">Total Amount</th>
+                            <th className="py-3 px-3 min-w-[170px]">Fulfillment / Dispatch</th>
+                            <th className="py-3 px-3 min-w-[180px]">Tracking & Cartons</th>
+                            <th className="py-3 px-3 text-right min-w-[130px]">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                          {filteredStoreOrders.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="py-8 text-center text-xs text-zinc-500">
+                                No orders match your current search and filter settings.
+                                <div className="mt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOrderSearch("");
+                                      setOrderStatusFilter("ALL");
+                                    }}
+                                    className="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 font-semibold cursor-pointer"
+                                  >
+                                    Reset Filters
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredStoreOrders.map((order) => {
+                              const isExpanded = expandedOrderId === order.id;
+                              return (
+                                <React.Fragment key={order.id}>
+                                  <tr
+                                    data-testid={`orders-table-row-${order.id}`}
+                                    className={`hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 transition-colors ${
+                                      isExpanded ? "bg-zinc-50/40 dark:bg-zinc-800/30" : ""
+                                    }`}
+                                  >
+                                    {/* Order Number & Date */}
+                                    <td className="py-2.5 px-3">
+                                      <div className="font-mono font-bold text-zinc-900 dark:text-white">
+                                        {order.orderNumber}
+                                      </div>
+                                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                        {formatOrderDateTime(order.createdAt)}
+                                      </div>
+                                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                        {order.paymentTerms && (
+                                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                                            {order.paymentTerms}
+                                          </span>
+                                        )}
+                                        <span className="text-[10px] font-medium text-zinc-400 capitalize">
+                                          {order.paymentStatus}
+                                        </span>
+                                      </div>
+                                    </td>
+
+                                    {/* Order Status */}
+                                    <td className="py-2.5 px-3">
+                                      <span
+                                        className={`inline-block px-2.5 py-0.5 rounded text-xs font-bold border ${getOrderStatusBadgeClasses(
+                                          order.orderStatus
+                                        )}`}
+                                        data-testid={`order-status-${order.id}`}
+                                      >
+                                        {formatOrderStatusName(order.orderStatus)}
+                                      </span>
+                                    </td>
+
+                                    {/* Items & Units */}
+                                    <td className="py-2.5 px-3">
+                                      <div className="font-semibold text-zinc-900 dark:text-white">
+                                        {order.totalItemsCount} {order.totalItemsCount === 1 ? "line item" : "line items"} · {order.totalOrderedUnits} units
+                                      </div>
+                                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                        {order.totalShippedUnits > 0 ? (
+                                          <span>{order.totalShippedUnits} shipped</span>
+                                        ) : order.orderStatus.toLowerCase() === "cancelled" ? (
+                                          <span className="text-zinc-400">Cancelled</span>
+                                        ) : (
+                                          <span className="text-zinc-400">0 shipped</span>
+                                        )}
+                                        {order.totalRemainingUnits > 0 && order.orderStatus.toLowerCase() !== "cancelled" && (
+                                          <span className="text-amber-600 dark:text-amber-400 font-semibold ml-1.5">
+                                            ({order.totalRemainingUnits} remaining)
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+
+                                    {/* Total Amount */}
+                                    <td className="py-2.5 px-3 text-right">
+                                      <div className="font-mono font-bold text-zinc-900 dark:text-white">
+                                        {formatOrderCurrency(order.totalAmount)}
+                                      </div>
+                                      <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                                        Subtotal: {formatOrderCurrency(order.subtotalAmount)}
+                                      </div>
+                                    </td>
+
+                                    {/* Fulfillment / Dispatch */}
+                                    <td className="py-2.5 px-3">
+                                      {order.fulfillments.length === 0 ? (
+                                        <div className="text-zinc-400 dark:text-zinc-500 italic text-[11px]">
+                                          No Dispatches Yet
+                                        </div>
+                                      ) : (
+                                        <div className="space-y-1">
+                                          <div className="font-semibold text-zinc-900 dark:text-white text-[11px]">
+                                            {order.fulfillments.length}{" "}
+                                            {order.fulfillments.length === 1 ? "Dispatch" : "Dispatches"}
+                                            {order.totalBoxCount > 0 && ` (${order.totalBoxCount} Cartons)`}
+                                          </div>
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            {order.fulfillments.map((f) => (
+                                              <span
+                                                key={f.id}
+                                                className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${
+                                                  f.status.toLowerCase() === "delivered"
+                                                    ? "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800"
+                                                    : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                                }`}
+                                              >
+                                                {f.status.toLowerCase() === "delivered" ? "Delivered" : "Shipped"}
+                                              </span>
+                                            ))}
+                                            {order.fulfillments[0]?.shippedAt && (
+                                              <span className="text-[10px] text-zinc-400">
+                                                {formatOrderDate(order.fulfillments[0].shippedAt)}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    {/* Tracking & Cartons */}
+                                    <td className="py-2.5 px-3">
+                                      {order.fulfillments.length === 0 ? (
+                                        <span className="text-zinc-400 text-[11px]">—</span>
+                                      ) : (
+                                        <div className="space-y-1">
+                                          {order.fulfillments.map((f) => (
+                                            <div key={f.id} className="text-[11px]">
+                                              {f.trackingUrl ? (
+                                                <a
+                                                  href={f.trackingUrl}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="font-mono text-emerald-600 dark:text-emerald-400 hover:underline font-semibold flex items-center gap-1"
+                                                >
+                                                  {f.carrier ? `${f.carrier}: ` : ""}
+                                                  {f.trackingNumber || "Track"} ↗
+                                                </a>
+                                              ) : f.trackingNumber ? (
+                                                <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                                                  {f.carrier ? `${f.carrier}: ` : ""}
+                                                  {f.trackingNumber}
+                                                </span>
+                                              ) : (
+                                                <span className="text-zinc-400 italic">No tracking #</span>
+                                              )}
+                                              {f.boxes.length > 1 && (
+                                                <div className="text-[10px] text-zinc-400">
+                                                  {f.boxes.length} carton tracking numbers
+                                                </div>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    {/* Actions */}
+                                    <td className="py-2.5 px-3 text-right">
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+                                          data-testid={`order-toggle-${order.id}`}
+                                          className="px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
+                                        >
+                                          {isExpanded ? "Hide ▲" : "Details ▼"}
+                                        </button>
+                                        <Link
+                                          href={`/admin/sales/orders/${order.id}`}
+                                          data-testid={`order-process-link-${order.id}`}
+                                          className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-bold transition-all shadow-xs shrink-0 flex items-center gap-1"
+                                        >
+                                          <span>Process ↗</span>
+                                        </Link>
+                                      </div>
+                                    </td>
+                                  </tr>
+
+                                  {/* Expanded Drawer */}
+                                  {isExpanded && (
+                                    <tr
+                                      className="bg-zinc-50/70 dark:bg-zinc-950/40 border-b border-zinc-200 dark:border-zinc-800"
+                                      data-testid={`order-expanded-${order.id}`}
+                                    >
+                                      <td colSpan={7} className="p-4 space-y-4">
+                                        {/* Deliveries / Dispatches Section */}
+                                        <div className="space-y-2">
+                                          <h4 className="text-[11px] font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+                                            Confirmed Dispatches & Packaging ({order.fulfillments.length})
+                                          </h4>
+                                          {order.fulfillments.length === 0 ? (
+                                            <div className="text-xs text-zinc-400 italic bg-white dark:bg-zinc-900 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                                              No fulfillment packages have been dispatched for this order yet.
+                                            </div>
+                                          ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                              {order.fulfillments.map((f) => (
+                                                <div
+                                                  key={f.id}
+                                                  className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-2"
+                                                >
+                                                  <div className="flex items-center justify-between gap-2">
+                                                    <div className="font-mono font-bold text-xs text-zinc-900 dark:text-white">
+                                                      {f.fulfillmentNumber}
+                                                    </div>
+                                                    <span
+                                                      className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                                        f.status.toLowerCase() === "delivered"
+                                                          ? "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800"
+                                                          : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                                      }`}
+                                                    >
+                                                      {f.status.toLowerCase() === "delivered"
+                                                        ? "Delivered"
+                                                        : "Shipped"}
+                                                    </span>
+                                                  </div>
+                                                  <div className="text-xs text-zinc-600 dark:text-zinc-300 space-y-0.5">
+                                                    <div>
+                                                      <span className="text-zinc-400">Carrier:</span>{" "}
+                                                      <span className="font-medium">{f.carrier || "Standard"}</span>
+                                                    </div>
+                                                    {f.shippedAt && (
+                                                      <div>
+                                                        <span className="text-zinc-400">Shipped:</span>{" "}
+                                                        <span>{formatOrderDateTime(f.shippedAt)}</span>
+                                                      </div>
+                                                    )}
+                                                    {f.deliveredAt && (
+                                                      <div>
+                                                        <span className="text-zinc-400">Delivered:</span>{" "}
+                                                        <span className="text-teal-600 dark:text-teal-400 font-medium">
+                                                          {formatOrderDateTime(f.deliveredAt)}
+                                                        </span>
+                                                      </div>
+                                                    )}
+                                                    {f.trackingNumber && (
+                                                      <div>
+                                                        <span className="text-zinc-400">Master Tracking:</span>{" "}
+                                                        {f.trackingUrl ? (
+                                                          <a
+                                                            href={f.trackingUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="font-mono text-emerald-600 dark:text-emerald-400 hover:underline font-semibold"
+                                                          >
+                                                            {f.trackingNumber} ↗
+                                                          </a>
+                                                        ) : (
+                                                          <span className="font-mono">{f.trackingNumber}</span>
+                                                        )}
+                                                      </div>
+                                                    )}
+                                                    {f.notes && (
+                                                      <div className="text-[11px] text-zinc-500 italic mt-1">
+                                                        Notes: {f.notes}
+                                                      </div>
+                                                    )}
+                                                  </div>
+
+                                                  {/* Carton Boxes */}
+                                                  {f.boxes && f.boxes.length > 0 && (
+                                                    <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 space-y-1">
+                                                      <div className="text-[10px] font-bold text-zinc-400 uppercase">
+                                                        Carton Boxes ({f.boxes.length}):
+                                                      </div>
+                                                      <div className="space-y-1">
+                                                        {f.boxes.map((b) => (
+                                                          <div
+                                                            key={b.id}
+                                                            className="flex items-center justify-between text-xs py-0.5 px-1.5 rounded bg-zinc-50 dark:bg-zinc-800/60"
+                                                          >
+                                                            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                                                              Carton #{b.boxNumber} of {b.boxTotal}
+                                                            </span>
+                                                            {b.trackingUrl ? (
+                                                              <a
+                                                                href={b.trackingUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline"
+                                                              >
+                                                                {b.trackingNumber || "Track"} ↗
+                                                              </a>
+                                                            ) : (
+                                                              <span className="font-mono text-[11px] text-zinc-500">
+                                                                {b.trackingNumber || "No tracking"}
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Order Items Table */}
+                                        <div className="space-y-2">
+                                          <h4 className="text-[11px] font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+                                            Ordered Products & Quantities ({order.items.length})
+                                          </h4>
+                                          <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-white dark:bg-zinc-900">
+                                            <table className="w-full text-left text-xs">
+                                              <thead className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/75 dark:bg-zinc-800/40 text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                                <tr>
+                                                  <th className="py-2 px-3">Product Name & Brand</th>
+                                                  <th className="py-2 px-3">SKU</th>
+                                                  <th className="py-2 px-3 text-right">Ordered</th>
+                                                  <th className="py-2 px-3 text-right">Shipped</th>
+                                                  <th className="py-2 px-3 text-right">Cancelled</th>
+                                                  <th className="py-2 px-3 text-right">Remaining</th>
+                                                  <th className="py-2 px-3 text-right">Unit Price</th>
+                                                  <th className="py-2 px-3 text-right">Line Total</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                                                {order.items.length === 0 ? (
+                                                  <tr>
+                                                    <td colSpan={8} className="py-4 text-center text-zinc-400 italic">
+                                                      No line item details found.
+                                                    </td>
+                                                  </tr>
+                                                ) : (
+                                                  order.items.map((item) => (
+                                                    <tr
+                                                      key={item.id}
+                                                      className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20"
+                                                    >
+                                                      <td className="py-2 px-3">
+                                                        <div className="font-semibold text-zinc-900 dark:text-white">
+                                                          {item.productName}
+                                                        </div>
+                                                        {item.brandName && (
+                                                          <div className="text-[10px] text-zinc-400">
+                                                            {item.brandName}
+                                                          </div>
+                                                        )}
+                                                      </td>
+                                                      <td className="py-2 px-3 font-mono text-[11px] text-zinc-500">
+                                                        {item.sku}
+                                                      </td>
+                                                      <td className="py-2 px-3 text-right font-medium">
+                                                        {item.quantity}
+                                                      </td>
+                                                      <td className="py-2 px-3 text-right font-medium text-emerald-600 dark:text-emerald-400">
+                                                        {item.quantityShipped}
+                                                      </td>
+                                                      <td className="py-2 px-3 text-right font-medium text-zinc-400">
+                                                        {item.quantityCancelled}
+                                                      </td>
+                                                      <td className="py-2 px-3 text-right font-medium">
+                                                        {item.quantityRemaining > 0 ? (
+                                                          <span className="text-amber-600 dark:text-amber-400 font-bold">
+                                                            {item.quantityRemaining}
+                                                          </span>
+                                                        ) : (
+                                                          <span className="text-zinc-400">0</span>
+                                                        )}
+                                                      </td>
+                                                      <td className="py-2 px-3 text-right font-mono text-zinc-600 dark:text-zinc-300">
+                                                        {formatOrderCurrency(item.unitWholesalePrice)}
+                                                      </td>
+                                                      <td className="py-2 px-3 text-right font-mono font-bold text-zinc-900 dark:text-white">
+                                                        {formatOrderCurrency(item.lineTotal)}
+                                                      </td>
+                                                    </tr>
+                                                  ))
+                                                )}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Authoritative Attribution & Policy Footer Banner */}
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/40 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+                    <div className="space-y-0.5">
+                      <p className="font-semibold text-zinc-700 dark:text-zinc-300">
+                        Authoritative Sales Order Ledger & Carrier Fulfillment
+                      </p>
+                      <p className="text-[11px] leading-relaxed">
+                        Store orders are authoritatively tracked and processed within the Sales Orders module. Fulfillments, multi-carton tracking numbers, and delivery verifications are synchronized with carrier dispatches.
+                      </p>
+                    </div>
+                    <Link
+                      href={`/admin/retailers/${selectedStore.companyId}?tab=orders`}
+                      data-testid="orders-retailer-360-link"
+                      className="shrink-0 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-750 text-xs font-semibold transition-all shadow-xs"
+                    >
+                      <span>Retailer 360° Orders ↗</span>
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

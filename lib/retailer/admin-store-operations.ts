@@ -81,6 +81,87 @@ export interface AdminStoreInventoryOverview {
   items: AdminStoreInventoryItem[];
 }
 
+export interface AdminStoreOrderBox {
+  id: string;
+  boxNumber: number;
+  boxTotal: number;
+  carrier: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  status: string;
+}
+
+export interface AdminStoreOrderFulfillment {
+  id: string;
+  fulfillmentNumber: string;
+  orderId: string;
+  status: "processing" | "shipped" | "delivered" | string;
+  carrier: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  boxCount: number;
+  notes: string | null;
+  boxes: AdminStoreOrderBox[];
+}
+
+export interface AdminStoreOrderItemDetail {
+  id: string;
+  orderId: string;
+  productId: string;
+  sku: string;
+  productName: string;
+  brandName: string | null;
+  quantity: number;
+  quantityShipped: number;
+  quantityCancelled: number;
+  quantityRemaining: number;
+  unitWholesalePrice: number;
+  lineTotal: number;
+}
+
+export interface AdminStoreOrderItem {
+  id: string;
+  orderNumber: string;
+  companyId: string;
+  storeId: string;
+  orderStatus: "submitted" | "confirmed" | "processing" | "partially_shipped" | "shipped" | "delivered" | "partially_cancelled" | "cancelled" | string;
+  paymentStatus: string;
+  paymentTerms: string | null;
+  subtotalAmount: number;
+  taxAmount: number;
+  shippingAmount: number;
+  totalAmount: number;
+  totalItemsCount: number;
+  totalSkusCount: number;
+  totalOrderedUnits: number;
+  totalShippedUnits: number;
+  totalCancelledUnits: number;
+  totalRemainingUnits: number;
+  totalBoxCount: number;
+  shippingAddress: string | null;
+  shippingCity: string | null;
+  shippingState: string | null;
+  shippingZip: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items: AdminStoreOrderItemDetail[];
+  fulfillments: AdminStoreOrderFulfillment[];
+}
+
+export interface AdminStoreOrdersOverview {
+  storeId: string;
+  storeName: string;
+  companyId: string;
+  companyName: string;
+  totalOrdersCount: number;
+  openOrdersCount: number;
+  shippedOrdersCount: number;
+  ordersWithRemainingUnitsCount: number;
+  orders: AdminStoreOrderItem[];
+}
+
 export interface AdminStoreOperationsData {
   stores: AdminStoreOperationItem[];
   retailers: Array<{
@@ -92,6 +173,7 @@ export interface AdminStoreOperationsData {
   activeStoresCount: number;
   totalRetailersCount: number;
   storeInventoryMap: Record<string, AdminStoreInventoryOverview>;
+  storeOrdersMap: Record<string, AdminStoreOrdersOverview>;
 }
 
 /**
@@ -417,6 +499,261 @@ export async function getAdminStoreInventoryData(
   };
 }
 
+/**
+ * Authoritative store-specific orders and fulfillments resolver for Store Operations
+ */
+export async function getAdminStoreOrdersData(
+  storeId: string
+): Promise<AdminStoreOrdersOverview | null> {
+  await verifyAdminSession();
+  const adminClient = createAdminClient();
+
+  // 1. Fetch Store and Company
+  const { data: store, error: storeErr } = await adminClient
+    .from("stores")
+    .select(`
+      id,
+      name,
+      company_id,
+      companies:companies!stores_company_id_fkey (
+        id,
+        name
+      )
+    `)
+    .eq("id", storeId)
+    .maybeSingle();
+
+  if (storeErr || !store) {
+    return null;
+  }
+
+  const companyId = store.company_id;
+  const company = Array.isArray(store.companies) ? store.companies[0] : store.companies;
+  const companyName = company?.name || "Unknown Retailer";
+
+  // 2. Fetch Orders strictly belonging to this physical Store ID
+  const { data: rawOrders, error: ordersErr } = await adminClient
+    .from("retailer_orders")
+    .select(`
+      id,
+      order_number,
+      company_id,
+      store_id,
+      order_status,
+      payment_status,
+      payment_terms,
+      subtotal_amount,
+      tax_amount,
+      shipping_amount,
+      total_amount,
+      total_items_count,
+      total_skus_count,
+      total_ordered_units,
+      total_shipped_units,
+      total_cancelled_units,
+      total_remaining_units,
+      total_box_count,
+      shipping_address,
+      shipping_city,
+      shipping_state,
+      shipping_zip,
+      created_at,
+      updated_at
+    `)
+    .eq("store_id", storeId)
+    .order("created_at", { ascending: false });
+
+  if (ordersErr) {
+    console.error("[getAdminStoreOrdersData] Error fetching store orders:", ordersErr);
+    return null;
+  }
+
+  const orders = rawOrders || [];
+  const orderIds = orders.map((o) => o.id);
+
+  let itemsByOrderId: Record<string, AdminStoreOrderItemDetail[]> = {};
+  let fulfillmentsByOrderId: Record<string, AdminStoreOrderFulfillment[]> = {};
+
+  if (orderIds.length > 0) {
+    // 3. Fetch Items
+    try {
+      const { data: itemRows } = await adminClient
+        .from("retailer_order_items")
+        .select(`
+          id,
+          order_id,
+          product_id,
+          sku,
+          product_name,
+          brand_name,
+          quantity,
+          quantity_shipped,
+          quantity_cancelled,
+          unit_wholesale_price,
+          line_total
+        `)
+        .in("order_id", orderIds);
+
+      (itemRows || []).forEach((r) => {
+        const remaining = Math.max(0, (r.quantity || 0) - (r.quantity_shipped || 0) - (r.quantity_cancelled || 0));
+        const itemDetail: AdminStoreOrderItemDetail = {
+          id: r.id,
+          orderId: r.order_id,
+          productId: r.product_id,
+          sku: r.sku || "N/A",
+          productName: r.product_name || "Unknown Product",
+          brandName: r.brand_name || null,
+          quantity: Number(r.quantity) || 0,
+          quantityShipped: Number(r.quantity_shipped) || 0,
+          quantityCancelled: Number(r.quantity_cancelled) || 0,
+          quantityRemaining: remaining,
+          unitWholesalePrice: Number(r.unit_wholesale_price) || 0,
+          lineTotal: Number(r.line_total) || 0,
+        };
+        if (!itemsByOrderId[r.order_id]) itemsByOrderId[r.order_id] = [];
+        itemsByOrderId[r.order_id].push(itemDetail);
+      });
+    } catch (e) {
+      console.warn("[getAdminStoreOrdersData] Warning fetching order items:", e);
+    }
+
+    // 4. Fetch Fulfillments
+    try {
+      const { data: fulfillmentRows } = await adminClient
+        .from("retailer_order_fulfillments")
+        .select(`
+          id,
+          fulfillment_number,
+          order_id,
+          status,
+          carrier,
+          tracking_number,
+          tracking_url,
+          shipped_at,
+          delivered_at,
+          box_count,
+          notes
+        `)
+        .in("order_id", orderIds);
+
+      const fulIds = (fulfillmentRows || []).map((f) => f.id);
+      let boxesByFulfillmentId: Record<string, AdminStoreOrderBox[]> = {};
+
+      if (fulIds.length > 0) {
+        try {
+          const { data: boxRows } = await adminClient
+            .from("retailer_order_fulfillment_boxes")
+            .select(`
+              id,
+              fulfillment_id,
+              order_id,
+              box_number,
+              box_total,
+              carrier,
+              tracking_number,
+              tracking_url,
+              status
+            `)
+            .in("fulfillment_id", fulIds);
+
+          (boxRows || []).forEach((b) => {
+            const box: AdminStoreOrderBox = {
+              id: b.id,
+              boxNumber: Number(b.box_number) || 1,
+              boxTotal: Number(b.box_total) || 1,
+              carrier: b.carrier || null,
+              trackingNumber: b.tracking_number || null,
+              trackingUrl: b.tracking_url || null,
+              status: b.status || "active",
+            };
+            if (!boxesByFulfillmentId[b.fulfillment_id]) boxesByFulfillmentId[b.fulfillment_id] = [];
+            boxesByFulfillmentId[b.fulfillment_id].push(box);
+          });
+        } catch (e) {
+          console.warn("[getAdminStoreOrdersData] Warning fetching boxes:", e);
+        }
+      }
+
+      (fulfillmentRows || []).forEach((f) => {
+        const ful: AdminStoreOrderFulfillment = {
+          id: f.id,
+          fulfillmentNumber: f.fulfillment_number || "N/A",
+          orderId: f.order_id,
+          status: f.status || "processing",
+          carrier: f.carrier || null,
+          trackingNumber: f.tracking_number || null,
+          trackingUrl: f.tracking_url || null,
+          shippedAt: f.shipped_at || null,
+          deliveredAt: f.delivered_at || null,
+          boxCount: Number(f.box_count) || (boxesByFulfillmentId[f.id]?.length || 0),
+          notes: f.notes || null,
+          boxes: boxesByFulfillmentId[f.id] || [],
+        };
+        if (!fulfillmentsByOrderId[f.order_id]) fulfillmentsByOrderId[f.order_id] = [];
+        fulfillmentsByOrderId[f.order_id].push(ful);
+      });
+    } catch (e) {
+      console.warn("[getAdminStoreOrdersData] Warning fetching fulfillments:", e);
+    }
+  }
+
+  // 5. Construct AdminStoreOrderItem array
+  const orderItems: AdminStoreOrderItem[] = orders.map((o) => {
+    return {
+      id: o.id,
+      orderNumber: o.order_number,
+      companyId: o.company_id,
+      storeId: o.store_id,
+      orderStatus: o.order_status,
+      paymentStatus: o.payment_status || "unpaid",
+      paymentTerms: o.payment_terms || null,
+      subtotalAmount: Number(o.subtotal_amount) || 0,
+      taxAmount: Number(o.tax_amount) || 0,
+      shippingAmount: Number(o.shipping_amount) || 0,
+      totalAmount: Number(o.total_amount) || 0,
+      totalItemsCount: Number(o.total_items_count) || (itemsByOrderId[o.id]?.length || 0),
+      totalSkusCount: Number(o.total_skus_count) || 0,
+      totalOrderedUnits: Number(o.total_ordered_units) || 0,
+      totalShippedUnits: Number(o.total_shipped_units) || 0,
+      totalCancelledUnits: Number(o.total_cancelled_units) || 0,
+      totalRemainingUnits: Number(o.total_remaining_units) || 0,
+      totalBoxCount: Number(o.total_box_count) || 0,
+      shippingAddress: o.shipping_address || null,
+      shippingCity: o.shipping_city || null,
+      shippingState: o.shipping_state || null,
+      shippingZip: o.shipping_zip || null,
+      createdAt: o.created_at,
+      updatedAt: o.updated_at,
+      items: itemsByOrderId[o.id] || [],
+      fulfillments: fulfillmentsByOrderId[o.id] || [],
+    };
+  });
+
+  // 6. Aggregate KPIs
+  const totalOrdersCount = orderItems.length;
+  const openOrdersCount = orderItems.filter((o) =>
+    ["submitted", "confirmed", "processing", "partially_shipped"].includes(o.orderStatus.toLowerCase())
+  ).length;
+  const shippedOrdersCount = orderItems.filter((o) =>
+    ["shipped", "delivered"].includes(o.orderStatus.toLowerCase())
+  ).length;
+  const ordersWithRemainingUnitsCount = orderItems.filter((o) =>
+    o.totalRemainingUnits > 0 && o.orderStatus.toLowerCase() !== "cancelled"
+  ).length;
+
+  return {
+    storeId: store.id,
+    storeName: store.name,
+    companyId,
+    companyName,
+    totalOrdersCount,
+    openOrdersCount,
+    shippedOrdersCount,
+    ordersWithRemainingUnitsCount,
+    orders: orderItems,
+  };
+}
+
 export async function getAdminStoreOperationsData(): Promise<AdminStoreOperationsData> {
   await verifyAdminSession();
   const adminClient = createAdminClient();
@@ -579,6 +916,19 @@ export async function getAdminStoreOperationsData(): Promise<AdminStoreOperation
     }
   }
 
+  // 6. Batch resolve store orders overviews for all stores
+  const storeOrdersMap: Record<string, AdminStoreOrdersOverview> = {};
+  for (const st of formattedStores) {
+    try {
+      const ordOverview = await getAdminStoreOrdersData(st.id);
+      if (ordOverview) {
+        storeOrdersMap[st.id] = ordOverview;
+      }
+    } catch (e) {
+      console.warn(`[getAdminStoreOperationsData] Warning resolving orders for store ${st.id}:`, e);
+    }
+  }
+
   return {
     stores: formattedStores,
     retailers: Array.from(retailerMap.values()),
@@ -586,5 +936,6 @@ export async function getAdminStoreOperationsData(): Promise<AdminStoreOperation
     activeStoresCount: formattedStores.filter((s) => s.status === "active").length,
     totalRetailersCount: retailerMap.size,
     storeInventoryMap,
+    storeOrdersMap,
   };
 }
