@@ -273,7 +273,11 @@ export async function getAdminStoreInventoryData(
   // 7. Build Product Inventory Items
   const items: AdminStoreInventoryItem[] = products.map((prod: any) => {
     const brand = Array.isArray(prod.brands) ? prod.brands[0] : prod.brands;
-    const sku = resolveEffectiveSku(prod) || "KS-SKU";
+    const sku =
+      resolveEffectiveSku(prod.letusto_sku, prod.manufacture_sku) ||
+      prod.letusto_sku ||
+      prod.manufacture_sku ||
+      "KS-SKU";
     const primaryImg = imageMap[prod.id]?.primaryUrl || null;
 
     // Pricing & Policy
