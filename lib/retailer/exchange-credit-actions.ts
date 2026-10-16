@@ -130,11 +130,13 @@ export async function getExchangeCreditOverviewData(): Promise<{
         companyCode: company?.code || null,
         status: e.status,
         optionACreditRate: Number(e.option_a_credit_rate),
-        optionBCreditRate: Number(e.option_b_credit_rate),
-        minInventoryReportingWeeks: e.min_inventory_reporting_weeks,
-        trialPeriodDays: e.trial_period_days,
-        evaluationDay: e.evaluation_day,
-        claimWindowDays: e.claim_window_days,
+        optionBCreditRate: 1.0,
+        minInventoryReportingWeeks: 8,
+        trialPeriodDays: 90,
+        evaluationDay: 100,
+        claimWindowDays: 50,
+        maxSellThroughRate: 0.5,
+        reorderDisqualifies: true,
         enrolledBy: e.enrolled_by,
         enrolledAt: e.enrolled_at,
         effectiveDate: e.effective_date,
@@ -176,13 +178,12 @@ export async function getExchangeCreditOverviewData(): Promise<{
         fulfilledProtectedQuantity: c.fulfilled_protected_quantity,
         frozenUnitWholesalePrice: Number(c.frozen_unit_wholesale_price),
         frozenOptionARate: Number(c.frozen_option_a_rate),
-        frozenOptionBRate: Number(c.frozen_option_b_rate),
-        frozenMinReportingWeeks: c.frozen_min_reporting_weeks,
+        frozenOptionBRate: 1.0,
+        frozenMinReportingWeeks: 8,
+        frozenMaxSellThroughRate: 0.5,
         status: statusKey,
         statusLabel: statusConfig.label,
         firstShipmentDate: c.first_shipment_date,
-        firstDeliveryDate: c.first_delivery_date,
-        protectionStartDate: c.protection_start_date,
         trialEndDate: c.trial_end_date,
         evaluationDate: c.evaluation_date,
         claimDeadlineDate: c.claim_deadline_date,
@@ -264,19 +265,13 @@ export async function enrollCompanyExchangeProgramAction(
     };
   }
 
-  const { companyId, optionARate = 0.4, optionBRate = 0.2, minReportingWeeks = 8, effectiveDate, notes } = input;
+  const { companyId, optionARate = 0.4, effectiveDate, notes } = input;
 
   if (!companyId) {
     return { success: false, error: "Company ID is required." };
   }
   if (optionARate < 0.2 || optionARate > 0.5) {
     return { success: false, error: "Option A Credit Rate must be between 20% (0.20) and 50% (0.50)." };
-  }
-  if (optionBRate < 0.1 || optionBRate > 0.35) {
-    return { success: false, error: "Option B Credit Rate must be between 10% (0.10) and 35% (0.35)." };
-  }
-  if (minReportingWeeks < 4 || minReportingWeeks > 12) {
-    return { success: false, error: "Minimum reporting weeks must be between 4 and 12 weeks." };
   }
 
   const supabase = createAdminClient();
@@ -306,18 +301,20 @@ export async function enrollCompanyExchangeProgramAction(
     };
   }
 
-  // Perform Insert
+  // Perform Insert with fixed Option B (100%) and fixed Pilot Rules
   const { data: newEnrollment, error: insertErr } = await supabase
     .from("retailer_exchange_program_enrollments")
     .insert({
       company_id: companyId,
       status: "active",
       option_a_credit_rate: optionARate,
-      option_b_credit_rate: optionBRate,
-      min_inventory_reporting_weeks: minReportingWeeks,
+      option_b_credit_rate: 1.0000,
+      min_inventory_reporting_weeks: 8,
       trial_period_days: 90,
       evaluation_day: 100,
       claim_window_days: 50,
+      max_sell_through_rate: 0.5000,
+      reorder_disqualifies: true,
       enrolled_by: session.userId,
       effective_date: effectiveDate || new Date().toISOString().split("T")[0],
       notes: notes || null,
@@ -339,8 +336,13 @@ export async function enrollCompanyExchangeProgramAction(
     new_values: {
       status: "active",
       option_a_credit_rate: optionARate,
-      option_b_credit_rate: optionBRate,
-      min_inventory_reporting_weeks: minReportingWeeks,
+      option_b_credit_rate: 1.0000,
+      min_inventory_reporting_weeks: 8,
+      trial_period_days: 90,
+      evaluation_day: 100,
+      claim_window_days: 50,
+      max_sell_through_rate: 0.5000,
+      reorder_disqualifies: true,
       effective_date: effectiveDate || new Date().toISOString().split("T")[0],
       notes,
     },
@@ -353,7 +355,9 @@ export async function enrollCompanyExchangeProgramAction(
 
 /**
  * 4. Update Future Enrollment Policy Settings
- * Note: Only applies to future cohorts; previously registered cohorts retain their frozen snapshot.
+ * Note: Only Option A rate is configurable per company (20% to 50%).
+ * Option B (100%) and pilot rules are fixed program-wide.
+ * Previously registered cohorts retain their frozen snapshots.
  */
 export async function updateCompanyExchangeEnrollmentAction(
   input: UpdateEnrollmentInput
@@ -364,9 +368,12 @@ export async function updateCompanyExchangeEnrollmentAction(
     return { success: false, error: "Migration 0175 schema is not yet applied." };
   }
 
-  const { enrollmentId, optionARate, optionBRate, minReportingWeeks, reason } = input;
+  const { enrollmentId, optionARate, reason } = input;
   if (!enrollmentId || !reason || reason.trim().length < 5) {
     return { success: false, error: "Enrollment ID and a descriptive reason (at least 5 characters) are required." };
+  }
+  if (optionARate === undefined || optionARate < 0.2 || optionARate > 0.5) {
+    return { success: false, error: "Option A Rate must be between 20% (0.20) and 50% (0.50)." };
   }
 
   const supabase = createAdminClient();
@@ -382,29 +389,9 @@ export async function updateCompanyExchangeEnrollmentAction(
   }
 
   const updates: Record<string, unknown> = {
+    option_a_credit_rate: optionARate,
     updated_at: new Date().toISOString(),
   };
-
-  if (optionARate !== undefined) {
-    if (optionARate < 0.2 || optionARate > 0.5) {
-      return { success: false, error: "Option A Rate must be between 20% and 50%." };
-    }
-    updates.option_a_credit_rate = optionARate;
-  }
-
-  if (optionBRate !== undefined) {
-    if (optionBRate < 0.1 || optionBRate > 0.35) {
-      return { success: false, error: "Option B Rate must be between 10% and 35%." };
-    }
-    updates.option_b_credit_rate = optionBRate;
-  }
-
-  if (minReportingWeeks !== undefined) {
-    if (minReportingWeeks < 4 || minReportingWeeks > 12) {
-      return { success: false, error: "Minimum reporting weeks must be between 4 and 12." };
-    }
-    updates.min_inventory_reporting_weeks = minReportingWeeks;
-  }
 
   const { error: updateErr } = await supabase
     .from("retailer_exchange_program_enrollments")
@@ -423,8 +410,6 @@ export async function updateCompanyExchangeEnrollmentAction(
     changed_by: session.userId,
     old_values: {
       option_a_credit_rate: current.option_a_credit_rate,
-      option_b_credit_rate: current.option_b_credit_rate,
-      min_inventory_reporting_weeks: current.min_inventory_reporting_weeks,
     },
     new_values: updates,
     reason,
@@ -514,7 +499,6 @@ export async function registerProtectedSupplyCohortAction(
     protectedQuantity,
     unitWholesalePrice,
     firstShipmentDate,
-    firstDeliveryDate,
   } = input;
 
   if (!companyId || !storeId || !productId || !sourceOrderId || !sourceOrderItemId) {
@@ -523,8 +507,8 @@ export async function registerProtectedSupplyCohortAction(
   if (!protectedQuantity || protectedQuantity <= 0) {
     return { success: false, error: "Protected quantity must be greater than 0." };
   }
-  if (unitWholesalePrice === undefined || unitWholesalePrice < 0) {
-    return { success: false, error: "Unit wholesale price must be non-negative." };
+  if (unitWholesalePrice === undefined || unitWholesalePrice <= 0) {
+    return { success: false, error: "Unit wholesale price must be greater than 0." };
   }
 
   const supabase = createAdminClient();
@@ -546,7 +530,73 @@ export async function registerProtectedSupplyCohortAction(
     };
   }
 
-  // 2. Lifetime 1-time Store + SKU Protection Enforcement
+  // 2. Cross-Entity Relational Validations
+  // Store verification
+  const { data: store, error: storeErr } = await supabase
+    .from("stores")
+    .select("id, company_id")
+    .eq("id", storeId)
+    .single();
+
+  if (storeErr || !store) {
+    return { success: false, error: "Target store not found." };
+  }
+  if (store.company_id !== companyId) {
+    return { success: false, error: "Store does not belong to the enrolled company." };
+  }
+
+  // Product verification
+  const { data: prod, error: prodErr } = await supabase
+    .from("products")
+    .select("id")
+    .eq("id", productId)
+    .single();
+
+  if (prodErr || !prod) {
+    return { success: false, error: "Target product not found." };
+  }
+
+  // Source Order verification
+  const { data: order, error: orderErr } = await supabase
+    .from("retailer_orders")
+    .select("id, company_id, store_id")
+    .eq("id", sourceOrderId)
+    .single();
+
+  if (orderErr || !order) {
+    return { success: false, error: "Source B2B order not found." };
+  }
+  if (order.company_id !== companyId) {
+    return { success: false, error: "Source order does not belong to the enrolled company." };
+  }
+  if (order.store_id !== storeId) {
+    return { success: false, error: "Source order does not belong to the specified store." };
+  }
+
+  // Source Order Item verification
+  const { data: orderItem, error: itemErr } = await supabase
+    .from("retailer_order_items")
+    .select("id, order_id, product_id, quantity, wholesale_price")
+    .eq("id", sourceOrderItemId)
+    .single();
+
+  if (itemErr || !orderItem) {
+    return { success: false, error: "Source order item not found." };
+  }
+  if (orderItem.order_id !== sourceOrderId) {
+    return { success: false, error: "Order item does not belong to the source order." };
+  }
+  if (orderItem.product_id !== productId) {
+    return { success: false, error: "Order item product does not match the protected product." };
+  }
+  if (protectedQuantity > orderItem.quantity) {
+    return {
+      success: false,
+      error: `Protected quantity (${protectedQuantity}) cannot exceed ordered quantity (${orderItem.quantity}).`,
+    };
+  }
+
+  // 3. Lifetime 1-time Store + SKU Protection Enforcement
   const { data: existingCohort } = await supabase
     .from("retailer_protected_supply_cohorts")
     .select("id, cohort_code, status")
@@ -561,16 +611,27 @@ export async function registerProtectedSupplyCohortAction(
     };
   }
 
-  // 3. Generate Cohort Code
-  const currentYear = new Date().getFullYear();
-  const randomSuffix = Math.floor(100000 + Math.random() * 900000);
-  const cohortCode = `PSC-${currentYear}-${randomSuffix}`;
+  // 4. Generate Cohort Code
+  let cohortCode: string;
+  try {
+    const { data: codeResult, error: codeErr } = await supabase.rpc("generate_protected_cohort_code");
+    if (!codeErr && codeResult) {
+      cohortCode = String(codeResult);
+    } else {
+      const currentYear = new Date().getFullYear();
+      const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+      cohortCode = `PSC-${currentYear}-${randomSuffix}`;
+    }
+  } catch {
+    const currentYear = new Date().getFullYear();
+    const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+    cohortCode = `PSC-${currentYear}-${randomSuffix}`;
+  }
 
-  // 4. Calculate Dates if first shipment date provided
-  const anchorDate = firstDeliveryDate || firstShipmentDate || null;
-  const trialEndDate = anchorDate ? addDays(anchorDate, 90) : null;
-  const evalDate = anchorDate ? addDays(anchorDate, 100) : null;
-  const claimDeadline = anchorDate ? addDays(anchorDate, 150) : null;
+  // 5. Calculate Dates if first shipment date provided (Day 0 = First Shipment)
+  const trialEndDate = firstShipmentDate ? addDays(firstShipmentDate, 90) : null;
+  const evalDate = firstShipmentDate ? addDays(firstShipmentDate, 100) : null;
+  const claimDeadline = firstShipmentDate ? addDays(firstShipmentDate, 150) : null;
 
   const { data: newCohort, error: insertErr } = await supabase
     .from("retailer_protected_supply_cohorts")
@@ -586,12 +647,11 @@ export async function registerProtectedSupplyCohortAction(
       fulfilled_protected_quantity: 0,
       frozen_unit_wholesale_price: unitWholesalePrice,
       frozen_option_a_rate: enrollment.option_a_credit_rate,
-      frozen_option_b_rate: enrollment.option_b_credit_rate,
-      frozen_min_reporting_weeks: enrollment.min_inventory_reporting_weeks,
+      frozen_option_b_rate: 1.0000,
+      frozen_min_reporting_weeks: 8,
+      frozen_max_sell_through_rate: 0.5000,
       status: "registered",
       first_shipment_date: firstShipmentDate || null,
-      first_delivery_date: firstDeliveryDate || null,
-      protection_start_date: anchorDate,
       trial_end_date: trialEndDate,
       evaluation_date: evalDate,
       claim_deadline_date: claimDeadline,
@@ -620,10 +680,25 @@ export async function associateSplitShipmentAction(
     return { success: false, error: "Migration 0175 schema is not yet applied." };
   }
 
-  const { cohortId, fulfillmentId, fulfillmentItemId, quantityShipped, quantityDelivered = 0, shippedAt, deliveredAt, carrier, trackingNumber, isFirstShipment, notes } = input;
+  const {
+    cohortId,
+    fulfillmentId,
+    fulfillmentItemId,
+    quantityShipped,
+    quantityDelivered = 0,
+    shippedAt,
+    deliveredAt,
+    carrier,
+    trackingNumber,
+    isFirstShipment,
+    notes,
+  } = input;
 
   if (!cohortId || !fulfillmentId || !quantityShipped || quantityShipped <= 0) {
     return { success: false, error: "Cohort ID, Fulfillment ID, and a positive quantity shipped are required." };
+  }
+  if (quantityDelivered < 0 || quantityDelivered > quantityShipped) {
+    return { success: false, error: "Delivered quantity cannot be negative or exceed shipped quantity." };
   }
 
   const supabase = createAdminClient();
@@ -639,7 +714,76 @@ export async function associateSplitShipmentAction(
     return { success: false, error: "Target protected cohort not found." };
   }
 
-  // 2. Count existing shipments to determine sequence
+  // 2. Validate Cumulative Shipped Quantity against Authorized Protected Quantity
+  const currentFulfilled = cohort.fulfilled_protected_quantity || 0;
+  const newFulfilledQty = currentFulfilled + quantityShipped;
+  if (newFulfilledQty > cohort.total_protected_quantity) {
+    return {
+      success: false,
+      error: `Cumulative shipped quantity (${newFulfilledQty}) exceeds authorized total protected quantity (${cohort.total_protected_quantity}).`,
+    };
+  }
+
+  // 3. Verify Fulfillment belongs to the cohort's source order
+  const { data: fulfillment, error: fulErr } = await supabase
+    .from("retailer_order_fulfillments")
+    .select("id, order_id")
+    .eq("id", fulfillmentId)
+    .single();
+
+  if (fulErr || !fulfillment) {
+    return { success: false, error: "Fulfillment record not found." };
+  }
+  if (fulfillment.order_id !== cohort.source_order_id) {
+    return { success: false, error: "Fulfillment does not belong to the cohort's source order." };
+  }
+
+  // 4. Verify Fulfillment Item if provided
+  if (fulfillmentItemId) {
+    const { data: fulItem, error: fulItemErr } = await supabase
+      .from("retailer_order_fulfillment_items")
+      .select("id, fulfillment_id, order_item_id")
+      .eq("id", fulfillmentItemId)
+      .single();
+
+    if (fulItemErr || !fulItem) {
+      return { success: false, error: "Fulfillment item record not found." };
+    }
+    if (fulItem.fulfillment_id !== fulfillmentId) {
+      return { success: false, error: "Fulfillment item does not belong to the specified fulfillment." };
+    }
+    if (fulItem.order_item_id !== cohort.source_order_item_id) {
+      return { success: false, error: "Fulfillment item does not correspond to the cohort's source order item." };
+    }
+
+    // Check unique fulfillment item constraint (no double-counting)
+    const { data: existingItemShipment } = await supabase
+      .from("retailer_protected_supply_shipments")
+      .select("id")
+      .eq("fulfillment_item_id", fulfillmentItemId)
+      .maybeSingle();
+
+    if (existingItemShipment) {
+      return {
+        success: false,
+        error: "This fulfillment item has already been assigned to a protected cohort shipment.",
+      };
+    }
+  }
+
+  // Check unique fulfillment per cohort constraint
+  const { data: existingCohortShipment } = await supabase
+    .from("retailer_protected_supply_shipments")
+    .select("id")
+    .eq("cohort_id", cohortId)
+    .eq("fulfillment_id", fulfillmentId)
+    .maybeSingle();
+
+  if (existingCohortShipment) {
+    return { success: false, error: "This fulfillment has already been linked to this cohort." };
+  }
+
+  // 5. Count existing shipments to determine sequence
   const { count: existingShipmentCount } = await supabase
     .from("retailer_protected_supply_shipments")
     .select("*", { count: "exact", head: true })
@@ -648,7 +792,7 @@ export async function associateSplitShipmentAction(
   const sequence = (existingShipmentCount || 0) + 1;
   const isFirst = isFirstShipment !== undefined ? isFirstShipment : sequence === 1;
 
-  // 3. Insert shipment record
+  // 6. Insert shipment record
   const { error: shipErr } = await supabase
     .from("retailer_protected_supply_shipments")
     .insert({
@@ -670,8 +814,7 @@ export async function associateSplitShipmentAction(
     return { success: false, error: shipErr.message };
   }
 
-  // 4. Update Cohort metrics
-  const newFulfilledQty = (cohort.fulfilled_protected_quantity || 0) + quantityShipped;
+  // 7. Update Cohort metrics & Day 0 dates
   const isFullyFulfilled = newFulfilledQty >= cohort.total_protected_quantity;
 
   const updates: Record<string, unknown> = {
@@ -679,17 +822,13 @@ export async function associateSplitShipmentAction(
     updated_at: new Date().toISOString(),
   };
 
-  if (isFirst) {
+  // Day 0 is strictly first actual Letusto shipment date
+  if (isFirst || !cohort.first_shipment_date) {
     const shipmentDateStr = shippedAt ? shippedAt.split("T")[0] : new Date().toISOString().split("T")[0];
     updates.first_shipment_date = shipmentDateStr;
-    if (deliveredAt) {
-      const delivDateStr = deliveredAt.split("T")[0];
-      updates.first_delivery_date = delivDateStr;
-      updates.protection_start_date = delivDateStr;
-      updates.trial_end_date = addDays(delivDateStr, 90);
-      updates.evaluation_date = addDays(delivDateStr, 100);
-      updates.claim_deadline_date = addDays(delivDateStr, 150);
-    }
+    updates.trial_end_date = addDays(shipmentDateStr, 90);
+    updates.evaluation_date = addDays(shipmentDateStr, 100);
+    updates.claim_deadline_date = addDays(shipmentDateStr, 150);
   }
 
   if (isFullyFulfilled) {

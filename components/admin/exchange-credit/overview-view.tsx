@@ -36,7 +36,6 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
   const [protectedQty, setProtectedQty] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [firstShipDate, setFirstShipDate] = useState("");
-  const [firstDelivDate, setFirstDelivDate] = useState("");
   const [registerSubmitting, setRegisterSubmitting] = useState(false);
   const [registerError, setRegisterError] = useState("");
 
@@ -51,7 +50,6 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
     setProtectedQty("");
     setUnitCost("");
     setFirstShipDate("");
-    setFirstDelivDate("");
     setRegisterError("");
     setShowRegisterCohortModal(true);
   };
@@ -71,7 +69,6 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
         protectedQuantity: parseInt(protectedQty, 10),
         unitWholesalePrice: parseFloat(unitCost),
         firstShipmentDate: firstShipDate || undefined,
-        firstDeliveryDate: firstDelivDate || undefined,
       });
 
       if (!res.success) {
@@ -357,25 +354,17 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-zinc-400 font-semibold mb-1">First Shipment Date</label>
-                  <input
-                    type="date"
-                    value={firstShipDate}
-                    onChange={(e) => setFirstShipDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-zinc-400 font-semibold mb-1">First Delivery Date</label>
-                  <input
-                    type="date"
-                    value={firstDelivDate}
-                    onChange={(e) => setFirstDelivDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-zinc-400 font-semibold mb-1">
+                  First Shipment Date (Day 0 Anchor)
+                </label>
+                <input
+                  type="date"
+                  value={firstShipDate}
+                  onChange={(e) => setFirstShipDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-cyan-500"
+                />
+                <span className="text-[10px] text-zinc-500">Day 0 anchors the 90-day trial, Day 100 evaluation, and Day 150 deadline.</span>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">

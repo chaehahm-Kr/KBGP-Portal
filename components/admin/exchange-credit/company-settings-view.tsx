@@ -27,15 +27,12 @@ export function CompanySettingsView({
   // Form states for enroll modal
   const [companyIdInput, setCompanyIdInput] = useState("");
   const [optionARateInput, setOptionARateInput] = useState("0.40");
-  const [optionBRateInput, setOptionBRateInput] = useState("0.20");
-  const [minWeeksInput, setMinWeeksInput] = useState("8");
   const [notesInput, setNotesInput] = useState("");
   const [enrollSubmitting, setEnrollSubmitting] = useState(false);
   const [enrollError, setEnrollError] = useState("");
 
   // Form states for edit policy modal
   const [editOptionARate, setEditOptionARate] = useState("0.40");
-  const [editMinWeeks, setEditMinWeeks] = useState("8");
   const [editReason, setEditReason] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState("");
@@ -48,8 +45,6 @@ export function CompanySettingsView({
   const handleOpenEnrollModal = () => {
     setCompanyIdInput("");
     setOptionARateInput("0.40");
-    setOptionBRateInput("0.20");
-    setMinWeeksInput("8");
     setNotesInput("");
     setEnrollError("");
     setShowEnrollModal(true);
@@ -64,8 +59,6 @@ export function CompanySettingsView({
       const res = await enrollCompanyExchangeProgramAction({
         companyId: companyIdInput.trim(),
         optionARate: parseFloat(optionARateInput),
-        optionBRate: parseFloat(optionBRateInput),
-        minReportingWeeks: parseInt(minWeeksInput, 10),
         notes: notesInput.trim(),
       });
 
@@ -85,7 +78,6 @@ export function CompanySettingsView({
   const handleOpenEditModal = (enrollment: CompanyExchangeEnrollment) => {
     setSelectedEnrollment(enrollment);
     setEditOptionARate(enrollment.optionACreditRate.toString());
-    setEditMinWeeks(enrollment.minInventoryReportingWeeks.toString());
     setEditReason("");
     setEditError("");
     setShowEditModal(true);
@@ -101,7 +93,6 @@ export function CompanySettingsView({
       const res = await updateCompanyExchangeEnrollmentAction({
         enrollmentId: selectedEnrollment.id,
         optionARate: parseFloat(editOptionARate),
-        minReportingWeeks: parseInt(editMinWeeks, 10),
         reason: editReason.trim(),
       });
 
@@ -183,7 +174,7 @@ export function CompanySettingsView({
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-center">Option A Rate</th>
                 <th className="py-3 px-4 text-center">Option B Rate</th>
-                <th className="py-3 px-4 text-center">Min Weekly Checks</th>
+                <th className="py-3 px-4 text-center">Pilot Rules</th>
                 <th className="py-3 px-4">Effective Date</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -231,10 +222,10 @@ export function CompanySettingsView({
                       {(enr.optionACreditRate * 100).toFixed(0)}%
                     </td>
                     <td className="py-3 px-4 text-center font-medium text-zinc-300">
-                      {(enr.optionBCreditRate * 100).toFixed(0)}%
+                      100% <span className="text-[10px] text-zinc-500">(Return & Credit)</span>
                     </td>
-                    <td className="py-3 px-4 text-center text-zinc-200">
-                      {enr.minInventoryReportingWeeks} weeks
+                    <td className="py-3 px-4 text-center text-zinc-300">
+                      8 wks · Day 100 eval
                     </td>
                     <td className="py-3 px-4 text-zinc-400">{enr.effectiveDate}</td>
                     <td className="py-3 px-4 text-right space-x-1.5">
@@ -320,49 +311,40 @@ export function CompanySettingsView({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-zinc-400 font-semibold mb-1">Option A Rate (20% - 50%) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.20"
-                    max="0.50"
-                    required
-                    value={optionARateInput}
-                    onChange={(e) => setOptionARateInput(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-cyan-500"
-                  />
-                  <span className="text-[10px] text-zinc-500">Default: 0.40 (40%)</span>
-                </div>
-                <div>
-                  <label className="block text-zinc-400 font-semibold mb-1">Option B Rate (10% - 35%)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.10"
-                    max="0.35"
-                    required
-                    value={optionBRateInput}
-                    onChange={(e) => setOptionBRateInput(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-cyan-500"
-                  />
-                  <span className="text-[10px] text-zinc-500">Default: 0.20 (20%)</span>
-                </div>
-              </div>
-
               <div>
-                <label className="block text-zinc-400 font-semibold mb-1">Min Weekly Inventory Checks *</label>
+                <label className="block text-zinc-400 font-semibold mb-1">Option A Rate (20% - 50%) *</label>
                 <input
                   type="number"
-                  min="4"
-                  max="12"
+                  step="0.01"
+                  min="0.20"
+                  max="0.50"
                   required
-                  value={minWeeksInput}
-                  onChange={(e) => setMinWeeksInput(e.target.value)}
+                  value={optionARateInput}
+                  onChange={(e) => setOptionARateInput(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-cyan-500"
                 />
-                <span className="text-[10px] text-zinc-500">Default: 8 weeks of physical inventory count</span>
+                <span className="text-[10px] text-zinc-500">Configurable rate (20% to 50%). Default: 0.40 (40%)</span>
+              </div>
+
+              <div className="p-3 rounded-lg bg-zinc-950/80 border border-zinc-800/80 space-y-1 text-xs">
+                <div className="flex justify-between items-center text-zinc-300 font-semibold">
+                  <span>Option B (Return & Credit):</span>
+                  <span className="text-zinc-100 font-bold">100% of original wholesale cost</span>
+                </div>
+                <p className="text-[10px] text-zinc-500">
+                  Fixed rule: Resaleable accepted units returned earn 100% wholesale credit.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-lg bg-cyan-950/20 border border-cyan-800/30 space-y-1 text-xs text-cyan-300">
+                <div className="font-semibold text-cyan-200 text-[11px]">Fixed Pilot Program Rules (Non-editable):</div>
+                <ul className="list-disc list-inside space-y-0.5 text-[10px] text-cyan-300/80">
+                  <li>8 weekly physical inventory checks required</li>
+                  <li>Day 0 = First actual Letusto shipment date</li>
+                  <li>Day 100 Evaluation & 50-Day Claim Window (Day 100-150)</li>
+                  <li>Sell-through must be strictly &lt; 50%</li>
+                  <li>Same Store + SKU reorder automatically disqualifies</li>
+                </ul>
               </div>
 
               <div>
@@ -423,19 +405,18 @@ export function CompanySettingsView({
                   onChange={(e) => setEditOptionARate(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-cyan-500"
                 />
+                <span className="text-[10px] text-zinc-500">Configurable rate (20% to 50%). Applies to future cohorts.</span>
               </div>
 
-              <div>
-                <label className="block text-zinc-400 font-semibold mb-1">Min Weekly Inventory Checks *</label>
-                <input
-                  type="number"
-                  min="4"
-                  max="12"
-                  required
-                  value={editMinWeeks}
-                  onChange={(e) => setEditMinWeeks(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-cyan-500"
-                />
+              <div className="p-3 rounded-lg bg-zinc-950/80 border border-zinc-800/80 space-y-1 text-xs">
+                <div className="flex justify-between items-center text-zinc-300 font-semibold">
+                  <span>Option B Rate:</span>
+                  <span className="text-zinc-200 font-bold">100% (Fixed Return & Credit)</span>
+                </div>
+                <div className="flex justify-between items-center text-zinc-300 font-semibold">
+                  <span>Min Weekly Checks:</span>
+                  <span className="text-zinc-200 font-bold">8 weeks (Fixed Pilot)</span>
+                </div>
               </div>
 
               <div>

@@ -198,11 +198,11 @@ export function CohortTable({
                               Eval: {cohort.evaluationDate}
                             </div>
                             <div className="text-[10px] text-zinc-500">
-                              Start: {cohort.protectionStartDate || "N/A"}
+                              Day 0: {cohort.firstShipmentDate || "N/A"}
                             </div>
                           </div>
                         ) : (
-                          <span className="text-zinc-600 text-[11px]">Awaiting 1st Delivery</span>
+                          <span className="text-zinc-600 text-[11px]">Awaiting 1st Shipment</span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">

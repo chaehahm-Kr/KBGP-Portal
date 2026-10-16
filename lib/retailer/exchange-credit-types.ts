@@ -10,6 +10,7 @@ export type ProtectedCohortStatus =
   | "claim_resolved"
   | "disqualified_reordered"
   | "disqualified_insufficient_checks"
+  | "disqualified_high_sales"
   | "expired_unclaimed"
   | "cancelled";
 
@@ -19,12 +20,21 @@ export interface CompanyExchangeEnrollment {
   companyName: string;
   companyCode: string | null;
   status: CompanyEnrollmentStatus;
-  optionACreditRate: number; // e.g. 0.40 = 40%
-  optionBCreditRate: number; // e.g. 0.20 = 20%
-  minInventoryReportingWeeks: number; // default: 8
-  trialPeriodDays: number; // default: 90
-  evaluationDay: number; // default: 100
-  claimWindowDays: number; // default: 50
+  
+  // Option A is configurable per company (20% to 50%, default: 40%)
+  optionACreditRate: number;
+  
+  // Option B is fixed at 100% of original wholesale unit cost for resaleable returned units
+  optionBCreditRate: 1.0;
+  
+  // Fixed Pilot Program Conditions (Non-editable per company)
+  minInventoryReportingWeeks: 8;
+  trialPeriodDays: 90;
+  evaluationDay: 100;
+  claimWindowDays: 50;
+  maxSellThroughRate: 0.5;
+  reorderDisqualifies: true;
+
   enrolledBy: string;
   enrolledByName?: string;
   enrolledAt: string;
@@ -35,6 +45,7 @@ export interface CompanyExchangeEnrollment {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  
   // Summary counters
   activeCohortsCount?: number;
   totalProtectedValue?: number;
@@ -62,7 +73,7 @@ export interface ProtectedSupplyShipment {
   shipmentSequence: number;
   quantityShipped: number;
   quantityDelivered: number;
-  shippedAt: string | null;
+  shippedAt: string;
   deliveredAt: string | null;
   trackingNumber: string | null;
   carrier: string | null;
@@ -88,24 +99,23 @@ export interface ProtectedSupplyCohort {
   sourceOrderNumber: string;
   sourceOrderItemId: string;
 
-  // Frozen metrics
+  // Frozen metrics (Permanent financial baseline)
   totalProtectedQuantity: number;
   fulfilledProtectedQuantity: number;
   frozenUnitWholesalePrice: number;
-  frozenOptionARate: number;
-  frozenOptionBRate: number;
-  frozenMinReportingWeeks: number;
+  frozenOptionARate: number; // 0.20 to 0.50
+  frozenOptionBRate: 1.0; // Fixed 100%
+  frozenMinReportingWeeks: 8;
+  frozenMaxSellThroughRate: 0.5;
 
   status: ProtectedCohortStatus;
   statusLabel: string;
 
-  // Key Dates (YYYY-MM-DD)
-  firstShipmentDate: string | null;
-  firstDeliveryDate: string | null;
-  protectionStartDate: string | null;
-  trialEndDate: string | null;
-  evaluationDate: string | null;
-  claimDeadlineDate: string | null;
+  // Key Dates (Day 0 = first actual Letusto shipment date; Timezone: America/New_York)
+  firstShipmentDate: string | null; // Day 0
+  trialEndDate: string | null;      // Day 0 + 90 days
+  evaluationDate: string | null;    // Day 0 + 100 days
+  claimDeadlineDate: string | null; // Day 0 + 150 days
 
   // Disqualification details
   disqualificationReason: string | null;
@@ -124,17 +134,13 @@ export interface ProtectedSupplyCohort {
 export interface EnrollCompanyInput {
   companyId: string;
   optionARate?: number; // 0.20 to 0.50 (default: 0.40)
-  optionBRate?: number; // 0.10 to 0.35 (default: 0.20)
-  minReportingWeeks?: number; // default: 8
   effectiveDate?: string; // YYYY-MM-DD
   notes?: string;
 }
 
 export interface UpdateEnrollmentInput {
   enrollmentId: string;
-  optionARate?: number;
-  optionBRate?: number;
-  minReportingWeeks?: number;
+  optionARate: number; // 0.20 to 0.50
   reason: string;
 }
 
@@ -152,7 +158,6 @@ export interface RegisterProtectedCohortInput {
   protectedQuantity: number;
   unitWholesalePrice: number;
   firstShipmentDate?: string;
-  firstDeliveryDate?: string;
   notes?: string;
 }
 
@@ -243,13 +248,19 @@ export const COHORT_STATUS_CONFIG: Record<
     border: "border-teal-500/20",
   },
   disqualified_reordered: {
-    label: "재발주 탈락 (Disqualified)",
+    label: "재발주 탈락 (Reordered)",
     bg: "bg-rose-500/10",
     text: "text-rose-400",
     border: "border-rose-500/20",
   },
   disqualified_insufficient_checks: {
-    label: "실사 부족 탈락 (No Checks)",
+    label: "실사 부족 탈락 (Under 8 Checks)",
+    bg: "bg-rose-500/10",
+    text: "text-rose-400",
+    border: "border-rose-500/20",
+  },
+  disqualified_high_sales: {
+    label: "판매율 초과 탈락 (Sales >= 50%)",
     bg: "bg-rose-500/10",
     text: "text-rose-400",
     border: "border-rose-500/20",

@@ -158,6 +158,14 @@ export function CohortDetailView({
             </div>
 
             <div className="p-3 rounded-lg bg-zinc-950/80 border border-zinc-800/80">
+              <span className="text-zinc-500 text-[10px] uppercase font-semibold">Frozen Option B Rate</span>
+              <div className="text-lg font-bold text-zinc-200 mt-1">
+                100%
+                <span className="text-xs font-normal text-zinc-400 ml-1">(Return & Credit)</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-zinc-950/80 border border-zinc-800/80 col-span-2">
               <span className="text-zinc-500 text-[10px] uppercase font-semibold">Source B2B Order</span>
               <div className="text-sm font-bold text-cyan-400 mt-1 truncate">
                 {cohort.sourceOrderNumber}
@@ -167,8 +175,8 @@ export function CohortDetailView({
 
           <div className="border-t border-zinc-800 pt-3 space-y-2 text-xs">
             <div className="flex justify-between py-1">
-              <span className="text-zinc-400">Protection Anchor Date:</span>
-              <span className="font-semibold text-zinc-200">{cohort.protectionStartDate || "Awaiting Delivery"}</span>
+              <span className="text-zinc-400">Day 0 (First Shipment Date):</span>
+              <span className="font-semibold text-zinc-200">{cohort.firstShipmentDate || "Awaiting Shipment"}</span>
             </div>
             <div className="flex justify-between py-1">
               <span className="text-zinc-400">Day 90 Trial End Date:</span>
