@@ -256,6 +256,57 @@ async function runQA() {
     await page.waitForTimeout(500);
     assert('Assignment modal closed cleanly on Cancel (Zero DB writes invariant)', !(await placementModal.isVisible()));
 
+    // 6b. Verify Compact Visual Shelf Tiles & Hover Actions (ADM-STORE-OPS-P3-003-R1)
+    console.log('\nScenario 6b: Compact Visual Shelf Tile Verification (Target Feel 6-8 per row)');
+    const placedTiles = page.locator('[data-testid^="placement-card-"]');
+    const placedCount = await placedTiles.count();
+    console.log(`  Found ${placedCount} placed product tile(s) on display`);
+    if (placedCount > 0) {
+      const firstTile = placedTiles.first();
+      assert('Placed product tile is visible', await firstTile.isVisible());
+
+      // 1. Verify thumbnail image is present
+      const img = firstTile.locator('img, span:has-text("💄")').first();
+      assert('Thumbnail image container is rendered inside compact tile', await img.isVisible());
+
+      // 2. Verify SKU is prominent
+      const skuEl = firstTile.locator('span.font-mono').first();
+      assert('Monospace SKU is displayed on compact tile', await skuEl.isVisible());
+
+      // 3. Hover over tile to reveal hover action overlay
+      await firstTile.hover();
+      await page.waitForTimeout(400);
+
+      const hoverShot = path.join(ARTIFACT_DIR, 'adm_store_ops_p3_compact_shelf_hover.png');
+      await page.screenshot({ path: hoverShot, fullPage: false });
+      console.log(`  📸 Screenshot saved: ${hoverShot}`);
+
+      const editBtn = firstTile.locator('[data-testid^="btn-edit-placement-"]').first();
+      const unassignBtn = firstTile.locator('[data-testid^="btn-unassign-placement-"]').first();
+      assert('Edit button is revealed upon hover/focus', await editBtn.isVisible());
+      assert('Unassign button is revealed upon hover/focus', await unassignBtn.isVisible());
+
+      // 4. Test Edit Modal interaction without DB write
+      await editBtn.click();
+      await page.waitForTimeout(400);
+      const editModalTitle = page.locator('[data-testid="placement-modal-title"]').first();
+      assert('Edit Placement modal opened with title "Edit Shelf Placement"', (await editModalTitle.innerText()).includes('Edit'));
+      await page.locator('[data-testid="btn-close-placement-modal"], [data-testid="btn-cancel-placement"]').first().click();
+      await page.waitForTimeout(400);
+      assert('Edit Placement modal closed cleanly without mutation', !(await page.locator('[data-testid="placement-modal-card"]').isVisible()));
+
+      // 5. Test Unassign Modal interaction without DB write
+      await firstTile.hover();
+      await page.waitForTimeout(300);
+      await unassignBtn.click();
+      await page.waitForTimeout(400);
+      const unassignModal = page.locator('[data-testid="unassign-modal-card"]').first();
+      assert('Unassign confirmation modal opened', await unassignModal.isVisible());
+      await page.locator('[data-testid="btn-cancel-unassign"]').first().click();
+      await page.waitForTimeout(400);
+      assert('Unassign confirmation modal cancelled cleanly without deletion', !(await unassignModal.isVisible()));
+    }
+
     // 7. Regression Testing Across All 6 Store Operations Tabs
     console.log('\nScenario 7: Five-Tab Regression & URL State Verification');
     const tabs = [

@@ -3820,93 +3820,131 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
                                             </button>
                                           </div>
 
-                                          {/* Shelf Placements Slots */}
+                                          {/* Shelf Surface / Merchandising Track */}
                                           {shelfPlacements.length > 0 ? (
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                              {shelfPlacements.map((plc) => (
-                                                <div
-                                                  key={plc.id}
-                                                  data-testid={`placement-card-${plc.id}`}
-                                                  className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-850/60 border border-zinc-200/60 dark:border-zinc-750 flex flex-col justify-between gap-2 text-xs hover:border-zinc-300 dark:hover:border-zinc-600 transition-all"
-                                                >
-                                                  <div className="flex items-start gap-2">
-                                                    {/* Product Thumbnail */}
-                                                    <div className="w-10 h-10 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
+                                            <div className="pt-2 pb-2.5 border-b-4 border-zinc-300 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-850/40 rounded-lg px-2.5 flex flex-wrap gap-2.5 items-end">
+                                              {/* Placed Products in Slot Order */}
+                                              {shelfPlacements
+                                                .slice()
+                                                .sort((a, b) => a.positionSlot - b.positionSlot)
+                                                .map((plc) => (
+                                                  <div
+                                                    key={plc.id}
+                                                    tabIndex={0}
+                                                    data-testid={`placement-card-${plc.id}`}
+                                                    title={`${plc.productName}\nBrand: ${plc.brandName || "N/A"}\nSKU: ${plc.sku}\nBay ${plc.bayNumber} · Shelf ${plc.shelfLevel} · Slot #${plc.positionSlot}\nFacings: ${plc.facingCount}F · Capacity: ${plc.capacityUnits}u\nStatus: ${plc.placementStatusLabel}${plc.notes ? `\nNotes: ${plc.notes}` : ""}`}
+                                                    className="group relative w-[108px] sm:w-[116px] shrink-0 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-750 hover:border-emerald-500 dark:hover:border-emerald-500 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between items-center p-1.5 select-none focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                                                  >
+                                                    {/* Top Micro-Bar: Slot # & Status Dot */}
+                                                    <div className="w-full flex items-center justify-between text-[9px] px-0.5 leading-none">
+                                                      <span className="font-mono font-bold text-zinc-500 dark:text-zinc-400">
+                                                        #{plc.positionSlot}
+                                                      </span>
+                                                      <div className="flex items-center gap-1">
+                                                        {plc.facingCount > 1 && (
+                                                          <span className="font-mono font-semibold text-[8px] text-zinc-400">
+                                                            {plc.facingCount}F
+                                                          </span>
+                                                        )}
+                                                        <span
+                                                          className={`w-2 h-2 rounded-full shrink-0 ${
+                                                            plc.placementStatus === "active"
+                                                              ? "bg-emerald-500"
+                                                              : plc.placementStatus === "planned"
+                                                              ? "bg-blue-500"
+                                                              : "bg-amber-500"
+                                                          }`}
+                                                          title={plc.placementStatusLabel}
+                                                        />
+                                                      </div>
+                                                    </div>
+
+                                                    {/* Thumbnail Image Container */}
+                                                    <div className="w-16 h-16 sm:w-18 sm:h-18 my-1 rounded-md bg-zinc-50 dark:bg-zinc-800 border border-zinc-150 dark:border-zinc-750 flex items-center justify-center overflow-hidden shrink-0 group-hover:scale-105 transition-transform duration-150">
                                                       {plc.thumbnailUrl ? (
                                                         <img
                                                           src={plc.thumbnailUrl}
                                                           alt={plc.productName}
-                                                          className="w-full h-full object-cover"
+                                                          className="w-full h-full object-contain p-1"
                                                         />
                                                       ) : (
-                                                        <span className="text-zinc-400 text-sm">💄</span>
+                                                        <span className="text-xl">💄</span>
                                                       )}
                                                     </div>
 
-                                                    <div className="min-w-0 flex-1">
-                                                      <div className="flex items-center justify-between gap-1">
-                                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-zinc-200/80 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
-                                                          Pos #{plc.positionSlot}
-                                                        </span>
-                                                        <span
-                                                          className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                                                            plc.placementStatus === "active"
-                                                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                                              : plc.placementStatus === "planned"
-                                                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-                                                              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                                                          }`}
-                                                        >
-                                                          {plc.placementStatusLabel}
-                                                        </span>
-                                                      </div>
-
-                                                      <p
-                                                        className="font-bold text-zinc-900 dark:text-white mt-1 text-[11px] leading-tight line-clamp-1"
-                                                        title={plc.productName}
+                                                    {/* Bottom SKU Bar */}
+                                                    <div className="w-full pt-1 border-t border-zinc-100 dark:border-zinc-800 text-center">
+                                                      <span
+                                                        className="font-mono text-[10px] font-bold text-zinc-900 dark:text-zinc-100 block truncate tracking-tight"
+                                                        title={plc.sku}
                                                       >
+                                                        {plc.sku}
+                                                      </span>
+                                                    </div>
+
+                                                    {/* Lightweight Hover Tooltip Popover */}
+                                                    <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 rounded-lg bg-zinc-950 text-white dark:bg-zinc-800 dark:text-zinc-100 border border-zinc-700 shadow-xl text-[10px] z-30 space-y-1">
+                                                      <p className="font-bold leading-tight line-clamp-2">
                                                         {plc.productName}
                                                       </p>
                                                       {plc.brandName && (
-                                                        <span className="text-[10px] text-zinc-400 block truncate">
+                                                        <p className="text-[9px] text-zinc-400 truncate">
                                                           {plc.brandName}
-                                                        </span>
+                                                        </p>
                                                       )}
-                                                      <span className="text-[10px] font-mono text-zinc-500 block">
-                                                        SKU: {plc.sku}
-                                                      </span>
-                                                    </div>
-                                                  </div>
-
-                                                  {/* Slot Capacity & Facings Footer + Actions */}
-                                                  <div className="flex items-center justify-between pt-1 border-t border-zinc-150 dark:border-zinc-800 text-[10px]">
-                                                    <div className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
-                                                      <span className="font-semibold">{plc.facingCount}F</span>
-                                                      <span>·</span>
-                                                      <span>Cap: {plc.capacityUnits}u</span>
+                                                      <div className="flex items-center justify-between text-[9px] text-zinc-400 pt-1 border-t border-zinc-800 dark:border-zinc-700">
+                                                        <span>
+                                                          Slot #{plc.positionSlot} · {plc.facingCount} Facing{plc.facingCount > 1 ? "s" : ""}
+                                                        </span>
+                                                        <span>Cap: {plc.capacityUnits}u</span>
+                                                      </div>
+                                                      <div className="text-[9px] text-emerald-400 font-semibold">
+                                                        Status: {plc.placementStatusLabel}
+                                                      </div>
+                                                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-950 dark:border-t-zinc-800" />
                                                     </div>
 
-                                                    <div className="flex items-center gap-1">
+                                                    {/* Hover Action Overlay (Edit & Unassign) */}
+                                                    <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute inset-0 rounded-lg bg-zinc-950/80 backdrop-blur-[1px] flex flex-col items-center justify-center gap-1.5 p-1.5 z-20">
                                                       <button
                                                         type="button"
-                                                        onClick={() => handleOpenEditPlacementModal(fixture, plc)}
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          handleOpenEditPlacementModal(fixture, plc);
+                                                        }}
                                                         data-testid={`btn-edit-placement-${plc.id}`}
-                                                        className="px-1.5 py-0.5 rounded text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-200/60 dark:hover:bg-zinc-700 transition-all cursor-pointer font-medium"
+                                                        className="w-full py-1 px-2 rounded bg-white hover:bg-zinc-100 text-zinc-900 text-[10px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                                                       >
-                                                        Edit
+                                                        <span>✎</span>
+                                                        <span>Edit</span>
                                                       </button>
                                                       <button
                                                         type="button"
-                                                        onClick={() => handleOpenUnassignConfirm(fixture, plc)}
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          handleOpenUnassignConfirm(fixture, plc);
+                                                        }}
                                                         data-testid={`btn-unassign-placement-${plc.id}`}
-                                                        className="px-1.5 py-0.5 rounded text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer font-medium"
+                                                        className="w-full py-1 px-2 rounded bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                                                       >
-                                                        Unassign
+                                                        <span>✕</span>
+                                                        <span>Unassign</span>
                                                       </button>
                                                     </div>
                                                   </div>
-                                                </div>
-                                              ))}
+                                                ))}
+
+                                              {/* Compact Add Slot Quick Button at End of Shelf Row */}
+                                              <button
+                                                type="button"
+                                                onClick={() => handleOpenAssignPlacementModal(fixture, activeBay, shelfNum)}
+                                                className="w-[108px] sm:w-[116px] h-[106px] sm:h-[114px] shrink-0 rounded-lg border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20 text-zinc-400 hover:text-emerald-600 transition-all flex flex-col items-center justify-center gap-1 cursor-pointer group select-none"
+                                              >
+                                                <span className="text-xl font-bold group-hover:scale-110 transition-transform leading-none">
+                                                  +
+                                                </span>
+                                                <span className="text-[10px] font-semibold">Add Slot</span>
+                                              </button>
                                             </div>
                                           ) : (
                                             /* Empty Shelf Position State (UI-only, No DB writes per Prompt requirement) */
