@@ -68,10 +68,12 @@ export default async function AdminApplicationsPage({
     mode?: string;
     company?: string;
     show_deleted?: string;
+    tab?: string;
   }>;
 }) {
   await verifyAdminSession();
-  const { type, status, mode, company, show_deleted } = await searchParams;
+  const { type, status, mode, company, show_deleted, tab } = await searchParams;
+  const effectiveType = type || (tab === "brand" ? "brand" : tab === "retailer" ? "retailer" : undefined);
   const supabase = await createClient();
 
   let query = supabase
@@ -82,8 +84,8 @@ export default async function AdminApplicationsPage({
     .neq("status", "draft")
     .order("created_at", { ascending: false });
 
-  if (type) {
-    query = query.eq("partner_type", type);
+  if (effectiveType) {
+    query = query.eq("partner_type", effectiveType);
   }
   if (status) {
     query = query.eq("status", status);
@@ -295,7 +297,7 @@ export default async function AdminApplicationsPage({
     return diffDays === 0 ? "오늘 접수" : `${diffDays}일 경과`;
   };
 
-  const currentTab = type || "all";
+  const currentTab = effectiveType || "all";
 
   return (
     <div className="space-y-6">
@@ -358,7 +360,7 @@ export default async function AdminApplicationsPage({
       {/* Filter Panel */}
       <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 shadow-xs">
         <form method="get" className="flex flex-wrap items-center gap-3">
-          {type && <input type="hidden" name="type" value={type} />}
+          {effectiveType && <input type="hidden" name="type" value={effectiveType} />}
 
           <div className="flex flex-1 min-w-[200px] flex-col gap-1.5">
             <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase">회사명 검색</span>

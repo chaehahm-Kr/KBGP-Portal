@@ -17,6 +17,8 @@ import {
   UsersIcon,
   SettingsIcon,
   IntelligenceIcon,
+  KnowledgeIcon,
+  SupportIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   KnowledgeSubIcon,
@@ -94,7 +96,15 @@ function getBestActiveHref(
     if (targetQuery) {
       for (const [k, v] of targetParams.entries()) {
         queryParamCount++;
-        if (!searchParams || searchParams.get(k) !== v) {
+        const currentVal = searchParams?.get(k);
+        // Also support alias if k === "type", check "tab" as well
+        const aliasVal =
+          k === "type"
+            ? searchParams?.get("tab")
+            : k === "tab"
+            ? searchParams?.get("type")
+            : null;
+        if (!searchParams || (currentVal !== v && aliasVal !== v)) {
           queryMatches = false;
           break;
         }
@@ -104,7 +114,7 @@ function getBestActiveHref(
     if (!queryMatches) return;
 
     // Specificity score:
-    // Base score = targetPath length
+    // Base score = targetPath.length
     // Exact path match bonus: +1000
     // Query param match bonus: +5000 per matched query param
     let score = targetPath.length;
@@ -153,56 +163,96 @@ export default function Sidebar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Depth 1 expand state
+  // Section level independent expand states (Brand, Hub, Settings & Other)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    brand: true,
+    hub: true,
+    settingsOther: true,
+  });
+
+  // Depth 1 menu expand state
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
-    Applications: false,
     "Companies & Brands": false,
     Products: false,
-    Inventory: false,
     Purchasing: false,
     Finance: false,
     "Retail Network": false,
     "Sales & Performance": false,
-    Intelligence: false,
-    Amazon: false,
     "Tasks & Communication": false,
+    Amazon: false,
+    Intelligence: false,
     Settings: false,
   });
 
-  // Depth 2 expand state (for 3-depth items like Intelligence -> Growth Simulator)
+  // Depth 2 expand state (for 3-depth items like Intelligence -> Growth Simulator / Insights)
   const [expandedSubMenus, setExpandedSubMenus] = useState<Record<string, boolean>>({
     "Intelligence->Growth Simulator": true,
     "Intelligence->Insights": true,
   });
 
-  // Auto-expand parent and nested submenus matching current pathname
+  // Auto-expand parent section and nested submenus matching current route
   useEffect(() => {
     if (!pathname) return;
 
+    const queryType =
+      searchParams?.get("type") || searchParams?.get("tab") || searchParams?.get("source");
+
+    const isBrandApps = pathname.startsWith("/admin/applications") && queryType !== "retailer";
+    const isHubApps = pathname.startsWith("/admin/applications") && queryType === "retailer";
+
+    const isBrandInquiries = pathname.startsWith("/admin/partner-inquiries") && queryType !== "retailer";
+    const isHubInquiries = pathname.startsWith("/admin/partner-inquiries") && queryType === "retailer";
+
+    const isCompanies = pathname.startsWith("/admin/companies") || pathname.startsWith("/admin/brands");
+    const isTrading = pathname.startsWith("/admin/products/trading");
+    const isContent = pathname.startsWith("/admin/products/content");
+    const isBrandProducts =
+      (pathname.startsWith("/admin/products") || pathname.startsWith("/admin/inventory")) &&
+      !isTrading &&
+      !isContent;
+    const isPurchasing = pathname.startsWith("/admin/purchasing");
+    const isReceivables = pathname.startsWith("/admin/finance/receivables");
+    const isBrandFinance = pathname.startsWith("/admin/finance") && !isReceivables;
+    const isRetailNetwork =
+      pathname.startsWith("/admin/retailers") ||
+      pathname.startsWith("/admin/stores") ||
+      pathname.startsWith("/admin/protection-reviews");
+    const isOrderProcessing = pathname.startsWith("/admin/sales/orders");
+    const isSales = pathname.startsWith("/admin/sales") && !isOrderProcessing;
+    const isReports = pathname.startsWith("/admin/reports");
+    const isTasks = pathname.startsWith("/admin/tasks") || pathname.startsWith("/admin/inquiries");
+    const isAmazon = pathname.startsWith("/admin/amazon");
     const isSimulator = pathname.startsWith("/admin/simulator");
     const isInsights = pathname.startsWith("/admin/insights");
     const isIntelligence = isSimulator || isInsights;
+    const isSettings =
+      pathname.startsWith("/admin/settings") ||
+      pathname.startsWith("/admin/knowledge") ||
+      pathname.startsWith("/admin/staff");
+
+    // Automatically expand parent section without collapsing other sections
+    if (isBrandApps || isCompanies || isBrandProducts || isPurchasing || isBrandFinance || isBrandInquiries) {
+      setExpandedSections((prev) => ({ ...prev, brand: true }));
+    }
+    if (isHubApps || isTrading || isRetailNetwork || isOrderProcessing || isReceivables || isContent || isSales || isHubInquiries) {
+      setExpandedSections((prev) => ({ ...prev, hub: true }));
+    }
+    if (isReports || isTasks || isAmazon || isIntelligence || isSettings) {
+      setExpandedSections((prev) => ({ ...prev, settingsOther: true }));
+    }
 
     setExpandedMenus((prev) => ({
       ...prev,
-      Applications: pathname.startsWith("/admin/applications"),
-      "Companies & Brands": pathname.startsWith("/admin/companies") || pathname.startsWith("/admin/brands"),
-      Products: pathname.startsWith("/admin/products") || pathname.startsWith("/admin/inventory"),
-      Inventory: pathname.startsWith("/admin/inventory"),
-      Purchasing: pathname.startsWith("/admin/purchasing") && !pathname.startsWith("/admin/purchasing/invoices"),
-      Finance: pathname.startsWith("/admin/finance"),
-      "Retail Network":
-        pathname.startsWith("/admin/retailers") ||
-        pathname.startsWith("/admin/stores") ||
-        pathname.startsWith("/admin/protection-reviews"),
-      "Sales & Performance": pathname.startsWith("/admin/sales"),
-      Intelligence: isIntelligence,
-      Amazon: pathname.startsWith("/admin/amazon"),
-      "Tasks & Communication":
-        pathname.startsWith("/admin/tasks") ||
-        pathname.startsWith("/admin/partner-inquiries") ||
-        pathname.startsWith("/admin/inquiries"),
-      Settings: pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/knowledge"),
+      "Companies & Brands": isCompanies || prev["Companies & Brands"],
+      Products: isBrandProducts || prev.Products,
+      Purchasing: isPurchasing || prev.Purchasing,
+      Finance: isBrandFinance || prev.Finance,
+      "Retail Network": isRetailNetwork || prev["Retail Network"],
+      "Sales & Performance": isSales || prev["Sales & Performance"],
+      "Tasks & Communication": isTasks || prev["Tasks & Communication"],
+      Amazon: isAmazon || prev.Amazon,
+      Intelligence: isIntelligence || prev.Intelligence,
+      Settings: isSettings || prev.Settings,
     }));
 
     if (isIntelligence) {
@@ -212,11 +262,22 @@ export default function Sidebar({
         "Intelligence->Insights": isInsights || prev["Intelligence->Insights"],
       }));
     }
-  }, [pathname]);
+  }, [pathname, searchParams]);
 
-  const menuItems: MenuItem[] = [
-    { name: "Dashboard", icon: DashboardIcon, href: "/admin" },
-    { name: "Applications", icon: ApplicationsIcon, href: "/admin/applications" },
+  // Section 0: Dashboard (Top level)
+  const dashboardItem: MenuItem = {
+    name: "Dashboard",
+    icon: DashboardIcon,
+    href: "/admin",
+  };
+
+  // Section 1: K SELECT BRAND items
+  const rawBrandItems: MenuItem[] = [
+    {
+      name: "Brand Applications",
+      icon: ApplicationsIcon,
+      href: "/admin/applications?type=brand",
+    },
     {
       name: "Companies & Brands",
       icon: CompaniesIcon,
@@ -230,8 +291,6 @@ export default function Sidebar({
       icon: ProductsIcon,
       subItems: [
         { name: "Product Catalog", href: "/admin/products" },
-        { name: "Trading Products", href: "/admin/products/trading" },
-        { name: "Content & Training", href: "/admin/products/content" },
         { name: "Inventory Overview", href: "/admin/inventory" },
         { name: "Compliance", href: "/admin/products?status=compliance" },
         { name: "Pricing Simulator", href: "/admin/products/pricing-profitability" },
@@ -252,11 +311,29 @@ export default function Sidebar({
       name: "Finance",
       icon: ReportsIcon,
       subItems: [
-        { name: "Invoices & Receivables", href: "/admin/finance/receivables" },
         { name: "Supplier Invoices", href: "/admin/finance/invoices" },
         { name: "Payments", href: "/admin/finance/payments" },
         { name: "Cost Review (Landed Cost)", href: "/admin/finance/landed-cost" },
       ],
+    },
+    {
+      name: "Brand Inquiries",
+      icon: SupportIcon,
+      href: "/admin/partner-inquiries?type=brand",
+    },
+  ];
+
+  // Section 2: K SELECT HUB items
+  const rawHubItems: MenuItem[] = [
+    {
+      name: "Retailer Applications",
+      icon: ApplicationsIcon,
+      href: "/admin/applications?type=retailer",
+    },
+    {
+      name: "Trading Products",
+      icon: ProductsIcon,
+      href: "/admin/products/trading",
     },
     {
       name: "Retail Network",
@@ -269,13 +346,58 @@ export default function Sidebar({
       ],
     },
     {
+      name: "Order Processing",
+      icon: SalesIcon,
+      href: "/admin/sales/orders",
+    },
+    {
+      name: "Invoices & Receivables",
+      icon: ReportsIcon,
+      href: "/admin/finance/receivables",
+    },
+    {
+      name: "Content & Training",
+      icon: KnowledgeIcon,
+      href: "/admin/products/content",
+    },
+    {
       name: "Sales & Performance",
       icon: SalesIcon,
       subItems: [
         { name: "Overview", href: "/admin/sales" },
-        { name: "Order Processing", href: "/admin/sales/orders" },
         { name: "SKU Performance", href: "/admin/sales?tab=sku" },
         { name: "Promotions & Coupons", href: "/admin/sales/promotions" },
+      ],
+    },
+    {
+      name: "Retail Inquiries",
+      icon: SupportIcon,
+      href: "/admin/partner-inquiries?type=retailer",
+    },
+  ];
+
+  // Section 3: SETTINGS & OTHER items
+  const rawSettingsOtherItems: MenuItem[] = [
+    {
+      name: "Reports",
+      icon: ReportsIcon,
+      href: "/admin/reports",
+    },
+    {
+      name: "Tasks & Communication",
+      icon: TasksIcon,
+      subItems: [
+        { name: "Tasks", href: "/admin/tasks" },
+        { name: "Onboarding Leads", href: "/admin/inquiries" },
+        { name: "Activity Log", href: "/admin/tasks?tab=activity" },
+      ],
+    },
+    {
+      name: "Amazon",
+      icon: AmazonIcon,
+      subItems: [
+        { name: "Launch Pipeline", href: "/admin/amazon" },
+        { name: "Inventory", href: "/admin/amazon?tab=inventory" },
       ],
     },
     {
@@ -306,36 +428,10 @@ export default function Sidebar({
       ],
     },
     {
-      name: "Amazon",
-      icon: AmazonIcon,
-      subItems: [
-        { name: "Launch Pipeline", href: "/admin/amazon" },
-        { name: "Inventory", href: "/admin/amazon?tab=inventory" },
-      ],
-    },
-    {
-      name: "Tasks & Communication",
-      icon: TasksIcon,
-      subItems: [
-        { name: "Tasks", href: "/admin/tasks" },
-        { name: "Partner Inquiries", href: "/admin/partner-inquiries" },
-        { name: "Onboarding Leads", href: "/admin/inquiries" },
-        { name: "Activity Log", href: "/admin/tasks?tab=activity" },
-      ],
-    },
-    { name: "Reports", icon: ReportsIcon, href: "/admin/reports" },
-    {
-      name: "Users & Permissions",
-      icon: UsersIcon,
-      subItems: [
-        { name: "Staff & Permissions", href: "/admin/staff" },
-        { name: "Support Session Logs", href: "/admin/staff/support-sessions" },
-      ],
-    },
-    {
       name: "Settings",
       icon: SettingsIcon,
       subItems: [
+        { name: "Users & Permissions", href: "/admin/staff", icon: UsersIcon },
         { name: "Agreement Templates", href: "/admin/settings/agreement-templates", icon: EmailTemplatesIcon },
         { name: "Knowledge Center", href: "/admin/knowledge", icon: KnowledgeSubIcon },
         { name: "Email Templates", href: "/admin/settings/email-templates", icon: EmailTemplatesIcon },
@@ -350,30 +446,69 @@ export default function Sidebar({
     },
   ];
 
-  const filteredMenuItems = useMemo(() => {
-    return menuItems.filter((item) => {
-      if (!permissions) return true;
-      if (permissions.isSuperAdmin) return true;
+  // Filter items by staff permissions
+  const filterMenuItems = (items: MenuItem[]) => {
+    return items
+      .filter((item) => {
+        if (!permissions) return true;
+        if (permissions.isSuperAdmin) return true;
 
-      if (item.name === "Finance" && permissions.canAccessFinance === false) {
-        return false;
-      }
-      if (item.name === "Retail Network" && permissions.canAccessRetail === false) {
-        return false;
-      }
-      if (item.name === "Applications" && permissions.canAccessBrand === false) {
-        return false;
-      }
-      if (item.name === "Users & Permissions" && permissions.canManageStaff === false) {
-        return false;
-      }
-      return true;
-    });
-  }, [menuItems, permissions]);
+        if (item.name === "Brand Applications" && permissions.canAccessBrand === false) return false;
+        if (item.name === "Retailer Applications" && permissions.canAccessRetail === false) return false;
+        if (item.name === "Finance" && permissions.canAccessFinance === false) return false;
+        if (item.name === "Invoices & Receivables" && permissions.canAccessFinance === false) return false;
+        if (item.name === "Retail Network" && permissions.canAccessRetail === false) return false;
+        return true;
+      })
+      .map((item) => {
+        if (
+          item.name === "Settings" &&
+          item.subItems &&
+          permissions &&
+          !permissions.isSuperAdmin &&
+          permissions.canManageStaff === false
+        ) {
+          return {
+            ...item,
+            subItems: item.subItems.filter((sub) => sub.name !== "Users & Permissions"),
+          };
+        }
+        return item;
+      });
+  };
+
+  const brandItems = useMemo(() => filterMenuItems(rawBrandItems), [rawBrandItems, permissions]);
+  const hubItems = useMemo(() => filterMenuItems(rawHubItems), [rawHubItems, permissions]);
+  const settingsOtherItems = useMemo(
+    () => filterMenuItems(rawSettingsOtherItems),
+    [rawSettingsOtherItems, permissions]
+  );
+
+  // All active candidate items
+  const allItems = useMemo(
+    () => [dashboardItem, ...brandItems, ...hubItems, ...settingsOtherItems],
+    [dashboardItem, brandItems, hubItems, settingsOtherItems]
+  );
+
+  // Compute the single best-matching active href across all items
+  const bestActiveHref = useMemo(
+    () => getBestActiveHref(allItems, pathname, searchParams),
+    [allItems, pathname, searchParams]
+  );
+
+  const handleToggleSection = (sectionKey: string) => {
+    if (isCollapsed) {
+      toggleCollapse();
+    }
+    setExpandedSections((prev) => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey],
+    }));
+  };
 
   const handleToggleExpand = (name: string) => {
     if (isCollapsed) {
-      toggleCollapse(); // Expand sidebar if collapsed
+      toggleCollapse();
     }
     setExpandedMenus((prev) => ({ ...prev, [name]: !prev[name] }));
   };
@@ -382,12 +517,6 @@ export default function Sidebar({
     e.stopPropagation();
     setExpandedSubMenus((prev) => ({ ...prev, [key]: !prev[key] }));
   };
-
-  // Compute the single best-matching active href across all items
-  const bestActiveHref = useMemo(
-    () => getBestActiveHref(filteredMenuItems, pathname, searchParams),
-    [filteredMenuItems, pathname, searchParams]
-  );
 
   const isSubItemActive = (sub: SubItem): boolean => {
     if (sub.href) {
@@ -409,14 +538,188 @@ export default function Sidebar({
     return false;
   };
 
+  // Badge calculations
+  const brandBadgeCount =
+    (unreadCounts.applications || 0) +
+    (unreadCounts.poRequests || 0) +
+    (unreadCounts.supplierInvoices || 0) +
+    (pendingInquiriesCount || 0);
+
+  const hubBadgeCount = (unreadCounts.applications || 0) + (pendingInquiriesCount || 0);
+
+  const renderMenuItem = (item: MenuItem) => {
+    const isActive = isMenuItemActive(item);
+    const hasSubItems = !!item.subItems;
+    const isExpanded = expandedMenus[item.name] && !isCollapsed;
+
+    // Parent item unread count badge
+    let parentBadgeCount = 0;
+    if (item.name === "Brand Applications" || item.name === "Retailer Applications") {
+      parentBadgeCount = unreadCounts.applications;
+    } else if (item.name === "Products") {
+      parentBadgeCount = unreadCounts.products;
+    } else if (item.name === "Purchasing") {
+      parentBadgeCount = unreadCounts.poRequests;
+    } else if (item.name === "Finance") {
+      parentBadgeCount = unreadCounts.supplierInvoices;
+    } else if (item.name === "Brand Inquiries" || item.name === "Retail Inquiries") {
+      parentBadgeCount = pendingInquiriesCount;
+    } else if (item.name === "Tasks & Communication") {
+      parentBadgeCount = pendingInquiriesCount;
+    }
+
+    return (
+      <div key={item.name} className="space-y-1">
+        {hasSubItems ? (
+          <button
+            onClick={() => handleToggleExpand(item.name)}
+            className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors relative cursor-pointer ${
+              isActive
+                ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold"
+                : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+            }`}
+          >
+            <item.icon className="h-5 w-5 shrink-0" />
+            {!isCollapsed && <span className="flex-1 text-left">{item.name}</span>}
+            {!isCollapsed && parentBadgeCount > 0 && !isExpanded && (
+              <span className="mr-1 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.2 shadow-xs">
+                {parentBadgeCount}
+              </span>
+            )}
+            {isCollapsed && parentBadgeCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-950" />
+            )}
+            {!isCollapsed &&
+              (isExpanded ? (
+                <ChevronDownIcon size={16} className="text-zinc-400" />
+              ) : (
+                <ChevronRightIcon size={16} className="text-zinc-400" />
+              ))}
+          </button>
+        ) : (
+          <Link
+            href={item.href || "/admin"}
+            className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors relative ${
+              isActive
+                ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold"
+                : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+            }`}
+          >
+            <item.icon className="h-5 w-5 shrink-0" />
+            {!isCollapsed && <span className="flex-1">{item.name}</span>}
+            {!isCollapsed && parentBadgeCount > 0 && (
+              <span className="rounded-full bg-amber-500 text-white px-2 py-0.5 text-[10px] font-extrabold shadow-xs">
+                {parentBadgeCount}
+              </span>
+            )}
+            {isCollapsed && parentBadgeCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-950" />
+            )}
+          </Link>
+        )}
+
+        {/* Depth 2 & Depth 3 Submenus */}
+        {hasSubItems && isExpanded && (
+          <div className="pl-6 space-y-1">
+            {item.subItems?.map((sub) => {
+              const hasNested = !!sub.subItems;
+              const subKey = `${item.name}->${sub.name}`;
+              const isSubExpanded = expandedSubMenus[subKey] !== false;
+              const isSubActive = isSubItemActive(sub);
+
+              // Subitem unread count
+              let subBadgeCount = 0;
+              if (sub.name === "PO Requests") {
+                subBadgeCount = unreadCounts.poRequests;
+              } else if (sub.name === "Product Catalog") {
+                subBadgeCount = unreadCounts.products;
+              } else if (sub.name === "Supplier Invoices") {
+                subBadgeCount = unreadCounts.supplierInvoices;
+              }
+
+              if (hasNested) {
+                return (
+                  <div key={sub.name} className="space-y-1">
+                    <button
+                      onClick={(e) => handleToggleSubExpand(subKey, e)}
+                      className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                        isSubActive
+                          ? "text-zinc-900 dark:text-white font-bold"
+                          : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        {sub.icon && <sub.icon size={14} className="text-zinc-400 dark:text-zinc-500 shrink-0" />}
+                        <span>{sub.name}</span>
+                      </span>
+                      {isSubExpanded ? (
+                        <ChevronDownIcon size={14} className="text-zinc-400" />
+                      ) : (
+                        <ChevronRightIcon size={14} className="text-zinc-400" />
+                      )}
+                    </button>
+
+                    {/* Depth 3 Links */}
+                    {isSubExpanded && (
+                      <div className="pl-4 space-y-1 border-l border-zinc-200 dark:border-zinc-800 ml-3">
+                        {sub.subItems?.map((child) => {
+                          const isChildActive = child.href === bestActiveHref;
+
+                          return (
+                            <Link
+                              key={child.name}
+                              href={child.href}
+                              className={`block rounded-md px-3 py-1 text-xs transition-colors ${
+                                isChildActive
+                                  ? "text-zinc-900 dark:text-white font-bold bg-zinc-100/70 dark:bg-zinc-800/70"
+                                  : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                              }`}
+                            >
+                              {child.name}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // 2-Depth item with optional subitem icon (e.g. Settings items)
+              return (
+                <Link
+                  key={sub.name}
+                  href={sub.href || "#"}
+                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    isSubActive
+                      ? "text-zinc-900 dark:text-white font-bold bg-zinc-100/70 dark:bg-zinc-800/70"
+                      : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                  }`}
+                >
+                  {sub.icon && <sub.icon size={14} className="text-zinc-400 dark:text-zinc-500 shrink-0" />}
+                  <span className="flex-1">{sub.name}</span>
+                  {subBadgeCount > 0 && (
+                    <span className="rounded-full bg-amber-500 text-white px-2 py-0.2 text-[10px] font-extrabold shadow-xs">
+                      {subBadgeCount}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <aside
       className={`fixed top-0 bottom-0 left-0 z-20 flex flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 transition-all duration-300 ${
         isCollapsed ? "w-16" : "w-64"
       }`}
     >
-      {/* Logo Area */}
-      <div className="flex h-16 items-center justify-between border-b border-zinc-200 px-4 dark:border-zinc-800">
+      {/* Top Logo Area */}
+      <div className="flex h-16 items-center justify-between border-b border-zinc-200 px-4 dark:border-zinc-800 shrink-0">
         {!isCollapsed && (
           <Link href="/admin" className="flex items-center gap-2">
             <span className="font-sans text-sm font-semibold tracking-wider text-zinc-900 dark:text-white uppercase">
@@ -434,179 +737,168 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* Navigation */}
+      {/* Navigation Scroll Container */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-1 select-none scrollbar-thin">
-        {filteredMenuItems.map((item) => {
-          const isActive = isMenuItemActive(item);
-          const hasSubItems = !!item.subItems;
-          const isExpanded = expandedMenus[item.name] && !isCollapsed;
+        {/* Top: Dashboard */}
+        {renderMenuItem(dashboardItem)}
 
-          // Determine parent-level unread count
-          let parentBadgeCount = 0;
-          if (item.name === "Applications") {
-            parentBadgeCount = unreadCounts.applications;
-          } else if (item.name === "Products") {
-            parentBadgeCount = unreadCounts.products;
-          } else if (item.name === "Purchasing") {
-            parentBadgeCount = unreadCounts.poRequests;
-          } else if (item.name === "Finance") {
-            parentBadgeCount = unreadCounts.supplierInvoices;
-          } else if (item.name === "Tasks & Communication") {
-            parentBadgeCount = pendingInquiriesCount;
-          }
-
-          return (
-            <div key={item.name} className="space-y-1">
-              {hasSubItems ? (
-                <button
-                  onClick={() => handleToggleExpand(item.name)}
-                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors relative ${
-                    isActive
-                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold"
-                      : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
-                  }`}
-                >
-                  <item.icon className="h-5 w-5 shrink-0" />
-                  {!isCollapsed && <span className="flex-1 text-left">{item.name}</span>}
-                  {!isCollapsed && parentBadgeCount > 0 && !isExpanded && (
-                    <span className="mr-1 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.2 shadow-xs">
-                      {parentBadgeCount}
-                    </span>
-                  )}
-                  {isCollapsed && parentBadgeCount > 0 && (
-                    <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-950" />
-                  )}
-                  {!isCollapsed &&
-                    (isExpanded ? (
-                      <ChevronDownIcon size={16} className="text-zinc-400" />
-                    ) : (
-                      <ChevronRightIcon size={16} className="text-zinc-400" />
-                    ))}
-                </button>
-              ) : (
-                <Link
-                  href={item.href || "/admin"}
-                  className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors relative ${
-                    isActive
-                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold"
-                      : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
-                  }`}
-                >
-                  <item.icon className="h-5 w-5 shrink-0" />
-                  {!isCollapsed && <span className="flex-1">{item.name}</span>}
-                  {!isCollapsed && parentBadgeCount > 0 && (
-                    <span className="rounded-full bg-amber-500 text-white px-2 py-0.5 text-[10px] font-extrabold shadow-xs">
-                      {parentBadgeCount}
-                    </span>
-                  )}
-                  {isCollapsed && parentBadgeCount > 0 && (
-                    <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-950" />
-                  )}
-                </Link>
-              )}
-
-              {/* Depth 2 & Depth 3 Submenus */}
-              {hasSubItems && isExpanded && (
-                <div className="pl-6 space-y-1">
-                  {item.subItems?.map((sub) => {
-                    const hasNested = !!sub.subItems;
-                    const subKey = `${item.name}->${sub.name}`;
-                    const isSubExpanded = expandedSubMenus[subKey] !== false;
-                    const isSubActive = isSubItemActive(sub);
-
-                    // Determine subitem unread count
-                    let subBadgeCount = 0;
-                    if (sub.name === "PO Requests") {
-                      subBadgeCount = unreadCounts.poRequests;
-                    } else if (sub.name === "Product Catalog") {
-                      subBadgeCount = unreadCounts.products;
-                    } else if (sub.name === "Supplier Invoices") {
-                      subBadgeCount = unreadCounts.supplierInvoices;
-                    } else if (sub.name === "Partner Inquiries") {
-                      subBadgeCount = pendingInquiriesCount;
-                    }
-
-                    if (hasNested) {
-                      return (
-                        <div key={sub.name} className="space-y-1">
-                          <button
-                            onClick={(e) => handleToggleSubExpand(subKey, e)}
-                            className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                              isSubActive
-                                ? "text-zinc-900 dark:text-white font-bold"
-                                : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-                            }`}
-                          >
-                            <span className="flex items-center gap-2">
-                              {sub.icon && <sub.icon size={14} className="text-zinc-400 dark:text-zinc-500 shrink-0" />}
-                              <span>{sub.name}</span>
-                            </span>
-                            {isSubExpanded ? (
-                              <ChevronDownIcon size={14} className="text-zinc-400" />
-                            ) : (
-                              <ChevronRightIcon size={14} className="text-zinc-400" />
-                            )}
-                          </button>
-
-                          {/* Depth 3 Links */}
-                          {isSubExpanded && (
-                            <div className="pl-4 space-y-1 border-l border-zinc-200 dark:border-zinc-800 ml-3">
-                              {sub.subItems?.map((child) => {
-                                const isChildActive = child.href === bestActiveHref;
-
-                                return (
-                                  <Link
-                                    key={child.name}
-                                    href={child.href}
-                                    className={`block rounded-md px-3 py-1 text-xs transition-colors ${
-                                      isChildActive
-                                        ? "text-zinc-900 dark:text-white font-bold bg-zinc-100/70 dark:bg-zinc-800/70"
-                                        : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-                                    }`}
-                                  >
-                                    {child.name}
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    // 2-Depth item with optional subitem icon (e.g. Settings items)
-                    return (
-                      <Link
-                        key={sub.name}
-                        href={sub.href || "#"}
-                        className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                          isSubActive
-                            ? "text-zinc-900 dark:text-white font-bold bg-zinc-100/70 dark:bg-zinc-800/70"
-                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-                        }`}
-                      >
-                        {sub.icon && <sub.icon size={14} className="text-zinc-400 dark:text-zinc-500 shrink-0" />}
-                        <span className="flex-1">{sub.name}</span>
-                        {subBadgeCount > 0 && (
-                          <span className="rounded-full bg-amber-500 text-white px-2 py-0.2 text-[10px] font-extrabold shadow-xs">
-                            {subBadgeCount}
-                          </span>
-                        )}
-                      </Link>
-                    );
-                  })}
+        {/* ------------------------------------------------------------- */}
+        {/* Section 1: K SELECT BRAND                                     */}
+        {/* ------------------------------------------------------------- */}
+        <div className="pt-2">
+          <div className="mb-2 border-t border-zinc-200 dark:border-zinc-800/80" />
+          {!isCollapsed ? (
+            <button
+              type="button"
+              onClick={() => handleToggleSection("brand")}
+              className="flex w-full items-center justify-between px-3 py-2 text-[11px] font-bold tracking-wider uppercase rounded-md text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60 transition-colors group cursor-pointer"
+              title="Toggle K SELECT BRAND section"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 overflow-hidden bg-black shadow-2xs">
+                  <img
+                    src="/symbol-Cyan-Hotpink.png"
+                    alt="K SELECT BRAND"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
-              )}
+                <span className="truncate text-zinc-900 dark:text-zinc-100 font-extrabold tracking-wider">
+                  K SELECT BRAND
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {!expandedSections.brand && brandBadgeCount > 0 && (
+                  <span className="rounded-full bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.2 shadow-xs">
+                    {brandBadgeCount}
+                  </span>
+                )}
+                {expandedSections.brand ? (
+                  <ChevronDownIcon size={14} className="text-zinc-400 dark:text-zinc-500" />
+                ) : (
+                  <ChevronRightIcon size={14} className="text-zinc-400 dark:text-zinc-500" />
+                )}
+              </div>
+            </button>
+          ) : (
+            <div className="flex justify-center py-1">
+              <button
+                type="button"
+                onClick={toggleCollapse}
+                title="K SELECT BRAND"
+                className="w-8 h-8 rounded-md flex items-center justify-center bg-black hover:opacity-80 transition-opacity"
+              >
+                <img
+                  src="/symbol-Cyan-Hotpink.png"
+                  alt="K SELECT BRAND"
+                  className="w-5 h-5 object-contain"
+                />
+              </button>
             </div>
-          );
-        })}
+          )}
+
+          {/* Brand Items (when expanded or collapsed sidebar) */}
+          {(expandedSections.brand || isCollapsed) && (
+            <div className="space-y-1 mt-1">{brandItems.map(renderMenuItem)}</div>
+          )}
+        </div>
+
+        {/* ------------------------------------------------------------- */}
+        {/* Section 2: K SELECT HUB                                       */}
+        {/* ------------------------------------------------------------- */}
+        <div className="pt-2">
+          <div className="mb-2 border-t border-zinc-200 dark:border-zinc-800/80" />
+          {!isCollapsed ? (
+            <button
+              type="button"
+              onClick={() => handleToggleSection("hub")}
+              className="flex w-full items-center justify-between px-3 py-2 text-[11px] font-bold tracking-wider uppercase rounded-md text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60 transition-colors group cursor-pointer"
+              title="Toggle K SELECT HUB section"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 overflow-hidden bg-zinc-900/10 dark:bg-black/60 shadow-2xs">
+                  <img
+                    src="/symbol-Hotpink-Cyan.png"
+                    alt="K SELECT HUB"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <span className="truncate text-zinc-900 dark:text-zinc-100 font-extrabold tracking-wider">
+                  K SELECT HUB
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {!expandedSections.hub && hubBadgeCount > 0 && (
+                  <span className="rounded-full bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.2 shadow-xs">
+                    {hubBadgeCount}
+                  </span>
+                )}
+                {expandedSections.hub ? (
+                  <ChevronDownIcon size={14} className="text-zinc-400 dark:text-zinc-500" />
+                ) : (
+                  <ChevronRightIcon size={14} className="text-zinc-400 dark:text-zinc-500" />
+                )}
+              </div>
+            </button>
+          ) : (
+            <div className="flex justify-center py-1">
+              <button
+                type="button"
+                onClick={toggleCollapse}
+                title="K SELECT HUB"
+                className="w-8 h-8 rounded-md flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 hover:opacity-80 transition-opacity"
+              >
+                <img
+                  src="/symbol-Hotpink-Cyan.png"
+                  alt="K SELECT HUB"
+                  className="w-5 h-5 object-contain"
+                />
+              </button>
+            </div>
+          )}
+
+          {/* Hub Items (when expanded or collapsed sidebar) */}
+          {(expandedSections.hub || isCollapsed) && (
+            <div className="space-y-1 mt-1">{hubItems.map(renderMenuItem)}</div>
+          )}
+        </div>
+
+        {/* ------------------------------------------------------------- */}
+        {/* Section 3: SETTINGS & OTHER                                   */}
+        {/* ------------------------------------------------------------- */}
+        <div className="pt-2">
+          <div className="mb-2 border-t border-zinc-200 dark:border-zinc-800/80" />
+          {!isCollapsed ? (
+            <button
+              type="button"
+              onClick={() => handleToggleSection("settingsOther")}
+              className="flex w-full items-center justify-between px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase rounded-md text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 hover:bg-zinc-100/40 dark:hover:bg-zinc-800/40 transition-colors group cursor-pointer"
+              title="Toggle SETTINGS & OTHER section"
+            >
+              <span className="truncate font-bold tracking-wider">
+                SETTINGS & OTHER
+              </span>
+              {expandedSections.settingsOther ? (
+                <ChevronDownIcon size={12} className="text-zinc-400 dark:text-zinc-500 shrink-0" />
+              ) : (
+                <ChevronRightIcon size={12} className="text-zinc-400 dark:text-zinc-500 shrink-0" />
+              )}
+            </button>
+          ) : (
+            <div className="my-2 border-t border-zinc-200 dark:border-zinc-800/80 mx-2" />
+          )}
+
+          {/* Settings & Other Items */}
+          {(expandedSections.settingsOther || isCollapsed) && (
+            <div className="space-y-1 mt-1">{settingsOtherItems.map(renderMenuItem)}</div>
+          )}
+        </div>
       </nav>
 
       {/* Footer / Collapse Button */}
-      <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
+      <div className="border-t border-zinc-200 p-3 dark:border-zinc-800 shrink-0">
         <button
           onClick={toggleCollapse}
-          className="flex w-full items-center justify-center rounded-md border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+          className="flex w-full items-center justify-center rounded-md border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white cursor-pointer"
         >
           {isCollapsed ? "→" : "← Collapse Sidebar"}
         </button>

@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { PartnerInquiryItem, CaseStatus, InquiryMessageItem, OfficialCaseStatus } from "@/lib/inquiry/types";
 import {
   getNormalizedStatus,
@@ -28,6 +29,7 @@ export interface CaseCreationUser {
 
 interface AdminPartnerInquiriesProps {
   initialInquiries: PartnerInquiryItem[];
+  initialSource?: "all" | "brand" | "retailer";
   companies?: CaseCreationCompany[];
   companyUsers?: CaseCreationUser[];
   answerAction: (
@@ -69,11 +71,19 @@ const MSG_TYPE_LABEL: Record<string, { icon: string; label: string; style: strin
 
 export function AdminPartnerInquiries({
   initialInquiries,
+  initialSource = "all",
   companies = [],
   companyUsers = [],
   answerAction,
   createCaseAction
 }: AdminPartnerInquiriesProps) {
+  const searchParams = useSearchParams();
+  const urlSource = searchParams?.get("type") || searchParams?.get("tab") || searchParams?.get("source");
+  const resolvedInitial =
+    urlSource === "brand" || urlSource === "retailer" || urlSource === "all"
+      ? (urlSource as "all" | "brand" | "retailer")
+      : initialSource;
+
   const [inquiries, setInquiries] = useState<PartnerInquiryItem[]>(initialInquiries);
   const [selectedInquiry, setSelectedInquiry] = useState<PartnerInquiryItem | null>(null);
 
@@ -81,7 +91,16 @@ export function AdminPartnerInquiries({
   const [activeTab, setActiveTab] = useState<"conversation" | "caselog">("conversation");
 
   // Source Filter: 'all' | 'brand' | 'retailer'
-  const [sourceFilter, setSourceFilter] = useState<"all" | "brand" | "retailer">("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "brand" | "retailer">(resolvedInitial);
+
+  useEffect(() => {
+    const s = searchParams?.get("type") || searchParams?.get("tab") || searchParams?.get("source");
+    if (s === "brand" || s === "retailer" || s === "all") {
+      setSourceFilter(s as "all" | "brand" | "retailer");
+    } else if (initialSource) {
+      setSourceFilter(initialSource);
+    }
+  }, [searchParams, initialSource]);
 
   // Default Multi-Select Statuses: Active 3 Statuses (RECEIVED, UNDER_REVIEW, ACTION_REQUIRED)
   const [selectedStatuses, setSelectedStatuses] = useState<OfficialCaseStatus[]>([
