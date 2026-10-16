@@ -251,6 +251,7 @@ export default function Sidebar({
     const isRetailNetwork =
       pathname.startsWith("/admin/retailers") ||
       pathname.startsWith("/admin/stores") ||
+      pathname.startsWith("/admin/store-operations") ||
       pathname.startsWith("/admin/protection-reviews");
     const isOrderProcessing = pathname.startsWith("/admin/sales/orders");
     const isSales = pathname.startsWith("/admin/sales") && !isOrderProcessing;
@@ -376,8 +377,7 @@ export default function Sidebar({
       icon: RetailIcon,
       subItems: [
         { name: "Retailers", href: "/admin/retailers" },
-        { name: "Stores", href: "/admin/stores" },
-        { name: "Placements", href: "/admin/stores?tab=placements" },
+        { name: "Store Operations", href: "/admin/store-operations" },
         { name: "Protection Reviews", href: "/admin/protection-reviews" },
       ],
     },
