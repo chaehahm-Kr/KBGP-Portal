@@ -69,3 +69,14 @@ export interface AdminProtectionReviewCounts {
   approved: number;
   rejected: number;
 }
+
+export interface GetAdminProtectionReviewsResult {
+  reviews: AdminProtectionReviewItem[];
+  counts: AdminProtectionReviewCounts;
+  error?: string | null;
+}
+
+export interface GetAdminProtectionReviewDetailResult {
+  review: AdminProtectionReviewDetail | null;
+  error?: string | null;
+}

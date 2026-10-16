@@ -10,13 +10,14 @@ export const metadata: Metadata = {
 export default async function AdminProtectionReviewsPage() {
   await verifyAdminSession();
 
-  const { reviews, counts } = await getAdminProtectionReviews();
+  const { reviews, counts, error } = await getAdminProtectionReviews();
 
   return (
     <div className="space-y-6">
       <AdminProtectionReviewsList
         initialReviews={reviews}
         initialCounts={counts}
+        queryError={error}
       />
     </div>
   );

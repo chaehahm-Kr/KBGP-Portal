@@ -5,12 +5,15 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCategoryName } from "@/lib/retailer/products";
 import { formatCanonicalCountryName } from "@/lib/constants/countries";
+import { resolveEffectiveSku } from "@/lib/product/types";
 import {
   AdminProtectionDecision,
   CreditProcessingStatus,
   AdminProtectionReviewItem,
   AdminProtectionReviewDetail,
   AdminProtectionReviewCounts,
+  GetAdminProtectionReviewsResult,
+  GetAdminProtectionReviewDetailResult,
 } from "./types";
 
 export type {
@@ -19,15 +22,14 @@ export type {
   AdminProtectionReviewItem,
   AdminProtectionReviewDetail,
   AdminProtectionReviewCounts,
+  GetAdminProtectionReviewsResult,
+  GetAdminProtectionReviewDetailResult,
 };
 
 /**
  * Fetch all protection reviews for K SELECT Admin queue
  */
-export async function getAdminProtectionReviews(): Promise<{
-  reviews: AdminProtectionReviewItem[];
-  counts: AdminProtectionReviewCounts;
-}> {
+export async function getAdminProtectionReviews(): Promise<GetAdminProtectionReviewsResult> {
   await verifyAdminSession();
   const adminClient = createAdminClient();
 
@@ -58,15 +60,24 @@ export async function getAdminProtectionReviews(): Promise<{
         id,
         name,
         name_en,
-        brand,
-        letusto_sku,
         category,
         category_code,
-        thumbnail_url,
+        letusto_sku,
+        manufacture_sku,
+        origin,
+        volume,
+        description,
+        status,
+        trading_wholesale_price,
+        price_additional_info,
+        brands (
+          id,
+          name
+        ),
         product_images (
-          image_url,
-          is_primary,
-          sort_order
+          id,
+          storage_path,
+          position
         )
       )
     `)
@@ -78,14 +89,19 @@ export async function getAdminProtectionReviews(): Promise<{
     return {
       reviews: [],
       counts: { all: 0, pending: 0, needs_information: 0, approved: 0, rejected: 0 },
+      error: "Failed to load protection reviews from database. Please check connectivity and try again.",
     };
   }
 
   // 2. Fetch resolutions table records
-  const { data: resolutions } = await adminClient
+  const { data: resolutions, error: resError } = await adminClient
     .from("retailer_protection_resolutions")
     .select("*")
     .order("created_at", { ascending: false });
+
+  if (resError) {
+    console.warn("[getAdminProtectionReviews] Warning fetching resolutions:", resError);
+  }
 
   const resolutionsByProtectionId = new Map<string, any>();
   if (resolutions) {
@@ -182,10 +198,35 @@ export async function getAdminProtectionReviews(): Promise<{
       decision = "pending";
     }
 
-    // Filter to only include items that have requested review or are in review workflow, or all records
-    const productImages = prod.product_images || [];
-    const primaryImage = productImages.find((img: any) => img.is_primary) || productImages[0];
-    const thumbnailUrl = primaryImage?.image_url || prod.thumbnail_url || null;
+    // Resolve product thumbnail
+    const rawImages = (prod.product_images as any[]) || [];
+    const sortedImages = [...rawImages].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    let thumbnailUrl: string | null = null;
+
+    if (sortedImages.length > 0 && sortedImages[0]?.storage_path) {
+      try {
+        const { data: signed } = await adminClient.storage
+          .from("company-uploads")
+          .createSignedUrl(sortedImages[0].storage_path, 7200);
+        thumbnailUrl = signed?.signedUrl || null;
+      } catch {
+        thumbnailUrl = null;
+      }
+    }
+
+    const info = (prod.price_additional_info as any) || {};
+    const overrides = info.admin_overrides || {};
+    const brand = Array.isArray(prod.brands) ? prod.brands[0] : (prod.brands as any) || {};
+    const brandName = brand?.name || "K SELECT LAB";
+
+    const effectiveSku =
+      resolveEffectiveSku(overrides.letusto_sku, prod.letusto_sku) ||
+      resolveEffectiveSku(overrides.manufacture_sku, prod.manufacture_sku) ||
+      prod.letusto_sku ||
+      "SKU-UNKNOWN";
+
+    const productName = overrides.name?.trim() || prod.name;
+    const productNameEn = overrides.name_en?.trim() || prod.name_en || null;
 
     reviews.push({
       id: prot.id,
@@ -193,10 +234,10 @@ export async function getAdminProtectionReviews(): Promise<{
       companyId: prot.company_id,
       companyName: comp.name,
       productId: prot.product_id,
-      productName: prod.name,
-      productNameEn: prod.name_en || null,
-      brandName: prod.brand || "K SELECT LAB",
-      sku: prod.letusto_sku || "SKU-UNKNOWN",
+      productName,
+      productNameEn,
+      brandName,
+      sku: effectiveSku,
       category: prod.category || "skincare",
       categoryLabel: formatCategoryName(prod.category || prod.category_code),
       thumbnailUrl,
@@ -235,7 +276,7 @@ export async function getAdminProtectionReviews(): Promise<{
     rejected: reviews.filter((r) => r.decision === "rejected").length,
   };
 
-  return { reviews, counts };
+  return { reviews, counts, error: null };
 }
 
 /**
@@ -243,7 +284,7 @@ export async function getAdminProtectionReviews(): Promise<{
  */
 export async function getAdminProtectionReviewDetail(
   protectionId: string
-): Promise<AdminProtectionReviewDetail | null> {
+): Promise<GetAdminProtectionReviewDetailResult> {
   await verifyAdminSession();
   const adminClient = createAdminClient();
 
@@ -268,41 +309,49 @@ export async function getAdminProtectionReviewDetail(
       companies (
         id,
         name,
-        contact_email,
-        phone,
-        business_type
+        contact_name,
+        contact_phone
       ),
       products (
         id,
         name,
         name_en,
-        brand,
-        letusto_sku,
         category,
         category_code,
-        thumbnail_url,
-        description,
-        volume,
+        letusto_sku,
+        manufacture_sku,
         origin,
-        wholesale_price,
+        volume,
+        description,
+        status,
+        trading_wholesale_price,
+        price_additional_info,
+        brands (
+          id,
+          name
+        ),
         product_images (
-          image_url,
-          is_primary,
-          sort_order
+          id,
+          storage_path,
+          position
         )
       )
     `)
     .eq("id", protectionId)
     .maybeSingle();
 
-  if (protError || !prot) {
+  if (protError) {
     console.error("[getAdminProtectionReviewDetail] Not found:", protectionId, protError);
-    return null;
+    return { review: null, error: "Database error retrieving protection review detail." };
+  }
+
+  if (!prot) {
+    return { review: null, error: null };
   }
 
   const comp = Array.isArray(prot.companies) ? prot.companies[0] : prot.companies;
   const prod = Array.isArray(prot.products) ? prot.products[0] : prot.products;
-  if (!comp || !prod) return null;
+  if (!comp || !prod) return { review: null, error: null };
 
   // Fetch resolution record
   const { data: resRecord } = await adminClient
@@ -423,59 +472,88 @@ export async function getAdminProtectionReviewDetail(
     decision = "needs_information";
   }
 
-  const productImages = prod.product_images || [];
-  const primaryImage = productImages.find((img: any) => img.is_primary) || productImages[0];
-  const thumbnailUrl = primaryImage?.image_url || prod.thumbnail_url || null;
+  // Resolve product thumbnail
+  const rawImages = (prod.product_images as any[]) || [];
+  const sortedImages = [...rawImages].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  let thumbnailUrl: string | null = null;
+
+  if (sortedImages.length > 0 && sortedImages[0]?.storage_path) {
+    try {
+      const { data: signed } = await adminClient.storage
+        .from("company-uploads")
+        .createSignedUrl(sortedImages[0].storage_path, 7200);
+      thumbnailUrl = signed?.signedUrl || null;
+    } catch {
+      thumbnailUrl = null;
+    }
+  }
+
+  const info = (prod.price_additional_info as any) || {};
+  const overrides = info.admin_overrides || {};
+  const brand = Array.isArray(prod.brands) ? prod.brands[0] : (prod.brands as any) || {};
+  const brandName = brand?.name || "K SELECT LAB";
+
+  const effectiveSku =
+    resolveEffectiveSku(overrides.letusto_sku, prod.letusto_sku) ||
+    resolveEffectiveSku(overrides.manufacture_sku, prod.manufacture_sku) ||
+    prod.letusto_sku ||
+    "SKU-UNKNOWN";
+
+  const productName = overrides.name?.trim() || prod.name;
+  const productNameEn = overrides.name_en?.trim() || prod.name_en || null;
 
   return {
-    id: prot.id,
-    resolutionId: resRecord?.id || null,
-    companyId: prot.company_id,
-    companyName: comp.name,
-    companyContactEmail: comp.contact_email || null,
-    companyPhone: comp.phone || null,
-    companyBusinessType: comp.business_type || null,
-    productId: prot.product_id,
-    productName: prod.name,
-    productNameEn: prod.name_en || null,
-    brandName: prod.brand || "K SELECT LAB",
-    sku: prod.letusto_sku || "SKU-UNKNOWN",
-    category: prod.category || "skincare",
-    categoryLabel: formatCategoryName(prod.category || prod.category_code),
-    thumbnailUrl,
-    productDescription: prod.description || null,
-    productVolume: prod.volume || null,
-    productOrigin: formatCanonicalCountryName(prod.origin) || "South Korea",
-    currentCatalogWholesalePrice: prod.wholesale_price ? Number(prod.wholesale_price) : null,
-    initialTrialUnitCost,
-    activationSource: prot.activation_source || "initial_order",
-    sourceOrderId: prot.source_order_id || null,
-    sourceOrderNumber,
-    sourceDeliveryReference: prot.source_delivery_reference || null,
-    requestedAt: resRecord?.requested_at || prot.review_requested_at || null,
-    requestedByEmail,
-    requestNotes: resRecord?.request_notes || prot.review_notes || null,
-    trialStartDate: prot.trial_start_date,
-    trialEndDate: prot.trial_end_date,
-    daysElapsed,
-    daysRemaining,
-    isPeriodEnded,
-    protectedQuantity: protectedQty,
-    estimatedMovement,
-    sellThroughPercent,
-    dataCoveragePercent,
-    storesReporting,
-    totalStores,
-    status: prot.status,
-    decision,
-    decisionAt: resRecord?.decision_at || null,
-    decisionByEmail,
-    decisionNotes: resRecord?.decision_notes || null,
-    approvedQuantity: resRecord?.approved_quantity ?? null,
-    approvedCreditAmount: resRecord?.approved_credit_amount ? Number(resRecord.approved_credit_amount) : null,
-    creditProcessingStatus: (resRecord?.credit_processing_status as CreditProcessingStatus) || "pending",
-    storeBreakdown,
-    isTest: prot.is_test || false,
+    review: {
+      id: prot.id,
+      resolutionId: resRecord?.id || null,
+      companyId: prot.company_id,
+      companyName: comp.name,
+      companyContactEmail: null,
+      companyPhone: comp.contact_phone || null,
+      companyBusinessType: null,
+      productId: prot.product_id,
+      productName,
+      productNameEn,
+      brandName,
+      sku: effectiveSku,
+      category: prod.category || "skincare",
+      categoryLabel: formatCategoryName(prod.category || prod.category_code),
+      thumbnailUrl,
+      productDescription: overrides.description || prod.description || null,
+      productVolume: overrides.volume || prod.volume || null,
+      productOrigin: formatCanonicalCountryName(overrides.origin || prod.origin) || "South Korea",
+      currentCatalogWholesalePrice: prod.trading_wholesale_price ? Number(prod.trading_wholesale_price) : null,
+      initialTrialUnitCost,
+      activationSource: prot.activation_source || "initial_order",
+      sourceOrderId: prot.source_order_id || null,
+      sourceOrderNumber,
+      sourceDeliveryReference: prot.source_delivery_reference || null,
+      requestedAt: resRecord?.requested_at || prot.review_requested_at || null,
+      requestedByEmail,
+      requestNotes: resRecord?.request_notes || prot.review_notes || null,
+      trialStartDate: prot.trial_start_date,
+      trialEndDate: prot.trial_end_date,
+      daysElapsed,
+      daysRemaining,
+      isPeriodEnded,
+      protectedQuantity: protectedQty,
+      estimatedMovement,
+      sellThroughPercent,
+      dataCoveragePercent,
+      storesReporting,
+      totalStores,
+      status: prot.status,
+      decision,
+      decisionAt: resRecord?.decision_at || null,
+      decisionByEmail,
+      decisionNotes: resRecord?.decision_notes || null,
+      approvedQuantity: resRecord?.approved_quantity ?? null,
+      approvedCreditAmount: resRecord?.approved_credit_amount ? Number(resRecord.approved_credit_amount) : null,
+      creditProcessingStatus: (resRecord?.credit_processing_status as CreditProcessingStatus) || "pending",
+      storeBreakdown,
+      isTest: prot.is_test || false,
+    },
+    error: null,
   };
 }
 

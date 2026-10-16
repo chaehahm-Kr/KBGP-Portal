@@ -11,11 +11,13 @@ import {
 interface AdminProtectionReviewsListProps {
   initialReviews: AdminProtectionReviewItem[];
   initialCounts: AdminProtectionReviewCounts;
+  queryError?: string | null;
 }
 
 export function AdminProtectionReviewsList({
   initialReviews,
   initialCounts,
+  queryError = null,
 }: AdminProtectionReviewsListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<string>("pending");
@@ -170,6 +172,30 @@ export function AdminProtectionReviewsList({
         </div>
       </div>
 
+      {/* Query Error Alert Banner */}
+      {queryError && (
+        <div className="rounded-2xl border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 p-4 sm:p-5 space-y-2 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⚠️</span>
+              <h3 className="text-sm font-bold text-red-900 dark:text-red-200">
+                Database Query Failure
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-red-600 hover:bg-red-700 text-white shadow-sm transition-colors cursor-pointer"
+            >
+              Retry Query
+            </button>
+          </div>
+          <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed">
+            {queryError}
+          </p>
+        </div>
+      )}
+
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 p-1 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl border border-zinc-200 dark:border-zinc-700/60 overflow-x-auto">
@@ -254,17 +280,33 @@ export function AdminProtectionReviewsList({
       {/* Reviews Table / List */}
       {filteredReviews.length === 0 ? (
         <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-12 text-center space-y-3 shadow-sm">
-          <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xl mx-auto">
-            🛡️
-          </div>
-          <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-            No Protection Reviews Found
-          </h3>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
-            {searchQuery
-              ? `No protection records match "${searchQuery}".`
-              : "There are currently no reviews matching this filter queue."}
-          </p>
+          {queryError ? (
+            <>
+              <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-950/80 text-red-600 flex items-center justify-center text-xl mx-auto">
+                ⚠️
+              </div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+                Unable to Load Protection Reviews
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
+                The queue could not be loaded due to a query error. Please click Retry Query above or check system connectivity.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xl mx-auto">
+                🛡️
+              </div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+                No Protection Reviews Found
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
+                {searchQuery
+                  ? `No protection records match "${searchQuery}".`
+                  : "There are currently no reviews matching this filter queue."}
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
