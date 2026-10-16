@@ -82,7 +82,6 @@ async function runQA() {
   const { data: users } = await client.auth.admin.listUsers();
   const adminUser = users?.users?.find((u) => u.email === TEST_EMAIL);
   if (adminUser) {
-    await client.auth.admin.updateUserById(adminUser.id, { password: TEST_PASSWORD });
     console.log(`✓ QA Admin User verified (${adminUser.email})`);
   }
 
@@ -212,29 +211,29 @@ async function runQA() {
 
     // 8. Regression: Test other tabs
     console.log('\n8. Regression Testing Other Tabs...');
-    await page.locator('button:has-text("Overview")').first().click();
-    await page.waitForTimeout(600);
+    await page.locator('[data-testid="tab-overview"]').click();
+    await page.waitForTimeout(1000);
     results['Tab_Overview_Working'] = await page.locator('[data-testid="tab-content-overview"]').isVisible();
 
-    await page.locator('button:has-text("Inventory & Reorder")').first().click();
-    await page.waitForTimeout(600);
+    await page.locator('[data-testid="tab-inventory"]').click();
+    await page.waitForTimeout(1000);
     results['Tab_Inventory_Working'] = await page.locator('[data-testid="tab-content-inventory"]').isVisible();
 
-    await page.locator('button:has-text("Orders & Deliveries")').first().click();
-    await page.waitForTimeout(600);
+    await page.locator('[data-testid="tab-orders"]').click();
+    await page.waitForTimeout(1000);
     results['Tab_Orders_Working'] = await page.locator('[data-testid="tab-content-orders"]').isVisible();
 
-    await page.locator('button:has-text("Sales & Performance")').first().click();
-    await page.waitForTimeout(600);
+    await page.locator('[data-testid="tab-sales"]').click();
+    await page.waitForTimeout(1000);
     results['Tab_Sales_Working'] = await page.locator('[data-testid="tab-content-sales"]').isVisible();
 
-    await page.locator('button:has-text("Staff & Training")').first().click();
-    await page.waitForTimeout(600);
+    await page.locator('[data-testid="tab-training"]').click();
+    await page.waitForTimeout(1000);
     results['Tab_Training_Working'] = await page.locator('[data-testid="tab-content-training"]').isVisible();
 
     // Return to Fixtures Tab
-    await page.locator('button:has-text("Fixtures & Placements")').first().click();
-    await page.waitForTimeout(600);
+    await page.locator('[data-testid="tab-fixtures"]').click();
+    await page.waitForTimeout(1000);
     results['Return_To_Fixtures_Working'] = await page.locator('[data-testid="tab-content-fixtures"]').isVisible();
     results['URL_Has_Tab_Fixtures'] = page.url().includes('tab=fixtures');
     console.log(`✓ Regression tests passed across all 6 tabs`);
