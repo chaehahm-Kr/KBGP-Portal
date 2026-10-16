@@ -64,6 +64,7 @@ interface MenuItem {
   icon: React.ComponentType<any>;
   href?: string;
   subItems?: SubItem[];
+  onClick?: () => void;
 }
 
 // Calculate the single best-matching href across all navigation items
@@ -164,13 +165,15 @@ export default function Sidebar({
   const searchParams = useSearchParams();
 
   // Section level independent expand states (Brand, Hub, General Operations)
+  // Default on login / initial load: all sections collapsed (ADM-NAV-HUB-001-R2)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    brand: true,
-    hub: true,
-    generalOps: true,
+    brand: false,
+    hub: false,
+    generalOps: false,
   });
 
   // Depth 1 menu expand state
+  // Default on login / initial load: all menus collapsed
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
     "Companies & Brands": false,
     Products: false,
@@ -186,13 +189,44 @@ export default function Sidebar({
 
   // Depth 2 expand state (for 3-depth items like Intelligence -> Growth Simulator / Insights)
   const [expandedSubMenus, setExpandedSubMenus] = useState<Record<string, boolean>>({
-    "Intelligence->Growth Simulator": true,
-    "Intelligence->Insights": true,
+    "Intelligence->Growth Simulator": false,
+    "Intelligence->Insights": false,
   });
+
+  // Helper to reset and collapse all sections, menus, and submenus (ADM-NAV-HUB-001-R2)
+  const collapseAllMenusAndSections = () => {
+    setExpandedSections({
+      brand: false,
+      hub: false,
+      generalOps: false,
+    });
+    setExpandedMenus({
+      "Companies & Brands": false,
+      Products: false,
+      Purchasing: false,
+      Finance: false,
+      "Retail Network": false,
+      "Sales & Performance": false,
+      "Tasks & Communication": false,
+      Amazon: false,
+      Intelligence: false,
+      Settings: false,
+    });
+    setExpandedSubMenus({
+      "Intelligence->Growth Simulator": false,
+      "Intelligence->Insights": false,
+    });
+  };
 
   // Auto-expand parent section and nested submenus matching current route
   useEffect(() => {
     if (!pathname) return;
+
+    // Reset all sidebar groups to collapsed state when on Dashboard (ADM-NAV-HUB-001-R2)
+    if (pathname === "/admin") {
+      collapseAllMenusAndSections();
+      return;
+    }
 
     const queryType =
       searchParams?.get("type") || searchParams?.get("tab") || searchParams?.get("source");
@@ -269,6 +303,7 @@ export default function Sidebar({
     name: "Dashboard",
     icon: DashboardIcon,
     href: "/admin",
+    onClick: collapseAllMenusAndSections,
   };
 
   // Section 1: K SELECT BRAND items
@@ -598,6 +633,7 @@ export default function Sidebar({
         ) : (
           <Link
             href={item.href || "/admin"}
+            onClick={item.onClick}
             title={isCollapsed ? item.name : undefined}
             className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors relative ${
               isActive
@@ -721,8 +757,13 @@ export default function Sidebar({
       {/* Top Logo Area */}
       <div className="flex h-16 items-center justify-between border-b border-zinc-200 px-4 dark:border-zinc-800 shrink-0">
         {!isCollapsed && (
-          <Link href="/admin" className="flex items-center gap-2">
-            <span className="font-sans text-sm font-semibold tracking-wider text-zinc-900 dark:text-white uppercase">
+          <Link
+            href="/admin"
+            onClick={collapseAllMenusAndSections}
+            className="flex items-center gap-2 group cursor-pointer"
+            title="K SELECT NETWORK ADMIN — Go to Dashboard"
+          >
+            <span className="font-sans text-sm font-semibold tracking-wider text-zinc-900 dark:text-white uppercase group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors">
               K SELECT NETWORK
             </span>
             <span className="rounded bg-zinc-900 px-1 py-0.5 text-[9px] font-medium text-white dark:bg-white dark:text-zinc-950">
@@ -731,9 +772,14 @@ export default function Sidebar({
           </Link>
         )}
         {isCollapsed && (
-          <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 dark:bg-white">
+          <Link
+            href="/admin"
+            onClick={collapseAllMenusAndSections}
+            className="mx-auto flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 dark:bg-white cursor-pointer hover:opacity-80 transition-opacity"
+            title="K SELECT NETWORK ADMIN — Go to Dashboard"
+          >
             <span className="text-[10px] font-bold text-white dark:text-zinc-950">KS</span>
-          </div>
+          </Link>
         )}
       </div>
 
