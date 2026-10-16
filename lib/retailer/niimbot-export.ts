@@ -142,9 +142,9 @@ export async function renderPriceTagToCanvas(
 
   if (isSale) {
     // =========================================================================
-    // TEMPLATE: SALE 1e (Approved Claude Design 1e)
+    // TEMPLATE: SALE 1e (Refined Hierarchy for 50x30mm NIIMBOT B1)
     // =========================================================================
-    const bandWidth = 72; // 9mm wide solid black SALE band
+    const bandWidth = 58; // Optimal vertical SALE banner width
     const bandHeight = baseHeight - margin * 2; // 216 dots (27mm)
 
     // Solid Vertical Black SALE Band on far left
@@ -156,15 +156,15 @@ export async function renderPriceTagToCanvas(
     ctx.translate(margin + bandWidth / 2, margin + bandHeight / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "900 32px system-ui, -apple-system, sans-serif";
+    ctx.font = "900 24px system-ui, -apple-system, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("SALE", 0, 0);
     ctx.restore();
 
     // Main content area to the right of the SALE band
-    const gutter = 9; // 1.1mm gutter
-    const mainX = margin + bandWidth + gutter; // 93 dots
+    const gutter = 8; // 1.0mm gutter
+    const mainX = margin + bandWidth + gutter; // 78 dots
     const mainRight = baseWidth - margin; // 388 dots
 
     // Header Row: Brand (left) & SKU (right)
@@ -174,12 +174,12 @@ export async function renderPriceTagToCanvas(
     ctx.textBaseline = "alphabetic";
 
     let displayBrand = brandText;
-    while (ctx.measureText(displayBrand).width > 180 && displayBrand.length > 3) {
+    while (ctx.measureText(displayBrand).width > 190 && displayBrand.length > 3) {
       displayBrand = displayBrand.slice(0, -4).trim() + "...";
     }
     ctx.fillText(displayBrand, mainX, margin + 11);
 
-    ctx.font = "bold 9px monospace, 'Courier New', Courier";
+    ctx.font = "bold 9.5px monospace, 'Courier New', Courier";
     ctx.textAlign = "right";
     ctx.fillText(skuText, mainRight, margin + 11);
 
@@ -191,8 +191,8 @@ export async function renderPriceTagToCanvas(
     ctx.lineTo(mainRight, margin + 17);
     ctx.stroke();
 
-    // QR Code Column (Bottom Right of Main Area): 15.5mm box (13.5mm symbol = 108 dots)
-    const qrSymbolSize = 108; // 13.5mm
+    // QR Code Column (Bottom Right of Main Area): 98x98 dots (12.25mm)
+    const qrSymbolSize = 98;
     const qrX = mainRight - qrSymbolSize;
     const qrY = baseHeight - margin - qrSymbolSize - 13;
 
@@ -214,15 +214,15 @@ export async function renderPriceTagToCanvas(
     ctx.fillText("SCAN FOR INFO", qrX + qrSymbolSize / 2, baseHeight - margin - 2);
 
     // Text Stack (Left of QR)
-    const textColWidth = 148;
-    let nameFontSize = 22;
-    let nameLineHeight = 25;
-    if (productName.length > 42) {
+    const textColWidth = qrX - mainX - 8; // 204 dots
+    let nameFontSize = 16.5;
+    let nameLineHeight = 19.5;
+    if (productName.length > 48) {
       nameFontSize = 11.5;
-      nameLineHeight = 13.5;
-    } else if (productName.length > 28) {
-      nameFontSize = 14.5;
-      nameLineHeight = 17;
+      nameLineHeight = 14;
+    } else if (productName.length > 32) {
+      nameFontSize = 13.5;
+      nameLineHeight = 16.5;
     }
 
     ctx.font = `bold ${nameFontSize}px system-ui, -apple-system, sans-serif`;
@@ -235,49 +235,50 @@ export async function renderPriceTagToCanvas(
       ctx.fillText(line, mainX, curY);
       curY += nameLineHeight;
     }
+    const productBottomY = curY - nameLineHeight + 4;
 
-    // SAVE XX% Box
+    // SAVE XX% Box (Enlarged, prominent, 1.8px border)
+    const saveBoxY = Math.max(78, productBottomY + 8);
     if (effectiveDiscount !== null) {
       const saveText = `SAVE ${effectiveDiscount}%`;
-      ctx.font = "900 11px system-ui, -apple-system, sans-serif";
-      const saveW = ctx.measureText(saveText).width + 10;
-      const saveBoxY = 82;
+      ctx.font = "900 13.5px system-ui, -apple-system, sans-serif";
+      const saveW = ctx.measureText(saveText).width + 14;
       ctx.strokeStyle = "#000000";
-      ctx.lineWidth = 1.3;
-      ctx.strokeRect(mainX, saveBoxY, saveW, 17);
+      ctx.lineWidth = 1.8;
+      ctx.strokeRect(mainX, saveBoxY, saveW, 22);
 
       ctx.fillStyle = "#000000";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(saveText, mainX + saveW / 2, saveBoxY + 8.5);
+      ctx.fillText(saveText, mainX + saveW / 2, saveBoxY + 11);
     }
 
-    // Strikethrough Regular Price
+    // Strikethrough Regular Price (Enlarged to 18px, bold, 2px strike line)
+    const regY = saveBoxY + 22 + 6 + 15;
     if (effectiveRegularPrice !== null) {
       const regText = `$${effectiveRegularPrice.toFixed(2)}`;
-      ctx.font = "bold 12px system-ui, -apple-system, sans-serif";
+      ctx.font = "bold 18px system-ui, -apple-system, sans-serif";
       ctx.textAlign = "left";
       ctx.textBaseline = "alphabetic";
-      const regY = 116;
       ctx.fillText(regText, mainX, regY);
 
       const regW = ctx.measureText(regText).width;
       ctx.strokeStyle = "#000000";
-      ctx.lineWidth = 1.3;
+      ctx.lineWidth = 2.0;
       ctx.beginPath();
-      ctx.moveTo(mainX - 1, regY - 4);
-      ctx.lineTo(mainX + regW + 1, regY - 4);
+      ctx.moveTo(mainX - 1, regY - 6);
+      ctx.lineTo(mainX + regW + 2, regY - 6);
       ctx.stroke();
     }
 
-    // Large SALE Price
+    // Large Dominant SALE Price (Dominates lower area, 62px for <$100, 46px for >=$100)
     const saleNum = item.salePrice || 0;
     const saleText = `$${saleNum.toFixed(2)}`;
-    const saleFontSize = saleNum >= 100 ? 34 : 44;
+    const saleFontSize = saleNum >= 100 ? 46 : 62;
     ctx.font = `900 ${saleFontSize}px system-ui, -apple-system, sans-serif`;
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText(saleText, mainX, baseHeight - margin - 8);
+    ctx.fillText(saleText, mainX, baseHeight - margin - 5);
   } else {
     // =========================================================================
     // TEMPLATE: REGULAR 1c (Approved Claude Design 1c)

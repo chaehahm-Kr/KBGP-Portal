@@ -53,18 +53,18 @@ export function PriceTagCard({
   const nameLen = (productName || "").length;
 
   if (isSale) {
-    // SALE 1e Template (Matches Attachment 2 & Claude PDF)
+    // SALE 1e Template (Matches Attachment 1 Refined Hierarchy)
     const nameFontSizeClass =
       nameLen > 40
         ? "text-[9.5px] leading-[1.12]"
         : nameLen > 24
-        ? "text-[11px] leading-[1.15]"
-        : "text-[12.5px] leading-[1.18]";
+        ? "text-[10.5px] leading-[1.15]"
+        : "text-[12px] leading-[1.18]";
 
     const salePriceFontSizeClass =
       (salePrice || 0) >= 100
-        ? "text-lg sm:text-xl"
-        : "text-xl sm:text-2xl";
+        ? "text-xl sm:text-2xl"
+        : "text-2xl sm:text-3xl";
 
     return (
       <div
@@ -81,9 +81,9 @@ export function PriceTagCard({
           boxSizing: "border-box",
         }}
       >
-        {/* Solid Vertical Black SALE Band (Far Left) */}
-        <div className="w-[18%] bg-black text-white flex items-center justify-center relative select-none self-stretch shrink-0">
-          <span className="font-black text-base sm:text-lg tracking-wider text-white rotate-[-90deg] whitespace-nowrap select-none">
+        {/* Solid Vertical Black SALE Band (Far Left: 15% width) */}
+        <div className="w-[15%] bg-black text-white flex items-center justify-center relative select-none self-stretch shrink-0">
+          <span className="font-black text-sm sm:text-base tracking-wider text-white rotate-[-90deg] whitespace-nowrap select-none">
             SALE
           </span>
         </div>
@@ -109,26 +109,26 @@ export function PriceTagCard({
                 {productName}
               </div>
 
-              {/* Price Stack */}
+              {/* Price Stack: SAVE Box, Strikethrough Regular, Dominant SALE Price */}
               <div className="space-y-0.5 pt-0.5">
                 {effectiveDiscount !== null && (
-                  <div className="inline-block self-start border border-black px-1.5 py-0.2 rounded-[2px] bg-white leading-none">
-                    <span className="font-black text-[7.5px] sm:text-[8.5px] text-black tracking-tight block">
+                  <div className="inline-block self-start border-[1.5px] border-black px-1.5 py-0.5 rounded-[2px] bg-white leading-none">
+                    <span className="font-black text-[8.5px] sm:text-[9.5px] text-black tracking-tight block">
                       SAVE {effectiveDiscount}%
                     </span>
                   </div>
                 )}
-                <div className="text-[9px] sm:text-[10px] font-bold text-black line-through decoration-black decoration-[1.5px] leading-tight">
+                <div className="text-[10.5px] sm:text-[11.5px] font-bold text-black line-through decoration-black decoration-[1.5px] leading-tight">
                   ${effectiveRegularPrice?.toFixed(2)}
                 </div>
-                <div className={`${salePriceFontSizeClass} font-black text-black leading-none tracking-tight`}>
+                <div className={`${salePriceFontSizeClass} font-black text-black leading-none tracking-tight pt-0.5`}>
                   ${salePrice?.toFixed(2)}
                 </div>
               </div>
             </div>
 
             {/* QR Code Column */}
-            <div className="w-[32%] sm:w-[30%] flex flex-col items-center justify-end shrink-0 self-end pb-0.5">
+            <div className="w-[28%] sm:w-[26%] flex flex-col items-center justify-end shrink-0 self-end pb-0.5">
               <div className="w-full aspect-square relative bg-white">
                 {qrDataUrl ? (
                   <Image
