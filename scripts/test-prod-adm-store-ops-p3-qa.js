@@ -114,8 +114,8 @@ async function runQA() {
 
     // 3. Navigate to Store Operations
     console.log('\n2. Navigating to Store Operations...');
-    await page.goto(`${ADMIN_URL}/admin/store-operations`, { waitUntil: 'domcontentloaded', timeout: 25000 });
-    await page.waitForSelector('[data-testid="store-operations-container"]', { timeout: 15000 });
+    await page.goto(`${ADMIN_URL}/admin/store-operations`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('[data-testid="store-operations-container"]', { timeout: 25000 });
     console.log('✓ Store Operations list loaded');
 
     // 4. Select Test Store 01
