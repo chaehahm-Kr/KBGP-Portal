@@ -248,7 +248,7 @@ async function runQA() {
     // Tab 5: Registered Products
     await navButtons.nth(4).click();
     await page.waitForTimeout(500);
-    const tab5Visible = (await page.locator('th:has-text("SKU/바코드"), td:has-text("등록된 제품이 존재하지 않습니다"), text=등록 제품').first().isVisible().catch(() => false));
+    const tab5Visible = (await page.locator('th:has-text("업체 SKU"), th:has-text("Letusto SKU"), td:has-text("등록된 제품이 존재하지 않습니다")').first().isVisible().catch(() => false));
     results['Tab_5_Products_Content_Displayed'] = tab5Visible;
     console.log(`   [Test 14] Tab 5 (Registered Products) displayed: ${tab5Visible ? 'PASS' : 'FAIL'}`);
 
