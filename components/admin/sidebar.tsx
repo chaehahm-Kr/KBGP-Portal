@@ -328,7 +328,7 @@ export default function Sidebar({
       subItems: [
         { name: "Product Catalog", href: "/admin/products" },
         { name: "Inventory Overview", href: "/admin/inventory" },
-        { name: "Compliance", href: "/admin/products?status=compliance" },
+        { name: "Compliance", href: "/admin/products/compliance" },
         { name: "Pricing Simulator", href: "/admin/products/pricing-profitability" },
         { name: "Curation", href: "/admin/products/curation" },
       ],
