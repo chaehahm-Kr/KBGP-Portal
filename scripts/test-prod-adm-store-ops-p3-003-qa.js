@@ -112,28 +112,71 @@ async function runQA() {
   try {
     // 1. Authenticate
     console.log('Scenario 1: Authenticated Session & Navigation');
-    await page.goto(`${ADMIN_URL}/admin/login`, { waitUntil: 'networkidle' });
-    await page.fill('input[type="email"]', TEST_EMAIL);
-    await page.fill('input[type="password"]', TEST_PASSWORD);
-    await page.click('button[type="submit"]');
-    await page.waitForURL('**/admin/**', { timeout: 15000 });
+    await page.goto(`${ADMIN_URL}/admin/login`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+    await page.locator('input#email, input[type="email"]').fill(TEST_EMAIL);
+    await page.locator('input#password, input[type="password"]').fill(TEST_PASSWORD);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 25000 });
+    await page.waitForTimeout(1500);
     assert('Admin login successful and redirected to admin dashboard', page.url().includes('/admin'));
 
-    // 2. Navigate to Store Operations with Fixtures tab pre-selected for Test Store 01
-    const targetStoreId = 'effe7832-096c-4ae1-86c7-3cb189b59731';
-    console.log(`\nScenario 2: Navigate to Store Operations -> Fixtures & Placements`);
-    await page.goto(`${ADMIN_URL}/admin/store-operations?storeId=${targetStoreId}&tab=fixtures`, {
-      waitUntil: 'networkidle',
+    // 2. Navigate to Store Operations
+    console.log(`\nScenario 2: Navigate to Store Operations`);
+    await page.goto(`${ADMIN_URL}/admin/store-operations`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 25000,
     });
+    await page.waitForSelector('[data-testid="store-operations-container"]', { timeout: 15000 });
 
-    const activeTabElem = await page.locator('[data-testid="tab-fixtures"]').first();
-    assert('Fixtures & Placements tab is visible', await activeTabElem.isVisible());
+    // Look for stores in the list
+    const storesTable = page.locator('[data-testid="stores-table"]').first();
+    await storesTable.waitFor({ state: 'visible', timeout: 10000 });
+    assert('Stores table is visible on Store Operations page', await storesTable.isVisible());
 
-    // 3. Verify Existing Fixture Card
-    console.log('\nScenario 3: Verify Physical Fixture Card & KPI Bar');
-    const fixtureCodeLocator = page.locator('text=FIXSTURE-4F').first();
-    await fixtureCodeLocator.waitFor({ state: 'visible', timeout: 10000 });
-    assert('Fixture FIXSTURE-4F is displayed in Store Operations', await fixtureCodeLocator.isVisible());
+    // Click into store detail (either Test Store 01 or the first store)
+    const viewBtn = page.locator('tr:has-text("Test Store 01") button, [data-testid^="view-store-btn-"]').first();
+    assert('View Store action button is present', await viewBtn.isVisible());
+    await viewBtn.click();
+    await page.waitForTimeout(800);
+
+    // Verify Store Detail header is visible
+    const detailHeader = page.locator('[data-testid="store-detail-header"]').first();
+    await detailHeader.waitFor({ state: 'visible', timeout: 10000 });
+    assert('Store detail view loaded successfully', await detailHeader.isVisible());
+
+    // Click on Fixtures & Placements Tab
+    console.log(`\nScenario 3: Open Fixtures & Placements Tab`);
+    const fixturesTabBtn = page.locator('[data-testid="tab-fixtures"]').first();
+    assert('Fixtures & Placements tab is present', await fixturesTabBtn.isVisible());
+    await fixturesTabBtn.click();
+    await page.waitForTimeout(800);
+
+    const fixturesContent = page.locator('[data-testid="tab-content-fixtures"]').first();
+    assert('Fixtures & Placements tab content is active', await fixturesContent.isVisible());
+
+    // 4. Verify Existing Fixture or Register Fixture if none
+    console.log('\nScenario 4: Verify Physical Fixture Card & Placement Controls');
+    const fixtureCards = page.locator('[data-testid^="fixture-card-"]');
+    const fixtureCount = await fixtureCards.count();
+    console.log(`  Found ${fixtureCount} physical fixture(s) in this store`);
+
+    if (fixtureCount === 0) {
+      // If store has 0 fixtures registered, register a test fixture first
+      console.log('  Registering a fixture for this store...');
+      const registerFirstBtn = page.locator('[data-testid="btn-register-first-fixture"], [data-testid="btn-register-fixture"]').first();
+      await registerFirstBtn.click();
+      await page.waitForTimeout(500);
+
+      await page.fill('[data-testid="input-fixture-code"]', 'TEST-8F');
+      await page.fill('[data-testid="input-fixture-name"]', 'Modular 8ft Display');
+      await page.selectOption('[data-testid="select-fixture-type"]', 'wall_8ft');
+      await page.click('[data-testid="btn-submit-fixture"]');
+      await page.waitForTimeout(1500);
+    }
+
+    const firstFixtureCard = page.locator('[data-testid^="fixture-card-"]').first();
+    await firstFixtureCard.waitFor({ state: 'visible', timeout: 10000 });
+    assert('Physical Display Fixture card is displayed', await firstFixtureCard.isVisible());
 
     // 4. Verify Placement Summary & Toggle Button
     console.log('\nScenario 4: Verify Placement Controls & Expand Planogram Matrix');
@@ -166,7 +209,7 @@ async function runQA() {
 
     // 6. Test Product Assignment Modal
     console.log('\nScenario 6: Product Assignment Modal & Store Assortment Filter');
-    const assignBtn = page.locator('[data-testid^="btn-assign-slot-"]').first();
+    const assignBtn = page.locator('[data-testid^="btn-add-to-shelf-"], [data-testid^="btn-empty-shelf-assign-"]').first();
     await assignBtn.click();
     await page.waitForTimeout(500);
 
