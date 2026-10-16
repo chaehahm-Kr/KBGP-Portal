@@ -9,6 +9,10 @@ export interface CompliancePrefillData {
   priority: string;
   title: string;
   content: string;
+  productId?: string;
+  productName?: string;
+  productSku?: string;
+  sectionId?: string;
 }
 
 /**

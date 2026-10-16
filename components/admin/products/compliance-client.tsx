@@ -60,6 +60,17 @@ export interface ComplianceProductItem {
     created_at: string;
     signedUrl?: string | null;
   }>;
+
+  // Authoritative linked partner inquiries
+  inquiries?: Array<{
+    id: string;
+    case_number: string | null;
+    title: string;
+    status: string;
+    priority: string;
+    is_action_required: boolean;
+    updated_at: string;
+  }>;
 }
 
 interface ComplianceClientProps {
@@ -268,6 +279,19 @@ export function ComplianceClient({
 
   // Detail Modal / Drawer
   const [selectedProduct, setSelectedProduct] = useState<ComplianceProductItem | null>(null);
+
+  // Auto-open modal if productId is provided in URL
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get("productId");
+    if (pid && products.length > 0) {
+      const target = products.find((p) => p.id === pid);
+      if (target) {
+        setSelectedProduct(target);
+      }
+    }
+  }, [products]);
 
   // Distinct origins for advanced filter
   const distinctOrigins = useMemo(() => {
@@ -972,10 +996,15 @@ export function ComplianceClient({
                     <Link
                       href={`/admin/partner-inquiries?type=brand&newCase=1&productId=${encodeURIComponent(p.id)}`}
                       target="_blank"
-                      className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
                       title={`Open Brand Inquiries for ${p.brand_name} (${p.company_name})`}
                     >
-                      Contact ↗
+                      <span>Contact ↗</span>
+                      {Boolean(p.inquiries && p.inquiries.length > 0) && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-purple-600 text-white font-mono text-[9px] font-bold" title={`${p.inquiries!.length} linked inquiry cases`}>
+                          {p.inquiries!.length}
+                        </span>
+                      )}
                     </Link>
                   </td>
                 </tr>
@@ -1015,7 +1044,16 @@ export function ComplianceClient({
       {selectedProduct && (
         <ComplianceDetailModal
           product={selectedProduct}
-          onClose={() => setSelectedProduct(null)}
+          onClose={() => {
+            setSelectedProduct(null);
+            if (typeof window !== "undefined") {
+              const url = new URL(window.location.href);
+              if (url.searchParams.has("productId")) {
+                url.searchParams.delete("productId");
+                window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+              }
+            }
+          }}
         />
       )}
     </div>
@@ -1265,6 +1303,49 @@ function ComplianceDetailModal({
                 Open Brand Inquiries ↗
               </Link>
             </div>
+
+            {/* Linked Inquiries (if any exist for this product) */}
+            {Boolean(product.inquiries && product.inquiries.length > 0) && (
+              <div className="p-3 rounded-xl border border-purple-200/60 dark:border-purple-900/50 bg-purple-50/50 dark:bg-purple-950/20 text-[11px] space-y-2 mt-3 shrink-0">
+                <div className="flex items-center justify-between font-semibold text-purple-900 dark:text-purple-300">
+                  <span className="flex items-center gap-1.5">
+                    <span>📨</span>
+                    <span>연계 문의 ({product.inquiries!.length})</span>
+                  </span>
+                  <Link
+                    href={`/admin/partner-inquiries?type=brand`}
+                    target="_blank"
+                    className="text-[10px] text-purple-600 dark:text-purple-400 hover:underline"
+                  >
+                    전체 ↗
+                  </Link>
+                </div>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-0.5">
+                  {product.inquiries!.map((inq) => (
+                    <Link
+                      key={inq.id}
+                      href={`/admin/partner-inquiries?type=brand&id=${encodeURIComponent(inq.id)}`}
+                      target="_blank"
+                      className="block p-2 rounded-lg bg-white dark:bg-zinc-900 border border-purple-100 dark:border-purple-900/40 hover:border-purple-300 dark:hover:border-purple-700 transition-colors shadow-2xs"
+                    >
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-mono font-bold text-purple-700 dark:text-purple-400 truncate">
+                          {inq.case_number || "No Case #"}
+                        </span>
+                        <span className={`px-1.5 py-0.2 rounded text-[9px] font-semibold uppercase ${
+                          inq.is_action_required ? "bg-rose-500/10 text-rose-500 border border-rose-500/20" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                        }`}>
+                          {inq.status}
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-medium text-zinc-800 dark:text-zinc-200 truncate mt-0.5" title={inq.title}>
+                        {inq.title}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Panel: Selected Section Detail Content */}

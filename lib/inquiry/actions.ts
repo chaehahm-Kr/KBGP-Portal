@@ -426,6 +426,32 @@ export async function createAdminPartnerInquiry(formData: FormData) {
 
     const relatedInvoiceId = (formData.get("related_invoice_id") as string) || null;
     const relatedPoId = (formData.get("related_po_id") as string) || null;
+    const rawProductId = String(formData.get("related_product_id") || "").trim() || null;
+    let validatedProductId: string | null = null;
+
+    if (rawProductId) {
+      // Validate that product exists AND belongs to the target company (or company's brands)
+      const { data: prodRecord, error: prodErr } = await adminSupabase
+        .from("products")
+        .select("id, company_id, brand_id, brands ( company_id )")
+        .eq("id", rawProductId)
+        .maybeSingle();
+
+      if (prodErr || !prodRecord) {
+        return { success: false, error: "유효하지 않은 제품 ID입니다. 제품 정보를 확인해주세요." };
+      }
+
+      // Check cross-company alignment to prevent accidental cross-company linking
+      const prodCompanyId = prodRecord.company_id || (prodRecord.brands as any)?.company_id;
+      if (prodCompanyId && prodCompanyId !== companyId) {
+        return { 
+          success: false, 
+          error: "선택된 회사와 제품의 소속 회사가 일치하지 않습니다. 올바른 회사를 선택해주세요." 
+        };
+      }
+
+      validatedProductId = prodRecord.id;
+    }
 
     // Admin created case status: default 'in_review' (검토중), or 'action_required' (조치필요) if is_action_required is true
     const initialStatus: CaseStatus = isActionRequired ? "action_required" : "in_review";
@@ -449,6 +475,9 @@ export async function createAdminPartnerInquiry(formData: FormData) {
     }
     if (relatedPoId) {
       insertPayload.related_po_id = relatedPoId;
+    }
+    if (validatedProductId) {
+      insertPayload.related_product_id = validatedProductId;
     }
 
     let { data: newInquiry, error: insertError } = await adminSupabase

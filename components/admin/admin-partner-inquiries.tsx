@@ -105,6 +105,17 @@ export function AdminPartnerInquiries({
     }
   }, [searchParams, initialSource]);
 
+  // Auto-select inquiry when navigating with ?id= or ?caseId= (e.g. from Compliance Review)
+  useEffect(() => {
+    const targetId = searchParams?.get("id") || searchParams?.get("caseId");
+    if (targetId && inquiries.length > 0) {
+      const match = inquiries.find((i) => i.id === targetId || i.case_number === targetId);
+      if (match) {
+        setSelectedInquiry(match);
+      }
+    }
+  }, [searchParams, inquiries]);
+
   // Default Multi-Select Statuses: Active 3 Statuses (RECEIVED, UNDER_REVIEW, ACTION_REQUIRED)
   const [selectedStatuses, setSelectedStatuses] = useState<OfficialCaseStatus[]>([
     "RECEIVED",
@@ -130,6 +141,9 @@ export function AdminPartnerInquiries({
   const [selectedContactUserId, setSelectedContactUserId] = useState<string>(
     initialNewCase?.contactUserId || ""
   );
+  const [newProductId, setNewProductId] = useState<string>(initialNewCase?.productId || "");
+  const [newProductName, setNewProductName] = useState<string>(initialNewCase?.productName || "");
+  const [newProductSku, setNewProductSku] = useState<string>(initialNewCase?.productSku || "");
   const [newCategory, setNewCategory] = useState<string>(initialNewCase?.category || "product");
   const [newTitle, setNewTitle] = useState<string>(initialNewCase?.title || "");
   const [newContent, setNewContent] = useState<string>(initialNewCase?.content || "");
@@ -146,6 +160,9 @@ export function AdminPartnerInquiries({
       setShowCreateCaseModal(true);
       if (initialNewCase.companyId) setSelectedCompanyId(initialNewCase.companyId);
       setSelectedContactUserId(initialNewCase.contactUserId || "");
+      if (initialNewCase.productId) setNewProductId(initialNewCase.productId);
+      if (initialNewCase.productName) setNewProductName(initialNewCase.productName);
+      if (initialNewCase.productSku) setNewProductSku(initialNewCase.productSku);
       if (initialNewCase.category) setNewCategory(initialNewCase.category);
       if (initialNewCase.priority) setNewPriority(initialNewCase.priority);
       if (initialNewCase.title) setNewTitle(initialNewCase.title);
@@ -184,6 +201,9 @@ export function AdminPartnerInquiries({
 
   const handleCloseCreateCaseModal = () => {
     setShowCreateCaseModal(false);
+    setNewProductId("");
+    setNewProductName("");
+    setNewProductSku("");
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       if (url.searchParams.has("newCase") || url.searchParams.has("productId")) {
@@ -242,6 +262,9 @@ export function AdminPartnerInquiries({
     fd.append("priority", newPriority);
     fd.append("is_action_required", newIsActionRequired ? "true" : "false");
     fd.append("send_email", newSendEmail ? "true" : "false");
+    if (newProductId) {
+      fd.append("related_product_id", newProductId);
+    }
     if (newFile) {
       fd.append("file", newFile);
     }
@@ -258,6 +281,9 @@ export function AdminPartnerInquiries({
         setNewFile(null);
         setNewIsActionRequired(false);
         setNewSendEmail(false);
+        setNewProductId("");
+        setNewProductName("");
+        setNewProductSku("");
         window.location.reload();
       } else {
         setCreateCaseError(res.error || "케이스 생성에 실패했습니다.");
@@ -603,8 +629,8 @@ export function AdminPartnerInquiries({
                       </div>
                       <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">{item.content}</p>
 
-                      {/* Retailer Specific Context Tags */}
-                      {isRetailer && (item.related_order_number || item.related_fulfillment_number || item.related_product_name) && (
+                      {/* Operational Context Tags (Retailer Order/Fulfillment, or Linked Product) */}
+                      {(item.related_order_number || item.related_fulfillment_number || item.related_product_name) && (
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[9px] font-mono">
                           {item.related_order_number && (
                             <span className="rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-1.5 py-0.5 font-bold">
@@ -617,7 +643,7 @@ export function AdminPartnerInquiries({
                             </span>
                           )}
                           {item.related_product_name && (
-                            <span className="rounded bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 truncate max-w-[160px]">
+                            <span className="rounded bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 truncate max-w-[180px]" title={item.related_product_name}>
                               🏷️ {item.related_product_name}
                             </span>
                           )}
@@ -899,6 +925,52 @@ export function AdminPartnerInquiries({
                         </Link>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Related Product Card (Brand or Generic Product Linkage) */}
+                {Boolean(selectedInquiry.related_product_id || selectedInquiry.related_product_name) && selectedInquiry.source_type !== "retailer" && (
+                  <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/30 text-xs space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-bold text-amber-900 dark:text-amber-300">
+                      <span className="flex items-center gap-1.5">
+                        <span>🏷️</span>
+                        <span>연계 제품 (Related Product)</span>
+                      </span>
+                      {selectedInquiry.related_product_id && (
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/admin/products/${selectedInquiry.related_product_id}`}
+                            target="_blank"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-100/50 dark:hover:bg-amber-900/50 transition-colors shadow-xs"
+                            title="Open in Product Catalog"
+                          >
+                            <span>📦 카탈로그 상세 ↗</span>
+                          </Link>
+                          <Link
+                            href={`/admin/products/compliance?productId=${encodeURIComponent(selectedInquiry.related_product_id)}`}
+                            target="_blank"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-zinc-900 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-100/50 dark:hover:bg-purple-900/50 transition-colors shadow-xs"
+                            title="Open in Product Compliance"
+                          >
+                            <span>📋 컴플라이언스 검토 ↗</span>
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">제품명 (Product Name)</span>
+                        <span className="font-bold text-zinc-900 dark:text-zinc-100 truncate block">
+                          {selectedInquiry.related_product_name || "미확인 제품"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">SKU (Letusto / Manufacture)</span>
+                        <span className="font-mono text-zinc-800 dark:text-zinc-200">
+                          {selectedInquiry.related_product_sku || "-"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -1284,6 +1356,37 @@ export function AdminPartnerInquiries({
                   </div>
                 )}
               </div>
+
+              {/* Linked Product (if opened from Compliance or Product Catalog) */}
+              {newProductId && (
+                <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/70 dark:border-amber-900/50 dark:bg-amber-950/30 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                      <span>🏷️</span>
+                      <span>연계 대상 제품 (Linked Product)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewProductId("");
+                        setNewProductName("");
+                        setNewProductSku("");
+                      }}
+                      className="text-[10px] text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200 underline cursor-pointer"
+                    >
+                      연계 해제
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-zinc-800 dark:text-zinc-200">
+                    <div className="font-semibold truncate">{newProductName || newProductId}</div>
+                    {newProductSku && (
+                      <div className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        SKU: {newProductSku}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* 3. Case Type (Category) & Priority */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

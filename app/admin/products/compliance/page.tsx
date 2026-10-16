@@ -143,6 +143,38 @@ export default async function AdminProductCompliancePage() {
     }
   }
 
+  // 8b. Fetch linked partner inquiries
+  const { data: rawInquiries } = await admin
+    .from("partner_inquiries")
+    .select("id, case_number, title, status, priority, is_action_required, related_product_id, updated_at")
+    .not("related_product_id", "is", null);
+
+  const inquiryMap = new Map<string, Array<{
+    id: string;
+    case_number: string | null;
+    title: string;
+    status: string;
+    priority: string;
+    is_action_required: boolean;
+    updated_at: string;
+  }>>();
+
+  (rawInquiries ?? []).forEach((inq) => {
+    if (!inq.related_product_id) return;
+    if (!inquiryMap.has(inq.related_product_id)) {
+      inquiryMap.set(inq.related_product_id, []);
+    }
+    inquiryMap.get(inq.related_product_id)!.push({
+      id: inq.id,
+      case_number: inq.case_number,
+      title: inq.title,
+      status: inq.status,
+      priority: inq.priority,
+      is_action_required: inq.is_action_required,
+      updated_at: inq.updated_at,
+    });
+  });
+
   // 9. Assemble ComplianceProductItem list
   const resolvedProducts: ComplianceProductItem[] = products.map((p) => {
     const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
@@ -217,6 +249,7 @@ export default async function AdminProductCompliancePage() {
       storage_condition: attrs?.get("STORAGE_CONDITION") || null,
 
       certificates: prodCerts,
+      inquiries: inquiryMap.get(p.id) || [],
     };
   });
 

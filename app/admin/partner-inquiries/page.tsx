@@ -90,6 +90,10 @@ export default async function AdminPartnerInquiriesPage({
         priority: "normal",
         title,
         content,
+        productId: product.id,
+        productName,
+        productSku: sku,
+        sectionId: sp.section || "",
       };
     }
   }
