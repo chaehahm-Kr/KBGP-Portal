@@ -699,6 +699,11 @@ export async function getAdminStoreOrdersData(
 
   // 5. Construct AdminStoreOrderItem array
   const orderItems: AdminStoreOrderItem[] = orders.map((o) => {
+    const orderFulfillments = fulfillmentsByOrderId[o.id] || [];
+    const calculatedBoxes = orderFulfillments.reduce(
+      (acc, f) => acc + (f.boxes && f.boxes.length > 0 ? f.boxes.length : (f.boxCount || 0)),
+      0
+    );
     return {
       id: o.id,
       orderNumber: o.order_number,
@@ -717,7 +722,7 @@ export async function getAdminStoreOrdersData(
       totalShippedUnits: Number(o.total_shipped_units) || 0,
       totalCancelledUnits: Number(o.total_cancelled_units) || 0,
       totalRemainingUnits: Number(o.total_remaining_units) || 0,
-      totalBoxCount: Number(o.total_box_count) || 0,
+      totalBoxCount: Number(o.total_box_count) || calculatedBoxes,
       shippingAddress: o.shipping_address || null,
       shippingCity: o.shipping_city || null,
       shippingState: o.shipping_state || null,
@@ -725,7 +730,7 @@ export async function getAdminStoreOrdersData(
       createdAt: o.created_at,
       updatedAt: o.updated_at,
       items: itemsByOrderId[o.id] || [],
-      fulfillments: fulfillmentsByOrderId[o.id] || [],
+      fulfillments: orderFulfillments,
     };
   });
 
