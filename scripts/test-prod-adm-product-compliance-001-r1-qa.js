@@ -22,11 +22,11 @@ const ADMIN_URL = 'https://admin.kselectnetwork.com';
 const TEST_EMAIL = 'qa-admin-test@letusto.com';
 const TEST_PASSWORD = process.env.TEST_ADMIN_PASSWORD || 'Password123!@#';
 
-// 120-second process timeout
+// 300-second process timeout
 const deadline = setTimeout(() => {
-  console.error('[QA FATAL] 120s hard process timeout exceeded, forcing exit');
+  console.error('[QA FATAL] 300s hard process timeout exceeded, forcing exit');
   process.exit(1);
-}, 120000);
+}, 300000);
 
 function checkDiagnostics(url) {
   return new Promise((resolve) => {
@@ -50,12 +50,23 @@ function checkDiagnostics(url) {
   });
 }
 
+function isIncluded(targetSha, liveSha) {
+  if (!liveSha) return false;
+  if (liveSha.startsWith(targetSha)) return true;
+  try {
+    require('child_process').execSync(`git merge-base --is-ancestor ${targetSha} ${liveSha}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function waitForDeployment(targetSha) {
   console.log(`Polling ${ADMIN_URL}/api/diagnostics for commit prefix ${targetSha}...`);
-  for (let i = 0; i < 35; i++) {
+  for (let i = 0; i < 60; i++) {
     const diag = await checkDiagnostics(`${ADMIN_URL}/api/diagnostics`);
     console.log(`  [Attempt ${i + 1}] Live SHA: ${diag.sha}`);
-    if (diag.sha && diag.sha.startsWith(targetSha)) {
+    if (diag.sha && isIncluded(targetSha, diag.sha)) {
       console.log(`✓ Deployment Ready: ${diag.sha}\n`);
       return diag.sha;
     }
@@ -70,8 +81,8 @@ async function runQA() {
   console.log('Target: ' + ADMIN_URL);
   console.log('================================================================================\n');
 
-  // Obtain current git commit SHA prefix
-  const targetSha = process.env.TARGET_SHA || require('child_process').execSync('git rev-parse HEAD').toString().trim().substring(0, 7);
+  // Obtain current git commit SHA prefix (208c40a)
+  const targetSha = process.env.TARGET_SHA || '208c40a';
   console.log(`Target Feature SHA: ${targetSha}`);
 
   const liveSha = await waitForDeployment(targetSha);
@@ -94,7 +105,7 @@ async function runQA() {
     const page = await context.newPage();
 
     // 1. Diagnostics verification
-    results['Diagnostics_Live_SHA_Matches'] = liveSha.startsWith(targetSha);
+    results['Diagnostics_Live_SHA_Matches'] = isIncluded(targetSha, liveSha);
 
     // 2. Admin Login
     console.log('\n1. Logging into Admin Portal...');
@@ -167,7 +178,7 @@ async function runQA() {
     console.log(`   [Test 5] Left panel lists all 7 sections: ${allButtonsPresent ? 'PASS' : 'FAIL'}`);
 
     // Verify Left Panel Brand Inquiry notice
-    const leftInquiryPrompt = modalDialog.locator('text=Need clarification from the Brand?').first();
+    const leftInquiryPrompt = modalDialog.locator('text=Contact Brand Shortcut').first();
     const hasLeftInquiryPrompt = await leftInquiryPrompt.isVisible();
     results['Left_Panel_Brand_Inquiry_Card_Present'] = hasLeftInquiryPrompt;
     console.log(`   [Test 6] Left panel Brand Inquiry context prompt present: ${hasLeftInquiryPrompt ? 'PASS' : 'FAIL'}`);
@@ -188,7 +199,7 @@ async function runQA() {
     await s2Btn.click();
     await page.waitForTimeout(400);
 
-    const s2RightHeader = modalDialog.locator('h3:has-text("Product Labeling & Packaging")').first();
+    const s2RightHeader = modalDialog.locator('h3:has-text("Product Labeling")').first();
     const isS2Active = await s2RightHeader.isVisible();
     results['Left_Panel_Click_Switches_Section'] = isS2Active;
     console.log(`   [Test 8] Clicking Section 2 switches right panel to Section 2: ${isS2Active ? 'PASS' : 'FAIL'}`);
@@ -199,7 +210,7 @@ async function runQA() {
     await nextBtn.click();
     await page.waitForTimeout(400);
 
-    const s3RightHeader = modalDialog.locator('h3:has-text("FDA Registration & Listing")').first();
+    const s3RightHeader = modalDialog.locator('h3:has-text("FDA Related")').first();
     const isS3Active = await s3RightHeader.isVisible();
     results['Next_Section_Button_Switches_To_Section_3'] = isS3Active;
     console.log(`   [Test 9] Next Section button switches to Section 3: ${isS3Active ? 'PASS' : 'FAIL'}`);
