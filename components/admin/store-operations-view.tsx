@@ -157,19 +157,33 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
     const params = new URLSearchParams(searchParams?.toString() || "");
     params.set("storeId", storeId);
     params.set("tab", "overview");
-    router.push(`${pathname}?${params.toString()}`);
+    const newUrl = `${pathname}?${params.toString()}`;
+    router.push(newUrl);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", newUrl);
+    }
   };
 
   const handleBackToList = () => {
     setSelectedStoreId(null);
     router.push(pathname);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", pathname);
+    }
   };
 
   const handleTabChange = (tabKey: DetailTabKey) => {
     setActiveTab(tabKey);
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    if (selectedStoreId) {
+      params.set("storeId", selectedStoreId);
+    }
     params.set("tab", tabKey);
-    router.push(`${pathname}?${params.toString()}`);
+    const newUrl = `${pathname}?${params.toString()}`;
+    router.push(newUrl);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", newUrl);
+    }
   };
 
   // Inventory Tab Search, Filter and Sort States
