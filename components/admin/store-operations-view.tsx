@@ -36,6 +36,8 @@ import {
   updateStoreFixturePlacementAction,
   unassignStoreFixturePlacementAction,
 } from "@/lib/retailer/admin-fixture-actions";
+import { StoreActivitiesTab } from "./store-activities-tab";
+import type { AdminStoreActivitiesOverview } from "@/lib/retailer/admin-store-activities-types";
 
 interface StoreOperationsViewProps {
   data: AdminStoreOperationsData;
@@ -64,7 +66,7 @@ const DETAIL_TABS: TabDefinition[] = [
   { key: "sales", label: "Sales & Performance", phaseLabel: "Phase 2 (Active)" },
   { key: "training", label: "Staff & Training", phaseLabel: "Phase 2 (Active)" },
   { key: "fixtures", label: "Fixtures & Placements", phaseLabel: "Phase 3 (Active)" },
-  { key: "activities", label: "Store Activities", badge: "Future", phaseLabel: "Future Phase (Planned)" },
+  { key: "activities", label: "Store Activities", phaseLabel: "Phase 4 (Active)" },
 ];
 
 function formatOrderCurrency(amount: number): string {
@@ -555,6 +557,11 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
     if (!selectedStoreId || !data.storeFixturesMap) return null;
     return data.storeFixturesMap[selectedStoreId] || null;
   }, [selectedStoreId, data.storeFixturesMap]);
+
+  const storeActivities = useMemo<AdminStoreActivitiesOverview | null>(() => {
+    if (!selectedStoreId || !data.storeActivitiesMap) return null;
+    return data.storeActivitiesMap[selectedStoreId] || null;
+  }, [selectedStoreId, data.storeActivitiesMap]);
 
   const filteredAssortmentProducts = useMemo(() => {
     const list = storeFixtures?.eligibleProducts || [];
@@ -3986,27 +3993,16 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
 
           {/* TAB 7: STORE ACTIVITIES */}
           {activeTab === "activities" && (
-            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4" data-testid="tab-content-activities">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300">
-                  Future Phase Planned
-                </span>
-                <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
-                  Store Field Visits & On-Site Activities
-                </h3>
+            storeActivities ? (
+              <StoreActivitiesTab
+                overview={storeActivities}
+                onSwitchTab={handleTabChange}
+              />
+            ) : (
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 text-center text-xs text-zinc-500">
+                Loading store activities...
               </div>
-              <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed max-w-2xl">
-                Field representative store inspections, photo logs, and assigned operational tasks will be tracked here in future phases. Retailer support tickets linked to this store can be viewed under Retailer 360°.
-              </p>
-              <div className="pt-2">
-                <Link
-                  href={`/admin/retailers/${selectedStore.companyId}?tab=support`}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 text-xs font-bold transition-all shadow-xs"
-                >
-                  <span>View Store Support Inquiries in Retailer 360° ↗</span>
-                </Link>
-              </div>
-            </div>
+            )
           )}
         </div>
       ) : (

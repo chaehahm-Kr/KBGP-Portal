@@ -15,6 +15,23 @@ import {
   type PricingInput,
 } from "./performance-financial-pure";
 import type { AnalysisPeriod, ReceiptEvent } from "./performance-financial-types";
+import {
+  AdminStoreActivitiesOverview,
+  AdminStoreActivity,
+  StoreTimelineItem,
+  ActivityKpiSummary,
+  ActivityType,
+} from "./admin-store-activities-types";
+import { getAdminStoreActivitiesData } from "./admin-store-activities";
+
+export {
+  getAdminStoreActivitiesData,
+  type AdminStoreActivitiesOverview,
+  type AdminStoreActivity,
+  type StoreTimelineItem,
+  type ActivityKpiSummary,
+  type ActivityType,
+};
 
 export interface AdminStoreOperationItem {
   id: string;
@@ -456,6 +473,7 @@ export interface AdminStoreOperationsData {
   storeTrainingMap: Record<string, AdminStoreTrainingOverview>;
   storePerformanceMap: Record<string, AdminStorePerformanceOverview>;
   storeFixturesMap: Record<string, AdminStoreFixturesOverview>;
+  storeActivitiesMap: Record<string, AdminStoreActivitiesOverview>;
 }
 
 /**
@@ -2254,6 +2272,17 @@ export async function getAdminStoreOperationsData(): Promise<AdminStoreOperation
     }
   }
 
+  // 10. Batch resolve store activities for all stores (ADM-STORE-OPS-P4-003)
+  const storeActivitiesMap: Record<string, AdminStoreActivitiesOverview> = {};
+  for (const st of formattedStores) {
+    try {
+      const actOverview = await getAdminStoreActivitiesData(st.id);
+      if (actOverview) storeActivitiesMap[st.id] = actOverview;
+    } catch (e) {
+      console.warn(`[getAdminStoreOperationsData] Warning resolving activities for store ${st.id}:`, e);
+    }
+  }
+
   return {
     stores: formattedStores,
     retailers: Array.from(retailerMap.values()),
@@ -2265,6 +2294,7 @@ export async function getAdminStoreOperationsData(): Promise<AdminStoreOperation
     storeTrainingMap,
     storePerformanceMap,
     storeFixturesMap,
+    storeActivitiesMap,
   };
 }
 
