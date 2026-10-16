@@ -1155,7 +1155,7 @@ export function CompanyDetailManager({
       {/* Main 2-Column Layout: Left Vertical Navigation + Right Content Area */}
       <div className="flex flex-col lg:flex-row items-start gap-6">
         {/* Left Vertical Navigation Menu */}
-        <aside className="w-full lg:w-64 xl:w-72 shrink-0">
+        <div className="w-full lg:w-64 xl:w-72 shrink-0" data-testid="company-detail-nav">
           <div className="rounded-xl border border-zinc-200 bg-white p-2 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto scrollbar-thin">
             <div className="px-3 py-2 mb-1 border-b border-zinc-100 dark:border-zinc-800/80">
               <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
@@ -1214,10 +1214,10 @@ export function CompanyDetailManager({
               })}
             </nav>
           </div>
-        </aside>
+        </div>
 
         {/* Right Content Area */}
-        <main className="flex-1 w-full min-w-0">
+        <div className="flex-1 w-full min-w-0" data-testid="company-detail-content">
           <div className="rounded-xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
             <div className="p-5 text-xs">
               {/* 1. Company Information Tab */}
@@ -2625,7 +2625,7 @@ export function CompanyDetailManager({
 
             </div>
           </div>
-        </main>
+        </div>
       </div>
 
       {/* Add User Modal */}
