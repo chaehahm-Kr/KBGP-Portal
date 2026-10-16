@@ -294,6 +294,42 @@ export type FixtureOperationalStatus =
   | "damaged"
   | "retired";
 
+export type PlacementStatus = "planned" | "active" | "clearance" | "removed";
+
+export interface AdminStoreFixturePlacementItem {
+  id: string;
+  storeFixtureId: string;
+  storeId: string;
+  productId: string;
+  productName: string;
+  productNameEn: string | null;
+  brandName: string | null;
+  sku: string;
+  category: string | null;
+  thumbnailUrl: string | null;
+  bayNumber: number;
+  shelfLevel: number;
+  positionSlot: number;
+  facingCount: number;
+  capacityUnits: number;
+  placementStatus: PlacementStatus;
+  placementStatusLabel: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoreAssortmentProductItem {
+  id: string;
+  name: string;
+  nameEn: string | null;
+  brandName: string | null;
+  sku: string;
+  category: string | null;
+  thumbnailUrl: string | null;
+  status: string;
+}
+
 export interface AdminStoreFixtureItem {
   id: string;
   storeId: string;
@@ -316,6 +352,7 @@ export interface AdminStoreFixtureItem {
   lastInspectedAt: string | null;
   notes: string | null;
   placementsCount: number;
+  placements: AdminStoreFixturePlacementItem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -330,7 +367,25 @@ export interface AdminStoreFixturesOverview {
   installedFixturesCount: number;
   plannedFixturesCount: number;
   maintenanceNeededCount: number;
+  totalPlacementsCount: number;
+  activePlacementsCount: number;
+  eligibleProducts: StoreAssortmentProductItem[];
   fixtures: AdminStoreFixtureItem[];
+}
+
+export function formatPlacementStatus(status: string): string {
+  switch (status) {
+    case "active":
+      return "Active";
+    case "planned":
+      return "Planned";
+    case "clearance":
+      return "Clearance";
+    case "removed":
+      return "Removed";
+    default:
+      return status;
+  }
 }
 
 export function formatFixtureType(type: string): string {
@@ -1601,7 +1656,75 @@ export async function getAdminStoreFixturesData(
   const companyId = store.company_id;
   const companyName = comp?.name || "Retailer Organization";
 
-  // 2. Fetch Fixtures with attached placements count
+  // 2. Fetch Store Eligible Assortment
+  const relevantProductIds = new Set<string>();
+
+  // A. Assortment from retailer_store_products
+  const { data: storeProductRows } = await adminClient
+    .from("retailer_store_products")
+    .select("product_id")
+    .eq("store_id", storeId)
+    .eq("is_active", true);
+
+  (storeProductRows || []).forEach((sp: any) => {
+    if (sp.product_id) relevantProductIds.add(sp.product_id);
+  });
+
+  // B. Weekly check items for this store
+  const { data: checkItems } = await adminClient
+    .from("retailer_weekly_checks")
+    .select("retailer_weekly_check_items ( product_id )")
+    .eq("store_id", storeId);
+
+  (checkItems || []).forEach((c: any) => {
+    (c.retailer_weekly_check_items || []).forEach((it: any) => {
+      if (it.product_id) relevantProductIds.add(it.product_id);
+    });
+  });
+
+  // C. Order items for this store
+  const { data: storeOrders } = await adminClient
+    .from("retailer_orders")
+    .select("retailer_order_items ( product_id )")
+    .eq("store_id", storeId);
+
+  (storeOrders || []).forEach((o: any) => {
+    (o.retailer_order_items || []).forEach((it: any) => {
+      if (it.product_id) relevantProductIds.add(it.product_id);
+    });
+  });
+
+  // D. Fallback: If no products found, load active selling products
+  if (relevantProductIds.size === 0) {
+    const { data: fallbackProds } = await adminClient
+      .from("products")
+      .select("id")
+      .eq("status", "selling")
+      .limit(20);
+
+    (fallbackProds || []).forEach((p) => relevantProductIds.add(p.id));
+  }
+
+  // 3. Fetch Full Product Details for Assortment
+  const { data: rawAssortmentProducts } = await adminClient
+    .from("products")
+    .select(`
+      id,
+      name,
+      name_en,
+      category,
+      letusto_sku,
+      manufacture_sku,
+      status,
+      brands (
+        id,
+        name
+      )
+    `)
+    .in("id", Array.from(relevantProductIds))
+    .order("name", { ascending: true });
+
+  // 4. Fetch Fixtures with Placements and Placed Products
   const { data: rawFixtures, error: fixErr } = await adminClient
     .from("store_fixtures")
     .select(`
@@ -1624,7 +1747,34 @@ export async function getAdminStoreFixturesData(
       notes,
       created_at,
       updated_at,
-      store_fixture_placements ( id )
+      store_fixture_placements (
+        id,
+        store_fixture_id,
+        store_id,
+        product_id,
+        bay_number,
+        shelf_level,
+        position_slot,
+        facing_count,
+        capacity_units,
+        placement_status,
+        notes,
+        created_at,
+        updated_at,
+        products:products!store_fixture_placements_product_id_fkey (
+          id,
+          name,
+          name_en,
+          letusto_sku,
+          manufacture_sku,
+          category,
+          status,
+          brands (
+            id,
+            name
+          )
+        )
+      )
     `)
     .eq("store_id", storeId)
     .order("created_at", { ascending: true });
@@ -1634,31 +1784,118 @@ export async function getAdminStoreFixturesData(
     return null;
   }
 
-  const fixtures: AdminStoreFixtureItem[] = (rawFixtures || []).map((f: any) => ({
-    id: f.id,
-    storeId: f.store_id,
-    companyId: f.company_id,
-    fixtureCode: f.fixture_code,
-    fixtureName: f.fixture_name,
-    fixtureType: f.fixture_type as FixtureType,
-    fixtureTypeLabel: formatFixtureType(f.fixture_type),
-    bayCount: f.bay_count || 1,
-    shelfCount: f.shelf_count || 5,
-    hasHeaderSignage: Boolean(f.has_header_signage),
-    inStoreLocation: f.in_store_location || null,
-    installationStatus: f.installation_status as FixtureInstallationStatus,
-    installationStatusLabel: formatInstallationStatus(f.installation_status),
-    operationalStatus: f.operational_status as FixtureOperationalStatus,
-    operationalStatusLabel: formatOperationalStatus(f.operational_status),
-    installationDate: f.installation_date || null,
-    installedBy: f.installed_by || null,
-    primaryPhotoUrl: f.primary_photo_url || null,
-    lastInspectedAt: f.last_inspected_at || null,
-    notes: f.notes || null,
-    placementsCount: Array.isArray(f.store_fixture_placements) ? f.store_fixture_placements.length : 0,
-    createdAt: f.created_at,
-    updatedAt: f.updated_at,
-  }));
+  // 5. Gather all product IDs to resolve authoritative images
+  const allImageProductIds = new Set<string>();
+  (rawAssortmentProducts || []).forEach((p) => allImageProductIds.add(p.id));
+
+  (rawFixtures || []).forEach((f: any) => {
+    (f.store_fixture_placements || []).forEach((plc: any) => {
+      if (plc.product_id) allImageProductIds.add(plc.product_id);
+    });
+  });
+
+  let imageMap: Record<string, { primaryUrl: string | null }> = {};
+  if (allImageProductIds.size > 0) {
+    try {
+      imageMap = await resolveAuthoritativeProductImages(
+        adminClient,
+        Array.from(allImageProductIds)
+      );
+    } catch (e) {
+      console.warn("[getAdminStoreFixturesData] Error fetching product images:", e);
+    }
+  }
+
+  // Map Eligible Assortment
+  const eligibleProducts: StoreAssortmentProductItem[] = (rawAssortmentProducts || []).map((p: any) => {
+    const brandName = Array.isArray(p.brands) ? p.brands[0]?.name : p.brands?.name;
+    const effectiveSku = resolveEffectiveSku(p) || p.letusto_sku || p.manufacture_sku || "N/A";
+    return {
+      id: p.id,
+      name: p.name,
+      nameEn: p.name_en || null,
+      brandName: brandName || null,
+      sku: effectiveSku,
+      category: p.category || null,
+      thumbnailUrl: imageMap[p.id]?.primaryUrl || null,
+      status: p.status,
+    };
+  });
+
+  // Map Fixtures & Placements
+  let totalPlacementsSum = 0;
+  let activePlacementsSum = 0;
+
+  const fixtures: AdminStoreFixtureItem[] = (rawFixtures || []).map((f: any) => {
+    const rawPlacements = Array.isArray(f.store_fixture_placements) ? f.store_fixture_placements : [];
+
+    const placements: AdminStoreFixturePlacementItem[] = rawPlacements.map((plc: any) => {
+      const prod = Array.isArray(plc.products) ? plc.products[0] : plc.products;
+      const brandName = prod?.brands ? (Array.isArray(prod.brands) ? prod.brands[0]?.name : prod.brands?.name) : null;
+      const sku = prod ? (resolveEffectiveSku(prod) || prod.letusto_sku || prod.manufacture_sku || "N/A") : "N/A";
+
+      return {
+        id: plc.id,
+        storeFixtureId: plc.store_fixture_id,
+        storeId: plc.store_id,
+        productId: plc.product_id,
+        productName: prod?.name || "Unknown Product",
+        productNameEn: prod?.name_en || null,
+        brandName: brandName || null,
+        sku,
+        category: prod?.category || null,
+        thumbnailUrl: imageMap[plc.product_id]?.primaryUrl || null,
+        bayNumber: plc.bay_number || 1,
+        shelfLevel: plc.shelf_level,
+        positionSlot: plc.position_slot,
+        facingCount: plc.facing_count || 1,
+        capacityUnits: plc.capacity_units ?? 6,
+        placementStatus: (plc.placement_status || "active") as PlacementStatus,
+        placementStatusLabel: formatPlacementStatus(plc.placement_status || "active"),
+        notes: plc.notes || null,
+        createdAt: plc.created_at,
+        updatedAt: plc.updated_at,
+      };
+    });
+
+    // Sort placements by bay_number ASC, shelf_level ASC, position_slot ASC
+    placements.sort((a, b) => {
+      if (a.bayNumber !== b.bayNumber) return a.bayNumber - b.bayNumber;
+      if (a.shelfLevel !== b.shelfLevel) return a.shelfLevel - b.shelfLevel;
+      return a.positionSlot - b.positionSlot;
+    });
+
+    const activePlacements = placements.filter((p) => p.placementStatus !== "removed");
+    totalPlacementsSum += placements.length;
+    activePlacementsSum += activePlacements.length;
+
+    return {
+      id: f.id,
+      storeId: f.store_id,
+      companyId: f.company_id,
+      fixtureCode: f.fixture_code,
+      fixtureName: f.fixture_name,
+      fixtureType: f.fixture_type as FixtureType,
+      fixtureTypeLabel: formatFixtureType(f.fixture_type),
+      bayCount: f.bay_count || 1,
+      shelfCount: f.shelf_count || 5,
+      hasHeaderSignage: Boolean(f.has_header_signage),
+      inStoreLocation: f.in_store_location || null,
+      installationStatus: f.installation_status as FixtureInstallationStatus,
+      installationStatusLabel: formatInstallationStatus(f.installation_status),
+      operationalStatus: f.operational_status as FixtureOperationalStatus,
+      operationalStatusLabel: formatOperationalStatus(f.operational_status),
+      installationDate: f.installation_date || null,
+      installedBy: f.installed_by || null,
+      primaryPhotoUrl: f.primary_photo_url || null,
+      lastInspectedAt: f.last_inspected_at || null,
+      notes: f.notes || null,
+      placementsCount: activePlacements.length,
+      placements,
+      createdAt: f.created_at,
+      updatedAt: f.updated_at,
+    };
+  });
 
   const activeFixturesCount = fixtures.filter((f) => f.operationalStatus === "active").length;
   const installedFixturesCount = fixtures.filter((f) => ["installed", "inspected"].includes(f.installationStatus)).length;
@@ -1675,6 +1912,9 @@ export async function getAdminStoreFixturesData(
     installedFixturesCount,
     plannedFixturesCount,
     maintenanceNeededCount,
+    totalPlacementsCount: totalPlacementsSum,
+    activePlacementsCount: activePlacementsSum,
+    eligibleProducts,
     fixtures,
   };
 }

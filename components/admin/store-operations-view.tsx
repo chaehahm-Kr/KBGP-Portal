@@ -18,6 +18,10 @@ import type {
   StorePerformanceStatus,
   AdminStoreFixtureItem,
   AdminStoreFixturesOverview,
+  AdminStoreFixturePlacementItem,
+  StoreAssortmentProductItem,
+  PlacementStatus,
+  formatPlacementStatus,
   FixtureType,
   FixtureInstallationStatus,
   FixtureOperationalStatus,
@@ -28,6 +32,9 @@ import type {
 import {
   registerStoreFixtureAction,
   updateStoreFixtureAction,
+  assignStoreFixturePlacementAction,
+  updateStoreFixturePlacementAction,
+  unassignStoreFixturePlacementAction,
 } from "@/lib/retailer/admin-fixture-actions";
 
 interface StoreOperationsViewProps {
@@ -514,10 +521,52 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
 
+  // Placement Management States (ADM-STORE-OPS-P3-003)
+  const [expandedFixturePlacements, setExpandedFixturePlacements] = useState<Record<string, boolean>>({});
+  const [selectedBayByFixture, setSelectedBayByFixture] = useState<Record<string, number>>({});
+
+  // Placement Modal State
+  const [isPlacementModalOpen, setIsPlacementModalOpen] = useState(false);
+  const [placementModalMode, setPlacementModalMode] = useState<"assign" | "edit">("assign");
+  const [targetFixtureForPlacement, setTargetFixtureForPlacement] = useState<AdminStoreFixtureItem | null>(null);
+  const [editingPlacement, setEditingPlacement] = useState<AdminStoreFixturePlacementItem | null>(null);
+
+  // Placement Form Fields
+  const [placementBayNumber, setPlacementBayNumber] = useState<number>(1);
+  const [placementShelfLevel, setPlacementShelfLevel] = useState<number>(1);
+  const [placementPositionSlot, setPlacementPositionSlot] = useState<number>(1);
+  const [placementProductId, setPlacementProductId] = useState<string>("");
+  const [placementProductSearch, setPlacementProductSearch] = useState<string>("");
+  const [placementFacingCount, setPlacementFacingCount] = useState<number>(1);
+  const [placementCapacityUnits, setPlacementCapacityUnits] = useState<number>(6);
+  const [placementStatus, setPlacementStatus] = useState<"active" | "planned" | "clearance">("active");
+  const [placementNotes, setPlacementNotes] = useState<string>("");
+  const [placementFormError, setPlacementFormError] = useState<string | null>(null);
+  const [placementSubmitting, setPlacementSubmitting] = useState(false);
+
+  // Unassign Confirm Modal State
+  const [unassignTarget, setUnassignTarget] = useState<{
+    placement: AdminStoreFixturePlacementItem;
+    fixture: AdminStoreFixtureItem;
+  } | null>(null);
+  const [unassignSubmitting, setUnassignSubmitting] = useState(false);
+
   const storeFixtures = useMemo<AdminStoreFixturesOverview | null>(() => {
     if (!selectedStoreId || !data.storeFixturesMap) return null;
     return data.storeFixturesMap[selectedStoreId] || null;
   }, [selectedStoreId, data.storeFixturesMap]);
+
+  const filteredAssortmentProducts = useMemo(() => {
+    const list = storeFixtures?.eligibleProducts || [];
+    if (!placementProductSearch.trim()) return list;
+    const q = placementProductSearch.toLowerCase().trim();
+    return list.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        (p.brandName && p.brandName.toLowerCase().includes(q))
+    );
+  }, [storeFixtures?.eligibleProducts, placementProductSearch]);
 
   const filteredFixtures = useMemo<AdminStoreFixtureItem[]>(() => {
     if (!storeFixtures?.fixtures) return [];
@@ -711,6 +760,214 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
       setFormError(err?.message || "An unexpected error occurred while saving fixture.");
     } finally {
       setFormSubmitting(false);
+    }
+  };
+
+  // Placement Management Handlers (ADM-STORE-OPS-P3-003)
+  const handleToggleFixturePlacements = (fixtureId: string) => {
+    setExpandedFixturePlacements((prev) => ({
+      ...prev,
+      [fixtureId]: !prev[fixtureId],
+    }));
+    if (!selectedBayByFixture[fixtureId]) {
+      setSelectedBayByFixture((prev) => ({ ...prev, [fixtureId]: 1 }));
+    }
+  };
+
+  const handleSelectBay = (fixtureId: string, bayNumber: number) => {
+    setSelectedBayByFixture((prev) => ({ ...prev, [fixtureId]: bayNumber }));
+  };
+
+  const handleOpenAssignPlacementModal = (
+    fixture: AdminStoreFixtureItem,
+    defaultBay?: number,
+    defaultShelf?: number,
+    defaultSlot?: number
+  ) => {
+    setTargetFixtureForPlacement(fixture);
+    setPlacementModalMode("assign");
+    setEditingPlacement(null);
+
+    const bay = defaultBay || selectedBayByFixture[fixture.id] || 1;
+    const shelf = defaultShelf || 1;
+
+    // Calculate next available position slot for this bay & shelf
+    let slot = defaultSlot || 1;
+    if (!defaultSlot && fixture.placements) {
+      const occupiedSlots = new Set(
+        fixture.placements
+          .filter((p) => p.bayNumber === bay && p.shelfLevel === shelf && p.placementStatus !== "removed")
+          .map((p) => p.positionSlot)
+      );
+      for (let s = 1; s <= 25; s++) {
+        if (!occupiedSlots.has(s)) {
+          slot = s;
+          break;
+        }
+      }
+    }
+
+    setPlacementBayNumber(bay);
+    setPlacementShelfLevel(shelf);
+    setPlacementPositionSlot(slot);
+    setPlacementProductId(storeFixtures?.eligibleProducts?.[0]?.id || "");
+    setPlacementProductSearch("");
+    setPlacementFacingCount(1);
+    setPlacementCapacityUnits(6);
+    setPlacementStatus("active");
+    setPlacementNotes("");
+    setPlacementFormError(null);
+    setIsPlacementModalOpen(true);
+  };
+
+  const handleOpenEditPlacementModal = (
+    fixture: AdminStoreFixtureItem,
+    placement: AdminStoreFixturePlacementItem
+  ) => {
+    setTargetFixtureForPlacement(fixture);
+    setPlacementModalMode("edit");
+    setEditingPlacement(placement);
+    setPlacementBayNumber(placement.bayNumber);
+    setPlacementShelfLevel(placement.shelfLevel);
+    setPlacementPositionSlot(placement.positionSlot);
+    setPlacementProductId(placement.productId);
+    setPlacementProductSearch("");
+    setPlacementFacingCount(placement.facingCount);
+    setPlacementCapacityUnits(placement.capacityUnits);
+    setPlacementStatus(
+      placement.placementStatus === "removed"
+        ? "active"
+        : (placement.placementStatus as "active" | "planned" | "clearance")
+    );
+    setPlacementNotes(placement.notes || "");
+    setPlacementFormError(null);
+    setIsPlacementModalOpen(true);
+  };
+
+  const handleSavePlacement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStore || !targetFixtureForPlacement) return;
+    setPlacementFormError(null);
+
+    if (!placementProductId) {
+      setPlacementFormError("Please select a product carried in this store's assortment.");
+      return;
+    }
+
+    const bayCountLimit = targetFixtureForPlacement.bayCount || 1;
+    if (placementBayNumber < 1 || placementBayNumber > bayCountLimit) {
+      setPlacementFormError(`Bay number must be between 1 and ${bayCountLimit}.`);
+      return;
+    }
+
+    const shelfCountLimit = targetFixtureForPlacement.shelfCount || 5;
+    if (placementShelfLevel < 1 || placementShelfLevel > shelfCountLimit) {
+      setPlacementFormError(`Shelf level must be between 1 and ${shelfCountLimit}.`);
+      return;
+    }
+
+    if (placementPositionSlot < 1 || placementPositionSlot > 25) {
+      setPlacementFormError("Position slot must be between 1 and 25.");
+      return;
+    }
+
+    if (placementFacingCount < 1 || placementFacingCount > 10) {
+      setPlacementFormError("Facing count must be between 1 and 10.");
+      return;
+    }
+
+    if (placementCapacityUnits < 0 || placementCapacityUnits > 200) {
+      setPlacementFormError("Capacity units must be between 0 and 200.");
+      return;
+    }
+
+    setPlacementSubmitting(true);
+    try {
+      if (placementModalMode === "assign") {
+        const res = await assignStoreFixturePlacementAction({
+          fixtureId: targetFixtureForPlacement.id,
+          storeId: selectedStore.id,
+          productId: placementProductId,
+          bayNumber: placementBayNumber,
+          shelfLevel: placementShelfLevel,
+          positionSlot: placementPositionSlot,
+          facingCount: placementFacingCount,
+          capacityUnits: placementCapacityUnits,
+          placementStatus,
+          notes: placementNotes.trim() || null,
+        });
+
+        if (!res.success) {
+          setPlacementFormError(res.error || "Failed to assign placement.");
+          setPlacementSubmitting(false);
+          return;
+        }
+
+        setIsPlacementModalOpen(false);
+        // Ensure this fixture is expanded
+        setExpandedFixturePlacements((prev) => ({ ...prev, [targetFixtureForPlacement.id]: true }));
+        setSelectedBayByFixture((prev) => ({ ...prev, [targetFixtureForPlacement.id]: placementBayNumber }));
+        router.refresh();
+      } else if (editingPlacement) {
+        const res = await updateStoreFixturePlacementAction({
+          placementId: editingPlacement.id,
+          fixtureId: targetFixtureForPlacement.id,
+          storeId: selectedStore.id,
+          productId: placementProductId,
+          bayNumber: placementBayNumber,
+          shelfLevel: placementShelfLevel,
+          positionSlot: placementPositionSlot,
+          facingCount: placementFacingCount,
+          capacityUnits: placementCapacityUnits,
+          placementStatus,
+          notes: placementNotes.trim() || null,
+        });
+
+        if (!res.success) {
+          setPlacementFormError(res.error || "Failed to update placement.");
+          setPlacementSubmitting(false);
+          return;
+        }
+
+        setIsPlacementModalOpen(false);
+        router.refresh();
+      }
+    } catch (err: any) {
+      setPlacementFormError(err?.message || "An unexpected error occurred while saving placement.");
+    } finally {
+      setPlacementSubmitting(false);
+    }
+  };
+
+  const handleOpenUnassignConfirm = (
+    fixture: AdminStoreFixtureItem,
+    placement: AdminStoreFixturePlacementItem
+  ) => {
+    setUnassignTarget({ fixture, placement });
+  };
+
+  const handleExecuteUnassign = async () => {
+    if (!unassignTarget || !selectedStore) return;
+    setUnassignSubmitting(true);
+    try {
+      const res = await unassignStoreFixturePlacementAction({
+        placementId: unassignTarget.placement.id,
+        fixtureId: unassignTarget.fixture.id,
+        storeId: selectedStore.id,
+      });
+
+      if (!res.success) {
+        alert(res.error || "Failed to unassign placement.");
+        setUnassignSubmitting(false);
+        return;
+      }
+
+      setUnassignTarget(null);
+      router.refresh();
+    } catch (err: any) {
+      alert(err?.message || "An error occurred while unassigning placement.");
+    } finally {
+      setUnassignSubmitting(false);
     }
   };
 
@@ -3377,25 +3634,310 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
                           )}
                         </div>
 
-                        {/* Phase 4 Placement Management Placeholder Callout */}
-                        <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                          <div className="p-3 rounded-lg bg-zinc-50/75 dark:bg-zinc-800/30 border border-dashed border-zinc-200 dark:border-zinc-700/80 flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2">
-                              <span className="text-zinc-400 text-sm">📦</span>
-                              <div>
-                                <span className="font-semibold text-zinc-800 dark:text-zinc-200 block text-[11px]">
-                                  Shelf & Product Placement Management
-                                </span>
-                                <span className="text-[10px] text-zinc-400 block">
-                                  Product placement management will be available in the next phase.
-                                </span>
+                        {/* Shelf & Product Placement Management (ADM-STORE-OPS-P3-003) */}
+                        {(() => {
+                          const isExpanded = Boolean(expandedFixturePlacements[fixture.id]);
+                          const activePlacements = (fixture.placements || []).filter(
+                            (p) => p.placementStatus !== "removed"
+                          );
+                          const activeBay = selectedBayByFixture[fixture.id] || 1;
+                          const bayPlacements = activePlacements.filter(
+                            (p) => p.bayNumber === activeBay
+                          );
+                          const totalBayCapacity = bayPlacements.reduce(
+                            (acc, p) => acc + (p.capacityUnits || 0),
+                            0
+                          );
+
+                          return (
+                            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+                              {/* Placements Header & Quick Toggle Bar */}
+                              <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-700/60">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-base">📦</span>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-xs font-bold text-zinc-900 dark:text-white">
+                                        Shelf Placements
+                                      </span>
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                          activePlacements.length > 0
+                                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                            : "bg-zinc-150 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400"
+                                        }`}
+                                        data-testid={`placements-count-${fixture.id}`}
+                                      >
+                                        {activePlacements.length} {activePlacements.length === 1 ? "Slot" : "Slots"} Occupied
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-zinc-500 block truncate">
+                                      {fixture.bayCount} Bay{fixture.bayCount > 1 ? "s" : ""} · {fixture.shelfCount} Shelves/Bay · {activePlacements.length} Active Positions
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleFixturePlacements(fixture.id)}
+                                    data-testid={`btn-manage-placements-${fixture.id}`}
+                                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                      isExpanded
+                                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-xs"
+                                        : "bg-white text-zinc-800 border border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700 dark:hover:bg-zinc-700"
+                                    }`}
+                                  >
+                                    <span>{isExpanded ? "Hide Planogram ▴" : "Manage Placements ▾"}</span>
+                                  </button>
+                                </div>
                               </div>
+
+                              {/* If collapsed and has placements, show a compact preview strip */}
+                              {!isExpanded && activePlacements.length > 0 && (
+                                <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-thin text-[10px]">
+                                  <span className="text-zinc-400 font-semibold uppercase text-[9px] shrink-0">
+                                    Assigned:
+                                  </span>
+                                  {activePlacements.slice(0, 4).map((p) => (
+                                    <span
+                                      key={p.id}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 shrink-0 font-medium"
+                                    >
+                                      <span className="font-mono font-bold text-zinc-500">
+                                        B{p.bayNumber}S{p.shelfLevel}P{p.positionSlot}
+                                      </span>
+                                      <span className="max-w-[100px] truncate">{p.productName}</span>
+                                    </span>
+                                  ))}
+                                  {activePlacements.length > 4 && (
+                                    <span className="text-zinc-400 font-bold shrink-0">
+                                      +{activePlacements.length - 4} more
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Expanded Planogram Layout View */}
+                              {isExpanded && (
+                                <div
+                                  className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-750 bg-zinc-50/50 dark:bg-zinc-850/40 space-y-3"
+                                  data-testid={`fixture-planogram-${fixture.id}`}
+                                >
+                                  {/* Bay Switcher Tabs & Top Action */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-200/70 dark:border-zinc-700/60 pb-2.5">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mr-1">
+                                        Bay Selection:
+                                      </span>
+                                      {Array.from({ length: fixture.bayCount }, (_, i) => i + 1).map((bayNum) => {
+                                        const bayPlacementsCount = activePlacements.filter(
+                                          (p) => p.bayNumber === bayNum
+                                        ).length;
+                                        const isBayActive = activeBay === bayNum;
+                                        return (
+                                          <button
+                                            key={bayNum}
+                                            type="button"
+                                            onClick={() => handleSelectBay(fixture.id, bayNum)}
+                                            data-testid={`bay-tab-${fixture.id}-${bayNum}`}
+                                            className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                              isBayActive
+                                                ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-xs"
+                                                : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                                            }`}
+                                          >
+                                            <span>Bay {bayNum}</span>
+                                            <span
+                                              className={`px-1 py-0.2 rounded text-[9px] font-mono ${
+                                                isBayActive
+                                                  ? "bg-zinc-700 text-zinc-100 dark:bg-zinc-200 dark:text-zinc-900"
+                                                  : "bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300"
+                                              }`}
+                                            >
+                                              {bayPlacementsCount}
+                                            </span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">
+                                        Cap: {totalBayCapacity} units
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenAssignPlacementModal(fixture, activeBay)}
+                                        data-testid={`btn-assign-slot-${fixture.id}`}
+                                        className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <span>+ Assign Product</span>
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Shelves Column for Selected Bay (Top to Bottom: shelfCount down to 1) */}
+                                  <div className="space-y-2.5">
+                                    {Array.from({ length: fixture.shelfCount }, (_, idx) => fixture.shelfCount - idx).map((shelfNum) => {
+                                      const shelfPlacements = bayPlacements.filter(
+                                        (p) => p.shelfLevel === shelfNum
+                                      );
+
+                                      return (
+                                        <div
+                                          key={shelfNum}
+                                          data-testid={`shelf-row-${fixture.id}-b${activeBay}-s${shelfNum}`}
+                                          className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 space-y-2 shadow-2xs"
+                                        >
+                                          {/* Shelf Bar Header */}
+                                          <div className="flex items-center justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-1.5 text-xs">
+                                            <div className="flex items-center gap-2">
+                                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 font-mono">
+                                                Shelf {shelfNum}
+                                                {shelfNum === fixture.shelfCount
+                                                  ? " (Top)"
+                                                  : shelfNum === 1
+                                                  ? " (Base)"
+                                                  : ""}
+                                              </span>
+                                              <span className="text-[10px] text-zinc-400">
+                                                {shelfPlacements.length > 0
+                                                  ? `${shelfPlacements.length} product${shelfPlacements.length > 1 ? "s" : ""} placed`
+                                                  : "Empty Shelf"}
+                                              </span>
+                                            </div>
+
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleOpenAssignPlacementModal(fixture, activeBay, shelfNum)
+                                              }
+                                              data-testid={`btn-add-to-shelf-${fixture.id}-b${activeBay}-s${shelfNum}`}
+                                              className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                                            >
+                                              <span>+ Add Product</span>
+                                            </button>
+                                          </div>
+
+                                          {/* Shelf Placements Slots */}
+                                          {shelfPlacements.length > 0 ? (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                              {shelfPlacements.map((plc) => (
+                                                <div
+                                                  key={plc.id}
+                                                  data-testid={`placement-card-${plc.id}`}
+                                                  className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-850/60 border border-zinc-200/60 dark:border-zinc-750 flex flex-col justify-between gap-2 text-xs hover:border-zinc-300 dark:hover:border-zinc-600 transition-all"
+                                                >
+                                                  <div className="flex items-start gap-2">
+                                                    {/* Product Thumbnail */}
+                                                    <div className="w-10 h-10 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
+                                                      {plc.thumbnailUrl ? (
+                                                        <img
+                                                          src={plc.thumbnailUrl}
+                                                          alt={plc.productName}
+                                                          className="w-full h-full object-cover"
+                                                        />
+                                                      ) : (
+                                                        <span className="text-zinc-400 text-sm">💄</span>
+                                                      )}
+                                                    </div>
+
+                                                    <div className="min-w-0 flex-1">
+                                                      <div className="flex items-center justify-between gap-1">
+                                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-zinc-200/80 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
+                                                          Pos #{plc.positionSlot}
+                                                        </span>
+                                                        <span
+                                                          className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                                            plc.placementStatus === "active"
+                                                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                                              : plc.placementStatus === "planned"
+                                                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                                                              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                                          }`}
+                                                        >
+                                                          {plc.placementStatusLabel}
+                                                        </span>
+                                                      </div>
+
+                                                      <p
+                                                        className="font-bold text-zinc-900 dark:text-white mt-1 text-[11px] leading-tight line-clamp-1"
+                                                        title={plc.productName}
+                                                      >
+                                                        {plc.productName}
+                                                      </p>
+                                                      {plc.brandName && (
+                                                        <span className="text-[10px] text-zinc-400 block truncate">
+                                                          {plc.brandName}
+                                                        </span>
+                                                      )}
+                                                      <span className="text-[10px] font-mono text-zinc-500 block">
+                                                        SKU: {plc.sku}
+                                                      </span>
+                                                    </div>
+                                                  </div>
+
+                                                  {/* Slot Capacity & Facings Footer + Actions */}
+                                                  <div className="flex items-center justify-between pt-1 border-t border-zinc-150 dark:border-zinc-800 text-[10px]">
+                                                    <div className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+                                                      <span className="font-semibold">{plc.facingCount}F</span>
+                                                      <span>·</span>
+                                                      <span>Cap: {plc.capacityUnits}u</span>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-1">
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => handleOpenEditPlacementModal(fixture, plc)}
+                                                        data-testid={`btn-edit-placement-${plc.id}`}
+                                                        className="px-1.5 py-0.5 rounded text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-200/60 dark:hover:bg-zinc-700 transition-all cursor-pointer font-medium"
+                                                      >
+                                                        Edit
+                                                      </button>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => handleOpenUnassignConfirm(fixture, plc)}
+                                                        data-testid={`btn-unassign-placement-${plc.id}`}
+                                                        className="px-1.5 py-0.5 rounded text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer font-medium"
+                                                      >
+                                                        Unassign
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            /* Empty Shelf Position State (UI-only, No DB writes per Prompt requirement) */
+                                            <div
+                                              data-testid={`empty-shelf-${fixture.id}-b${activeBay}-s${shelfNum}`}
+                                              className="p-2.5 rounded border border-dashed border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400"
+                                            >
+                                              <span className="text-[11px]">
+                                                Empty shelf — No products assigned to Shelf {shelfNum}.
+                                              </span>
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  handleOpenAssignPlacementModal(fixture, activeBay, shelfNum)
+                                                }
+                                                data-testid={`btn-empty-shelf-assign-${fixture.id}-b${activeBay}-s${shelfNum}`}
+                                                className="px-2 py-0.5 rounded bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300 text-[10px] font-bold transition-all cursor-pointer"
+                                              >
+                                                + Place Product Here
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-zinc-200/70 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
-                              Phase 4 Planned
-                            </span>
-                          </div>
-                        </div>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -3902,6 +4444,305 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Placement Modal (Assign / Edit) — ADM-STORE-OPS-P3-003 */}
+      {isPlacementModalOpen && targetFixtureForPlacement && (
+        <div
+          data-testid="placement-modal-backdrop"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+        >
+          <div
+            data-testid="placement-modal-card"
+            className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150 my-8"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-950 dark:text-white" data-testid="placement-modal-title">
+                  {placementModalMode === "edit" ? "Edit Shelf Placement" : "Assign Product to Shelf"}
+                </h3>
+                <p className="text-[11px] text-zinc-500">
+                  Fixture: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{targetFixtureForPlacement.fixtureCode}</span> ({targetFixtureForPlacement.fixtureName})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPlacementModalOpen(false)}
+                data-testid="btn-close-placement-modal"
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-sm cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Error Banner */}
+            {placementFormError && (
+              <div
+                data-testid="placement-modal-error"
+                className="p-3 rounded-lg bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-950/50 dark:border-rose-800 dark:text-rose-300 text-xs font-medium"
+              >
+                ⚠ {placementFormError}
+              </div>
+            )}
+
+            {/* Placement Form */}
+            <form onSubmit={handleSavePlacement} className="space-y-4 text-xs" data-testid="form-placement">
+              {/* Coordinates: Bay, Shelf, Position */}
+              <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-700/60 space-y-3">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  Fixture Slot Coordinates
+                </span>
+
+                <div className="grid grid-cols-3 gap-2.5">
+                  {/* Bay Selection */}
+                  <div>
+                    <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                      Bay <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={placementBayNumber}
+                      onChange={(e) => setPlacementBayNumber(Number(e.target.value))}
+                      data-testid="select-placement-bay"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                    >
+                      {Array.from({ length: targetFixtureForPlacement.bayCount || 1 }, (_, i) => i + 1).map((b) => (
+                        <option key={b} value={b}>
+                          Bay {b}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Shelf Level */}
+                  <div>
+                    <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                      Shelf Level <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={placementShelfLevel}
+                      onChange={(e) => setPlacementShelfLevel(Number(e.target.value))}
+                      data-testid="select-placement-shelf"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                    >
+                      {Array.from({ length: targetFixtureForPlacement.shelfCount || 5 }, (_, i) => i + 1).map((s) => (
+                        <option key={s} value={s}>
+                          Shelf {s} {s === targetFixtureForPlacement.shelfCount ? "(Top)" : s === 1 ? "(Base)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Position Slot */}
+                  <div>
+                    <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                      Slot # <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={25}
+                      required
+                      value={placementPositionSlot}
+                      onChange={(e) => setPlacementPositionSlot(Number(e.target.value))}
+                      data-testid="input-placement-slot"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Product Selection (Filtered strictly to Store Assortment) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block">
+                    Product (Store Assortment) <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-zinc-400">
+                    {filteredAssortmentProducts.length} carried SKU{filteredAssortmentProducts.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                {/* Product Search Input */}
+                <input
+                  type="text"
+                  placeholder="Search carried products by name, brand, SKU..."
+                  value={placementProductSearch}
+                  onChange={(e) => setPlacementProductSearch(e.target.value)}
+                  data-testid="input-placement-product-search"
+                  className="w-full px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                />
+
+                {/* Product Selector Dropdown */}
+                <select
+                  required
+                  value={placementProductId}
+                  onChange={(e) => setPlacementProductId(e.target.value)}
+                  data-testid="select-placement-product"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                >
+                  <option value="" disabled>
+                    -- Select Store Product --
+                  </option>
+                  {filteredAssortmentProducts.map((prod) => (
+                    <option key={prod.id} value={prod.id}>
+                      [{prod.sku}] {prod.brandName ? `${prod.brandName} - ` : ""}{prod.name}
+                    </option>
+                  ))}
+                </select>
+
+                {filteredAssortmentProducts.length === 0 && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                    No matching products found in this store's carried assortment.
+                  </p>
+                )}
+              </div>
+
+              {/* Facing Count & Capacity Units */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    Facing Count <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    required
+                    value={placementFacingCount}
+                    onChange={(e) => setPlacementFacingCount(Number(e.target.value))}
+                    data-testid="input-placement-facings"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                  />
+                  <span className="text-[10px] text-zinc-400 mt-0.5 block">Number of visual facings (1–10)</span>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    Capacity Units <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={200}
+                    required
+                    value={placementCapacityUnits}
+                    onChange={(e) => setPlacementCapacityUnits(Number(e.target.value))}
+                    data-testid="input-placement-capacity"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                  />
+                  <span className="text-[10px] text-zinc-400 mt-0.5 block">Max display shelf depth capacity</span>
+                </div>
+              </div>
+
+              {/* Placement Status */}
+              <div>
+                <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                  Placement Status <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={placementStatus}
+                  onChange={(e) => setPlacementStatus(e.target.value as "active" | "planned" | "clearance")}
+                  data-testid="select-placement-status"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                >
+                  <option value="active">Active (On Shelf Now)</option>
+                  <option value="planned">Planned (Reset / Upcoming)</option>
+                  <option value="clearance">Clearance (Promotional Sell-through)</option>
+                </select>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                  Placement Notes
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Eye level feature position, reset approved by regional lead"
+                  value={placementNotes}
+                  onChange={(e) => setPlacementNotes(e.target.value)}
+                  data-testid="input-placement-notes"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white resize-none"
+                />
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsPlacementModalOpen(false)}
+                  data-testid="btn-cancel-placement"
+                  className="px-3.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={placementSubmitting || !placementProductId}
+                  data-testid="btn-submit-placement"
+                  className="inline-flex items-center gap-1 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  <span>
+                    {placementSubmitting
+                      ? "Saving..."
+                      : placementModalMode === "assign"
+                      ? "Assign Placement"
+                      : "Save Changes"}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Unassign Confirmation Modal — ADM-STORE-OPS-P3-003 */}
+      {unassignTarget && (
+        <div
+          data-testid="unassign-modal-backdrop"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+        >
+          <div
+            data-testid="unassign-modal-card"
+            className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-2xl text-amber-500">⚠</span>
+              <div>
+                <h3 className="text-sm font-bold text-zinc-950 dark:text-white" data-testid="unassign-modal-title">
+                  Unassign Product from Shelf?
+                </h3>
+                <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1 leading-relaxed">
+                  Are you sure you want to unassign <span className="font-semibold text-zinc-900 dark:text-white">{unassignTarget.placement.productName}</span> from Bay {unassignTarget.placement.bayNumber}, Shelf {unassignTarget.placement.shelfLevel}, Slot #{unassignTarget.placement.positionSlot}?
+                </p>
+                <p className="text-[11px] text-zinc-400 mt-2">
+                  This sets the placement status to "removed" and frees up the slot for reassignment. No physical inventory quantities will be altered.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setUnassignTarget(null)}
+                data-testid="btn-cancel-unassign"
+                className="px-3.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={unassignSubmitting}
+                onClick={handleExecuteUnassign}
+                data-testid="btn-confirm-unassign"
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+              >
+                {unassignSubmitting ? "Unassigning..." : "Unassign Product"}
+              </button>
+            </div>
           </div>
         </div>
       )}
