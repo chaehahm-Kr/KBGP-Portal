@@ -13,7 +13,20 @@ import {
   type CompanyParsedMetadata
 } from "@/lib/company/admin-actions";
 import { adminUpdateBrand, adminCreateBrand, adminDeleteBrand } from "@/lib/brand/actions";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  CompaniesIcon,
+  UsersIcon,
+  TasksIcon,
+  CategoriesSubIcon,
+  ProductsIcon,
+  ApplicationsIcon,
+  EmailTemplatesIcon,
+  PurchasingIcon,
+  WarehousesIcon,
+  PaymentSettingsIcon,
+  ChevronLeftIcon,
+} from "@/components/admin/icons";
 import { CompanyDeleteCard } from "@/components/admin/company-delete-card";
 import { type PartnerStatusConfig } from "@/lib/settings/actions";
 import { 
@@ -53,6 +66,18 @@ const ROLE_LABEL: Record<string, string> = {
   company_admin: "관리자(Admin)",
   company_staff: "담당자(Staff)",
 };
+
+export type CompanyDetailTab =
+  | "info"
+  | "staff"
+  | "tasks"
+  | "brands"
+  | "products"
+  | "applications"
+  | "agreements"
+  | "supplier"
+  | "shipping-origin"
+  | "remittance";
 
 interface CompanyDetailManagerProps {
   company: {
@@ -272,10 +297,35 @@ export function CompanyDetailManager({
 
   const showSupplierTab = true;
 
-  const [activeTab, setActiveTab] = useState<
-    "staff" | "tasks" | "brands" | "products" | "applications" | "supplier" | "shipping-origin" | "remittance" | "agreements"
-  >("staff");
+  const searchParams = useSearchParams();
+  const paramTab = searchParams?.get("tab") as CompanyDetailTab | null;
+
+  const [activeTab, setActiveTab] = useState<CompanyDetailTab>(
+    paramTab && [
+      "info",
+      "staff",
+      "tasks",
+      "brands",
+      "products",
+      "applications",
+      "agreements",
+      "supplier",
+      "shipping-origin",
+      "remittance",
+    ].includes(paramTab)
+      ? paramTab
+      : "info"
+  );
   const [isPending, startTransition] = useTransition();
+
+  const handleTabChange = (tab: CompanyDetailTab) => {
+    setActiveTab(tab);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tab);
+      window.history.replaceState(null, "", url.toString());
+    }
+  };
 
   // Company general metadata states
   const [name, setName] = useState(company.name);
@@ -962,16 +1012,222 @@ export function CompanyDetailManager({
   // 활성 상태 멤버 목록
   const activeMembers = users.filter(u => u.status === "active");
 
+  const NAV_ITEMS: {
+    key: CompanyDetailTab;
+    labelKo: string;
+    labelEn: string;
+    badge?: number;
+    icon: React.ComponentType<{ size?: number; className?: string }>;
+  }[] = [
+    {
+      key: "info",
+      labelKo: "회사 정보 관리",
+      labelEn: "Company Information",
+      icon: CompaniesIcon,
+    },
+    {
+      key: "staff",
+      labelKo: "담당자 & 포털 사용자",
+      labelEn: "Contacts & Portal Users",
+      badge: users.length,
+      icon: UsersIcon,
+    },
+    {
+      key: "tasks",
+      labelKo: "담당 업무 지정",
+      labelEn: "Responsibility Assignment",
+      icon: TasksIcon,
+    },
+    {
+      key: "brands",
+      labelKo: "보유 브랜드",
+      labelEn: "Owned Brands",
+      badge: brands.length,
+      icon: CategoriesSubIcon,
+    },
+    {
+      key: "products",
+      labelKo: "등록 제품",
+      labelEn: "Registered Products",
+      badge: products.length,
+      icon: ProductsIcon,
+    },
+    {
+      key: "applications",
+      labelKo: "입점 신청서",
+      labelEn: "Retail Applications",
+      badge: applications.length,
+      icon: ApplicationsIcon,
+    },
+    {
+      key: "agreements",
+      labelKo: "계약 관리",
+      labelEn: "Agreement Management",
+      icon: EmailTemplatesIcon,
+    },
+    {
+      key: "supplier",
+      labelKo: "거래 정보",
+      labelEn: "Trading Information",
+      icon: PurchasingIcon,
+    },
+    {
+      key: "shipping-origin",
+      labelKo: "출고지 정보",
+      labelEn: "Shipping Origin Information",
+      icon: WarehousesIcon,
+    },
+    {
+      key: "remittance",
+      labelKo: "은행 정보",
+      labelEn: "Bank Information",
+      icon: PaymentSettingsIcon,
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3 items-start">
-        {/* Left Column: General legal information */}
-        <div className="md:col-span-1 space-y-6">
-          <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                회사 정보 관리
+      {/* Compact Company Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <Link
+            href="/admin/companies"
+            className="p-2 rounded-lg border border-zinc-200 text-zinc-500 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60 transition-colors shrink-0"
+            title="회사 목록으로 이동"
+          >
+            <ChevronLeftIcon size={16} />
+          </Link>
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt={name}
+              className="w-11 h-11 rounded-lg object-contain border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shrink-0"
+            />
+          ) : (
+            <div className="w-11 h-11 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500 shrink-0">
+              {name.slice(0, 2).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base font-bold text-zinc-900 dark:text-white truncate">
+                {name}
+              </h1>
+              {companyCode && (
+                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                  {companyCode}
+                </span>
+              )}
+              <span className={`inline-block rounded px-2.5 py-0.5 text-[10px] font-bold border ${statusColorClass}`}>
+                {statusConfig.label}
               </span>
+            </div>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase">
+                파트너 유형:
+              </span>
+              {types.length > 0 ? (
+                types.map((t) => (
+                  <span
+                    key={t}
+                    className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-350 border border-zinc-200 dark:border-zinc-700"
+                  >
+                    {t}
+                  </span>
+                ))
+              ) : (
+                <span className="text-[10px] text-zinc-400 italic">지정된 역할 없음</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+          <Link
+            href="/admin/companies"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors"
+          >
+            목록으로
+          </Link>
+        </div>
+      </div>
+
+      {/* Main 2-Column Layout: Left Vertical Navigation + Right Content Area */}
+      <div className="flex flex-col lg:flex-row items-start gap-6">
+        {/* Left Vertical Navigation Menu */}
+        <aside className="w-full lg:w-64 xl:w-72 shrink-0">
+          <div className="rounded-xl border border-zinc-200 bg-white p-2 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto scrollbar-thin">
+            <div className="px-3 py-2 mb-1 border-b border-zinc-100 dark:border-zinc-800/80">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                회사 상세 메뉴
+              </span>
+            </div>
+            <nav className="space-y-1">
+              {NAV_ITEMS.map((item) => {
+                const isActive = activeTab === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => handleTabChange(item.key)}
+                    className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 font-bold shadow-xs"
+                        : "text-zinc-650 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 font-medium"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <item.icon
+                        size={16}
+                        className={`shrink-0 ${
+                          isActive ? "text-white dark:text-zinc-950" : "text-zinc-400 dark:text-zinc-500"
+                        }`}
+                      />
+                      <div className="min-w-0">
+                        <span className="text-xs truncate block leading-snug">
+                          {item.labelKo}
+                        </span>
+                        <span
+                          className={`text-[10px] truncate block leading-none mt-0.5 ${
+                            isActive
+                              ? "text-zinc-300 dark:text-zinc-600 font-normal"
+                              : "text-zinc-400 dark:text-zinc-500"
+                          }`}
+                        >
+                          {item.labelEn}
+                        </span>
+                      </div>
+                    </div>
+                    {typeof item.badge === "number" && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold shrink-0 ${
+                          isActive
+                            ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </aside>
+
+        {/* Right Content Area */}
+        <main className="flex-1 w-full min-w-0">
+          <div className="rounded-xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
+            <div className="p-5 text-xs">
+              {/* 1. Company Information Tab */}
+              {activeTab === "info" && (
+                <div className="space-y-6">
+                  <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/50 relative">
+                    <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                        회사 정보 관리
+                      </span>
               {!isEditingMeta ? (
                 <button
                   onClick={() => {
@@ -1292,63 +1548,11 @@ export function CompanyDetailManager({
             </div>
           </div>
 
-          <CompanyDeleteCard companyId={company.id} companyName={company.name} />
+          <div className="pt-2">
+            <CompanyDeleteCard companyId={company.id} companyName={company.name} />
+          </div>
         </div>
-
-        {/* Right Column: Integrated Tabs Container */}
-        <div className="md:col-span-2 space-y-6">
-          
-          <div className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
-            {/* Tab Navigation Headers */}
-            <div className="border-b border-zinc-100 bg-zinc-50/50 px-5 py-3 dark:border-zinc-800 dark:bg-zinc-950/20">
-              <nav className="flex flex-wrap gap-4 text-xs font-bold text-zinc-400">
-                {([
-                  "staff",
-                  "tasks",
-                  "brands",
-                  "products",
-                  "applications",
-                  "agreements" as const,
-                  ...(showSupplierTab
-                    ? [
-                        "supplier" as const,
-                        "shipping-origin" as const,
-                        "remittance" as const,
-                      ]
-                    : []),
-                ] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab as any)}
-                    className={`pb-1 border-b-2 transition-all ${
-                      activeTab === tab
-                        ? "border-zinc-900 text-zinc-900 dark:border-white dark:text-white"
-                        : "border-transparent hover:text-zinc-600"
-                    }`}
-                  >
-                    {tab === "staff"
-                      ? `담당자 & 포털 사용자 (${users.length})`
-                      : tab === "tasks"
-                      ? "담당 업무 지정"
-                      : tab === "brands"
-                      ? "보유 브랜드"
-                      : tab === "products"
-                      ? "등록 제품"
-                      : tab === "applications"
-                      ? "입점 신청서"
-                      : tab === "agreements"
-                      ? "계약 관리"
-                      : tab === "supplier"
-                      ? "거래 정보"
-                      : tab === "shipping-origin"
-                      ? "출고지 정보"
-                      : "은행 정보"}
-                  </button>
-                ))}
-              </nav>
-            </div>
-
-            <div className="p-5 text-xs">
+      )}
               
               {/* Agreements Tab */}
               {activeTab === "agreements" && (
@@ -2421,8 +2625,7 @@ export function CompanyDetailManager({
 
             </div>
           </div>
-
-        </div>
+        </main>
       </div>
 
       {/* Add User Modal */}
