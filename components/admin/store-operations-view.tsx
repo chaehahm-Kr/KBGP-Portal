@@ -16,7 +16,19 @@ import type {
   AdminStorePerformanceSkuItem,
   AdminStorePerformanceOverview,
   StorePerformanceStatus,
+  AdminStoreFixtureItem,
+  AdminStoreFixturesOverview,
+  FixtureType,
+  FixtureInstallationStatus,
+  FixtureOperationalStatus,
+  formatFixtureType,
+  formatInstallationStatus,
+  formatOperationalStatus,
 } from "@/lib/retailer/admin-store-operations";
+import {
+  registerStoreFixtureAction,
+  updateStoreFixtureAction,
+} from "@/lib/retailer/admin-fixture-actions";
 
 interface StoreOperationsViewProps {
   data: AdminStoreOperationsData;
@@ -44,7 +56,7 @@ const DETAIL_TABS: TabDefinition[] = [
   { key: "orders", label: "Orders & Deliveries", phaseLabel: "Phase 2 (Active)" },
   { key: "sales", label: "Sales & Performance", phaseLabel: "Phase 2 (Active)" },
   { key: "training", label: "Staff & Training", phaseLabel: "Phase 2 (Active)" },
-  { key: "fixtures", label: "Fixtures & Placements", badge: "Future", phaseLabel: "Future Phase (Planned)" },
+  { key: "fixtures", label: "Fixtures & Placements", phaseLabel: "Phase 3 (Active)" },
   { key: "activities", label: "Store Activities", badge: "Future", phaseLabel: "Future Phase (Planned)" },
 ];
 
@@ -472,6 +484,235 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
 
     return prods;
   }, [storePerformance, salesSearch, salesRiskFilter, salesSort]);
+
+  // Fixtures & Placements Tab Search, Filter, Sort and Form States (ADM-STORE-OPS-P3-002)
+  const [fixtureSearch, setFixtureSearch] = useState("");
+  const [fixtureTypeFilter, setFixtureTypeFilter] = useState<string>("ALL");
+  const [fixtureStatusFilter, setFixtureStatusFilter] = useState<string>("ALL");
+  const [fixtureSort, setFixtureSort] = useState<"CODE_ASC" | "NAME_ASC" | "STATUS_FIRST" | "BAYS_DESC">("CODE_ASC");
+
+  // Fixture Modals & Detail Drawers
+  const [isFixtureModalOpen, setIsFixtureModalOpen] = useState(false);
+  const [fixtureModalMode, setFixtureModalMode] = useState<"register" | "edit">("register");
+  const [editingFixture, setEditingFixture] = useState<AdminStoreFixtureItem | null>(null);
+  const [detailFixture, setDetailFixture] = useState<AdminStoreFixtureItem | null>(null);
+
+  // Fixture Form Fields
+  const [formFixtureCode, setFormFixtureCode] = useState("");
+  const [formFixtureName, setFormFixtureName] = useState("");
+  const [formFixtureType, setFormFixtureType] = useState<FixtureType>("wall_4ft");
+  const [formBayCount, setFormBayCount] = useState<number>(1);
+  const [formShelfCount, setFormShelfCount] = useState<number>(5);
+  const [formHasHeaderSignage, setFormHasHeaderSignage] = useState<boolean>(true);
+  const [formInStoreLocation, setFormInStoreLocation] = useState("");
+  const [formInstallationStatus, setFormInstallationStatus] = useState<FixtureInstallationStatus>("planned");
+  const [formOperationalStatus, setFormOperationalStatus] = useState<FixtureOperationalStatus>("active");
+  const [formInstallationDate, setFormInstallationDate] = useState("");
+  const [formInstalledBy, setFormInstalledBy] = useState("");
+  const [formPrimaryPhotoUrl, setFormPrimaryPhotoUrl] = useState("");
+  const [formNotes, setFormNotes] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+
+  const storeFixtures = useMemo<AdminStoreFixturesOverview | null>(() => {
+    if (!selectedStoreId || !data.storeFixturesMap) return null;
+    return data.storeFixturesMap[selectedStoreId] || null;
+  }, [selectedStoreId, data.storeFixturesMap]);
+
+  const filteredFixtures = useMemo<AdminStoreFixtureItem[]>(() => {
+    if (!storeFixtures?.fixtures) return [];
+    let list = [...storeFixtures.fixtures];
+
+    // Search filter
+    if (fixtureSearch.trim()) {
+      const q = fixtureSearch.toLowerCase().trim();
+      list = list.filter(
+        (f) =>
+          f.fixtureCode.toLowerCase().includes(q) ||
+          f.fixtureName.toLowerCase().includes(q) ||
+          (f.inStoreLocation && f.inStoreLocation.toLowerCase().includes(q)) ||
+          f.fixtureTypeLabel.toLowerCase().includes(q)
+      );
+    }
+
+    // Type filter
+    if (fixtureTypeFilter !== "ALL") {
+      list = list.filter((f) => f.fixtureType === fixtureTypeFilter);
+    }
+
+    // Status filter
+    if (fixtureStatusFilter !== "ALL") {
+      list = list.filter(
+        (f) =>
+          f.operationalStatus === fixtureStatusFilter ||
+          f.installationStatus === fixtureStatusFilter
+      );
+    }
+
+    // Sort
+    list.sort((a, b) => {
+      switch (fixtureSort) {
+        case "CODE_ASC":
+          return a.fixtureCode.localeCompare(b.fixtureCode);
+        case "NAME_ASC":
+          return a.fixtureName.localeCompare(b.fixtureName);
+        case "STATUS_FIRST": {
+          const getStatusScore = (f: AdminStoreFixtureItem) => {
+            if (f.operationalStatus === "damaged") return 0;
+            if (f.operationalStatus === "needs_maintenance") return 1;
+            if (f.installationStatus === "planned") return 2;
+            if (f.installationStatus === "shipped") return 3;
+            if (f.installationStatus === "installed") return 4;
+            return 5;
+          };
+          const scoreDiff = getStatusScore(a) - getStatusScore(b);
+          if (scoreDiff !== 0) return scoreDiff;
+          return a.fixtureCode.localeCompare(b.fixtureCode);
+        }
+        case "BAYS_DESC":
+          return b.bayCount - a.bayCount;
+        default:
+          return 0;
+      }
+    });
+
+    return list;
+  }, [storeFixtures, fixtureSearch, fixtureTypeFilter, fixtureStatusFilter, fixtureSort]);
+
+  const handleOpenRegisterModal = () => {
+    setFixtureModalMode("register");
+    setEditingFixture(null);
+    setFormFixtureCode("");
+    setFormFixtureName("");
+    setFormFixtureType("wall_4ft");
+    setFormBayCount(1);
+    setFormShelfCount(5);
+    setFormHasHeaderSignage(true);
+    setFormInStoreLocation("");
+    setFormInstallationStatus("planned");
+    setFormOperationalStatus("active");
+    setFormInstallationDate("");
+    setFormInstalledBy("");
+    setFormPrimaryPhotoUrl("");
+    setFormNotes("");
+    setFormError(null);
+    setIsFixtureModalOpen(true);
+  };
+
+  const handleOpenEditModal = (fixture: AdminStoreFixtureItem) => {
+    setFixtureModalMode("edit");
+    setEditingFixture(fixture);
+    setFormFixtureCode(fixture.fixtureCode);
+    setFormFixtureName(fixture.fixtureName);
+    setFormFixtureType(fixture.fixtureType);
+    setFormBayCount(fixture.bayCount);
+    setFormShelfCount(fixture.shelfCount);
+    setFormHasHeaderSignage(fixture.hasHeaderSignage);
+    setFormInStoreLocation(fixture.inStoreLocation || "");
+    setFormInstallationStatus(fixture.installationStatus);
+    setFormOperationalStatus(fixture.operationalStatus);
+    setFormInstallationDate(fixture.installationDate || "");
+    setFormInstalledBy(fixture.installedBy || "");
+    setFormPrimaryPhotoUrl(fixture.primaryPhotoUrl || "");
+    setFormNotes(fixture.notes || "");
+    setFormError(null);
+    setIsFixtureModalOpen(true);
+  };
+
+  const handleFormTypeChange = (type: FixtureType) => {
+    setFormFixtureType(type);
+    if (fixtureModalMode === "register") {
+      if (type === "wall_4ft") setFormBayCount(1);
+      else if (type === "wall_8ft") setFormBayCount(2);
+      else if (type === "wall_12ft") setFormBayCount(3);
+      else if (type === "endcap_3ft") setFormBayCount(1);
+      else if (type === "countertop") setFormBayCount(1);
+    }
+  };
+
+  const handleSaveFixture = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStore) return;
+    setFormError(null);
+
+    if (!formFixtureCode.trim()) {
+      setFormError("Fixture Code is required.");
+      return;
+    }
+    if (!formFixtureName.trim()) {
+      setFormError("Fixture Name is required.");
+      return;
+    }
+    if (formBayCount < 1 || formBayCount > 6) {
+      setFormError("Bay count must be between 1 and 6.");
+      return;
+    }
+    if (formShelfCount < 1 || formShelfCount > 15) {
+      setFormError("Shelf count must be between 1 and 15.");
+      return;
+    }
+
+    setFormSubmitting(true);
+    try {
+      if (fixtureModalMode === "register") {
+        const res = await registerStoreFixtureAction({
+          storeId: selectedStore.id,
+          fixtureCode: formFixtureCode.trim(),
+          fixtureName: formFixtureName.trim(),
+          fixtureType: formFixtureType,
+          bayCount: formBayCount,
+          shelfCount: formShelfCount,
+          hasHeaderSignage: formHasHeaderSignage,
+          inStoreLocation: formInStoreLocation.trim() || null,
+          installationStatus: formInstallationStatus,
+          operationalStatus: formOperationalStatus,
+          installationDate: formInstallationDate.trim() || null,
+          installedBy: formInstalledBy.trim() || null,
+          primaryPhotoUrl: formPrimaryPhotoUrl.trim() || null,
+          notes: formNotes.trim() || null,
+        });
+
+        if (!res.success) {
+          setFormError(res.error || "Failed to register fixture.");
+          setFormSubmitting(false);
+          return;
+        }
+
+        setIsFixtureModalOpen(false);
+        router.refresh();
+      } else if (editingFixture) {
+        const res = await updateStoreFixtureAction({
+          fixtureId: editingFixture.id,
+          fixtureCode: formFixtureCode.trim(),
+          fixtureName: formFixtureName.trim(),
+          fixtureType: formFixtureType,
+          bayCount: formBayCount,
+          shelfCount: formShelfCount,
+          hasHeaderSignage: formHasHeaderSignage,
+          inStoreLocation: formInStoreLocation.trim() || null,
+          installationStatus: formInstallationStatus,
+          operationalStatus: formOperationalStatus,
+          installationDate: formInstallationDate.trim() || null,
+          installedBy: formInstalledBy.trim() || null,
+          primaryPhotoUrl: formPrimaryPhotoUrl.trim() || null,
+          notes: formNotes.trim() || null,
+        });
+
+        if (!res.success) {
+          setFormError(res.error || "Failed to update fixture.");
+          setFormSubmitting(false);
+          return;
+        }
+
+        setIsFixtureModalOpen(false);
+        router.refresh();
+      }
+    } catch (err: any) {
+      setFormError(err?.message || "An unexpected error occurred while saving fixture.");
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
 
   // Filtered stores for list
   const filteredStores = useMemo(() => {
@@ -2896,21 +3137,270 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
 
           {/* TAB 6: FIXTURES & PLACEMENTS */}
           {activeTab === "fixtures" && (
-            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4" data-testid="tab-content-fixtures">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300">
-                  Future Phase Planned
-                </span>
-                <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
-                  Physical Fixtures & Planogram Placements
-                </h3>
+            <div className="space-y-6" data-testid="tab-content-fixtures">
+              {/* Header & Registration Trigger */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 shadow-xs">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300">
+                      Phase 3 Active
+                    </span>
+                    <h3 className="text-base font-bold text-zinc-950 dark:text-white" data-testid="fixtures-tab-title">
+                      Physical Fixtures & Merchandising Assets
+                    </h3>
+                  </div>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 max-w-2xl leading-relaxed">
+                    Manage physical K-Beauty display units installed at{" "}
+                    <strong className="text-zinc-900 dark:text-zinc-100">{selectedStore.name}</strong>. Track modular bay geometry, shelf configurations, and operational status.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenRegisterModal}
+                  data-testid="btn-register-fixture"
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+                >
+                  <span>+ Register Fixture</span>
+                </button>
               </div>
-              <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed max-w-2xl">
-                Installed shelf fixtures, slot positions, display planograms, and fixture maintenance photos will be recorded here when physical fixture tracking is enabled. The legacy Placements tab contained placeholder demo records and has been retired in favor of authoritative operational records.
-              </p>
-              <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150 dark:border-zinc-800 text-[11px] text-zinc-500 max-w-xl">
-                📌 <strong>Status:</strong> No fixture registration or placement records currently exist in the database.
-              </div>
+
+              {/* KPI Overview Summary (Visible when fixtures exist) */}
+              {storeFixtures && storeFixtures.totalFixturesCount > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 shadow-xs">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Total Fixtures</span>
+                    <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1" data-testid="kpi-total-fixtures">
+                      {storeFixtures.totalFixturesCount} Units
+                    </p>
+                    <span className="text-[10px] text-zinc-500">Registered assets</span>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 shadow-xs">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Operational</span>
+                    <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1" data-testid="kpi-active-fixtures">
+                      {storeFixtures.activeFixturesCount} Active
+                    </p>
+                    <span className="text-[10px] text-zinc-500">Normal retail condition</span>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 shadow-xs">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Installed Units</span>
+                    <p className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-1" data-testid="kpi-installed-fixtures">
+                      {storeFixtures.installedFixturesCount} Verified
+                    </p>
+                    <span className="text-[10px] text-zinc-500">{storeFixtures.plannedFixturesCount} planned / in transit</span>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 shadow-xs">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Maintenance</span>
+                    <p className={`text-xl font-bold mt-1 ${storeFixtures.maintenanceNeededCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-zinc-900 dark:text-white"}`} data-testid="kpi-maintenance-fixtures">
+                      {storeFixtures.maintenanceNeededCount} Issues
+                    </p>
+                    <span className="text-[10px] text-zinc-500">Requires attention</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Fixtures List or Empty State */}
+              {(!storeFixtures || storeFixtures.totalFixturesCount === 0) ? (
+                <div
+                  className="rounded-xl border border-zinc-200 bg-white p-12 text-center shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4"
+                  data-testid="fixtures-empty-state"
+                >
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 text-2xl">
+                    🏬
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-zinc-950 dark:text-white" data-testid="fixtures-empty-state-title">
+                      No fixtures registered for this store.
+                    </h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md mx-auto leading-relaxed">
+                      Physical display fixtures (such as 4ft, 8ft, 12ft modular wall units or feature endcaps) installed at {selectedStore.name} have not been registered yet.
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleOpenRegisterModal}
+                      data-testid="btn-register-first-fixture"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                    >
+                      <span>+ Register First Fixture</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Search & Filter Toolbar */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={fixtureSearch}
+                        onChange={(e) => setFixtureSearch(e.target.value)}
+                        placeholder="Search fixtures by code, name, location..."
+                        data-testid="fixture-search-input"
+                        className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white transition-all"
+                      />
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 text-zinc-400 text-xs pointer-events-none">
+                        🔍
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-semibold text-zinc-500 uppercase">Status:</span>
+                      <select
+                        value={fixtureStatusFilter}
+                        onChange={(e) => setFixtureStatusFilter(e.target.value)}
+                        data-testid="fixture-status-filter"
+                        className="px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white outline-none cursor-pointer"
+                      >
+                        <option value="ALL">All ({storeFixtures.fixtures.length})</option>
+                        <option value="active">Active ({storeFixtures.activeFixturesCount})</option>
+                        <option value="installed">Installed ({storeFixtures.installedFixturesCount})</option>
+                        <option value="planned">Planned ({storeFixtures.plannedFixturesCount})</option>
+                        <option value="needs_maintenance">Maintenance ({storeFixtures.maintenanceNeededCount})</option>
+                      </select>
+
+                      <span className="text-[10px] font-semibold text-zinc-500 uppercase ml-2">Type:</span>
+                      <select
+                        value={fixtureTypeFilter}
+                        onChange={(e) => setFixtureTypeFilter(e.target.value)}
+                        data-testid="fixture-type-filter"
+                        className="px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white outline-none cursor-pointer"
+                      >
+                        <option value="ALL">All Types</option>
+                        <option value="wall_4ft">4ft Wall</option>
+                        <option value="wall_8ft">8ft Wall</option>
+                        <option value="wall_12ft">12ft Wall</option>
+                        <option value="endcap_3ft">3ft Endcap</option>
+                        <option value="countertop">Countertop</option>
+                        <option value="custom">Custom</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Fixtures Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="fixtures-grid">
+                    {filteredFixtures.map((fixture) => (
+                      <div
+                        key={fixture.id}
+                        data-testid={`fixture-card-${fixture.id}`}
+                        className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs space-y-4 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all flex flex-col justify-between"
+                      >
+                        <div className="space-y-3">
+                          {/* Card Header: Code, Badges, Edit Button */}
+                          <div className="flex items-start justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-sm font-bold text-zinc-950 dark:text-white" data-testid={`fixture-code-${fixture.id}`}>
+                                  {fixture.fixtureCode}
+                                </span>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                                  {fixture.fixtureTypeLabel}
+                                </span>
+                              </div>
+                              <h4 className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 mt-0.5">
+                                {fixture.fixtureName}
+                              </h4>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(fixture)}
+                              data-testid={`btn-edit-fixture-${fixture.id}`}
+                              className="px-2.5 py-1 rounded-md text-xs font-medium border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-all cursor-pointer"
+                            >
+                              Edit ✏️
+                            </button>
+                          </div>
+
+                          {/* Badges Status Strip */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              data-testid={`fixture-op-status-${fixture.id}`}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                fixture.operationalStatus === "active"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300"
+                                  : fixture.operationalStatus === "needs_maintenance"
+                                  ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-300"
+                                  : fixture.operationalStatus === "damaged"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-300"
+                                  : "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400"
+                              }`}
+                            >
+                              {fixture.operationalStatusLabel}
+                            </span>
+
+                            <span
+                              data-testid={`fixture-inst-status-${fixture.id}`}
+                              className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-900 dark:text-blue-300"
+                            >
+                              {fixture.installationStatusLabel}
+                            </span>
+
+                            {fixture.hasHeaderSignage && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:border-purple-900 dark:text-purple-300">
+                                ✨ Header Lightbox
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Metadata Specs Grid */}
+                          <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                            <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800/80">
+                              <span className="text-[10px] font-bold text-zinc-400 uppercase block">Modular Bays</span>
+                              <p className="font-semibold text-zinc-900 dark:text-white mt-0.5 font-mono">
+                                {fixture.bayCount} Bay{fixture.bayCount > 1 ? "s" : ""}
+                              </p>
+                              <span className="text-[10px] text-zinc-400">
+                                {fixture.shelfCount} shelves per bay ({fixture.bayCount * fixture.shelfCount} total)
+                              </span>
+                            </div>
+
+                            <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800/80">
+                              <span className="text-[10px] font-bold text-zinc-400 uppercase block">Store Location</span>
+                              <p className="font-semibold text-zinc-900 dark:text-white mt-0.5 truncate" title={fixture.inStoreLocation || "Not specified"}>
+                                {fixture.inStoreLocation || "Not specified"}
+                              </p>
+                              <span className="text-[10px] text-zinc-400">
+                                {fixture.installationDate ? `Installed ${fixture.installationDate}` : "Pending install"}
+                              </span>
+                            </div>
+                          </div>
+
+                          {fixture.notes && (
+                            <div className="p-2.5 rounded-lg bg-zinc-50/75 dark:bg-zinc-850 border border-zinc-150 dark:border-zinc-800 text-[11px] text-zinc-600 dark:text-zinc-300">
+                              📝 {fixture.notes}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Phase 4 Placement Management Placeholder Callout */}
+                        <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                          <div className="p-3 rounded-lg bg-zinc-50/75 dark:bg-zinc-800/30 border border-dashed border-zinc-200 dark:border-zinc-700/80 flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="text-zinc-400 text-sm">📦</span>
+                              <div>
+                                <span className="font-semibold text-zinc-800 dark:text-zinc-200 block text-[11px]">
+                                  Shelf & Product Placement Management
+                                </span>
+                                <span className="text-[10px] text-zinc-400 block">
+                                  Product placement management will be available in the next phase.
+                                </span>
+                              </div>
+                            </div>
+                            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-zinc-200/70 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
+                              Phase 4 Planned
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -3134,6 +3624,284 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
               </span>
               <span>Authoritative Source: public.stores</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fixture Modal (Register / Edit) */}
+      {isFixtureModalOpen && (
+        <div
+          data-testid="fixture-modal-backdrop"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs overflow-y-auto"
+        >
+          <div
+            data-testid="fixture-modal-card"
+            className="w-full max-w-xl rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 p-6 shadow-xl space-y-5 animate-in fade-in zoom-in-95 duration-150 my-8"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-950 dark:text-white" data-testid="fixture-modal-title">
+                  {fixtureModalMode === "edit" ? `Edit Fixture: ${editingFixture?.fixtureCode}` : "Register New Display Fixture"}
+                </h3>
+                <p className="text-[11px] text-zinc-500">
+                  Store: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{selectedStore?.name}</span> ({selectedStore?.id})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFixtureModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-sm cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Error Banner */}
+            {formError && (
+              <div
+                data-testid="fixture-modal-error"
+                className="p-3 rounded-lg bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-950/50 dark:border-rose-800 dark:text-rose-300 text-xs font-medium"
+              >
+                ⚠ {formError}
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleSaveFixture} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Fixture Code */}
+                <div>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    Fixture Code <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. LA01-W01, VOOR-EC01"
+                    value={formFixtureCode}
+                    onChange={(e) => setFormFixtureCode(e.target.value.toUpperCase())}
+                    data-testid="input-fixture-code"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 font-mono text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                  />
+                  <span className="text-[10px] text-zinc-400 mt-0.5 block">Unique store identifier</span>
+                </div>
+
+                {/* Fixture Name */}
+                <div>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    Fixture Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Main Perimeter Wall Display"
+                    value={formFixtureName}
+                    onChange={(e) => setFormFixtureName(e.target.value)}
+                    data-testid="input-fixture-name"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                  />
+                  <span className="text-[10px] text-zinc-400 mt-0.5 block">Descriptive display title</span>
+                </div>
+              </div>
+
+              {/* Fixture Type Preset */}
+              <div>
+                <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                  Hardware Model / Preset <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={formFixtureType}
+                  onChange={(e) => handleFormTypeChange(e.target.value as FixtureType)}
+                  data-testid="select-fixture-type"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white cursor-pointer"
+                >
+                  <option value="wall_4ft">4ft Modular Wall (1 Bay)</option>
+                  <option value="wall_8ft">8ft Modular Wall (2 Bays)</option>
+                  <option value="wall_12ft">12ft Modular Wall (3 Bays)</option>
+                  <option value="endcap_3ft">3ft Feature Endcap</option>
+                  <option value="countertop">Countertop Display</option>
+                  <option value="custom">Custom Display Unit</option>
+                </select>
+              </div>
+
+              {/* Bay Count & Shelf Count */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    Modular Bays <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={6}
+                    required
+                    value={formBayCount}
+                    onChange={(e) => setFormBayCount(parseInt(e.target.value) || 1)}
+                    data-testid="input-bay-count"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                  />
+                  <span className="text-[10px] text-zinc-400 mt-0.5 block">4ft=1, 8ft=2, 12ft=3</span>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    Shelves per Bay <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={15}
+                    required
+                    value={formShelfCount}
+                    onChange={(e) => setFormShelfCount(parseInt(e.target.value) || 5)}
+                    data-testid="input-shelf-count"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                  />
+                  <span className="text-[10px] text-zinc-400 mt-0.5 block">Physical shelf levels</span>
+                </div>
+              </div>
+
+              {/* Header Signage Checkbox */}
+              <div className="flex items-center gap-2 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700/60 bg-zinc-50 dark:bg-zinc-800/40">
+                <input
+                  type="checkbox"
+                  id="hasHeaderSignage"
+                  checked={formHasHeaderSignage}
+                  onChange={(e) => setFormHasHeaderSignage(e.target.checked)}
+                  data-testid="checkbox-header-signage"
+                  className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+                />
+                <label htmlFor="hasHeaderSignage" className="text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
+                  Fixture includes illuminated top header signage or branded lightbox banner
+                </label>
+              </div>
+
+              {/* Location in Store */}
+              <div>
+                <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                  Location within Store
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Front Entrance Wall, Section A"
+                  value={formInStoreLocation}
+                  onChange={(e) => setFormInStoreLocation(e.target.value)}
+                  data-testid="input-store-location"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                />
+              </div>
+
+              {/* Statuses: Operational & Installation */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    Operational Status
+                  </label>
+                  <select
+                    value={formOperationalStatus}
+                    onChange={(e) => setFormOperationalStatus(e.target.value as FixtureOperationalStatus)}
+                    data-testid="select-operational-status"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none cursor-pointer"
+                  >
+                    <option value="active">Active / Operational</option>
+                    <option value="needs_maintenance">Needs Maintenance</option>
+                    <option value="damaged">Damaged</option>
+                    <option value="retired">Retired / Out of Service</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    Installation Status
+                  </label>
+                  <select
+                    value={formInstallationStatus}
+                    onChange={(e) => setFormInstallationStatus(e.target.value as FixtureInstallationStatus)}
+                    data-testid="select-installation-status"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none cursor-pointer"
+                  >
+                    <option value="planned">Planned (Pending Delivery)</option>
+                    <option value="shipped">Shipped</option>
+                    <option value="delivered">Delivered to Store</option>
+                    <option value="installed">Installed</option>
+                    <option value="inspected">Inspected & Verified</option>
+                    <option value="retired">Retired / Decommissioned</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Installation Date & Installer */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    Installation Date
+                  </label>
+                  <input
+                    type="date"
+                    value={formInstallationDate}
+                    onChange={(e) => setFormInstallationDate(e.target.value)}
+                    data-testid="input-installation-date"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    Installed By
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Apex Fixture Solutions"
+                    value={formInstalledBy}
+                    onChange={(e) => setFormInstalledBy(e.target.value)}
+                    data-testid="input-installed-by"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                  Fixture Notes
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Additional hardware details, lighting wattage, or maintenance history..."
+                  value={formNotes}
+                  onChange={(e) => setFormNotes(e.target.value)}
+                  data-testid="input-fixture-notes"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none"
+                />
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsFixtureModalOpen(false)}
+                  data-testid="btn-cancel-fixture"
+                  className="px-3.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={formSubmitting}
+                  data-testid="btn-submit-fixture"
+                  className="inline-flex items-center gap-1 px-4 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  <span>
+                    {formSubmitting
+                      ? "Saving..."
+                      : fixtureModalMode === "register"
+                      ? "Register Fixture"
+                      : "Save Changes"}
+                  </span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

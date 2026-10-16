@@ -272,6 +272,120 @@ export interface AdminStorePerformanceOverview {
   products: AdminStorePerformanceSkuItem[];
 }
 
+export type FixtureType =
+  | "wall_4ft"
+  | "wall_8ft"
+  | "wall_12ft"
+  | "endcap_3ft"
+  | "countertop"
+  | "custom";
+
+export type FixtureInstallationStatus =
+  | "planned"
+  | "shipped"
+  | "delivered"
+  | "installed"
+  | "inspected"
+  | "retired";
+
+export type FixtureOperationalStatus =
+  | "active"
+  | "needs_maintenance"
+  | "damaged"
+  | "retired";
+
+export interface AdminStoreFixtureItem {
+  id: string;
+  storeId: string;
+  companyId: string;
+  fixtureCode: string;
+  fixtureName: string;
+  fixtureType: FixtureType;
+  fixtureTypeLabel: string;
+  bayCount: number;
+  shelfCount: number;
+  hasHeaderSignage: boolean;
+  inStoreLocation: string | null;
+  installationStatus: FixtureInstallationStatus;
+  installationStatusLabel: string;
+  operationalStatus: FixtureOperationalStatus;
+  operationalStatusLabel: string;
+  installationDate: string | null;
+  installedBy: string | null;
+  primaryPhotoUrl: string | null;
+  lastInspectedAt: string | null;
+  notes: string | null;
+  placementsCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminStoreFixturesOverview {
+  storeId: string;
+  storeName: string;
+  companyId: string;
+  companyName: string;
+  totalFixturesCount: number;
+  activeFixturesCount: number;
+  installedFixturesCount: number;
+  plannedFixturesCount: number;
+  maintenanceNeededCount: number;
+  fixtures: AdminStoreFixtureItem[];
+}
+
+export function formatFixtureType(type: string): string {
+  switch (type) {
+    case "wall_4ft":
+      return "4ft Modular Wall (1 Bay)";
+    case "wall_8ft":
+      return "8ft Modular Wall (2 Bays)";
+    case "wall_12ft":
+      return "12ft Modular Wall (3 Bays)";
+    case "endcap_3ft":
+      return "3ft Feature Endcap";
+    case "countertop":
+      return "Countertop Display";
+    case "custom":
+      return "Custom Display";
+    default:
+      return type;
+  }
+}
+
+export function formatInstallationStatus(status: string): string {
+  switch (status) {
+    case "planned":
+      return "Planned";
+    case "shipped":
+      return "Shipped";
+    case "delivered":
+      return "Delivered";
+    case "installed":
+      return "Installed";
+    case "inspected":
+      return "Inspected";
+    case "retired":
+      return "Retired";
+    default:
+      return status;
+  }
+}
+
+export function formatOperationalStatus(status: string): string {
+  switch (status) {
+    case "active":
+      return "Active / Operational";
+    case "needs_maintenance":
+      return "Needs Maintenance";
+    case "damaged":
+      return "Damaged";
+    case "retired":
+      return "Retired";
+    default:
+      return status;
+  }
+}
+
 export interface AdminStoreOperationsData {
   stores: AdminStoreOperationItem[];
   retailers: Array<{
@@ -286,6 +400,7 @@ export interface AdminStoreOperationsData {
   storeOrdersMap: Record<string, AdminStoreOrdersOverview>;
   storeTrainingMap: Record<string, AdminStoreTrainingOverview>;
   storePerformanceMap: Record<string, AdminStorePerformanceOverview>;
+  storeFixturesMap: Record<string, AdminStoreFixturesOverview>;
 }
 
 /**
@@ -1452,6 +1567,118 @@ export async function getAdminStorePerformanceData(
   };
 }
 
+/**
+ * Authoritative store-specific fixtures and placements overview resolver for Store Operations
+ * ADM-STORE-OPS-P3-002
+ */
+export async function getAdminStoreFixturesData(
+  storeId: string
+): Promise<AdminStoreFixturesOverview | null> {
+  await verifyAdminSession();
+  const adminClient = createAdminClient();
+
+  // 1. Fetch Store and Company
+  const { data: store, error: storeErr } = await adminClient
+    .from("stores")
+    .select(`
+      id,
+      name,
+      company_id,
+      companies:companies!stores_company_id_fkey (
+        id,
+        name,
+        company_code
+      )
+    `)
+    .eq("id", storeId)
+    .maybeSingle();
+
+  if (storeErr || !store) {
+    return null;
+  }
+
+  const comp = Array.isArray(store.companies) ? store.companies[0] : store.companies;
+  const companyId = store.company_id;
+  const companyName = comp?.name || "Retailer Organization";
+
+  // 2. Fetch Fixtures with attached placements count
+  const { data: rawFixtures, error: fixErr } = await adminClient
+    .from("store_fixtures")
+    .select(`
+      id,
+      store_id,
+      company_id,
+      fixture_code,
+      fixture_name,
+      fixture_type,
+      bay_count,
+      shelf_count,
+      has_header_signage,
+      in_store_location,
+      installation_status,
+      operational_status,
+      installation_date,
+      installed_by,
+      primary_photo_url,
+      last_inspected_at,
+      notes,
+      created_at,
+      updated_at,
+      store_fixture_placements ( id )
+    `)
+    .eq("store_id", storeId)
+    .order("created_at", { ascending: true });
+
+  if (fixErr) {
+    console.error("[getAdminStoreFixturesData] Error fetching store fixtures:", fixErr);
+    return null;
+  }
+
+  const fixtures: AdminStoreFixtureItem[] = (rawFixtures || []).map((f: any) => ({
+    id: f.id,
+    storeId: f.store_id,
+    companyId: f.company_id,
+    fixtureCode: f.fixture_code,
+    fixtureName: f.fixture_name,
+    fixtureType: f.fixture_type as FixtureType,
+    fixtureTypeLabel: formatFixtureType(f.fixture_type),
+    bayCount: f.bay_count || 1,
+    shelfCount: f.shelf_count || 5,
+    hasHeaderSignage: Boolean(f.has_header_signage),
+    inStoreLocation: f.in_store_location || null,
+    installationStatus: f.installation_status as FixtureInstallationStatus,
+    installationStatusLabel: formatInstallationStatus(f.installation_status),
+    operationalStatus: f.operational_status as FixtureOperationalStatus,
+    operationalStatusLabel: formatOperationalStatus(f.operational_status),
+    installationDate: f.installation_date || null,
+    installedBy: f.installed_by || null,
+    primaryPhotoUrl: f.primary_photo_url || null,
+    lastInspectedAt: f.last_inspected_at || null,
+    notes: f.notes || null,
+    placementsCount: Array.isArray(f.store_fixture_placements) ? f.store_fixture_placements.length : 0,
+    createdAt: f.created_at,
+    updatedAt: f.updated_at,
+  }));
+
+  const activeFixturesCount = fixtures.filter((f) => f.operationalStatus === "active").length;
+  const installedFixturesCount = fixtures.filter((f) => ["installed", "inspected"].includes(f.installationStatus)).length;
+  const plannedFixturesCount = fixtures.filter((f) => f.installationStatus === "planned").length;
+  const maintenanceNeededCount = fixtures.filter((f) => ["needs_maintenance", "damaged"].includes(f.operationalStatus)).length;
+
+  return {
+    storeId: store.id,
+    storeName: store.name,
+    companyId,
+    companyName,
+    totalFixturesCount: fixtures.length,
+    activeFixturesCount,
+    installedFixturesCount,
+    plannedFixturesCount,
+    maintenanceNeededCount,
+    fixtures,
+  };
+}
+
 export async function getAdminStoreOperationsData(): Promise<AdminStoreOperationsData> {
   await verifyAdminSession();
   const adminClient = createAdminClient();
@@ -1776,6 +2003,17 @@ export async function getAdminStoreOperationsData(): Promise<AdminStoreOperation
     }
   }
 
+  // 9. Batch resolve store fixtures for all stores (ADM-STORE-OPS-P3-002)
+  const storeFixturesMap: Record<string, AdminStoreFixturesOverview> = {};
+  for (const st of formattedStores) {
+    try {
+      const fixOverview = await getAdminStoreFixturesData(st.id);
+      if (fixOverview) storeFixturesMap[st.id] = fixOverview;
+    } catch (e) {
+      console.warn(`[getAdminStoreOperationsData] Warning resolving fixtures for store ${st.id}:`, e);
+    }
+  }
+
   return {
     stores: formattedStores,
     retailers: Array.from(retailerMap.values()),
@@ -1786,6 +2024,7 @@ export async function getAdminStoreOperationsData(): Promise<AdminStoreOperation
     storeOrdersMap,
     storeTrainingMap,
     storePerformanceMap,
+    storeFixturesMap,
   };
 }
 
