@@ -60,7 +60,7 @@ interface TradingProductsListProps {
   initialProducts: TradingProductItem[];
 }
 
-type SortField = "name" | "wholesale" | "retail" | "margin" | "onhand" | "available";
+type SortField = "name" | "wholesale" | "retail" | "moq" | "margin" | "onhand" | "available";
 type SortDirection = "asc" | "desc";
 
 const TRADING_COLORS: Record<string, string> = {
@@ -250,6 +250,9 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
     } else if (sortField === "retail") {
       valA = a.retailPrice ?? -1;
       valB = b.retailPrice ?? -1;
+    } else if (sortField === "moq") {
+      valA = typeof a.moq === "number" && !isNaN(a.moq) && a.moq > 0 ? a.moq : -1;
+      valB = typeof b.moq === "number" && !isNaN(b.moq) && b.moq > 0 ? b.moq : -1;
     } else if (sortField === "margin") {
       valA = a.retailerMarginPercent ?? -1;
       valB = b.retailerMarginPercent ?? -1;
@@ -653,6 +656,19 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                   </div>
                 </th>
                 <th
+                  onClick={() => handleSort("moq")}
+                  className="px-4 py-3.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    <span>Retail MOQ</span>
+                    {sortField === "moq" && (
+                      <span className="text-[10px] font-bold text-zinc-900 dark:text-white">
+                        {sortDirection === "asc" ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th
                   onClick={() => handleSort("margin")}
                   className="px-4 py-3.5 whitespace-nowrap text-center cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
                 >
@@ -777,7 +793,20 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                       )}
                     </td>
 
-                    {/* 8. Retailer Margin */}
+                    {/* 8. Retail MOQ */}
+                    <td className="px-4 py-3 align-middle text-right font-mono text-xs whitespace-nowrap">
+                      {typeof product.moq === "number" && !isNaN(product.moq) && product.moq > 0 ? (
+                        <span className="font-bold text-zinc-900 dark:text-white">
+                          {product.moq} EA
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400 dark:text-zinc-500 font-sans font-medium text-[11px]">
+                          Not Set
+                        </span>
+                      )}
+                    </td>
+
+                    {/* 9. Retailer Margin */}
                     <td className="px-4 py-3 align-middle text-center whitespace-nowrap">
                       {product.formattedMargin !== "—" ? (
                         <div className="flex flex-col items-center gap-0.5">
@@ -879,7 +908,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
               })}
               {sortedProducts.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-zinc-400 dark:text-zinc-500 text-xs">
+                  <td colSpan={14} className="py-12 text-center text-zinc-400 dark:text-zinc-500 text-xs">
                     조건에 해당하는 거래 대상 제품이 존재하지 않습니다.
                   </td>
                 </tr>
