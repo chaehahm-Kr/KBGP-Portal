@@ -525,6 +525,7 @@ export async function saveProductAttributeValues(
 
   revalidatePath(`/admin/products/${productId}`);
   revalidatePath(`/admin/products`);
+  revalidatePath(`/admin/products/compliance`);
   revalidatePath(`/portal/products/${productId}`);
   revalidatePath(`/portal/products`);
   

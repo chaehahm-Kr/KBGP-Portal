@@ -963,8 +963,9 @@ export function ComplianceClient({
                     <Link
                       href={`/admin/products/${p.id}`}
                       target="_blank"
+                      data-testid={`catalog-link-${p.id}`}
                       className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                      title="Open product catalog editor"
+                      title="Open authoritative Product Catalog editor"
                     >
                       Catalog ↗
                     </Link>
@@ -1021,16 +1022,72 @@ export function ComplianceClient({
   );
 }
 
-// 7-Section Navigation Config
+// 7-Section Navigation Config with authoritative Catalog routing
 const CHECKLIST_SECTIONS = [
-  { id: 1, name: "Product Classification", subtitle: "Category, Claims & Intended Use", icon: "🏷️" },
-  { id: 2, name: "Product Labeling", subtitle: "English Label, INCI, Net Contents", icon: "📜" },
-  { id: 3, name: "FDA Related", subtitle: "FDA Requirements & Registrations", icon: "🏛️" },
-  { id: 4, name: "MoCRA", subtitle: "Facility & Product Listing Mandates", icon: "📋" },
-  { id: 5, name: "OTC / Drug Facts", subtitle: "OTC Monographs & Drug Facts", icon: "💊" },
-  { id: 6, name: "Certifications & Testing", subtitle: "COA, SDS, Testing Reports & Patents", icon: "🔬" },
-  { id: 7, name: "Import & Customs", subtitle: "Country of Origin, Tariff & Clearance", icon: "🚢" },
+  { 
+    id: 1, 
+    name: "Product Classification", 
+    subtitle: "Category, Claims & Intended Use", 
+    icon: "🏷️",
+    catalogTab: "category_attributes",
+    catalogHash: "",
+  },
+  { 
+    id: 2, 
+    name: "Product Labeling", 
+    subtitle: "English Label, INCI, Net Contents", 
+    icon: "📜",
+    catalogTab: "basic",
+    catalogHash: "",
+  },
+  { 
+    id: 3, 
+    name: "FDA Related", 
+    subtitle: "FDA Requirements & Registrations", 
+    icon: "🏛️",
+    catalogTab: "category_attributes",
+    catalogHash: "#attr-FDA_STATUS",
+  },
+  { 
+    id: 4, 
+    name: "MoCRA", 
+    subtitle: "Facility & Product Listing Mandates", 
+    icon: "📋",
+    catalogTab: "category_attributes",
+    catalogHash: "#attr-MOCRA_STATUS",
+  },
+  { 
+    id: 5, 
+    name: "OTC / Drug Facts", 
+    subtitle: "OTC Monographs & Drug Facts", 
+    icon: "💊",
+    catalogTab: "category_attributes",
+    catalogHash: "#attr-OTC_STATUS",
+  },
+  { 
+    id: 6, 
+    name: "Certifications & Testing", 
+    subtitle: "COA, SDS, Testing Reports & Patents", 
+    icon: "🔬",
+    catalogTab: "certs",
+    catalogHash: "",
+  },
+  { 
+    id: 7, 
+    name: "Import & Customs", 
+    subtitle: "Country of Origin, Tariff & Clearance", 
+    icon: "🚢",
+    catalogTab: "logistics",
+    catalogHash: "",
+  },
 ] as const;
+
+function getCatalogSectionUrl(productId: string, tab: string, hash?: string) {
+  const base = `/admin/products/${productId}`;
+  const query = tab ? `?tab=${tab}` : "";
+  const fragment = hash ? (hash.startsWith("#") ? hash : `#${hash}`) : "";
+  return `${base}${query}${fragment}`;
+}
 
 function ComplianceDetailModal({
   product,
@@ -1126,8 +1183,9 @@ function ComplianceDetailModal({
             <Link
               href={`/admin/products/${product.id}`}
               target="_blank"
+              data-testid="modal-catalog-view-btn"
               className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-              title="Open authoritative Product Catalog"
+              title="Open authoritative Product Catalog editor"
             >
               Catalog View ↗
             </Link>
@@ -1225,9 +1283,21 @@ function ComplianceDetailModal({
                     {activeSection.subtitle}
                   </p>
                 </div>
-                <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded shrink-0">
-                  Section {activeSection.id} of 7
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    href={getCatalogSectionUrl(product.id, activeSection.catalogTab, activeSection.catalogHash)}
+                    target="_blank"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 text-xs font-semibold transition-colors"
+                    title={`Edit ${activeSection.name} in Product Catalog`}
+                    data-testid={`section-${activeSection.id}-edit-catalog`}
+                  >
+                    <span>✏️</span>
+                    <span>Edit in Product Catalog ↗</span>
+                  </Link>
+                  <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
+                    Section {activeSection.id} of 7
+                  </span>
+                </div>
               </div>
 
               {/* SECTION 1: Product Classification */}
@@ -1236,7 +1306,18 @@ function ComplianceDetailModal({
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Product Category</span>
-                      <ItemCategoryBadge type={product.category_full_path || product.category ? "existing_data" : "not_available"} />
+                      <div className="flex items-center gap-2">
+                        <ItemCategoryBadge type={product.category_full_path || product.category ? "existing_data" : "not_available"} />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "category_attributes")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Edit Category in Product Catalog"
+                          data-testid="edit-category-link"
+                        >
+                          Edit ↗
+                        </Link>
+                      </div>
                     </div>
                     <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-medium">
                       {product.category_full_path || product.category || "Data Not Available"}
@@ -1246,17 +1327,28 @@ function ComplianceDetailModal({
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Regulatory Classification</span>
-                      <ItemCategoryBadge
-                        type={
-                          product.otc_status === "NOT_OTC"
-                            ? "not_applicable"
-                            : product.otc_status === "OTC_REQUIRED" || product.otc_status === "POTENTIAL_OTC"
-                            ? "existing_data"
-                            : product.otc_status === "NOT_REVIEWED"
-                            ? "not_reviewed"
-                            : "not_available"
-                        }
-                      />
+                      <div className="flex items-center gap-2">
+                        <ItemCategoryBadge
+                          type={
+                            product.otc_status === "NOT_OTC"
+                              ? "not_applicable"
+                              : product.otc_status === "OTC_REQUIRED" || product.otc_status === "POTENTIAL_OTC"
+                              ? "existing_data"
+                              : product.otc_status === "NOT_REVIEWED"
+                              ? "not_reviewed"
+                              : "not_available"
+                          }
+                        />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "category_attributes", "#attr-OTC_STATUS")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Edit Regulatory Classification in Product Catalog"
+                          data-testid="edit-classification-link"
+                        >
+                          Edit ↗
+                        </Link>
+                      </div>
                     </div>
                     <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-medium">
                       {product.otc_status === "NOT_OTC"
@@ -1325,7 +1417,18 @@ function ComplianceDetailModal({
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">English Product Label</span>
-                      <ItemCategoryBadge type={product.ingredientsFileEnSignedUrl || product.ingredients_file_path_en ? "uploaded_doc" : "not_available"} />
+                      <div className="flex items-center gap-2">
+                        <ItemCategoryBadge type={product.ingredientsFileEnSignedUrl || product.ingredients_file_path_en ? "uploaded_doc" : "not_available"} />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "media")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Upload or manage English label file in Product Catalog"
+                          data-testid="edit-label-file-link"
+                        >
+                          Edit ↗
+                        </Link>
+                      </div>
                     </div>
                     <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
                       {product.ingredientsFileEnSignedUrl ? (
@@ -1349,15 +1452,26 @@ function ComplianceDetailModal({
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Ingredient Declaration (INCI)</span>
-                      <ItemCategoryBadge
-                        type={
-                          product.ingredients_text
-                            ? "existing_data"
-                            : product.ingredientsFileSignedUrl
-                            ? "uploaded_doc"
-                            : "not_available"
-                        }
-                      />
+                      <div className="flex items-center gap-2">
+                        <ItemCategoryBadge
+                          type={
+                            product.ingredients_text
+                              ? "existing_data"
+                              : product.ingredientsFileSignedUrl
+                              ? "uploaded_doc"
+                              : "not_available"
+                          }
+                        />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "basic")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Edit ingredients in Product Catalog"
+                          data-testid="edit-ingredients-link"
+                        >
+                          Edit ↗
+                        </Link>
+                      </div>
                     </div>
                     <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 leading-relaxed">
                       {product.ingredients_text ? (
@@ -1381,7 +1495,18 @@ function ComplianceDetailModal({
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Net Contents</span>
-                      <ItemCategoryBadge type={product.volume ? "existing_data" : "not_available"} />
+                      <div className="flex items-center gap-2">
+                        <ItemCategoryBadge type={product.volume ? "existing_data" : "not_available"} />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "basic")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Edit net contents/volume in Product Catalog"
+                          data-testid="edit-volume-link"
+                        >
+                          Edit ↗
+                        </Link>
+                      </div>
                     </div>
                     <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-medium">
                       {product.volume ? product.volume : "Data Not Available"}
@@ -1427,23 +1552,46 @@ function ComplianceDetailModal({
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Existing FDA Status</span>
-                      <StatusBadge rawStatus={product.fda_status} configMap={FDA_STATUS_CONFIG} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge rawStatus={product.fda_status} configMap={FDA_STATUS_CONFIG} />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "category_attributes", "#attr-FDA_STATUS")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Edit FDA_STATUS in Product Catalog"
+                          data-testid="edit-fda-status-link"
+                        >
+                          Edit ↗
+                        </Link>
+                      </div>
                     </div>
-                    <div className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Authoritative database attribute: <code className="text-zinc-300">FDA_STATUS</code>
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+                      <div>Authoritative database attribute: <code className="text-zinc-300">FDA_STATUS</code></div>
+                      <span className="text-[10px] text-zinc-400">Edits saved in Product Catalog</span>
                     </div>
                   </div>
 
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Existing FDA Registration Documents</span>
-                      <ItemCategoryBadge
-                        type={
-                          product.certificates.some((c) => c.certificate_type === "fda_registration")
-                            ? "uploaded_doc"
-                            : "not_available"
-                        }
-                      />
+                      <div className="flex items-center gap-2">
+                        <ItemCategoryBadge
+                          type={
+                            product.certificates.some((c) => c.certificate_type === "fda_registration")
+                              ? "uploaded_doc"
+                              : "not_available"
+                          }
+                        />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "certs")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Manage certificates in Product Catalog"
+                          data-testid="edit-certs-fda-link"
+                        >
+                          Manage ↗
+                        </Link>
+                      </div>
                     </div>
                     <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
                       {product.certificates.filter((c) => c.certificate_type === "fda_registration").length > 0 ? (
@@ -1486,10 +1634,22 @@ function ComplianceDetailModal({
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Existing MoCRA Status</span>
-                      <StatusBadge rawStatus={product.mocra_status} configMap={MOCRA_STATUS_CONFIG} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge rawStatus={product.mocra_status} configMap={MOCRA_STATUS_CONFIG} />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "category_attributes", "#attr-MOCRA_STATUS")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Edit MOCRA_STATUS in Product Catalog"
+                          data-testid="edit-mocra-status-link"
+                        >
+                          Edit ↗
+                        </Link>
+                      </div>
                     </div>
-                    <div className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Authoritative database attribute: <code className="text-zinc-300">MOCRA_STATUS</code>
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+                      <div>Authoritative database attribute: <code className="text-zinc-300">MOCRA_STATUS</code></div>
+                      <span className="text-[10px] text-zinc-400">Edits saved in Product Catalog</span>
                     </div>
                   </div>
 
@@ -1552,20 +1712,44 @@ function ComplianceDetailModal({
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Existing OTC Status</span>
-                      <StatusBadge rawStatus={product.otc_status} configMap={OTC_STATUS_CONFIG} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge rawStatus={product.otc_status} configMap={OTC_STATUS_CONFIG} />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "category_attributes", "#attr-OTC_STATUS")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Edit OTC_STATUS in Product Catalog"
+                          data-testid="edit-otc-status-link"
+                        >
+                          Edit ↗
+                        </Link>
+                      </div>
                     </div>
-                    <div className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Authoritative database attribute: <code className="text-zinc-300">OTC_STATUS</code>
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+                      <div>Authoritative database attribute: <code className="text-zinc-300">OTC_STATUS</code></div>
+                      <span className="text-[10px] text-zinc-400">Edits saved in Product Catalog</span>
                     </div>
                   </div>
 
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Drug Facts Status</span>
-                      <StatusBadge rawStatus={product.drug_facts_status} configMap={DRUG_FACTS_STATUS_CONFIG} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge rawStatus={product.drug_facts_status} configMap={DRUG_FACTS_STATUS_CONFIG} />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "category_attributes", "#attr-DRUG_FACTS_STATUS")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Edit DRUG_FACTS_STATUS in Product Catalog"
+                          data-testid="edit-drug-facts-status-link"
+                        >
+                          Edit ↗
+                        </Link>
+                      </div>
                     </div>
-                    <div className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Authoritative database attribute: <code className="text-zinc-300">DRUG_FACTS_STATUS</code>
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+                      <div>Authoritative database attribute: <code className="text-zinc-300">DRUG_FACTS_STATUS</code></div>
+                      <span className="text-[10px] text-zinc-400">Edits saved in Product Catalog</span>
                     </div>
                   </div>
 
@@ -1606,13 +1790,24 @@ function ComplianceDetailModal({
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">COA (Certificate of Analysis)</span>
-                      <ItemCategoryBadge
-                        type={
-                          product.certificates.some((c) => c.certificate_type === "ingredient_certification")
-                            ? "uploaded_doc"
-                            : "not_available"
-                        }
-                      />
+                      <div className="flex items-center gap-2">
+                        <ItemCategoryBadge
+                          type={
+                            product.certificates.some((c) => c.certificate_type === "ingredient_certification")
+                              ? "uploaded_doc"
+                              : "not_available"
+                          }
+                        />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "certs")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Manage certificates in Product Catalog"
+                          data-testid="edit-certs-coa-link"
+                        >
+                          Manage ↗
+                        </Link>
+                      </div>
                     </div>
                     <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
                       {product.certificates.some((c) => c.certificate_type === "ingredient_certification")
@@ -1644,13 +1839,24 @@ function ComplianceDetailModal({
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Other Certifications (Trademarks / Patents)</span>
-                      <ItemCategoryBadge
-                        type={
-                          product.certificates.some((c) => c.certificate_type === "trademark" || c.certificate_type === "patent")
-                            ? "uploaded_doc"
-                            : "not_available"
-                        }
-                      />
+                      <div className="flex items-center gap-2">
+                        <ItemCategoryBadge
+                          type={
+                            product.certificates.some((c) => c.certificate_type === "trademark" || c.certificate_type === "patent")
+                              ? "uploaded_doc"
+                              : "not_available"
+                          }
+                        />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "certs")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Manage certificates in Product Catalog"
+                          data-testid="edit-certs-other-link"
+                        >
+                          Manage ↗
+                        </Link>
+                      </div>
                     </div>
                     <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
                       {product.certificates.filter((c) => c.certificate_type === "trademark" || c.certificate_type === "patent").length > 0
@@ -1687,7 +1893,18 @@ function ComplianceDetailModal({
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Country of Origin</span>
-                      <ItemCategoryBadge type={product.origin ? "existing_data" : "not_available"} />
+                      <div className="flex items-center gap-2">
+                        <ItemCategoryBadge type={product.origin ? "existing_data" : "not_available"} />
+                        <Link
+                          href={getCatalogSectionUrl(product.id, "basic")}
+                          target="_blank"
+                          className="text-[11px] font-medium text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-0.5"
+                          title="Edit Origin in Product Catalog"
+                          data-testid="edit-origin-link"
+                        >
+                          Edit ↗
+                        </Link>
+                      </div>
                     </div>
                     <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-medium">
                       {product.origin || "Data Not Available"}
@@ -1751,6 +1968,21 @@ function ComplianceDetailModal({
                 >
                   Next Section →
                 </button>
+              </div>
+
+              {/* Product Catalog Authoritative Note */}
+              <div className="p-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-800 text-[10.5px] text-zinc-600 dark:text-zinc-400 flex items-center justify-between gap-3">
+                <div>
+                  <strong className="text-zinc-700 dark:text-zinc-300">Authoritative Single Source of Truth:</strong> Regulatory product values are authored and maintained directly in the Product Catalog. Updates reflect automatically on refresh.
+                </div>
+                <Link
+                  href={getCatalogSectionUrl(product.id, activeSection.catalogTab, activeSection.catalogHash)}
+                  target="_blank"
+                  className="text-cyan-400 font-semibold hover:underline shrink-0 text-[11px]"
+                  data-testid="bottom-edit-catalog-link"
+                >
+                  Edit in Catalog ↗
+                </Link>
               </div>
 
               {/* Regulatory Safety Disclaimer Notice */}
