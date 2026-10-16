@@ -3,6 +3,7 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { resolveProductName } from "@/lib/product/name-resolver";
+import type { ProductComplianceReviewItem, ComplianceReviewStatus } from "@/lib/compliance/types";
 import { ComplianceClient, type ComplianceProductItem } from "@/components/admin/products/compliance-client";
 
 export const metadata: Metadata = {
@@ -175,6 +176,57 @@ export default async function AdminProductCompliancePage() {
     });
   });
 
+  // 8c. Fetch internal compliance reviews
+  const { data: rawReviews } = await admin
+    .from("product_compliance_reviews")
+    .select(`
+      id,
+      product_id,
+      section_id,
+      status,
+      reviewer_id,
+      notes,
+      evidence_reference,
+      related_inquiry_id,
+      last_reviewed_at,
+      created_at,
+      updated_at,
+      staff_members:reviewer_id ( id, name, email ),
+      partner_inquiries:related_inquiry_id ( id, case_number, title, status )
+    `);
+
+  const reviewMap = new Map<string, Record<string, ProductComplianceReviewItem>>();
+  (rawReviews ?? []).forEach((row) => {
+    if (!row.product_id) return;
+    if (!reviewMap.has(row.product_id)) {
+      reviewMap.set(row.product_id, {});
+    }
+    const reviewerObj = Array.isArray(row.staff_members) ? row.staff_members[0] : row.staff_members;
+    const inquiryObj = Array.isArray(row.partner_inquiries) ? row.partner_inquiries[0] : row.partner_inquiries;
+    reviewMap.get(row.product_id)![row.section_id] = {
+      id: row.id,
+      product_id: row.product_id,
+      section_id: row.section_id,
+      status: row.status as ComplianceReviewStatus,
+      reviewer_id: row.reviewer_id,
+      notes: row.notes,
+      evidence_reference: row.evidence_reference,
+      related_inquiry_id: row.related_inquiry_id,
+      last_reviewed_at: row.last_reviewed_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      reviewer: reviewerObj ? { id: reviewerObj.id, name: reviewerObj.name, email: reviewerObj.email } : null,
+      inquiry: inquiryObj
+        ? {
+            id: inquiryObj.id,
+            case_number: inquiryObj.case_number,
+            title: inquiryObj.title,
+            status: inquiryObj.status,
+          }
+        : null,
+    };
+  });
+
   // 9. Assemble ComplianceProductItem list
   const resolvedProducts: ComplianceProductItem[] = products.map((p) => {
     const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
@@ -250,6 +302,7 @@ export default async function AdminProductCompliancePage() {
 
       certificates: prodCerts,
       inquiries: inquiryMap.get(p.id) || [],
+      reviewsBySection: reviewMap.get(p.id) || {},
     };
   });
 

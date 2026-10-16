@@ -3,6 +3,37 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { saveProductComplianceReview } from "@/lib/compliance/actions";
+import {
+  type ComplianceReviewStatus,
+  type ProductComplianceReviewItem,
+  COMPLIANCE_REVIEW_STATUS_CONFIG,
+} from "@/lib/compliance/types";
+
+export function ComplianceReviewBadge({
+  status,
+  size = "md",
+}: {
+  status: ComplianceReviewStatus | string | null | undefined;
+  size?: "sm" | "md";
+}) {
+  const normalized = (status as ComplianceReviewStatus) || "not_started";
+  const cfg =
+    COMPLIANCE_REVIEW_STATUS_CONFIG[normalized] ||
+    COMPLIANCE_REVIEW_STATUS_CONFIG.not_started;
+  const sizeClass =
+    size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-[11px]";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded font-medium border ${cfg.badgeClass} ${sizeClass}`}
+      title={`사내 검토 상태: ${cfg.labelKo} (${cfg.labelEn}) - 정부 인증이나 법적 승인이 아닙니다`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dotClass}`} />
+      <span>{cfg.labelKo}</span>
+    </span>
+  );
+}
 
 export interface ComplianceProductItem {
   id: string;
@@ -71,6 +102,9 @@ export interface ComplianceProductItem {
     is_action_required: boolean;
     updated_at: string;
   }>;
+
+  // Internal compliance review records by section
+  reviewsBySection?: Record<string, ProductComplianceReviewItem>;
 }
 
 interface ComplianceClientProps {
@@ -272,6 +306,46 @@ export function ComplianceClient({
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selectedOrigin, setSelectedOrigin] = useState("");
   const [filterMissingInfoOnly, setFilterMissingInfoOnly] = useState(false);
+  const [selectedLabelReviewStatus, setSelectedLabelReviewStatus] = useState("");
+  const [selectedImportReadinessStatus, setSelectedImportReadinessStatus] = useState("");
+
+  // Stored compliance reviews map by productId
+  const [reviewsByProductId, setReviewsByProductId] = useState<
+    Record<string, Record<string, ProductComplianceReviewItem>>
+  >(() => {
+    const map: Record<string, Record<string, ProductComplianceReviewItem>> = {};
+    products.forEach((p) => {
+      map[p.id] = { ...(p.reviewsBySection || {}) };
+    });
+    return map;
+  });
+
+  // Sync reviews if products prop changes
+  useEffect(() => {
+    setReviewsByProductId((prev) => {
+      const updated = { ...prev };
+      products.forEach((p) => {
+        if (!updated[p.id] || Object.keys(updated[p.id]).length === 0) {
+          updated[p.id] = { ...(p.reviewsBySection || {}) };
+        }
+      });
+      return updated;
+    });
+  }, [products]);
+
+  const handleReviewSaved = useCallback(
+    (productId: string, savedReview: ProductComplianceReviewItem) => {
+      setReviewsByProductId((prev) => {
+        const prodReviews = { ...(prev[productId] || {}) };
+        prodReviews[savedReview.section_id] = savedReview;
+        return {
+          ...prev,
+          [productId]: prodReviews,
+        };
+      });
+    },
+    []
+  );
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -393,6 +467,22 @@ export function ComplianceClient({
         if (!hasMissingReg) return false;
       }
 
+      // 11. Advanced: Label Review Status
+      if (selectedLabelReviewStatus) {
+        const prodReviews = reviewsByProductId[p.id] || {};
+        const secReview = prodReviews["2"] || prodReviews["product_labeling"];
+        const currentStatus = secReview?.status || "not_started";
+        if (currentStatus !== selectedLabelReviewStatus) return false;
+      }
+
+      // 12. Advanced: Import Readiness Status
+      if (selectedImportReadinessStatus) {
+        const prodReviews = reviewsByProductId[p.id] || {};
+        const secReview = prodReviews["overall"] || prodReviews["7"] || prodReviews["import_customs"];
+        const currentStatus = secReview?.status || "not_started";
+        if (currentStatus !== selectedImportReadinessStatus) return false;
+      }
+
       return true;
     });
   }, [
@@ -407,6 +497,9 @@ export function ComplianceClient({
     selectedDrugFactsStatus,
     selectedOrigin,
     filterMissingInfoOnly,
+    selectedLabelReviewStatus,
+    selectedImportReadinessStatus,
+    reviewsByProductId,
   ]);
 
   // Pagination calculation
@@ -428,6 +521,8 @@ export function ComplianceClient({
     setSelectedDrugFactsStatus("");
     setSelectedOrigin("");
     setFilterMissingInfoOnly(false);
+    setSelectedLabelReviewStatus("");
+    setSelectedImportReadinessStatus("");
     setCurrentPage(1);
   };
 
@@ -738,7 +833,9 @@ export function ComplianceClient({
             selectedOtcStatus ||
             selectedDrugFactsStatus ||
             selectedOrigin ||
-            filterMissingInfoOnly) && (
+            filterMissingInfoOnly ||
+            selectedLabelReviewStatus ||
+            selectedImportReadinessStatus) && (
             <button
               type="button"
               onClick={resetFilters}
@@ -790,39 +887,47 @@ export function ComplianceClient({
                 </label>
               </div>
 
-              {/* Planned Filter: Label Review Status */}
+              {/* Label Review Status Filter */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-medium text-zinc-400 dark:text-zinc-500">
-                    Label Review Status
-                  </label>
-                  <span className="text-[10px] uppercase font-semibold text-indigo-400 bg-indigo-500/10 px-1 py-0.2 rounded border border-indigo-500/20">
-                    Planned
-                  </span>
-                </div>
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+                  Label Review Status
+                </label>
                 <select
-                  disabled
-                  className="w-full h-8 px-2.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/50 text-xs text-zinc-400 cursor-not-allowed"
+                  value={selectedLabelReviewStatus}
+                  onChange={(e) => {
+                    setSelectedLabelReviewStatus(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full h-8 px-2.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-zinc-100"
                 >
-                  <option>All Review Statuses (Planned)</option>
+                  <option value="">All Review Statuses</option>
+                  <option value="not_started">미시작 (Not Started)</option>
+                  <option value="in_review">검토 중 (In Review)</option>
+                  <option value="info_requested">정보 요청 (Info Requested)</option>
+                  <option value="needs_followup">후속 조치 필요 (Needs Follow-up)</option>
+                  <option value="completed">내부 검토 완료 (Completed)</option>
                 </select>
               </div>
 
-              {/* Planned Filter: Import Readiness */}
+              {/* Import Readiness Filter */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-medium text-zinc-400 dark:text-zinc-500">
-                    Import Readiness
-                  </label>
-                  <span className="text-[10px] uppercase font-semibold text-indigo-400 bg-indigo-500/10 px-1 py-0.2 rounded border border-indigo-500/20">
-                    Planned
-                  </span>
-                </div>
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+                  Import Readiness
+                </label>
                 <select
-                  disabled
-                  className="w-full h-8 px-2.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/50 text-xs text-zinc-400 cursor-not-allowed"
+                  value={selectedImportReadinessStatus}
+                  onChange={(e) => {
+                    setSelectedImportReadinessStatus(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full h-8 px-2.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-zinc-100"
                 >
-                  <option>All Readiness Levels (Planned)</option>
+                  <option value="">All Readiness Levels</option>
+                  <option value="not_started">미시작 (Not Started)</option>
+                  <option value="in_review">검토 중 (In Review)</option>
+                  <option value="info_requested">정보 요청 (Info Requested)</option>
+                  <option value="needs_followup">후속 조치 필요 (Needs Follow-up)</option>
+                  <option value="completed">내부 검토 완료 (Completed)</option>
                 </select>
               </div>
             </div>
@@ -955,24 +1060,22 @@ export function ComplianceClient({
                     <StatusBadge rawStatus={p.drug_facts_status} configMap={DRUG_FACTS_STATUS_CONFIG} />
                   </td>
 
-                  {/* Label Review (Not Yet Tracked) */}
+                  {/* Label Review (Section 2 Review Status) */}
                   <td className="py-2.5 px-3">
-                    <span
-                      title="Label review workflow not established in Phase 1"
-                      className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/60"
-                    >
-                      Not Yet Tracked
-                    </span>
+                    {(() => {
+                      const pReviews = reviewsByProductId[p.id] || {};
+                      const rev = pReviews["2"] || pReviews["product_labeling"];
+                      return <ComplianceReviewBadge status={rev?.status || "not_started"} />;
+                    })()}
                   </td>
 
-                  {/* Import Readiness (Not Yet Tracked) */}
+                  {/* Import Readiness (Overall or Section 7 Review Status) */}
                   <td className="py-2.5 px-3">
-                    <span
-                      title="Import readiness decision not automated in Phase 1"
-                      className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/60"
-                    >
-                      Not Yet Tracked
-                    </span>
+                    {(() => {
+                      const pReviews = reviewsByProductId[p.id] || {};
+                      const rev = pReviews["overall"] || pReviews["7"] || pReviews["import_customs"];
+                      return <ComplianceReviewBadge status={rev?.status || "not_started"} />;
+                    })()}
                   </td>
 
                   {/* Actions: Review Checklist, Catalog, Contact Brand */}
@@ -1044,6 +1147,8 @@ export function ComplianceClient({
       {selectedProduct && (
         <ComplianceDetailModal
           product={selectedProduct}
+          reviews={reviewsByProductId[selectedProduct.id] || {}}
+          onReviewSaved={(savedReview) => handleReviewSaved(selectedProduct.id, savedReview)}
           onClose={() => {
             setSelectedProduct(null);
             if (typeof window !== "undefined") {
@@ -1060,10 +1165,30 @@ export function ComplianceClient({
   );
 }
 
-// 7-Section Navigation Config with authoritative Catalog routing
-const CHECKLIST_SECTIONS = [
+export interface ChecklistSectionConfig {
+  id: string;
+  badgeLabel: string;
+  name: string;
+  subtitle: string;
+  icon: string;
+  catalogTab: string;
+  catalogHash: string;
+}
+
+// Checklist Sections Navigation Config including Section 0 (Overall) and Sections 1-7
+const CHECKLIST_SECTIONS: readonly ChecklistSectionConfig[] = [
+  {
+    id: "overall",
+    badgeLabel: "★",
+    name: "Overall Review",
+    subtitle: "Comprehensive Compliance Assessment",
+    icon: "🌟",
+    catalogTab: "category_attributes",
+    catalogHash: "",
+  },
   { 
-    id: 1, 
+    id: "1", 
+    badgeLabel: "1",
     name: "Product Classification", 
     subtitle: "Category, Claims & Intended Use", 
     icon: "🏷️",
@@ -1071,7 +1196,8 @@ const CHECKLIST_SECTIONS = [
     catalogHash: "",
   },
   { 
-    id: 2, 
+    id: "2", 
+    badgeLabel: "2",
     name: "Product Labeling", 
     subtitle: "English Label, INCI, Net Contents", 
     icon: "📜",
@@ -1079,7 +1205,8 @@ const CHECKLIST_SECTIONS = [
     catalogHash: "",
   },
   { 
-    id: 3, 
+    id: "3", 
+    badgeLabel: "3",
     name: "FDA Related", 
     subtitle: "FDA Requirements & Registrations", 
     icon: "🏛️",
@@ -1087,7 +1214,8 @@ const CHECKLIST_SECTIONS = [
     catalogHash: "#attr-FDA_STATUS",
   },
   { 
-    id: 4, 
+    id: "4", 
+    badgeLabel: "4",
     name: "MoCRA", 
     subtitle: "Facility & Product Listing Mandates", 
     icon: "📋",
@@ -1095,7 +1223,8 @@ const CHECKLIST_SECTIONS = [
     catalogHash: "#attr-MOCRA_STATUS",
   },
   { 
-    id: 5, 
+    id: "5", 
+    badgeLabel: "5",
     name: "OTC / Drug Facts", 
     subtitle: "OTC Monographs & Drug Facts", 
     icon: "💊",
@@ -1103,7 +1232,8 @@ const CHECKLIST_SECTIONS = [
     catalogHash: "#attr-OTC_STATUS",
   },
   { 
-    id: 6, 
+    id: "6", 
+    badgeLabel: "6",
     name: "Certifications & Testing", 
     subtitle: "COA, SDS, Testing Reports & Patents", 
     icon: "🔬",
@@ -1111,7 +1241,8 @@ const CHECKLIST_SECTIONS = [
     catalogHash: "",
   },
   { 
-    id: 7, 
+    id: "7", 
+    badgeLabel: "7",
     name: "Import & Customs", 
     subtitle: "Country of Origin, Tariff & Clearance", 
     icon: "🚢",
@@ -1127,24 +1258,327 @@ function getCatalogSectionUrl(productId: string, tab: string, hash?: string) {
   return `${base}${query}${fragment}`;
 }
 
+function SectionInternalReviewPanel({
+  productId,
+  sectionId,
+  sectionName,
+  review,
+  linkedInquiries,
+  onSaved,
+  brandName,
+  companyName,
+}: {
+  productId: string;
+  sectionId: string;
+  sectionName: string;
+  review?: ProductComplianceReviewItem;
+  linkedInquiries: NonNullable<ComplianceProductItem["inquiries"]>;
+  onSaved: (savedReview: ProductComplianceReviewItem) => void;
+  brandName: string;
+  companyName: string;
+}) {
+  const [status, setStatus] = useState<ComplianceReviewStatus>(review?.status || "not_started");
+  const [notes, setNotes] = useState<string>(review?.notes || "");
+  const [evidenceReference, setEvidenceReference] = useState<string>(review?.evidence_reference || "");
+  const [relatedInquiryId, setRelatedInquiryId] = useState<string>(review?.related_inquiry_id || "");
+  const [isSaving, setIsSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  // Sync state whenever active section or persisted review changes
+  useEffect(() => {
+    setStatus(review?.status || "not_started");
+    setNotes(review?.notes || "");
+    setEvidenceReference(review?.evidence_reference || "");
+    setRelatedInquiryId(review?.related_inquiry_id || "");
+    setFeedback(null);
+  }, [sectionId, review]);
+
+  const hasChanges = useMemo(() => {
+    const origStatus = review?.status || "not_started";
+    const origNotes = review?.notes || "";
+    const origEvidence = review?.evidence_reference || "";
+    const origInq = review?.related_inquiry_id || "";
+    return (
+      status !== origStatus ||
+      notes !== origNotes ||
+      evidenceReference !== origEvidence ||
+      relatedInquiryId !== origInq
+    );
+  }, [status, notes, evidenceReference, relatedInquiryId, review]);
+
+  const handleReset = () => {
+    setStatus(review?.status || "not_started");
+    setNotes(review?.notes || "");
+    setEvidenceReference(review?.evidence_reference || "");
+    setRelatedInquiryId(review?.related_inquiry_id || "");
+    setFeedback(null);
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setFeedback(null);
+    try {
+      const res = await saveProductComplianceReview({
+        productId,
+        sectionId,
+        status,
+        notes: notes || null,
+        evidenceReference: evidenceReference || null,
+        relatedInquiryId: relatedInquiryId || null,
+      });
+
+      if (!res.success || !res.review) {
+        setFeedback({
+          type: "error",
+          message: res.error || "검토 내용 저장에 실패했습니다.",
+        });
+      } else {
+        setFeedback({
+          type: "success",
+          message: "검토 상태 및 사내 메모가 안전하게 저장되었습니다.",
+        });
+        onSaved(res.review);
+      }
+    } catch (err: any) {
+      setFeedback({
+        type: "error",
+        message: err?.message || "네트워크 또는 서버 통신 오류가 발생했습니다.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-zinc-200 dark:border-zinc-700/80 bg-zinc-50/70 dark:bg-zinc-800/40 p-4 space-y-3.5 shadow-sm">
+      {/* Panel Top: Title, Saved Status Badge, Reviewer Info */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-zinc-200 dark:border-zinc-700/60">
+        <div className="flex items-center gap-2">
+          <span className="text-base">📋</span>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+            Internal Compliance Review · {sectionName}
+          </h4>
+          <ComplianceReviewBadge status={review?.status || "not_started"} size="sm" />
+        </div>
+
+        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5 flex-wrap">
+          {review ? (
+            <>
+              <span>검토자:</span>
+              <strong className="text-zinc-700 dark:text-zinc-200 font-medium">
+                {review.reviewer?.name || review.reviewer?.email || "Admin Staff"}
+              </strong>
+              <span>•</span>
+              <span>최근 검토:</span>
+              <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                {new Date(review.last_reviewed_at).toLocaleDateString("ko-KR", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </>
+          ) : (
+            <span className="italic text-zinc-400">아직 저장된 사내 검토 없음 (미시작)</span>
+          )}
+        </div>
+      </div>
+
+      {/* Form Controls Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        {/* Review Status Selector */}
+        <div>
+          <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+            Review Status (검토 상태) <span className="text-rose-500">*</span>
+          </label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as ComplianceReviewStatus)}
+            className="w-full h-9 px-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-zinc-100 font-medium focus:outline-none focus:ring-2 focus:ring-zinc-400"
+          >
+            <option value="not_started">미시작 (Not Started)</option>
+            <option value="in_review">검토 중 (In Review)</option>
+            <option value="info_requested">정보 요청 (Info Requested)</option>
+            <option value="needs_followup">후속 조치 필요 (Needs Follow-up)</option>
+            <option value="completed">내부 검토 완료 (Review Completed)</option>
+          </select>
+        </div>
+
+        {/* Linked Brand Inquiry Selector */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+              Linked Brand Inquiry (연계 문의)
+            </label>
+            {relatedInquiryId ? (
+              <Link
+                href={`/admin/partner-inquiries?type=brand&id=${encodeURIComponent(relatedInquiryId)}`}
+                target="_blank"
+                className="text-[10.5px] font-semibold text-purple-600 dark:text-purple-400 hover:underline"
+              >
+                문의 열기 ↗
+              </Link>
+            ) : (
+              <Link
+                href={`/admin/partner-inquiries?type=brand&newCase=1&productId=${encodeURIComponent(productId)}&section=${encodeURIComponent(sectionId)}`}
+                target="_blank"
+                className="text-[10.5px] font-semibold text-purple-600 dark:text-purple-400 hover:underline"
+              >
+                + 새 문의 작성 ↗
+              </Link>
+            )}
+          </div>
+          <select
+            value={relatedInquiryId}
+            onChange={(e) => setRelatedInquiryId(e.target.value)}
+            className="w-full h-9 px-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-zinc-100 font-medium focus:outline-none focus:ring-2 focus:ring-zinc-400"
+          >
+            <option value="">(연결된 문의 없음 / None)</option>
+            {linkedInquiries.map((inq) => (
+              <option key={inq.id} value={inq.id}>
+                [{inq.case_number || "NO-CASE"}] {inq.title} ({inq.status})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Evidence Reference Input */}
+        <div className="md:col-span-2">
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+              Evidence Reference (증빙 문서/자료 참조)
+            </label>
+            <span
+              className={`text-[10.5px] font-mono ${
+                evidenceReference.length > 450 ? "text-amber-500 font-bold" : "text-zinc-400"
+              }`}
+            >
+              {evidenceReference.length} / 500자
+            </span>
+          </div>
+          <input
+            type="text"
+            value={evidenceReference}
+            maxLength={500}
+            onChange={(e) => setEvidenceReference(e.target.value)}
+            placeholder="예: FDA 시설등록 번호 / SDS v2.1 승인서 / 국문 라벨 번역본 검수완료 / 미생물 성적서 등"
+            className="w-full h-9 px-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-400 placeholder:text-zinc-400"
+          />
+        </div>
+
+        {/* Internal Review Notes Textarea */}
+        <div className="md:col-span-2">
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+              Internal Review Notes (사내 검토 메모 — 비공개)
+            </label>
+            <span
+              className={`text-[10.5px] font-mono ${
+                notes.length > 1800 ? "text-amber-500 font-bold" : "text-zinc-400"
+              }`}
+            >
+              {notes.length} / 2,000자
+            </span>
+          </div>
+          <textarea
+            rows={3}
+            value={notes}
+            maxLength={2000}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="규제 준수 상태 확인 의견, 브랜드에 요청한 사항, 보완 필요 조치 내역 등 관리자 전용 사내 메모를 입력하세요 (포털 사용자에게 노출되지 않음)..."
+            className="w-full p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-400 placeholder:text-zinc-400 leading-relaxed resize-y"
+          />
+        </div>
+      </div>
+
+      {/* Safety Notice & Non-Approval Legal Disclaimer */}
+      <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 flex items-start gap-2">
+        <span className="text-sm shrink-0">⚠️</span>
+        <div className="leading-relaxed">
+          <strong className="font-semibold">법적 고지:</strong> 사내 '내부 검토 완료(Completed)'는 K SELECT NETWORK의 내부 규정 준수 검토 기록을 의미하며, FDA 승인, 미국 정부 기관의 법적 인증, 또는 상업적 통관/판매 허가를 보증하지 않습니다.
+        </div>
+      </div>
+
+      {/* Action Bar: Feedback Message & Save/Reset Buttons */}
+      <div className="flex items-center justify-between gap-3 pt-1">
+        <div className="flex-1 min-w-0">
+          {feedback && (
+            <div
+              className={`text-xs font-medium flex items-center gap-1.5 truncate ${
+                feedback.type === "success" ? "text-emerald-500 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400"
+              }`}
+            >
+              <span>{feedback.type === "success" ? "✓" : "⚠️"}</span>
+              <span className="truncate">{feedback.message}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {hasChanges && (
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={handleReset}
+              className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              원래대로
+            </button>
+          )}
+
+          <button
+            type="button"
+            disabled={isSaving || !hasChanges}
+            onClick={handleSave}
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+          >
+            {isSaving ? (
+              <>
+                <span className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                <span>저장 중...</span>
+              </>
+            ) : (
+              <span>검토 저장 (Save Review)</span>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ComplianceDetailModal({
   product,
+  reviews,
+  onReviewSaved,
   onClose,
 }: {
   product: ComplianceProductItem;
+  reviews: Record<string, ProductComplianceReviewItem>;
+  onReviewSaved: (savedReview: ProductComplianceReviewItem) => void;
   onClose: () => void;
 }) {
-  const [activeSectionId, setActiveSectionId] = useState<number>(1);
+  const [activeSectionId, setActiveSectionId] = useState<string>("overall");
 
-  // Keyboard navigation: Escape to close, Arrow keys to navigate sections
+  // Keyboard navigation: Escape to close, Arrow keys to navigate sections cyclically
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
       } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
-        setActiveSectionId((curr) => (curr < 7 ? curr + 1 : 1));
+        setActiveSectionId((curr) => {
+          const idx = CHECKLIST_SECTIONS.findIndex((s) => s.id === curr);
+          const nextIdx = idx < CHECKLIST_SECTIONS.length - 1 ? idx + 1 : 0;
+          return CHECKLIST_SECTIONS[nextIdx].id;
+        });
       } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
-        setActiveSectionId((curr) => (curr > 1 ? curr - 1 : 7));
+        setActiveSectionId((curr) => {
+          const idx = CHECKLIST_SECTIONS.findIndex((s) => s.id === curr);
+          const prevIdx = idx > 0 ? idx - 1 : CHECKLIST_SECTIONS.length - 1;
+          return CHECKLIST_SECTIONS[prevIdx].id;
+        });
       }
     },
     [onClose]
@@ -1251,35 +1685,45 @@ function ComplianceDetailModal({
 
               {CHECKLIST_SECTIONS.map((sec) => {
                 const isSelected = sec.id === activeSectionId;
+                const secReview = reviews[sec.id];
                 return (
                   <button
                     key={sec.id}
                     type="button"
                     onClick={() => setActiveSectionId(sec.id)}
-                    className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center gap-3 cursor-pointer ${
+                    className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
                       isSelected
                         ? "bg-zinc-900 text-white dark:bg-zinc-800 dark:text-zinc-100 shadow-sm border border-zinc-700/80"
                         : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 border border-transparent"
                     }`}
                   >
-                    <span
-                      className={`flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold shrink-0 ${
-                        isSelected
-                          ? "bg-cyan-500 text-black font-extrabold"
-                          : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                      }`}
-                    >
-                      {sec.id}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold truncate">{sec.name}</div>
-                      <div
-                        className={`text-[10px] truncate ${
-                          isSelected ? "text-zinc-300 dark:text-zinc-400" : "text-zinc-400 dark:text-zinc-500"
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <span
+                        className={`flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold shrink-0 ${
+                          isSelected
+                            ? "bg-cyan-500 text-black font-extrabold"
+                            : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
                         }`}
                       >
-                        {sec.subtitle}
+                        {sec.badgeLabel}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold truncate">{sec.name}</div>
+                        <div
+                          className={`text-[10px] truncate ${
+                            isSelected ? "text-zinc-300 dark:text-zinc-400" : "text-zinc-400 dark:text-zinc-500"
+                          }`}
+                        >
+                          {sec.subtitle}
+                        </div>
                       </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      <ComplianceReviewBadge
+                        status={secReview?.status || "not_started"}
+                        size="sm"
+                      />
                     </div>
                   </button>
                 );
@@ -1376,13 +1820,79 @@ function ComplianceDetailModal({
                     <span>Edit in Product Catalog ↗</span>
                   </Link>
                   <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
-                    Section {activeSection.id} of 7
+                    {activeSection.id === "overall" ? "Overall Assessment" : `Section ${activeSection.badgeLabel} of 7`}
                   </span>
                 </div>
               </div>
 
+              {/* Internal Compliance Review Card (Rendered for active section) */}
+              <SectionInternalReviewPanel
+                productId={product.id}
+                sectionId={activeSection.id}
+                sectionName={activeSection.name}
+                review={reviews[activeSection.id]}
+                linkedInquiries={product.inquiries || []}
+                onSaved={onReviewSaved}
+                brandName={product.brand_name}
+                companyName={product.company_name}
+              />
+
+              {/* SECTION: Overall Review Summary */}
+              {activeSectionId === "overall" && (
+                <div className="space-y-4 pt-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                      Checklist Sections Summary (7개 섹션 진행 현황)
+                    </h4>
+                    <span className="text-[11px] text-zinc-400">
+                      섹션을 클릭하여 상세 정보와 내부 검토를 진행하세요
+                    </span>
+                  </div>
+
+                  <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden divide-y divide-zinc-200 dark:divide-zinc-800 bg-white dark:bg-zinc-900/60">
+                    {CHECKLIST_SECTIONS.filter((s) => s.id !== "overall").map((sec) => {
+                      const secReview = reviews[sec.id];
+                      return (
+                        <div
+                          key={sec.id}
+                          className="p-3.5 flex items-center justify-between gap-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold shrink-0 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                              {sec.badgeLabel}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm">{sec.icon}</span>
+                                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                                  {sec.name}
+                                </span>
+                              </div>
+                              <p className="text-[10.5px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                                {sec.subtitle}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            <ComplianceReviewBadge status={secReview?.status || "not_started"} size="sm" />
+                            <button
+                              type="button"
+                              onClick={() => setActiveSectionId(sec.id)}
+                              className="text-xs font-semibold text-cyan-500 hover:text-cyan-400 hover:underline flex items-center gap-1"
+                            >
+                              <span>검토 이동 →</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* SECTION 1: Product Classification */}
-              {activeSectionId === 1 && (
+              {activeSectionId === "1" && (
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
@@ -1493,7 +2003,7 @@ function ComplianceDetailModal({
               )}
 
               {/* SECTION 2: Product Labeling */}
-              {activeSectionId === 2 && (
+              {activeSectionId === "2" && (
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
@@ -1628,7 +2138,7 @@ function ComplianceDetailModal({
               )}
 
               {/* SECTION 3: FDA Related */}
-              {activeSectionId === 3 && (
+              {activeSectionId === "3" && (
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
@@ -1710,7 +2220,7 @@ function ComplianceDetailModal({
               )}
 
               {/* SECTION 4: MoCRA */}
-              {activeSectionId === 4 && (
+              {activeSectionId === "4" && (
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
@@ -1788,7 +2298,7 @@ function ComplianceDetailModal({
               )}
 
               {/* SECTION 5: OTC / Drug Facts */}
-              {activeSectionId === 5 && (
+              {activeSectionId === "5" && (
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
@@ -1866,7 +2376,7 @@ function ComplianceDetailModal({
               )}
 
               {/* SECTION 6: Certifications & Testing */}
-              {activeSectionId === 6 && (
+              {activeSectionId === "6" && (
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
@@ -1959,7 +2469,7 @@ function ComplianceDetailModal({
               )}
 
               {/* SECTION 7: Import & Customs */}
-              {activeSectionId === 7 && (
+              {activeSectionId === "7" && (
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between">
@@ -2032,8 +2542,11 @@ function ComplianceDetailModal({
               <div className="flex items-center justify-between">
                 <button
                   type="button"
-                  disabled={activeSectionId <= 1}
-                  onClick={() => setActiveSectionId((curr) => Math.max(1, curr - 1))}
+                  disabled={CHECKLIST_SECTIONS.findIndex((s) => s.id === activeSectionId) <= 0}
+                  onClick={() => {
+                    const idx = CHECKLIST_SECTIONS.findIndex((s) => s.id === activeSectionId);
+                    if (idx > 0) setActiveSectionId(CHECKLIST_SECTIONS[idx - 1].id);
+                  }}
                   className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 >
                   ← Previous Section
@@ -2043,8 +2556,11 @@ function ComplianceDetailModal({
                 </span>
                 <button
                   type="button"
-                  disabled={activeSectionId >= 7}
-                  onClick={() => setActiveSectionId((curr) => Math.min(7, curr + 1))}
+                  disabled={CHECKLIST_SECTIONS.findIndex((s) => s.id === activeSectionId) >= CHECKLIST_SECTIONS.length - 1}
+                  onClick={() => {
+                    const idx = CHECKLIST_SECTIONS.findIndex((s) => s.id === activeSectionId);
+                    if (idx < CHECKLIST_SECTIONS.length - 1) setActiveSectionId(CHECKLIST_SECTIONS[idx + 1].id);
+                  }}
                   className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 >
                   Next Section →
