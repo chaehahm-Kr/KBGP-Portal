@@ -46,9 +46,13 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
   // Selected Store ID from URL or local state
-  const selectedStoreId = searchParams.get("storeId");
-  const activeTabParam = (searchParams.get("tab") as DetailTabKey) || "overview";
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(() => searchParams?.get("storeId") || null);
+  const activeTabParam = (searchParams?.get("tab") as DetailTabKey) || "overview";
   const [activeTab, setActiveTab] = useState<DetailTabKey>(activeTabParam);
+
+  useEffect(() => {
+    setSelectedStoreId(searchParams?.get("storeId") || null);
+  }, [searchParams]);
 
   useEffect(() => {
     if (activeTabParam && DETAIL_TABS.some((t) => t.key === activeTabParam)) {
@@ -62,16 +66,16 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
   }, [selectedStoreId, data.stores]);
 
   const handleSelectStore = (storeId: string) => {
-    const params = new URLSearchParams(searchParams.toString());
+    setSelectedStoreId(storeId);
+    setActiveTab("overview");
+    const params = new URLSearchParams(searchParams?.toString() || "");
     params.set("storeId", storeId);
     params.set("tab", "overview");
     router.push(`${pathname}?${params.toString()}`);
   };
 
   const handleBackToList = () => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("storeId");
-    params.delete("tab");
+    setSelectedStoreId(null);
     router.push(pathname);
   };
 
