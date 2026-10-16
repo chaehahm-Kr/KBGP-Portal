@@ -19,7 +19,7 @@ const ARTIFACT_DIR = path.resolve('C:/Users/ChaeHahm/.gemini/antigravity/brain/9
 const ADMIN_URL = 'https://admin.kselectnetwork.com';
 const TEST_EMAIL = 'qa-admin-test@letusto.com';
 const TEST_PASSWORD = process.env.TEST_ADMIN_PASSWORD || 'Password123!@#';
-const TARGET_SHA_PREFIXES = ['c50d827', 'd4ee525'];
+const TARGET_SHA_PREFIXES = ['1967dad', 'c50d827', 'd4ee525'];
 
 // 90-second process timeout
 const deadline = setTimeout(() => {
