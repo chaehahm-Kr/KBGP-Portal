@@ -10,6 +10,9 @@ import type {
   AdminStoreInventoryOverview,
   AdminStoreOrderItem,
   AdminStoreOrdersOverview,
+  AdminStoreStaffItem,
+  AdminStoreTrainingProductItem,
+  AdminStoreTrainingOverview,
 } from "@/lib/retailer/admin-store-operations";
 
 interface StoreOperationsViewProps {
@@ -37,7 +40,7 @@ const DETAIL_TABS: TabDefinition[] = [
   { key: "inventory", label: "Inventory & Reorder", phaseLabel: "Phase 2 (Active)" },
   { key: "orders", label: "Orders & Deliveries", phaseLabel: "Phase 2 (Active)" },
   { key: "sales", label: "Sales & Performance", badge: "Phase 4", phaseLabel: "Phase 4 (Planned)" },
-  { key: "training", label: "Staff & Training", badge: "Phase 5", phaseLabel: "Phase 5 (Planned)" },
+  { key: "training", label: "Staff & Training", phaseLabel: "Phase 2 (Active)" },
   { key: "fixtures", label: "Fixtures & Placements", badge: "Future", phaseLabel: "Future Phase (Planned)" },
   { key: "activities", label: "Store Activities", badge: "Future", phaseLabel: "Future Phase (Planned)" },
 ];
@@ -319,6 +322,84 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
 
     return orders;
   }, [storeOrders, orderSearch, orderStatusFilter, orderSort]);
+
+  // Staff & Training Tab Search, Filter and Sort States
+  const [staffSearch, setStaffSearch] = useState("");
+  const [staffExpandedUserId, setStaffExpandedUserId] = useState<string | null>(null);
+  const [trainingProductSearch, setTrainingProductSearch] = useState("");
+  const [trainingProductFilter, setTrainingProductFilter] = useState<"ALL" | "GAPS_ONLY" | "COVERED_ONLY" | "UNAVAILABLE">("ALL");
+  const [trainingProductSort, setTrainingProductSort] = useState<"STATUS_FIRST" | "NAME_ASC" | "BRAND_ASC" | "STAFF_DESC">("STATUS_FIRST");
+
+  const storeTraining = useMemo<AdminStoreTrainingOverview | null>(() => {
+    if (!selectedStoreId || !data.storeTrainingMap) return null;
+    return data.storeTrainingMap[selectedStoreId] || null;
+  }, [selectedStoreId, data.storeTrainingMap]);
+
+  const filteredStaff = useMemo<AdminStoreStaffItem[]>(() => {
+    if (!storeTraining?.staff) return [];
+    let staff = [...storeTraining.staff];
+    if (staffSearch.trim()) {
+      const q = staffSearch.toLowerCase().trim();
+      staff = staff.filter(
+        (s) =>
+          s.userName.toLowerCase().includes(q) ||
+          s.email.toLowerCase().includes(q) ||
+          s.role.toLowerCase().includes(q)
+      );
+    }
+    return staff;
+  }, [storeTraining, staffSearch]);
+
+  const filteredTrainingProducts = useMemo<AdminStoreTrainingProductItem[]>(() => {
+    if (!storeTraining?.products) return [];
+    let prods = [...storeTraining.products];
+
+    // Search filter
+    if (trainingProductSearch.trim()) {
+      const q = trainingProductSearch.toLowerCase().trim();
+      prods = prods.filter(
+        (p) =>
+          p.productName.toLowerCase().includes(q) ||
+          p.brandName.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q)
+      );
+    }
+
+    // Status filter
+    if (trainingProductFilter === "GAPS_ONLY") {
+      prods = prods.filter((p) => p.coverageStatus === "needs_training");
+    } else if (trainingProductFilter === "COVERED_ONLY") {
+      prods = prods.filter((p) => p.coverageStatus === "covered");
+    } else if (trainingProductFilter === "UNAVAILABLE") {
+      prods = prods.filter((p) => p.trainingStatus !== "published");
+    }
+
+    // Sort
+    prods.sort((a, b) => {
+      switch (trainingProductSort) {
+        case "STATUS_FIRST": {
+          const getScore = (p: AdminStoreTrainingProductItem) => {
+            if (p.coverageStatus === "needs_training") return 0; // Gaps first
+            if (p.coverageStatus === "covered") return 1; // Covered
+            return 2; // Unavailable
+          };
+          const scoreDiff = getScore(a) - getScore(b);
+          if (scoreDiff !== 0) return scoreDiff;
+          return a.productName.localeCompare(b.productName);
+        }
+        case "NAME_ASC":
+          return a.productName.localeCompare(b.productName);
+        case "BRAND_ASC":
+          return a.brandName.localeCompare(b.brandName);
+        case "STAFF_DESC":
+          return b.qualifiedEmployees.length - a.qualifiedEmployees.length;
+        default:
+          return 0;
+      }
+    });
+
+    return prods;
+  }, [storeTraining, trainingProductSearch, trainingProductFilter, trainingProductSort]);
 
   // Filtered stores for list
   const filteredStores = useMemo(() => {
@@ -1802,26 +1883,545 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
 
           {/* TAB 5: STAFF & TRAINING */}
           {activeTab === "training" && (
-            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4" data-testid="tab-content-training">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-300">
-                  Phase 5 Planned
-                </span>
-                <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
-                  Store Staff & Training Coverage Matrix
-                </h3>
+            <div className="space-y-4" data-testid="tab-content-training">
+              {/* Header card with store attribution */}
+              <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300">
+                      Phase 2 Active
+                    </span>
+                    <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
+                      Store Staff & Verified Training Coverage
+                    </h3>
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Store-scoped staff assignments, verified product quiz qualifications, and carried product coverage gaps for{" "}
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">{selectedStore.name}</span> ({selectedStore.companyName}).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    href={`/admin/retailers/${selectedStore.companyId}?tab=training`}
+                    data-testid="training-retailer-360-link"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800 text-xs font-semibold transition-all shadow-xs"
+                  >
+                    <span>Retailer 360° Staff & Modules ↗</span>
+                  </Link>
+                </div>
               </div>
-              <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed max-w-2xl">
-                Individual employee verified quiz results and official Store Training Coverage (requiring at least 1 verified passing employee per eligible carried product) are currently computed in Retailer 360°.
-              </p>
-              <div className="pt-2">
-                <Link
-                  href={`/admin/retailers/${selectedStore.companyId}?tab=training`}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 text-xs font-bold transition-all shadow-xs"
-                >
-                  <span>View Authoritative Training Coverage in Retailer 360° ↗</span>
-                </Link>
-              </div>
+
+              {!storeTraining ? (
+                <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
+                  No staff & training data available for this store.
+                </div>
+              ) : (
+                <>
+                  {/* 4 Summary KPI Cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {/* KPI 1: Assigned Staff */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-training-assigned-staff"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Assigned Staff
+                      </span>
+                      <p className="text-lg font-bold text-zinc-900 dark:text-white font-mono">
+                        {storeTraining.assignedStaffCount}
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        Active store-scoped users
+                      </span>
+                    </div>
+
+                    {/* KPI 2: Eligible Products */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-training-eligible-products"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Eligible Products
+                      </span>
+                      <p className="text-lg font-bold text-zinc-900 dark:text-white font-mono">
+                        {storeTraining.eligibleProductsCount}
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        Carried with published quiz ({storeTraining.products.length} total carried)
+                      </span>
+                    </div>
+
+                    {/* KPI 3: Store Training Coverage */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-training-coverage"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Training Coverage
+                      </span>
+                      <p
+                        className={`text-lg font-bold font-mono ${
+                          storeTraining.storeCoveragePercent === null
+                            ? "text-zinc-400 dark:text-zinc-500"
+                            : storeTraining.storeCoveragePercent === 100
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : storeTraining.storeCoveragePercent > 0
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-amber-600 dark:text-amber-400"
+                        }`}
+                      >
+                        {storeTraining.storeCoveragePercent !== null
+                          ? `${storeTraining.storeCoveragePercent}%`
+                          : "N/A"}
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        {storeTraining.eligibleProductsCount === 0
+                          ? "No published training modules"
+                          : `${storeTraining.coveredProductsCount} of ${storeTraining.eligibleProductsCount} eligible covered`}
+                      </span>
+                    </div>
+
+                    {/* KPI 4: Coverage Gaps */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-training-gaps"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Coverage Gaps
+                      </span>
+                      <p
+                        className={`text-lg font-bold font-mono ${
+                          storeTraining.needsTrainingProductsCount > 0
+                            ? "text-rose-600 dark:text-rose-400"
+                            : "text-emerald-600 dark:text-emerald-400"
+                        }`}
+                      >
+                        {storeTraining.needsTrainingProductsCount}
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        {storeTraining.needsTrainingProductsCount > 0
+                          ? "Carried products needing certified staff"
+                          : "Full product training coverage"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* SECTION 1: ASSIGNED STAFF & QUALIFICATIONS */}
+                  <div className="rounded-xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
+                    <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
+                          Assigned Staff ({storeTraining.staff.length})
+                        </h4>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                          Employees with authorized access to this store and verified quiz qualification status.
+                        </p>
+                      </div>
+
+                      {/* Staff Search */}
+                      {storeTraining.staff.length > 0 && (
+                        <div className="relative min-w-[200px]">
+                          <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-zinc-400 text-xs">
+                            🔍
+                          </span>
+                          <input
+                            type="text"
+                            value={staffSearch}
+                            onChange={(e) => setStaffSearch(e.target.value)}
+                            placeholder="Search staff name, email, role..."
+                            data-testid="staff-search-input"
+                            className="w-full pl-7 pr-2.5 py-1 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                          />
+                          {staffSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setStaffSearch("")}
+                              className="absolute inset-y-0 right-0 flex items-center pr-2 text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {storeTraining.staff.length === 0 ? (
+                      <div
+                        className="p-8 text-center text-xs text-zinc-500 dark:text-zinc-400"
+                        data-testid="training-staff-empty-state"
+                      >
+                        <p className="font-semibold text-zinc-700 dark:text-zinc-300">No staff assigned to this store.</p>
+                        <p className="mt-1">
+                          In Retailer 360, company owners and managers can assign store access to individual employees.
+                        </p>
+                      </div>
+                    ) : filteredStaff.length === 0 ? (
+                      <div className="p-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                        No assigned staff match &quot;{staffSearch}&quot;.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-zinc-100 bg-zinc-50/50 text-[11px] font-semibold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/50 dark:text-zinc-400">
+                              <th className="py-2.5 px-4">Staff Member</th>
+                              <th className="py-2.5 px-3">Role</th>
+                              <th className="py-2.5 px-3">Store Assignment</th>
+                              <th className="py-2.5 px-3">Verified Qualifications</th>
+                              <th className="py-2.5 px-3">Last Completed</th>
+                              <th className="py-2.5 px-3 text-right">Details</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                            {filteredStaff.map((staff) => {
+                              const isExpanded = staffExpandedUserId === staff.userId;
+                              const completionRate =
+                                storeTraining.eligibleProductsCount > 0
+                                  ? Math.min(
+                                      100,
+                                      Math.round(
+                                        (staff.verifiedProductsCompletedCount / storeTraining.eligibleProductsCount) * 100
+                                      )
+                                    )
+                                  : 0;
+
+                              return (
+                                <React.Fragment key={staff.userId}>
+                                  <tr
+                                    className={`hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors ${
+                                      isExpanded ? "bg-zinc-50/60 dark:bg-zinc-800/30" : ""
+                                    }`}
+                                    data-testid={`staff-row-${staff.userId}`}
+                                  >
+                                    {/* Staff Member */}
+                                    <td className="py-3 px-4">
+                                      <div className="font-semibold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                                        <span>{staff.userName}</span>
+                                        {staff.verifiedProductsCompletedCount > 0 && (
+                                          <span className="text-emerald-600 dark:text-emerald-400 text-xs" title="Verified Qualified">
+                                            ✓
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                                        {staff.email}
+                                      </div>
+                                    </td>
+
+                                    {/* Role */}
+                                    <td className="py-3 px-3">
+                                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 capitalize">
+                                        {staff.role}
+                                      </span>
+                                    </td>
+
+                                    {/* Assignment Status */}
+                                    <td className="py-3 px-3">
+                                      {staff.assignmentStatus === "assigned" ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300">
+                                          <span>🏪</span> Assigned Store
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-900 dark:text-indigo-300">
+                                          <span>🌐</span> All Stores Access
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    {/* Verified Qualifications */}
+                                    <td className="py-3 px-3">
+                                      <div className="flex items-center gap-2">
+                                        <div className="font-semibold text-zinc-900 dark:text-white text-xs">
+                                          {staff.verifiedProductsCompletedCount}{" "}
+                                          <span className="text-zinc-400 font-normal">
+                                            / {storeTraining.eligibleProductsCount} passed
+                                          </span>
+                                        </div>
+                                        <span className="text-[10px] font-semibold text-zinc-500">
+                                          ({completionRate}%)
+                                        </span>
+                                      </div>
+                                      <div className="w-32 bg-zinc-100 dark:bg-zinc-800 rounded-full h-1.5 mt-1 overflow-hidden">
+                                        <div
+                                          className={`h-1.5 rounded-full ${
+                                            completionRate === 100
+                                              ? "bg-emerald-500"
+                                              : completionRate > 0
+                                              ? "bg-blue-500"
+                                              : "bg-zinc-300 dark:bg-zinc-700"
+                                          }`}
+                                          style={{ width: `${completionRate}%` }}
+                                        />
+                                      </div>
+                                    </td>
+
+                                    {/* Last Completed */}
+                                    <td className="py-3 px-3 text-zinc-500 dark:text-zinc-400 text-xs">
+                                      {formatOrderDate(staff.latestVerifiedCompletionDate)}
+                                    </td>
+
+                                    {/* Expand Action */}
+                                    <td className="py-3 px-3 text-right">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setStaffExpandedUserId(isExpanded ? null : staff.userId)
+                                        }
+                                        data-testid={`toggle-staff-${staff.userId}`}
+                                        className="text-xs font-semibold px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 cursor-pointer"
+                                      >
+                                        {isExpanded ? "Hide Modules ▲" : "View Modules ▼"}
+                                      </button>
+                                    </td>
+                                  </tr>
+
+                                  {/* Expanded Drawer for Staff Completed Products */}
+                                  {isExpanded && (
+                                    <tr className="bg-zinc-50/70 dark:bg-zinc-800/40">
+                                      <td colSpan={6} className="p-4 border-t border-zinc-100 dark:border-zinc-800">
+                                        <div className="space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <h5 className="text-[11px] font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+                                              Verified Quiz Qualifications for {staff.userName}
+                                            </h5>
+                                            <span className="text-[10px] text-zinc-500">
+                                              Only 100% server-graded passing scores qualify.
+                                            </span>
+                                          </div>
+
+                                          {staff.completions.length === 0 ? (
+                                            <p className="text-xs text-zinc-500 dark:text-zinc-400 italic py-1">
+                                              No verified quiz completions recorded yet.
+                                            </p>
+                                          ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                              {staff.completions.map((p) => (
+                                                <div
+                                                  key={p.productId}
+                                                  className="p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 flex items-start justify-between gap-2 shadow-2xs"
+                                                >
+                                                  <div className="min-w-0">
+                                                    <p className="font-semibold text-xs text-zinc-900 dark:text-white truncate">
+                                                      {p.productName}
+                                                    </p>
+                                                    <p className="text-[10px] font-mono text-zinc-400">
+                                                      {p.sku || "No SKU"}
+                                                    </p>
+                                                    <p className="text-[10px] text-zinc-500 mt-1">
+                                                      Completed: {formatOrderDate(p.completedAt)}
+                                                    </p>
+                                                  </div>
+                                                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300">
+                                                    100% Passed
+                                                  </span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SECTION 2: CARRIED PRODUCTS TRAINING MATRIX & COVERAGE GAPS */}
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-zinc-50 dark:bg-zinc-900/60 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                      {/* Search Input */}
+                      <div className="relative flex-1 min-w-[200px]">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-zinc-400 text-xs">
+                          🔍
+                        </span>
+                        <input
+                          type="text"
+                          value={trainingProductSearch}
+                          onChange={(e) => setTrainingProductSearch(e.target.value)}
+                          placeholder="Search carried products, brand, SKU..."
+                          data-testid="training-products-search-input"
+                          className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                        />
+                        {trainingProductSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setTrainingProductSearch("")}
+                            className="absolute inset-y-0 right-0 flex items-center pr-2.5 text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        {/* Filter Select */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-semibold text-zinc-500 uppercase">Coverage:</span>
+                          <select
+                            value={trainingProductFilter}
+                            onChange={(e) => setTrainingProductFilter(e.target.value as any)}
+                            data-testid="training-products-filter-select"
+                            className="px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none cursor-pointer"
+                          >
+                            <option value="ALL">All Carried Products ({storeTraining.products.length})</option>
+                            <option value="GAPS_ONLY">Coverage Gaps ({storeTraining.needsTrainingProductsCount})</option>
+                            <option value="COVERED_ONLY">Verified Covered ({storeTraining.coveredProductsCount})</option>
+                            <option value="UNAVAILABLE">
+                              Training Unavailable ({storeTraining.products.length - storeTraining.eligibleProductsCount})
+                            </option>
+                          </select>
+                        </div>
+
+                        {/* Sort Select */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-semibold text-zinc-500 uppercase">Sort:</span>
+                          <select
+                            value={trainingProductSort}
+                            onChange={(e) => setTrainingProductSort(e.target.value as any)}
+                            data-testid="training-products-sort-select"
+                            className="px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none cursor-pointer"
+                          >
+                            <option value="STATUS_FIRST">Priority: Gaps First</option>
+                            <option value="NAME_ASC">Product Name (A → Z)</option>
+                            <option value="BRAND_ASC">Brand Name (A → Z)</option>
+                            <option value="STAFF_DESC">Qualified Staff (Most First)</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Products Training Table */}
+                    <div className="rounded-xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
+                      <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
+                            Carried Products & Training Coverage ({filteredTrainingProducts.length})
+                          </h4>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                            Status of mandatory staff qualifications for all products carried at this store.
+                          </p>
+                        </div>
+                      </div>
+
+                      {filteredTrainingProducts.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                          No products match the selected search or filter criteria.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="border-b border-zinc-100 bg-zinc-50/50 text-[11px] font-semibold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/50 dark:text-zinc-400">
+                                <th className="py-2.5 px-4">Product & SKU</th>
+                                <th className="py-2.5 px-3">Brand</th>
+                                <th className="py-2.5 px-3">Training Module</th>
+                                <th className="py-2.5 px-3">Verified Staff</th>
+                                <th className="py-2.5 px-3 text-right">Coverage Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                              {filteredTrainingProducts.map((p) => (
+                                <tr
+                                  key={p.productId}
+                                  className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors"
+                                  data-testid={`training-product-row-${p.productId}`}
+                                >
+                                  {/* Product & SKU */}
+                                  <td className="py-3 px-4">
+                                    <div className="font-semibold text-zinc-900 dark:text-white">
+                                      {p.productName}
+                                    </div>
+                                    <div className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500">
+                                      {p.sku || "No SKU"}
+                                    </div>
+                                  </td>
+
+                                  {/* Brand */}
+                                  <td className="py-3 px-3 text-zinc-700 dark:text-zinc-300 font-medium">
+                                    {p.brandName}
+                                  </td>
+
+                                  {/* Training Module */}
+                                  <td className="py-3 px-3">
+                                    {p.trainingStatus === "published" ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300">
+                                        <span>📖</span> Published Quiz
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                                        No Module
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* Verified Staff */}
+                                  <td className="py-3 px-3">
+                                    {p.qualifiedEmployees.length > 0 ? (
+                                      <div>
+                                        <div className="font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                                          <span>✓</span> {p.qualifiedEmployees.length} qualified staff
+                                        </div>
+                                        <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate max-w-xs">
+                                          {p.qualifiedEmployees.join(", ")}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="text-zinc-400 dark:text-zinc-500 italic text-[11px]">
+                                        0 qualified staff
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* Coverage Status */}
+                                  <td className="py-3 px-3 text-right">
+                                    {p.coverageStatus === "not_available" ? (
+                                      <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-medium bg-zinc-100 text-zinc-600 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400">
+                                        Training Unavailable
+                                      </span>
+                                    ) : p.coverageStatus === "covered" ? (
+                                      <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300">
+                                        ✓ Verified Covered
+                                      </span>
+                                    ) : (
+                                      <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-300">
+                                        ⚠️ Needs Training
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Authoritative Attribution & Policy Footer Banner */}
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="text-zinc-500 dark:text-zinc-400 space-y-0.5">
+                      <p className="font-semibold text-zinc-700 dark:text-zinc-300">
+                        Authoritative Training Coverage Policy:
+                      </p>
+                      <p>
+                        A store is considered covered for a product when at least one store-assigned staff member has achieved a verified 100% score on the server-graded quiz. Legacy self-reported completions are excluded.
+                      </p>
+                    </div>
+                    <Link
+                      href={`/admin/retailers/${selectedStore.companyId}?tab=training`}
+                      data-testid="training-retailer-360-footer-link"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 font-semibold shrink-0 transition-all shadow-xs"
+                    >
+                      <span>Manage Modules in Retailer 360° ↗</span>
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

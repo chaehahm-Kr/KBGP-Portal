@@ -8,6 +8,7 @@ import {
   resolveRetailerSalesPolicy,
   normalizeReorderQuantity,
 } from "@/lib/product/retailer-policy";
+import { computeRetailerTrainingAnalytics } from "@/lib/retailer/admin-training-analytics";
 
 export interface AdminStoreOperationItem {
   id: string;
@@ -162,6 +163,56 @@ export interface AdminStoreOrdersOverview {
   orders: AdminStoreOrderItem[];
 }
 
+export interface AdminStoreStaffItem {
+  userId: string;
+  userName: string;
+  email: string;
+  role: string;
+  assignmentStatus: "assigned" | "all_stores";
+  eligibleProductsCount: number;
+  verifiedProductsCompletedCount: number;
+  individualCompletionRate: number; // percentage 0-100
+  latestVerifiedCompletionDate: string | null;
+  status: "certified" | "in_progress" | "not_started";
+  completions: Array<{
+    productId: string;
+    productName: string;
+    sku: string;
+    completedAt: string | null;
+    isVerified: boolean;
+  }>;
+}
+
+export interface AdminStoreTrainingProductItem {
+  productId: string;
+  productName: string;
+  productNameEn: string | null;
+  sku: string;
+  brandName: string;
+  category: string;
+  thumbnailUrl: string | null;
+  trainingStatus: "published" | "draft" | "in_review" | "unavailable";
+  coverageStatus: "covered" | "needs_training" | "not_available";
+  qualifiedEmployees: string[];
+  latestPassDate: string | null;
+}
+
+export interface AdminStoreTrainingOverview {
+  storeId: string;
+  storeName: string;
+  companyId: string;
+  companyName: string;
+  assignedStaffCount: number;
+  eligibleProductsCount: number;
+  coveredProductsCount: number;
+  needsTrainingProductsCount: number;
+  storeCoveragePercent: number | null; // null if eligibleProductsCount === 0 -> "N/A"
+  lastCompletedAt: string | null;
+  staff: AdminStoreStaffItem[];
+  products: AdminStoreTrainingProductItem[];
+  gapProducts: AdminStoreTrainingProductItem[];
+}
+
 export interface AdminStoreOperationsData {
   stores: AdminStoreOperationItem[];
   retailers: Array<{
@@ -174,6 +225,7 @@ export interface AdminStoreOperationsData {
   totalRetailersCount: number;
   storeInventoryMap: Record<string, AdminStoreInventoryOverview>;
   storeOrdersMap: Record<string, AdminStoreOrdersOverview>;
+  storeTrainingMap: Record<string, AdminStoreTrainingOverview>;
 }
 
 /**
@@ -759,6 +811,165 @@ export async function getAdminStoreOrdersData(
   };
 }
 
+/**
+ * Authoritative store-specific staff and training coverage resolver for Store Operations (ADM-STORE-OPS-P2-003)
+ */
+export async function getAdminStoreTrainingData(
+  storeId: string
+): Promise<AdminStoreTrainingOverview | null> {
+  const adminClient = createAdminClient();
+
+  // 1. Fetch store with parent company
+  const { data: store, error: storeErr } = await adminClient
+    .from("stores")
+    .select(`
+      id,
+      name,
+      city,
+      state,
+      company_id,
+      companies:companies!stores_company_id_fkey (
+        id,
+        name
+      )
+    `)
+    .eq("id", storeId)
+    .single();
+
+  if (storeErr || !store) {
+    console.error("[getAdminStoreTrainingData] Error fetching store:", storeErr);
+    return null;
+  }
+
+  const companyId = store.company_id;
+  const companyName = (store.companies as any)?.name || "Retailer Company";
+
+  // 2. Fetch all stores for this company
+  const { data: companyStoresRaw } = await adminClient
+    .from("stores")
+    .select("id, name, city, state")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: true });
+
+  const companyStores = companyStoresRaw || [];
+
+  // 3. Fetch company users
+  const { data: companyUsers } = await adminClient
+    .from("company_users")
+    .select("id, name, email, company_role, status")
+    .eq("company_id", companyId);
+
+  const userIds = (companyUsers || []).map((cu) => cu.id);
+  const userRolesMap = new Map<string, any>();
+  const userStoresMap = new Map<string, any[]>();
+
+  if (userIds.length > 0) {
+    const { data: roles } = await adminClient
+      .from("retailer_user_roles")
+      .select("user_id, role, has_all_stores_access")
+      .in("user_id", userIds)
+      .eq("company_id", companyId);
+    (roles || []).forEach((r) => userRolesMap.set(r.user_id, r));
+
+    const { data: storeAccess } = await adminClient
+      .from("retailer_user_store_access")
+      .select("user_id, store_id, stores(id, name, city)")
+      .in("user_id", userIds)
+      .eq("company_id", companyId);
+
+    (storeAccess || []).forEach((sa: any) => {
+      if (!userStoresMap.has(sa.user_id)) userStoresMap.set(sa.user_id, []);
+      if (sa.stores) userStoresMap.get(sa.user_id)!.push(sa.stores);
+    });
+  }
+
+  const members = (companyUsers || []).map((cu) => {
+    const r = userRolesMap.get(cu.id);
+    const hasAllStoresAccess = r?.has_all_stores_access === true;
+    const assignedStores = hasAllStoresAccess
+      ? companyStores.map((s) => ({ id: s.id, name: s.name }))
+      : userStoresMap.get(cu.id) || [];
+    return {
+      id: cu.id,
+      fullName: cu.name,
+      email: cu.email,
+      role: r?.role || cu.company_role || "employee",
+      hasAllStoresAccess,
+      assignedStores,
+    };
+  });
+
+  const trainingAnalytics = await computeRetailerTrainingAnalytics({
+    companyId,
+    stores: companyStores,
+    members,
+    adminClient,
+  });
+
+  const storeCoverage = trainingAnalytics.stores.find((s) => s.storeId === storeId);
+
+  const storeStaff: AdminStoreStaffItem[] = trainingAnalytics.employees
+    .filter((emp) => {
+      const hasExplicit = (userStoresMap.get(emp.userId) || []).some((s: any) => s.id === storeId);
+      const hasAll = emp.hasAllStoresAccess;
+      return hasExplicit || hasAll;
+    })
+    .map((emp) => {
+      const hasExplicit = (userStoresMap.get(emp.userId) || []).some((s: any) => s.id === storeId);
+      return {
+        userId: emp.userId,
+        userName: emp.userName,
+        email: emp.email,
+        role: emp.role,
+        assignmentStatus: hasExplicit ? "assigned" : "all_stores",
+        eligibleProductsCount: emp.availablePublishedCount,
+        verifiedProductsCompletedCount: emp.productsCompletedCount,
+        individualCompletionRate: emp.completionPercent,
+        latestVerifiedCompletionDate: emp.latestCompletionAt,
+        status: emp.status,
+        completions: emp.completions.map((c) => ({
+          productId: c.productId,
+          productName: c.productName,
+          sku: c.sku,
+          completedAt: c.completedAt,
+          isVerified: c.isVerifiedQuiz,
+        })),
+      };
+    });
+
+  const storeProducts: AdminStoreTrainingProductItem[] = (storeCoverage?.products || []).map((p) => ({
+    productId: p.productId,
+    productName: p.productName,
+    productNameEn: p.productNameEn || null,
+    sku: p.sku,
+    brandName: p.brandName,
+    category: p.category,
+    thumbnailUrl: p.thumbnailUrl || null,
+    trainingStatus: p.trainingStatus,
+    coverageStatus: p.coverageStatus,
+    qualifiedEmployees: p.qualifiedEmployees || [],
+    latestPassDate: p.latestPassDate || null,
+  }));
+
+  const gapProducts = storeProducts.filter((p) => p.coverageStatus !== "covered");
+
+  return {
+    storeId: store.id,
+    storeName: store.name,
+    companyId,
+    companyName,
+    assignedStaffCount: storeStaff.length,
+    eligibleProductsCount: storeCoverage?.publishedProductsCount || 0,
+    coveredProductsCount: storeCoverage?.coveredProductsCount || 0,
+    needsTrainingProductsCount: storeCoverage?.needsTrainingCount || 0,
+    storeCoveragePercent: storeCoverage?.coveragePercent ?? null,
+    lastCompletedAt: storeCoverage?.lastCompletedAt || null,
+    staff: storeStaff,
+    products: storeProducts,
+    gapProducts,
+  };
+}
+
 export async function getAdminStoreOperationsData(): Promise<AdminStoreOperationsData> {
   await verifyAdminSession();
   const adminClient = createAdminClient();
@@ -934,6 +1145,144 @@ export async function getAdminStoreOperationsData(): Promise<AdminStoreOperation
     }
   }
 
+  // 7. Batch resolve store training analytics overviews for all stores (ADM-STORE-OPS-P2-003)
+  const storeTrainingMap: Record<string, AdminStoreTrainingOverview> = {};
+  const storesByCompany = new Map<string, typeof formattedStores>();
+  for (const st of formattedStores) {
+    if (!storesByCompany.has(st.companyId)) {
+      storesByCompany.set(st.companyId, []);
+    }
+    storesByCompany.get(st.companyId)!.push(st);
+  }
+
+  for (const [companyId, companyStores] of storesByCompany.entries()) {
+    try {
+      const { data: companyUsers } = await adminClient
+        .from("company_users")
+        .select("id, name, email, company_role, status")
+        .eq("company_id", companyId);
+
+      const userIds = (companyUsers || []).map((cu) => cu.id);
+      let userRolesMap = new Map<string, any>();
+      let userStoresMap = new Map<string, any[]>();
+
+      if (userIds.length > 0) {
+        const { data: roles } = await adminClient
+          .from("retailer_user_roles")
+          .select("user_id, role, has_all_stores_access")
+          .in("user_id", userIds)
+          .eq("company_id", companyId);
+        (roles || []).forEach((r) => userRolesMap.set(r.user_id, r));
+
+        const { data: storeAccess } = await adminClient
+          .from("retailer_user_store_access")
+          .select("user_id, store_id, stores(id, name, city)")
+          .in("user_id", userIds)
+          .eq("company_id", companyId);
+
+        (storeAccess || []).forEach((sa: any) => {
+          if (!userStoresMap.has(sa.user_id)) userStoresMap.set(sa.user_id, []);
+          if (sa.stores) userStoresMap.get(sa.user_id)!.push(sa.stores);
+        });
+      }
+
+      const members = (companyUsers || []).map((cu) => {
+        const r = userRolesMap.get(cu.id);
+        const hasAllStoresAccess = r?.has_all_stores_access === true;
+        const assignedStores = hasAllStoresAccess
+          ? companyStores.map((s) => ({ id: s.id, name: s.name }))
+          : userStoresMap.get(cu.id) || [];
+        return {
+          id: cu.id,
+          fullName: cu.name,
+          email: cu.email,
+          role: r?.role || cu.company_role || "employee",
+          hasAllStoresAccess,
+          assignedStores,
+        };
+      });
+
+      const trainingAnalytics = await computeRetailerTrainingAnalytics({
+        companyId,
+        stores: companyStores.map((s) => ({
+          id: s.id,
+          name: s.name,
+          city: s.city,
+          state: s.state,
+        })),
+        members,
+        adminClient,
+      });
+
+      for (const st of companyStores) {
+        const storeCoverage = trainingAnalytics.stores.find((s) => s.storeId === st.id);
+
+        const storeStaff: AdminStoreStaffItem[] = trainingAnalytics.employees
+          .filter((emp) => {
+            const hasExplicit = (userStoresMap.get(emp.userId) || []).some((s: any) => s.id === st.id);
+            const hasAll = emp.hasAllStoresAccess;
+            return hasExplicit || hasAll;
+          })
+          .map((emp) => {
+            const hasExplicit = (userStoresMap.get(emp.userId) || []).some((s: any) => s.id === st.id);
+            return {
+              userId: emp.userId,
+              userName: emp.userName,
+              email: emp.email,
+              role: emp.role,
+              assignmentStatus: hasExplicit ? "assigned" : "all_stores",
+              eligibleProductsCount: emp.availablePublishedCount,
+              verifiedProductsCompletedCount: emp.productsCompletedCount,
+              individualCompletionRate: emp.completionPercent,
+              latestVerifiedCompletionDate: emp.latestCompletionAt,
+              status: emp.status,
+              completions: emp.completions.map((c) => ({
+                productId: c.productId,
+                productName: c.productName,
+                sku: c.sku,
+                completedAt: c.completedAt,
+                isVerified: c.isVerifiedQuiz,
+              })),
+            };
+          });
+
+        const storeProducts: AdminStoreTrainingProductItem[] = (storeCoverage?.products || []).map((p) => ({
+          productId: p.productId,
+          productName: p.productName,
+          productNameEn: p.productNameEn || null,
+          sku: p.sku,
+          brandName: p.brandName,
+          category: p.category,
+          thumbnailUrl: p.thumbnailUrl || null,
+          trainingStatus: p.trainingStatus,
+          coverageStatus: p.coverageStatus,
+          qualifiedEmployees: p.qualifiedEmployees || [],
+          latestPassDate: p.latestPassDate || null,
+        }));
+
+        const gapProducts = storeProducts.filter((p) => p.coverageStatus !== "covered");
+
+        storeTrainingMap[st.id] = {
+          storeId: st.id,
+          storeName: st.name,
+          companyId: st.companyId,
+          companyName: st.companyName,
+          assignedStaffCount: storeStaff.length,
+          eligibleProductsCount: storeCoverage?.publishedProductsCount || 0,
+          coveredProductsCount: storeCoverage?.coveredProductsCount || 0,
+          needsTrainingProductsCount: storeCoverage?.needsTrainingCount || 0,
+          storeCoveragePercent: storeCoverage?.coveragePercent ?? null,
+          lastCompletedAt: storeCoverage?.lastCompletedAt || null,
+          staff: storeStaff,
+          products: storeProducts,
+          gapProducts,
+        };
+      }
+    } catch (e) {
+      console.warn(`[getAdminStoreOperationsData] Warning computing training analytics for company ${companyId}:`, e);
+    }
+  }
+
   return {
     stores: formattedStores,
     retailers: Array.from(retailerMap.values()),
@@ -942,5 +1291,6 @@ export async function getAdminStoreOperationsData(): Promise<AdminStoreOperation
     totalRetailersCount: retailerMap.size,
     storeInventoryMap,
     storeOrdersMap,
+    storeTrainingMap,
   };
 }
