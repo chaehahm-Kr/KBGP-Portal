@@ -92,7 +92,7 @@ export async function getExchangeCreditOverviewData(): Promise<{
       .from("retailer_exchange_program_enrollments")
       .select(`
         *,
-        companies:company_id(id, name, code)
+        companies:company_id(id, name, company_code)
       `)
       .order("created_at", { ascending: false });
 
@@ -105,7 +105,7 @@ export async function getExchangeCreditOverviewData(): Promise<{
         *,
         companies:company_id(name),
         stores:store_id(name, store_code),
-        products:product_id(name, letusto_sku, primary_image_url),
+        products:product_id(name, letusto_sku),
         retailer_orders:source_order_id(order_number)
       `)
       .order("created_at", { ascending: false });
@@ -127,7 +127,7 @@ export async function getExchangeCreditOverviewData(): Promise<{
         id: e.id,
         companyId: e.company_id,
         companyName: company?.name || "Unknown Retailer",
-        companyCode: company?.code || null,
+        companyCode: company?.company_code || null,
         status: e.status,
         optionACreditRate: Number(e.option_a_credit_rate),
         optionBCreditRate: 1.0,
@@ -169,7 +169,7 @@ export async function getExchangeCreditOverviewData(): Promise<{
         productId: c.product_id,
         productName: prod?.name || "Unknown Product",
         productSku: prod?.letusto_sku || "N/A",
-        productThumbnailUrl: prod?.primary_image_url || null,
+        productThumbnailUrl: null,
         enrollmentId: c.enrollment_id,
         sourceOrderId: c.source_order_id,
         sourceOrderNumber: ord?.order_number || "N/A",
