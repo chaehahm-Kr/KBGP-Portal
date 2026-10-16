@@ -112,7 +112,7 @@ async function runQA() {
 
     // 3. Verify Dashboard at top
     console.log('\n2. Verifying Dashboard at top...');
-    const dashboardLink = page.locator('aside a[href="/admin"]').first();
+    const dashboardLink = page.locator('aside nav a[href="/admin"]').first();
     const hasDashboard = await dashboardLink.isVisible();
     results['Dashboard_Visible_At_Top'] = hasDashboard;
     console.log(`   [Test 1] Dashboard visible at top: ${hasDashboard ? 'PASS' : 'FAIL'}`);
@@ -331,8 +331,8 @@ async function runQA() {
 
     const aside = page.locator('aside').first();
     const isSidebarCollapsed = (await aside.getAttribute('class') || '').includes('w-16');
-    // In collapsed view, Settings gear button is visible
-    const isSettingsIconVisible = await settingsBtn.isVisible();
+    // In collapsed view, Settings gear button is visible with title="Settings"
+    const isSettingsIconVisible = await page.locator('aside button[title="Settings"]').isVisible();
     results['Sidebar_Collapses_To_w16_With_Settings_Icon'] = isSidebarCollapsed && isSettingsIconVisible;
     console.log(`   [Test 22] Sidebar collapses to w-16 with Settings icon visible: ${results['Sidebar_Collapses_To_w16_With_Settings_Icon'] ? 'PASS' : 'FAIL'}`);
 
