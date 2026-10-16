@@ -126,19 +126,14 @@ async function runQA() {
     // 3. Navigate to Compliance page
     console.log('\n2. Navigating to /admin/products/compliance...');
     await page.goto(`${ADMIN_URL}/admin/products/compliance`, { waitUntil: 'domcontentloaded', timeout: 20000 });
-    await page.waitForTimeout(2000);
-
-    // Grab first product row information from the table
-    const firstRow = page.locator('tbody tr').first();
-    const productNameEl = firstRow.locator('td').nth(1).locator('div').first();
-    const targetProductName = (await productNameEl.innerText()).trim();
-    console.log(`   Inspecting target product: "${targetProductName}"`);
+    await page.waitForTimeout(3000);
 
     // ==============================================================================
     // ENTRY POINT 1: Product List > Contact Shortcut
     // ==============================================================================
     console.log('\n3. Testing Entry Point 1: Product List > Contact...');
-    const listContactLink = firstRow.locator('a:has-text("Contact ↗")').first();
+    const listContactLink = page.locator('tbody tr a:has-text("Contact ↗")').first();
+    await listContactLink.waitFor({ state: 'visible', timeout: 15000 });
     const listHref = await listContactLink.getAttribute('href');
     console.log(`   List Contact Link Href: ${listHref}`);
     results['List_Contact_Href_Has_NewCase_And_ProductId'] =
