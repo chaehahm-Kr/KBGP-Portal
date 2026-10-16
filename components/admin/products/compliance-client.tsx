@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -152,18 +152,92 @@ function StatusBadge({
   );
 }
 
-function ItemCategoryBadge({ type }: { type: "existing" | "not_reviewed" | "not_available" | "not_applicable" | "planned" }) {
+/**
+ * Six distinct information classification badges per Section 4:
+ * A. Existing Product Data (Authoritative product values stored in system)
+ * B. Uploaded Document (Actual uploaded certificate or label documents)
+ * C. Regulatory Guidance (General explanatory regulatory info - NOT marked as existing data)
+ * D. Data Not Available (Product-specific info not available)
+ * E. Not Applicable (Existing explicit N/A value, not a formal legal determination)
+ * F. Planned (Future features not yet implemented)
+ * Plus G. Not Reviewed (Explicit unreviewed status)
+ */
+function ItemCategoryBadge({
+  type,
+}: {
+  type:
+    | "existing_data"
+    | "uploaded_doc"
+    | "regulatory_guidance"
+    | "not_available"
+    | "not_applicable"
+    | "planned"
+    | "not_reviewed";
+}) {
   switch (type) {
-    case "existing":
-      return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">Existing Data</span>;
-    case "not_reviewed":
-      return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">Not Reviewed</span>;
+    case "existing_data":
+      return (
+        <span
+          title="Authoritative product value stored in system records"
+          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+        >
+          Existing Product Data
+        </span>
+      );
+    case "uploaded_doc":
+      return (
+        <span
+          title="Product-specific document or certificate file uploaded in system"
+          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-500/10 text-teal-400 border border-teal-500/30"
+        >
+          Uploaded Document
+        </span>
+      );
+    case "regulatory_guidance":
+      return (
+        <span
+          title="General explanatory regulatory guidance for review reference (Not product data)"
+          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/30"
+        >
+          Regulatory Guidance
+        </span>
+      );
     case "not_available":
-      return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700">Data Not Available</span>;
+      return (
+        <span
+          title="Product-specific information not available in authoritative source"
+          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700"
+        >
+          Data Not Available
+        </span>
+      );
     case "not_applicable":
-      return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-800/80 text-zinc-400 border border-zinc-700/60">Not Applicable (N/A)</span>;
+      return (
+        <span
+          title="Explicit N/A value in system (Not an independently verified legal determination)"
+          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-800/80 text-zinc-400 border border-zinc-700/60"
+        >
+          Not Applicable (N/A)
+        </span>
+      );
     case "planned":
-      return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">Planned (Phase 2+)</span>;
+      return (
+        <span
+          title="Workflow capability planned for future compliance phase"
+          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/30"
+        >
+          Planned (Phase 2+)
+        </span>
+      );
+    case "not_reviewed":
+      return (
+        <span
+          title="Field explicitly marked as unreviewed in system"
+          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30"
+        >
+          Not Reviewed
+        </span>
+      );
   }
 }
 
@@ -349,6 +423,19 @@ export function ComplianceClient({
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
             US Import & Market Readiness — Regulatory review checklist and existing product compliance overview
           </p>
+        </div>
+
+        {/* Global Brand Inquiries Shortcut */}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/partner-inquiries?type=brand"
+            target="_blank"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 text-xs font-semibold transition-colors"
+            title="Open Brand Inquiries in new tab"
+          >
+            <span>💬</span>
+            <span>Brand Inquiries ↗</span>
+          </Link>
         </div>
       </div>
 
@@ -758,7 +845,7 @@ export function ComplianceClient({
               <th className="py-3 px-3 min-w-[110px]">Drug Facts</th>
               <th className="py-3 px-3 min-w-[100px]">Label Review</th>
               <th className="py-3 px-3 min-w-[110px]">Import Ready</th>
-              <th className="py-3 px-3 text-right min-w-[140px]">Actions</th>
+              <th className="py-3 px-3 text-right min-w-[190px]">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 text-zinc-800 dark:text-zinc-200">
@@ -864,8 +951,8 @@ export function ComplianceClient({
                     </span>
                   </td>
 
-                  {/* Actions */}
-                  <td className="py-2.5 px-3 text-right space-x-2">
+                  {/* Actions: Review Checklist, Catalog, Contact Brand */}
+                  <td className="py-2.5 px-3 text-right space-x-1.5 whitespace-nowrap">
                     <button
                       type="button"
                       onClick={() => setSelectedProduct(p)}
@@ -877,9 +964,17 @@ export function ComplianceClient({
                       href={`/admin/products/${p.id}`}
                       target="_blank"
                       className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                      title="Open full product catalog editor"
+                      title="Open product catalog editor"
                     >
                       Catalog ↗
+                    </Link>
+                    <Link
+                      href="/admin/partner-inquiries?type=brand"
+                      target="_blank"
+                      className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
+                      title={`Open Brand Inquiries for ${p.brand_name} (${p.company_name})`}
+                    >
+                      Contact ↗
                     </Link>
                   </td>
                 </tr>
@@ -915,7 +1010,7 @@ export function ComplianceClient({
         </div>
       )}
 
-      {/* 7. Product Compliance Checklist Detail Modal */}
+      {/* 7. Product Compliance Checklist Detail Modal (Two-Panel Navigable Design) */}
       {selectedProduct && (
         <ComplianceDetailModal
           product={selectedProduct}
@@ -926,6 +1021,17 @@ export function ComplianceClient({
   );
 }
 
+// 7-Section Navigation Config
+const CHECKLIST_SECTIONS = [
+  { id: 1, name: "Product Classification", subtitle: "Category, Claims & Intended Use", icon: "🏷️" },
+  { id: 2, name: "Product Labeling", subtitle: "English Label, INCI, Net Contents", icon: "📜" },
+  { id: 3, name: "FDA Related", subtitle: "FDA Requirements & Registrations", icon: "🏛️" },
+  { id: 4, name: "MoCRA", subtitle: "Facility & Product Listing Mandates", icon: "📋" },
+  { id: 5, name: "OTC / Drug Facts", subtitle: "OTC Monographs & Drug Facts", icon: "💊" },
+  { id: 6, name: "Certifications & Testing", subtitle: "COA, SDS, Testing Reports & Patents", icon: "🔬" },
+  { id: 7, name: "Import & Customs", subtitle: "Country of Origin, Tariff & Clearance", icon: "🚢" },
+] as const;
+
 function ComplianceDetailModal({
   product,
   onClose,
@@ -933,23 +1039,46 @@ function ComplianceDetailModal({
   product: ComplianceProductItem;
   onClose: () => void;
 }) {
+  const [activeSectionId, setActiveSectionId] = useState<number>(1);
+
+  // Keyboard navigation: Escape to close, Arrow keys to navigate sections
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+        setActiveSectionId((curr) => (curr < 7 ? curr + 1 : 1));
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+        setActiveSectionId((curr) => (curr > 1 ? curr - 1 : 7));
+      }
+    },
+    [onClose]
+  );
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
+
+  const activeSection = CHECKLIST_SECTIONS.find((s) => s.id === activeSectionId) || CHECKLIST_SECTIONS[0];
+
   return (
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/75 backdrop-blur-sm animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-sm animate-fadeIn"
     >
-      <div className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-5xl h-[88vh] bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-start justify-between gap-4 bg-zinc-50 dark:bg-zinc-900/80">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
+        <div className="px-6 py-3.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 bg-zinc-50/90 dark:bg-zinc-900/90 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-11 w-11 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
               {product.photoUrl ? (
                 <Image
                   src={product.photoUrl}
                   alt={product.display_name}
-                  width={48}
-                  height={48}
+                  width={44}
+                  height={44}
                   className="h-full w-full object-cover"
                   unoptimized
                 />
@@ -957,583 +1086,689 @@ function ComplianceDetailModal({
                 <span className="text-[10px] text-zinc-400">No img</span>
               )}
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1">
+                <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate" title={product.display_name}>
                   {product.display_name}
                 </h2>
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0">
                   Read-Only Checklist
                 </span>
               </div>
-              <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 flex flex-wrap items-center gap-2">
+              <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 flex flex-wrap items-center gap-2 truncate">
                 <span>Brand: <strong className="text-zinc-700 dark:text-zinc-200">{product.brand_name}</strong></span>
                 <span>•</span>
                 <span>Company: <strong className="text-zinc-700 dark:text-zinc-200">{product.company_name}</strong></span>
                 {product.letusto_sku && (
                   <>
                     <span>•</span>
-                    <span className="font-mono">Letusto SKU: <strong className="text-zinc-700 dark:text-zinc-200">{product.letusto_sku}</strong></span>
+                    <span className="font-mono text-zinc-700 dark:text-zinc-300">SKU: {product.letusto_sku}</span>
                   </>
                 )}
               </div>
             </div>
           </div>
 
+          {/* Header Action Shortcuts */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Contact Brand Shortcut (Reuses existing Brand Inquiries) */}
+            <Link
+              href="/admin/partner-inquiries?type=brand"
+              target="_blank"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-500/40 bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 text-xs font-semibold transition-colors"
+              title={`Open Brand Inquiries for ${product.brand_name} (${product.company_name})`}
+            >
+              <span>💬</span>
+              <span>Contact Brand ↗</span>
+            </Link>
+
+            {/* Catalog View Link */}
             <Link
               href={`/admin/products/${product.id}`}
               target="_blank"
               className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              title="Open authoritative Product Catalog"
             >
               Catalog View ↗
             </Link>
+
+            {/* Close Button */}
             <button
               type="button"
               onClick={onClose}
               className="h-8 w-8 rounded-lg flex items-center justify-center text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              title="Close modal (Esc)"
             >
               ✕
             </button>
           </div>
         </div>
 
-        {/* Modal Body: Seven Structured Sections */}
-        <div className="p-6 overflow-y-auto space-y-6 text-xs text-zinc-800 dark:text-zinc-200">
-          {/* Section 1: Product Classification */}
-          <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 bg-zinc-50/50 dark:bg-zinc-900/40">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-3">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-800 text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                  1
-                </span>
-                Product Classification
-              </h3>
-              <span className="text-[11px] text-zinc-400">Classification & Intended Use</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Product Category</span>
-                  <ItemCategoryBadge type={product.category_full_path || product.category ? "existing" : "not_available"} />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100">
-                  {product.category_full_path || product.category || "Data Not Available"}
-                </div>
+        {/* Modal Body: Two-Panel Grid (Left: 7-Section Nav, Right: Selected Section Detail) */}
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-12 min-h-0 overflow-hidden">
+          {/* Left Panel: Seven-Section Navigation List */}
+          <div className="md:col-span-4 lg:col-span-4 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 p-4 flex flex-col justify-between overflow-y-auto">
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider px-2 mb-2">
+                Checklist Sections ({CHECKLIST_SECTIONS.length})
               </div>
 
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Regulatory Classification</span>
-                  <ItemCategoryBadge
-                    type={
-                      product.otc_status === "NOT_OTC"
-                        ? "not_applicable"
-                        : product.otc_status === "OTC_REQUIRED" || product.otc_status === "POTENTIAL_OTC"
-                        ? "existing"
-                        : product.otc_status === "NOT_REVIEWED"
-                        ? "not_reviewed"
-                        : "not_available"
-                    }
-                  />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100">
-                  {product.otc_status === "NOT_OTC"
-                    ? "Standard Cosmetic (Non-OTC)"
-                    : product.otc_status === "OTC_REQUIRED"
-                    ? "Over-the-Counter Drug (OTC)"
-                    : product.otc_status === "POTENTIAL_OTC"
-                    ? "Potential OTC / Functional Product"
-                    : product.otc_status === "NOT_REVIEWED"
-                    ? "Not Reviewed"
-                    : "Data Not Available"}
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Intended Use & Directions</span>
-                  <ItemCategoryBadge type={product.how_to_use || product.description ? "existing" : "not_available"} />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 line-clamp-3">
-                  {product.how_to_use || product.description || "Data Not Available"}
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Product Claims</span>
-                  <ItemCategoryBadge
-                    type={
-                      (product.bullet_points && product.bullet_points.length > 0) || product.hair_loss_claim
-                        ? "existing"
-                        : "not_available"
-                    }
-                  />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 line-clamp-3">
-                  {product.hair_loss_claim && (
-                    <div className="text-[11px] text-amber-400 mb-0.5">
-                      • Hair-loss claim: {product.hair_loss_claim}
+              {CHECKLIST_SECTIONS.map((sec) => {
+                const isSelected = sec.id === activeSectionId;
+                return (
+                  <button
+                    key={sec.id}
+                    type="button"
+                    onClick={() => setActiveSectionId(sec.id)}
+                    className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center gap-3 cursor-pointer ${
+                      isSelected
+                        ? "bg-zinc-900 text-white dark:bg-zinc-800 dark:text-zinc-100 shadow-sm border border-zinc-700/80"
+                        : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 border border-transparent"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold shrink-0 ${
+                        isSelected
+                          ? "bg-cyan-500 text-black font-extrabold"
+                          : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                      }`}
+                    >
+                      {sec.id}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">{sec.name}</div>
+                      <div
+                        className={`text-[10px] truncate ${
+                          isSelected ? "text-zinc-300 dark:text-zinc-400" : "text-zinc-400 dark:text-zinc-500"
+                        }`}
+                      >
+                        {sec.subtitle}
+                      </div>
                     </div>
-                  )}
-                  {product.bullet_points && product.bullet_points.length > 0
-                    ? product.bullet_points.join(" • ")
-                    : !product.hair_loss_claim
-                    ? "Data Not Available"
-                    : null}
-                </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Contextual Brand Inquiry Notice in Left Panel */}
+            <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-800/40 text-[11px] space-y-2 mt-4 shrink-0">
+              <div className="font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+                <span>💬</span>
+                <span>Contact Brand Shortcut</span>
               </div>
+              <p className="text-zinc-500 dark:text-zinc-400 text-[10.5px] leading-relaxed">
+                Need regulatory certificates or missing label files from <strong className="text-zinc-700 dark:text-zinc-300">{product.company_name}</strong>?
+              </p>
+              <Link
+                href="/admin/partner-inquiries?type=brand"
+                target="_blank"
+                className="inline-flex items-center justify-center w-full px-2.5 py-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-xs font-semibold hover:bg-purple-500/20 transition-colors"
+              >
+                Open Brand Inquiries ↗
+              </Link>
             </div>
           </div>
 
-          {/* Section 2: Product Labeling */}
-          <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 bg-zinc-50/50 dark:bg-zinc-900/40">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-3">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-800 text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                  2
+          {/* Right Panel: Selected Section Detail Content */}
+          <div className="md:col-span-8 lg:col-span-8 p-6 overflow-y-auto flex flex-col justify-between space-y-6">
+            <div className="space-y-5">
+              {/* Section Header */}
+              <div className="border-b border-zinc-200 dark:border-zinc-800 pb-3 flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{activeSection.icon}</span>
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                      {activeSection.name}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    {activeSection.subtitle}
+                  </p>
+                </div>
+                <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded shrink-0">
+                  Section {activeSection.id} of 7
                 </span>
-                Product Labeling
-              </h3>
-              <span className="text-[11px] text-zinc-400">Packaging, Text & Ingredients</span>
+              </div>
+
+              {/* SECTION 1: Product Classification */}
+              {activeSectionId === 1 && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Product Category</span>
+                      <ItemCategoryBadge type={product.category_full_path || product.category ? "existing_data" : "not_available"} />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-medium">
+                      {product.category_full_path || product.category || "Data Not Available"}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Regulatory Classification</span>
+                      <ItemCategoryBadge
+                        type={
+                          product.otc_status === "NOT_OTC"
+                            ? "not_applicable"
+                            : product.otc_status === "OTC_REQUIRED" || product.otc_status === "POTENTIAL_OTC"
+                            ? "existing_data"
+                            : product.otc_status === "NOT_REVIEWED"
+                            ? "not_reviewed"
+                            : "not_available"
+                        }
+                      />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-medium">
+                      {product.otc_status === "NOT_OTC"
+                        ? "Standard Cosmetic (Non-OTC)"
+                        : product.otc_status === "OTC_REQUIRED"
+                        ? "Over-the-Counter Drug (OTC)"
+                        : product.otc_status === "POTENTIAL_OTC"
+                        ? "Potential OTC / Functional Product"
+                        : product.otc_status === "NOT_REVIEWED"
+                        ? "Not Reviewed"
+                        : "Data Not Available"}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Intended Use & Directions</span>
+                      <ItemCategoryBadge type={product.how_to_use || product.description ? "existing_data" : "not_available"} />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 line-clamp-4 leading-relaxed">
+                      {product.how_to_use || product.description || "Data Not Available"}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Product Claims</span>
+                      <ItemCategoryBadge
+                        type={
+                          (product.bullet_points && product.bullet_points.length > 0) || product.hair_loss_claim
+                            ? "existing_data"
+                            : "not_available"
+                        }
+                      />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 leading-relaxed">
+                      {product.hair_loss_claim && (
+                        <div className="text-amber-400 mb-1">
+                          • Hair-loss claim: {product.hair_loss_claim}
+                        </div>
+                      )}
+                      {product.bullet_points && product.bullet_points.length > 0
+                        ? product.bullet_points.join(" • ")
+                        : !product.hair_loss_claim
+                        ? "Data Not Available"
+                        : null}
+                    </div>
+                  </div>
+
+                  {/* General Regulatory Guidance Card */}
+                  <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-sky-400">Classification Regulatory Context</span>
+                      <ItemCategoryBadge type="regulatory_guidance" />
+                    </div>
+                    <p className="text-zinc-400 dark:text-zinc-400 leading-relaxed text-[11px]">
+                      Under U.S. law, product classification depends on intended use, claims, and active ingredients. Articles intended only to cleanse, beautify, or alter appearance are cosmetics under MoCRA; articles intended to affect bodily structure or function or treat/prevent conditions are drugs (OTC).
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION 2: Product Labeling */}
+              {activeSectionId === 2 && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">English Product Label</span>
+                      <ItemCategoryBadge type={product.ingredientsFileEnSignedUrl || product.ingredients_file_path_en ? "uploaded_doc" : "not_available"} />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
+                      {product.ingredientsFileEnSignedUrl ? (
+                        <a
+                          href={product.ingredientsFileEnSignedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-cyan-400 underline hover:text-cyan-300 flex items-center gap-1"
+                        >
+                          <span>📄</span>
+                          <span>View Uploaded English Label File ↗</span>
+                        </a>
+                      ) : product.ingredients_file_path_en ? (
+                        <span className="font-mono text-[11px]">{product.ingredients_file_path_en}</span>
+                      ) : (
+                        "Data Not Available (Future Input Required)"
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Ingredient Declaration (INCI)</span>
+                      <ItemCategoryBadge
+                        type={
+                          product.ingredients_text
+                            ? "existing_data"
+                            : product.ingredientsFileSignedUrl
+                            ? "uploaded_doc"
+                            : "not_available"
+                        }
+                      />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 leading-relaxed">
+                      {product.ingredients_text ? (
+                        <p className="line-clamp-4">{product.ingredients_text}</p>
+                      ) : product.ingredientsFileSignedUrl ? (
+                        <a
+                          href={product.ingredientsFileSignedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-cyan-400 underline hover:text-cyan-300 flex items-center gap-1"
+                        >
+                          <span>📄</span>
+                          <span>View Ingredients Document ↗</span>
+                        </a>
+                      ) : (
+                        "Data Not Available"
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Net Contents</span>
+                      <ItemCategoryBadge type={product.volume ? "existing_data" : "not_available"} />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-medium">
+                      {product.volume ? product.volume : "Data Not Available"}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Responsible Company Information</span>
+                      <ItemCategoryBadge type="existing_data" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-medium">
+                      {product.company_name} ({product.company_country || "Country Not Recorded"})
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Required Warnings & Precautionary Statements</span>
+                      <ItemCategoryBadge type="planned" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                      Mandatory cosmetic warning labels (e.g. eye safety, flammable propellants, patch test cautions) review workflow planned for Phase 2.
+                    </div>
+                  </div>
+
+                  {/* General Regulatory Guidance Card */}
+                  <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-sky-400">Labeling Regulatory Requirements</span>
+                      <ItemCategoryBadge type="regulatory_guidance" />
+                    </div>
+                    <p className="text-zinc-400 dark:text-zinc-400 leading-relaxed text-[11px]">
+                      U.S. cosmetic labels must prominently state all required information in English, display ingredients in descending order using standard INCI nomenclature, declare net quantity in both U.S. Customary and Metric units, and identify the responsible distributor/importer.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION 3: FDA Related */}
+              {activeSectionId === 3 && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Existing FDA Status</span>
+                      <StatusBadge rawStatus={product.fda_status} configMap={FDA_STATUS_CONFIG} />
+                    </div>
+                    <div className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Authoritative database attribute: <code className="text-zinc-300">FDA_STATUS</code>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Existing FDA Registration Documents</span>
+                      <ItemCategoryBadge
+                        type={
+                          product.certificates.some((c) => c.certificate_type === "fda_registration")
+                            ? "uploaded_doc"
+                            : "not_available"
+                        }
+                      />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
+                      {product.certificates.filter((c) => c.certificate_type === "fda_registration").length > 0 ? (
+                        <ul className="space-y-1.5">
+                          {product.certificates
+                            .filter((c) => c.certificate_type === "fda_registration")
+                            .map((c) => (
+                              <li key={c.id} className="flex items-center justify-between text-xs p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-md">
+                                <span>📄 {c.original_filename || "FDA Registration Certificate"} (v{c.version})</span>
+                                {c.signedUrl && (
+                                  <a href={c.signedUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline hover:text-cyan-300">
+                                    Download ↗
+                                  </a>
+                                )}
+                              </li>
+                            ))}
+                        </ul>
+                      ) : (
+                        "No FDA Registration Documents Uploaded"
+                      )}
+                    </div>
+                  </div>
+
+                  {/* General Regulatory Guidance Card */}
+                  <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-sky-400">Applicable FDA Safety & Adulteration Requirements</span>
+                      <ItemCategoryBadge type="regulatory_guidance" />
+                    </div>
+                    <p className="text-zinc-400 dark:text-zinc-400 leading-relaxed text-[11px]">
+                      Under the Federal Food, Drug, and Cosmetic Act (FD&C Act), cosmetics do not undergo pre-market FDA approval (except color additives). However, products must not be adulterated (injurious to users) or misbranded (false or deceptive). The manufacturer holds legal liability for product safety.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION 4: MoCRA */}
+              {activeSectionId === 4 && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Existing MoCRA Status</span>
+                      <StatusBadge rawStatus={product.mocra_status} configMap={MOCRA_STATUS_CONFIG} />
+                    </div>
+                    <div className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Authoritative database attribute: <code className="text-zinc-300">MOCRA_STATUS</code>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Facility Registration (MoCRA § 605)</span>
+                      <ItemCategoryBadge type="planned" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                      Mandatory biennial cosmetic manufacturing/processing facility registration via FDA Cosmetics Direct. Structured verification planned for Phase 2.
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Cosmetic Product Listing (MoCRA § 607)</span>
+                      <ItemCategoryBadge type="planned" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                      Mandatory product listing submission to FDA (including product category, ingredients, and facility info). Systematic tracking planned for Phase 2.
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Responsible Person & U.S. Agent</span>
+                      <ItemCategoryBadge type="existing_data" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-medium">
+                      Responsible Entity: {product.company_name} · U.S. Agent Designation: Future Input Required
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Safety Substantiation (MoCRA § 608)</span>
+                      <ItemCategoryBadge type="planned" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                      Requirement to maintain records supporting adequate safety substantiation for each cosmetic formulation prior to distribution. Audit tracking planned for Phase 2.
+                    </div>
+                  </div>
+
+                  {/* General Regulatory Guidance Card */}
+                  <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-sky-400">MoCRA Statutory Context</span>
+                      <ItemCategoryBadge type="regulatory_guidance" />
+                    </div>
+                    <p className="text-zinc-400 dark:text-zinc-400 leading-relaxed text-[11px]">
+                      Enacted in December 2022, the Modernization of Cosmetics Regulation Act expands FDA oversight to mandatory facility registration, cosmetic listing, safety records, and serious adverse event reporting within 15 business days.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION 5: OTC / Drug Facts */}
+              {activeSectionId === 5 && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Existing OTC Status</span>
+                      <StatusBadge rawStatus={product.otc_status} configMap={OTC_STATUS_CONFIG} />
+                    </div>
+                    <div className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Authoritative database attribute: <code className="text-zinc-300">OTC_STATUS</code>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Drug Facts Status</span>
+                      <StatusBadge rawStatus={product.drug_facts_status} configMap={DRUG_FACTS_STATUS_CONFIG} />
+                    </div>
+                    <div className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Authoritative database attribute: <code className="text-zinc-300">DRUG_FACTS_STATUS</code>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Active Pharmaceutical Ingredients</span>
+                      <ItemCategoryBadge
+                        type={
+                          product.otc_status === "NOT_OTC" || product.otc_status === "NOT_APPLICABLE" || product.otc_status === "NA"
+                            ? "not_applicable"
+                            : "not_available"
+                        }
+                      />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
+                      {product.otc_status === "NOT_OTC" || product.otc_status === "NOT_APPLICABLE" || product.otc_status === "NA"
+                        ? "Not Applicable (Cosmetic without active drug ingredients or monograph claims)"
+                        : "Review Required for OTC active ingredients under applicable FDA monographs"}
+                    </div>
+                  </div>
+
+                  {/* General Regulatory Guidance Card */}
+                  <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-sky-400">OTC Drug Facts Labeling Monograph Mandate</span>
+                      <ItemCategoryBadge type="regulatory_guidance" />
+                    </div>
+                    <p className="text-zinc-400 dark:text-zinc-400 leading-relaxed text-[11px]">
+                      Articles with therapeutic or functional active ingredients (sunscreen UV filters, acne actives, dandruff agents) are governed as Over-the-Counter drugs, requiring standardized Drug Facts labeling (21 CFR 201.66) specifying active ingredients, purpose, uses, warnings, and directions.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION 6: Certifications & Testing */}
+              {activeSectionId === 6 && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">COA (Certificate of Analysis)</span>
+                      <ItemCategoryBadge
+                        type={
+                          product.certificates.some((c) => c.certificate_type === "ingredient_certification")
+                            ? "uploaded_doc"
+                            : "not_available"
+                        }
+                      />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
+                      {product.certificates.some((c) => c.certificate_type === "ingredient_certification")
+                        ? "Uploaded in Product Documents"
+                        : "Data Not Available"}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">SDS (Safety Data Sheet)</span>
+                      <ItemCategoryBadge type="not_available" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
+                      Data Not Available (Future Input Required)
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Testing Reports (Stability / Micro / Heavy Metals)</span>
+                      <ItemCategoryBadge type="not_available" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
+                      Data Not Available (Future Input Required)
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Other Certifications (Trademarks / Patents)</span>
+                      <ItemCategoryBadge
+                        type={
+                          product.certificates.some((c) => c.certificate_type === "trademark" || c.certificate_type === "patent")
+                            ? "uploaded_doc"
+                            : "not_available"
+                        }
+                      />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
+                      {product.certificates.filter((c) => c.certificate_type === "trademark" || c.certificate_type === "patent").length > 0
+                        ? `${product.certificates.filter((c) => c.certificate_type === "trademark" || c.certificate_type === "patent").length} certificate(s) uploaded`
+                        : "No Patents or Trademarks Uploaded"}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Document Expiration & Renewal Tracking</span>
+                      <ItemCategoryBadge type="planned" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                      Automated expiration monitoring and renewal alert workflows planned for Phase 2.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION 7: Import & Customs */}
+              {activeSectionId === 7 && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">HS / HTS Classification</span>
+                      <ItemCategoryBadge type="not_available" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100">
+                      Data Not Available (Phase 2 Tariff Classification Required)
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Country of Origin</span>
+                      <ItemCategoryBadge type={product.origin ? "existing_data" : "not_available"} />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-medium">
+                      {product.origin || "Data Not Available"}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Importer / Manufacturer Roles</span>
+                      <ItemCategoryBadge type="existing_data" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-medium">
+                      Manufacturer: {product.company_name} · U.S. Importer: K SELECT NETWORK LLC
+                    </div>
+                  </div>
+
+                  {/* General Regulatory Guidance Cards */}
+                  <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-sky-400">Commercial Invoice & Packing List Protocol</span>
+                      <ItemCategoryBadge type="regulatory_guidance" />
+                    </div>
+                    <p className="text-zinc-400 dark:text-zinc-400 leading-relaxed text-[11px]">
+                      Commercial Invoices and Packing Lists are generated dynamically per Purchase Order shipment and clearance package, not stored as static product-level attributes.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-sky-400">U.S. Customs & Border Protection (CBP) Clearance Mandates</span>
+                      <ItemCategoryBadge type="regulatory_guidance" />
+                    </div>
+                    <p className="text-zinc-400 dark:text-zinc-400 leading-relaxed text-[11px]">
+                      Prior Notice under FDA/BTA, CBP Entry Summary (Form 7501), and verification of MoCRA compliance at U.S. ports of entry.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">English Product Label</span>
-                  <ItemCategoryBadge type={product.ingredientsFileEnSignedUrl || product.ingredients_file_path_en ? "existing" : "not_available"} />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100">
-                  {product.ingredientsFileEnSignedUrl ? (
-                    <a
-                      href={product.ingredientsFileEnSignedUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-cyan-400 underline hover:text-cyan-300"
-                    >
-                      View Uploaded English Label File ↗
-                    </a>
-                  ) : product.ingredients_file_path_en ? (
-                    <span className="font-mono text-[11px]">{product.ingredients_file_path_en}</span>
-                  ) : (
-                    "Data Not Available (Future Input Required)"
-                  )}
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Ingredient Declaration (INCI)</span>
-                  <ItemCategoryBadge type={product.ingredients_text || product.ingredientsFileSignedUrl ? "existing" : "not_available"} />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 line-clamp-3">
-                  {product.ingredients_text ? (
-                    product.ingredients_text
-                  ) : product.ingredientsFileSignedUrl ? (
-                    <a
-                      href={product.ingredientsFileSignedUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-cyan-400 underline hover:text-cyan-300"
-                    >
-                      View Ingredients Document ↗
-                    </a>
-                  ) : (
-                    "Data Not Available"
-                  )}
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Net Contents</span>
-                  <ItemCategoryBadge type={product.volume ? "existing" : "not_available"} />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100">
-                  {product.volume ? product.volume : "Data Not Available"}
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Responsible Company Information</span>
-                  <ItemCategoryBadge type="existing" />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100">
-                  {product.company_name} ({product.company_country || "Country Not Recorded"})
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 md:col-span-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Required Warnings & Precautionary Text</span>
-                  <ItemCategoryBadge type="planned" />
-                </div>
-                <div className="mt-1 text-zinc-500 dark:text-zinc-400">
-                  Mandatory warning labels review (e.g. eye contact, flammable aerosols, child safety) planned for Phase 2 workflow integration.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: FDA Related */}
-          <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 bg-zinc-50/50 dark:bg-zinc-900/40">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-3">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-800 text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                  3
+            {/* Bottom Controls of Right Panel: Sequential Navigation & Regulatory Disclaimer */}
+            <div className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800 shrink-0">
+              {/* Previous / Next Section Buttons */}
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  disabled={activeSectionId <= 1}
+                  onClick={() => setActiveSectionId((curr) => Math.max(1, curr - 1))}
+                  className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  ← Previous Section
+                </button>
+                <span className="text-[11px] text-zinc-400">
+                  Tip: Use ↑ / ↓ or ← / → arrow keys to navigate
                 </span>
-                FDA Related
-              </h3>
-              <span className="text-[11px] text-zinc-400">U.S. Food and Drug Administration</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Existing FDA Status</span>
-                  <StatusBadge rawStatus={product.fda_status} configMap={FDA_STATUS_CONFIG} />
-                </div>
-                <div className="mt-1 text-zinc-500 dark:text-zinc-400 text-[11px]">
-                  Authoritative database attribute: <code className="text-zinc-300">FDA_STATUS</code>
-                </div>
+                <button
+                  type="button"
+                  disabled={activeSectionId >= 7}
+                  onClick={() => setActiveSectionId((curr) => Math.min(7, curr + 1))}
+                  className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  Next Section →
+                </button>
               </div>
 
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Applicable FDA Requirements</span>
-                  <ItemCategoryBadge type="existing" />
-                </div>
-                <div className="mt-1 text-zinc-700 dark:text-zinc-300 text-[11px]">
-                  Cosmetics do not receive pre-market FDA approval, but must not be adulterated or misbranded under FD&C Act.
+              {/* Regulatory Safety Disclaimer Notice */}
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 flex items-start gap-2">
+                <span className="text-sm">⚠️</span>
+                <div>
+                  <strong className="font-semibold">Regulatory Safety Notice:</strong> This Phase 1 Compliance tool organizes existing product data for review planning and U.S. market readiness. It does NOT constitute legal counsel, FDA certification, or an automated determination of import or commercial distribution eligibility.
                 </div>
               </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 md:col-span-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Existing Registration Information</span>
-                  {product.certificates.some((c) => c.certificate_type === "fda_registration") ? (
-                    <ItemCategoryBadge type="existing" />
-                  ) : (
-                    <ItemCategoryBadge type="not_available" />
-                  )}
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100">
-                  {product.certificates.filter((c) => c.certificate_type === "fda_registration").length > 0 ? (
-                    <ul className="space-y-1">
-                      {product.certificates
-                        .filter((c) => c.certificate_type === "fda_registration")
-                        .map((c) => (
-                          <li key={c.id} className="flex items-center justify-between text-xs">
-                            <span>📄 {c.original_filename || "FDA Registration Certificate"} (v{c.version})</span>
-                            {c.signedUrl && (
-                              <a href={c.signedUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline">
-                                Download ↗
-                              </a>
-                            )}
-                          </li>
-                        ))}
-                    </ul>
-                  ) : (
-                    "No FDA Registration Documents Uploaded"
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 4: MoCRA */}
-          <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 bg-zinc-50/50 dark:bg-zinc-900/40">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-3">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-800 text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                  4
-                </span>
-                MoCRA (Modernization of Cosmetics Regulation Act)
-              </h3>
-              <span className="text-[11px] text-zinc-400">Facility & Listing Mandates</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Existing MoCRA Status</span>
-                  <StatusBadge rawStatus={product.mocra_status} configMap={MOCRA_STATUS_CONFIG} />
-                </div>
-                <div className="mt-1 text-zinc-500 dark:text-zinc-400 text-[11px]">
-                  Authoritative database attribute: <code className="text-zinc-300">MOCRA_STATUS</code>
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Facility Registration</span>
-                  <ItemCategoryBadge type="planned" />
-                </div>
-                <div className="mt-1 text-zinc-500 dark:text-zinc-400 text-[11px]">
-                  Cosmetics Direct facility registration tracking planned for Phase 2.
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Product Listing</span>
-                  <ItemCategoryBadge type="planned" />
-                </div>
-                <div className="mt-1 text-zinc-500 dark:text-zinc-400 text-[11px]">
-                  FDA cosmetic product listing submission record planned for Phase 2.
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Responsible Person</span>
-                  <ItemCategoryBadge type="existing" />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 text-[11px]">
-                  {product.company_name} (U.S. Agent Designation: Future Input Required)
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 md:col-span-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Safety Substantiation</span>
-                  <ItemCategoryBadge type="planned" />
-                </div>
-                <div className="mt-1 text-zinc-500 dark:text-zinc-400 text-[11px]">
-                  Documentation establishing adequate safety substantiation under MoCRA section 608 planned for Phase 2 checklist verification.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 5: OTC / Drug Facts */}
-          <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 bg-zinc-50/50 dark:bg-zinc-900/40">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-3">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-800 text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                  5
-                </span>
-                OTC / Drug Facts
-              </h3>
-              <span className="text-[11px] text-zinc-400">Over-the-Counter Drug Mandates</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Existing OTC Status</span>
-                  <StatusBadge rawStatus={product.otc_status} configMap={OTC_STATUS_CONFIG} />
-                </div>
-                <div className="mt-1 text-zinc-500 dark:text-zinc-400 text-[11px]">
-                  Authoritative database attribute: <code className="text-zinc-300">OTC_STATUS</code>
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Drug Facts Status</span>
-                  <StatusBadge rawStatus={product.drug_facts_status} configMap={DRUG_FACTS_STATUS_CONFIG} />
-                </div>
-                <div className="mt-1 text-zinc-500 dark:text-zinc-400 text-[11px]">
-                  Authoritative database attribute: <code className="text-zinc-300">DRUG_FACTS_STATUS</code>
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Active Ingredients</span>
-                  <ItemCategoryBadge
-                    type={
-                      product.otc_status === "NOT_OTC" || product.otc_status === "NOT_APPLICABLE" || product.otc_status === "NA"
-                        ? "not_applicable"
-                        : "not_available"
-                    }
-                  />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 text-[11px]">
-                  {product.otc_status === "NOT_OTC" || product.otc_status === "NOT_APPLICABLE" || product.otc_status === "NA"
-                    ? "Not Applicable (Cosmetic / Non-OTC)"
-                    : "Review Required for OTC monographs (Future Input Required)"}
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">OTC Labeling Requirements</span>
-                  <ItemCategoryBadge
-                    type={
-                      product.otc_status === "NOT_OTC" || product.otc_status === "NOT_APPLICABLE" || product.otc_status === "NA"
-                        ? "not_applicable"
-                        : "planned"
-                    }
-                  />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 text-[11px]">
-                  {product.otc_status === "NOT_OTC" || product.otc_status === "NOT_APPLICABLE" || product.otc_status === "NA"
-                    ? "Not Applicable (Standard Cosmetic Labeling)"
-                    : "Drug Facts Box formatting compliance review planned for Phase 2."}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 6: Certifications & Testing */}
-          <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 bg-zinc-50/50 dark:bg-zinc-900/40">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-3">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-800 text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                  6
-                </span>
-                Certifications & Testing
-              </h3>
-              <span className="text-[11px] text-zinc-400">Laboratory Reports & Documents</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">COA (Certificate of Analysis)</span>
-                  {product.certificates.some((c) => c.certificate_type === "ingredient_certification") ? (
-                    <ItemCategoryBadge type="existing" />
-                  ) : (
-                    <ItemCategoryBadge type="not_available" />
-                  )}
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 text-[11px]">
-                  {product.certificates.some((c) => c.certificate_type === "ingredient_certification")
-                    ? "Uploaded in Product Documents"
-                    : "Data Not Available"}
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">SDS (Safety Data Sheet)</span>
-                  <ItemCategoryBadge type="not_available" />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 text-[11px]">
-                  Data Not Available (Future Input Required)
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Testing Reports (Stability / Heavy Metals)</span>
-                  <ItemCategoryBadge type="not_available" />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 text-[11px]">
-                  Data Not Available (Future Input Required)
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Other Certifications (Trademarks / Patents)</span>
-                  {product.certificates.some((c) => c.certificate_type === "trademark" || c.certificate_type === "patent") ? (
-                    <ItemCategoryBadge type="existing" />
-                  ) : (
-                    <ItemCategoryBadge type="not_available" />
-                  )}
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 text-[11px]">
-                  {product.certificates.filter((c) => c.certificate_type === "trademark" || c.certificate_type === "patent").length > 0
-                    ? `${product.certificates.filter((c) => c.certificate_type === "trademark" || c.certificate_type === "patent").length} certificate(s) uploaded`
-                    : "No Patents or Trademarks Uploaded"}
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 md:col-span-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Document Expiration Dates</span>
-                  <ItemCategoryBadge type="planned" />
-                </div>
-                <div className="mt-1 text-zinc-500 dark:text-zinc-400 text-[11px]">
-                  Document lifecycle tracking and automated expiration alerts planned for Phase 2.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 7: Import & Customs */}
-          <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 bg-zinc-50/50 dark:bg-zinc-900/40">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-3">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-800 text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                  7
-                </span>
-                Import & Customs
-              </h3>
-              <span className="text-[11px] text-zinc-400">Cross-Border Clearance Readiness</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">HS / HTS Classification</span>
-                  <ItemCategoryBadge type="not_available" />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 text-[11px]">
-                  Data Not Available (Phase 2 Tariff Classification Required)
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Country of Origin</span>
-                  <ItemCategoryBadge type={product.origin ? "existing" : "not_available"} />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 text-[11px]">
-                  {product.origin || "Data Not Available"}
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Importer / Manufacturer</span>
-                  <ItemCategoryBadge type="existing" />
-                </div>
-                <div className="mt-1 text-zinc-900 dark:text-zinc-100 text-[11px]">
-                  Manufacturer: {product.company_name} · U.S. Importer: K SELECT NETWORK LLC
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Commercial Invoice & Packing List</span>
-                  <ItemCategoryBadge type="not_applicable" />
-                </div>
-                <div className="mt-1 text-zinc-700 dark:text-zinc-300 text-[11px]">
-                  Generated dynamically per Purchase Order / Logistics shipment (Not stored at product-level)
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 md:col-span-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">Applicable Import Requirements</span>
-                  <ItemCategoryBadge type="existing" />
-                </div>
-                <div className="mt-1 text-zinc-700 dark:text-zinc-300 text-[11px]">
-                  Prior Notice under FDA/BTA, CBP Entry Summary, MoCRA Compliance verification at port of entry.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Legal Safety Notice */}
-          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 flex items-start gap-2">
-            <span className="text-sm">⚠️</span>
-            <div>
-              <strong className="font-semibold">Regulatory Safety Notice:</strong> This Phase 1 Compliance tool organizes existing product data for review planning and U.S. market readiness. It does NOT constitute legal counsel, FDA certification, or an automated determination of import or commercial distribution eligibility.
             </div>
           </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/80 flex items-center justify-end">
+        <div className="px-6 py-2.5 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/90 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 shrink-0">
+          <div>
+            Reviewing: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{product.display_name}</span>
+          </div>
           <button
             type="button"
             onClick={onClose}
