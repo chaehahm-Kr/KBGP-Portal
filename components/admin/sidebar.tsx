@@ -165,15 +165,15 @@ export default function Sidebar({
   const searchParams = useSearchParams();
 
   // Section level independent expand states (Brand, Hub, General Operations)
-  // Default on login / initial load: all sections collapsed (ADM-NAV-HUB-001-R2)
+  // Default on login / initial load: Brand & Hub expanded, General Ops collapsed (ADM-NAV-HUB-001-R3)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    brand: false,
-    hub: false,
+    brand: true,
+    hub: true,
     generalOps: false,
   });
 
   // Depth 1 menu expand state
-  // Default on login / initial load: all menus collapsed
+  // Default on login / initial load: all menus collapsed (ADM-NAV-HUB-001-R3)
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
     "Companies & Brands": false,
     Products: false,
@@ -193,11 +193,12 @@ export default function Sidebar({
     "Intelligence->Insights": false,
   });
 
-  // Helper to reset and collapse all sections, menus, and submenus (ADM-NAV-HUB-001-R2)
-  const collapseAllMenusAndSections = () => {
+  // Helper to reset sidebar to default state on Dashboard / logo click (ADM-NAV-HUB-001-R3)
+  // Default: K SELECT BRAND & K SELECT HUB expanded, Settings & GENERAL OPERATIONS collapsed, all submenus collapsed
+  const resetToDefaultDashboardState = () => {
     setExpandedSections({
-      brand: false,
-      hub: false,
+      brand: true,
+      hub: true,
       generalOps: false,
     });
     setExpandedMenus({
@@ -222,9 +223,9 @@ export default function Sidebar({
   useEffect(() => {
     if (!pathname) return;
 
-    // Reset all sidebar groups to collapsed state when on Dashboard (ADM-NAV-HUB-001-R2)
+    // Reset sidebar to default state when on Dashboard (ADM-NAV-HUB-001-R3)
     if (pathname === "/admin") {
-      collapseAllMenusAndSections();
+      resetToDefaultDashboardState();
       return;
     }
 
@@ -303,7 +304,7 @@ export default function Sidebar({
     name: "Dashboard",
     icon: DashboardIcon,
     href: "/admin",
-    onClick: collapseAllMenusAndSections,
+    onClick: resetToDefaultDashboardState,
   };
 
   // Section 1: K SELECT BRAND items
@@ -759,7 +760,7 @@ export default function Sidebar({
         {!isCollapsed && (
           <Link
             href="/admin"
-            onClick={collapseAllMenusAndSections}
+            onClick={resetToDefaultDashboardState}
             className="flex items-center gap-2 group cursor-pointer"
             title="K SELECT NETWORK ADMIN — Go to Dashboard"
           >
@@ -774,7 +775,7 @@ export default function Sidebar({
         {isCollapsed && (
           <Link
             href="/admin"
-            onClick={collapseAllMenusAndSections}
+            onClick={resetToDefaultDashboardState}
             className="mx-auto flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 dark:bg-white cursor-pointer hover:opacity-80 transition-opacity"
             title="K SELECT NETWORK ADMIN — Go to Dashboard"
           >
