@@ -67,7 +67,7 @@ export interface ComplianceProductItem {
     case_number: string | null;
     title: string;
     status: string;
-    priority: string;
+    priority?: string | null;
     is_action_required: boolean;
     updated_at: string;
   }>;

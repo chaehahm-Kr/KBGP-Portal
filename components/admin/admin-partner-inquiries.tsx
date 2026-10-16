@@ -112,9 +112,14 @@ export function AdminPartnerInquiries({
       const match = inquiries.find((i) => i.id === targetId || i.case_number === targetId);
       if (match) {
         setSelectedInquiry(match);
+        const normStatus = getNormalizedStatus(match.status);
+        setSelectedStatuses((prev) => (prev.includes(normStatus) ? prev : [...prev, normStatus]));
+        if (match.source_type && match.source_type !== sourceFilter) {
+          setSourceFilter(match.source_type);
+        }
       }
     }
-  }, [searchParams, inquiries]);
+  }, [searchParams, inquiries, sourceFilter]);
 
   // Default Multi-Select Statuses: Active 3 Statuses (RECEIVED, UNDER_REVIEW, ACTION_REQUIRED)
   const [selectedStatuses, setSelectedStatuses] = useState<OfficialCaseStatus[]>([
@@ -929,7 +934,7 @@ export function AdminPartnerInquiries({
                 )}
 
                 {/* Related Product Card (Brand or Generic Product Linkage) */}
-                {Boolean(selectedInquiry.related_product_id || selectedInquiry.related_product_name) && selectedInquiry.source_type !== "retailer" && (
+                {Boolean(selectedInquiry.related_product_id || selectedInquiry.related_product_name) && (
                   <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/30 text-xs space-y-2.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-bold text-amber-900 dark:text-amber-300">
                       <span className="flex items-center gap-1.5">

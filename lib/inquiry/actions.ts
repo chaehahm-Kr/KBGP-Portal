@@ -424,12 +424,17 @@ export async function createAdminPartnerInquiry(formData: FormData) {
       attachmentFilename = file.name;
     }
 
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const relatedInvoiceId = (formData.get("related_invoice_id") as string) || null;
     const relatedPoId = (formData.get("related_po_id") as string) || null;
     const rawProductId = String(formData.get("related_product_id") || "").trim() || null;
     let validatedProductId: string | null = null;
 
     if (rawProductId) {
+      if (!UUID_REGEX.test(rawProductId)) {
+        return { success: false, error: "유효하지 않은 제품 ID 형식입니다. 올바른 제품을 선택해주세요." };
+      }
+
       // Validate that product exists AND belongs to the target company (or company's brands)
       const { data: prodRecord, error: prodErr } = await adminSupabase
         .from("products")
@@ -442,8 +447,12 @@ export async function createAdminPartnerInquiry(formData: FormData) {
       }
 
       // Check cross-company alignment to prevent accidental cross-company linking
-      const prodCompanyId = prodRecord.company_id || (prodRecord.brands as any)?.company_id;
-      if (prodCompanyId && prodCompanyId !== companyId) {
+      const brandCompanyId = Array.isArray(prodRecord.brands)
+        ? (prodRecord.brands[0] as any)?.company_id
+        : (prodRecord.brands as any)?.company_id;
+      const prodCompanyId = prodRecord.company_id || brandCompanyId;
+
+      if (!prodCompanyId || prodCompanyId !== companyId) {
         return { 
           success: false, 
           error: "선택된 회사와 제품의 소속 회사가 일치하지 않습니다. 올바른 회사를 선택해주세요." 

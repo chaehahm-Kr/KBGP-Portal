@@ -146,7 +146,7 @@ export default async function AdminProductCompliancePage() {
   // 8b. Fetch linked partner inquiries
   const { data: rawInquiries } = await admin
     .from("partner_inquiries")
-    .select("id, case_number, title, status, priority, is_action_required, related_product_id, updated_at")
+    .select("id, case_number, title, status, is_action_required, related_product_id, updated_at")
     .not("related_product_id", "is", null);
 
   const inquiryMap = new Map<string, Array<{
@@ -154,7 +154,7 @@ export default async function AdminProductCompliancePage() {
     case_number: string | null;
     title: string;
     status: string;
-    priority: string;
+    priority?: string;
     is_action_required: boolean;
     updated_at: string;
   }>>();
@@ -169,7 +169,7 @@ export default async function AdminProductCompliancePage() {
       case_number: inq.case_number,
       title: inq.title,
       status: inq.status,
-      priority: inq.priority,
+      priority: (inq as any).priority || "normal",
       is_action_required: inq.is_action_required,
       updated_at: inq.updated_at,
     });
