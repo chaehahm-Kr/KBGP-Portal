@@ -969,7 +969,7 @@ export function ComplianceClient({
                       Catalog ↗
                     </Link>
                     <Link
-                      href="/admin/partner-inquiries?type=brand"
+                      href={`/admin/partner-inquiries?type=brand&newCase=1&productId=${encodeURIComponent(p.id)}`}
                       target="_blank"
                       className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
                       title={`Open Brand Inquiries for ${p.brand_name} (${p.company_name})`}
@@ -1113,7 +1113,7 @@ function ComplianceDetailModal({
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Contact Brand Shortcut (Reuses existing Brand Inquiries) */}
             <Link
-              href="/admin/partner-inquiries?type=brand"
+              href={`/admin/partner-inquiries?type=brand&newCase=1&productId=${encodeURIComponent(product.id)}&section=${activeSectionId}`}
               target="_blank"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-500/40 bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 text-xs font-semibold transition-colors"
               title={`Open Brand Inquiries for ${product.brand_name} (${product.company_name})`}
@@ -1200,7 +1200,7 @@ function ComplianceDetailModal({
                 Need regulatory certificates or missing label files from <strong className="text-zinc-700 dark:text-zinc-300">{product.company_name}</strong>?
               </p>
               <Link
-                href="/admin/partner-inquiries?type=brand"
+                href={`/admin/partner-inquiries?type=brand&newCase=1&productId=${encodeURIComponent(product.id)}&section=${activeSectionId}`}
                 target="_blank"
                 className="inline-flex items-center justify-center w-full px-2.5 py-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-xs font-semibold hover:bg-purple-500/20 transition-colors"
               >

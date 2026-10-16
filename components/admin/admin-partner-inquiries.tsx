@@ -13,6 +13,7 @@ import {
 } from "@/lib/inquiry/types";
 import { updateCaseStatus, closeCaseAdmin, answerAndClosePartnerInquiry, markAdminPartnerInquiryRead } from "@/lib/inquiry/actions";
 import { stageLargeFiles } from "@/lib/files/stage-form-files";
+import type { CompliancePrefillData } from "@/lib/inquiry/compliance-prefill";
 
 export interface CaseCreationCompany {
   id: string;
@@ -32,6 +33,7 @@ interface AdminPartnerInquiriesProps {
   initialSource?: "all" | "brand" | "retailer";
   companies?: CaseCreationCompany[];
   companyUsers?: CaseCreationUser[];
+  initialNewCase?: CompliancePrefillData | null;
   answerAction: (
     inquiryId: string,
     replyContent: string,
@@ -74,6 +76,7 @@ export function AdminPartnerInquiries({
   initialSource = "all",
   companies = [],
   companyUsers = [],
+  initialNewCase = null,
   answerAction,
   createCaseAction
 }: AdminPartnerInquiriesProps) {
@@ -119,19 +122,40 @@ export function AdminPartnerInquiries({
   const [showCloseConfirmModal, setShowCloseConfirmModal] = useState(false);
   const [showDirectCloseConfirmModal, setShowDirectCloseConfirmModal] = useState(false);
 
-  // Admin New Case Creation states
-  const [showCreateCaseModal, setShowCreateCaseModal] = useState(false);
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>(companies[0]?.id || "");
-  const [selectedContactUserId, setSelectedContactUserId] = useState<string>("");
-  const [newCategory, setNewCategory] = useState<string>("product");
-  const [newTitle, setNewTitle] = useState<string>("");
-  const [newContent, setNewContent] = useState<string>("");
-  const [newPriority, setNewPriority] = useState<string>("normal");
+  // Admin New Case Creation states (supports ADM-PRODUCT-COMPLIANCE-001-R2 prefill)
+  const [showCreateCaseModal, setShowCreateCaseModal] = useState<boolean>(initialNewCase?.isOpen ?? false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>(
+    initialNewCase?.companyId || companies[0]?.id || ""
+  );
+  const [selectedContactUserId, setSelectedContactUserId] = useState<string>(
+    initialNewCase?.contactUserId || ""
+  );
+  const [newCategory, setNewCategory] = useState<string>(initialNewCase?.category || "product");
+  const [newTitle, setNewTitle] = useState<string>(initialNewCase?.title || "");
+  const [newContent, setNewContent] = useState<string>(initialNewCase?.content || "");
+  const [newPriority, setNewPriority] = useState<string>(initialNewCase?.priority || "normal");
   const [newIsActionRequired, setNewIsActionRequired] = useState<boolean>(false);
   const [newSendEmail, setNewSendEmail] = useState<boolean>(false);
   const [newFile, setNewFile] = useState<File | null>(null);
   const [isCreatingCase, setIsCreatingCase] = useState<boolean>(false);
   const [createCaseError, setCreateCaseError] = useState<string>("");
+
+  // Sync incoming prefill changes
+  useEffect(() => {
+    if (initialNewCase?.isOpen) {
+      setShowCreateCaseModal(true);
+      if (initialNewCase.companyId) setSelectedCompanyId(initialNewCase.companyId);
+      setSelectedContactUserId(initialNewCase.contactUserId || "");
+      if (initialNewCase.category) setNewCategory(initialNewCase.category);
+      if (initialNewCase.priority) setNewPriority(initialNewCase.priority);
+      if (initialNewCase.title) setNewTitle(initialNewCase.title);
+      if (initialNewCase.content) setNewContent(initialNewCase.content);
+      setNewIsActionRequired(false);
+      setNewSendEmail(false);
+      setNewFile(null);
+      setCreateCaseError("");
+    }
+  }, [initialNewCase]);
 
   // Status update states
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -143,16 +167,33 @@ export function AdminPartnerInquiries({
     return companyUsers.filter((u) => u.company_id === selectedCompanyId);
   }, [selectedCompanyId, companyUsers]);
 
-  // When selected company changes, auto select contact user
+  // Contact user selection when company changes:
+  // Select only if an existing valid contact can be identified unambiguously (exactly 1 user).
+  // Otherwise leave it unselected to preserve required-field validation.
   useEffect(() => {
-    if (availableUsersForCompany.length > 0) {
-      if (!availableUsersForCompany.some((u) => u.id === selectedContactUserId)) {
-        setSelectedContactUserId(availableUsersForCompany[0].id);
+    setSelectedContactUserId((curr) => {
+      if (availableUsersForCompany.length === 1) {
+        return availableUsersForCompany[0].id;
       }
-    } else {
-      setSelectedContactUserId("");
+      if (availableUsersForCompany.some((u) => u.id === curr)) {
+        return curr;
+      }
+      return "";
+    });
+  }, [selectedCompanyId, availableUsersForCompany]);
+
+  const handleCloseCreateCaseModal = () => {
+    setShowCreateCaseModal(false);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("newCase") || url.searchParams.has("productId")) {
+        url.searchParams.delete("newCase");
+        url.searchParams.delete("productId");
+        url.searchParams.delete("section");
+        window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+      }
     }
-  }, [selectedCompanyId, availableUsersForCompany, selectedContactUserId]);
+  };
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -211,7 +252,7 @@ export function AdminPartnerInquiries({
       }
       const res = await createCaseAction(await stageLargeFiles(fd));
       if (res.success) {
-        setShowCreateCaseModal(false);
+        handleCloseCreateCaseModal();
         setNewTitle("");
         setNewContent("");
         setNewFile(null);
@@ -1185,7 +1226,7 @@ export function AdminPartnerInquiries({
               </div>
               <button
                 type="button"
-                onClick={() => setShowCreateCaseModal(false)}
+                onClick={handleCloseCreateCaseModal}
                 className="text-xs text-zinc-400 hover:text-zinc-700 dark:hover:text-white cursor-pointer"
               >
                 닫기
@@ -1228,6 +1269,9 @@ export function AdminPartnerInquiries({
                     onChange={(e) => setSelectedContactUserId(e.target.value)}
                     className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors cursor-pointer"
                   >
+                    {availableUsersForCompany.length !== 1 && (
+                      <option value="">-- 담당자를 선택하세요 (Select Contact Person) --</option>
+                    )}
                     {availableUsersForCompany.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.name} ({u.email}) {u.company_role === "company_admin" ? "— 관리자" : ""}
@@ -1379,7 +1423,7 @@ export function AdminPartnerInquiries({
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowCreateCaseModal(false)}
+                  onClick={handleCloseCreateCaseModal}
                   className="flex-1 rounded-lg border border-zinc-200 py-2.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                 >
                   취소 (Cancel)
