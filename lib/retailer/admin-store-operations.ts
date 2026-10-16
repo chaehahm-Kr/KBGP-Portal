@@ -9,6 +9,12 @@ import {
   normalizeReorderQuantity,
 } from "@/lib/product/retailer-policy";
 import { computeRetailerTrainingAnalytics } from "@/lib/retailer/admin-training-analytics";
+import {
+  buildStoreSkuFinancialEstimate,
+  type SnapshotInput,
+  type PricingInput,
+} from "./performance-financial-pure";
+import type { AnalysisPeriod, ReceiptEvent } from "./performance-financial-types";
 
 export interface AdminStoreOperationItem {
   id: string;
@@ -213,6 +219,59 @@ export interface AdminStoreTrainingOverview {
   gapProducts: AdminStoreTrainingProductItem[];
 }
 
+export type StorePerformanceStatus =
+  | "valid_estimate"
+  | "baseline_only"
+  | "not_reported"
+  | "insufficient_data";
+
+export interface AdminStorePerformanceSkuItem {
+  productId: string;
+  productName: string;
+  productNameEn: string | null;
+  sku: string;
+  brandName: string;
+  category: string;
+  thumbnailUrl: string | null;
+  latestReportedStock: number | null;
+  estimatedUnitsSold: number | null; // null if insufficient data or baseline or not reported
+  estimatedWeeklyVelocity: number | null; // null if insufficient data
+  approxWeeksOfSupply: number | null; // null if no velocity
+  performanceStatus: StorePerformanceStatus;
+  statusLabel: string;
+  statusReason: string;
+  stockRisk: "stockout" | "low_stock" | "sufficient" | "overstock" | "unreported" | "insufficient_data";
+  stockRiskLabel: string;
+  usableSubmissionsCount: number;
+  lastReportingDate: string | null;
+  lastReportingWeek: string | null;
+  incomingQty: number;
+}
+
+export interface AdminStorePerformanceOverview {
+  storeId: string;
+  storeName: string;
+  companyId: string;
+  companyName: string;
+  selectedPeriod: AnalysisPeriod;
+  submittedChecksCount: number;
+  latestReportDate: string | null;
+  latestReportingWeek: string | null;
+
+  // 4 Top Summary KPIs
+  totalEstimatedUnitsSold: number | null; // null if 0 comparable intervals
+  averageWeeklyVelocity: number | null;   // null if 0 comparable intervals
+  productsWithValidDataCount: number;     // SKUs with valid estimates or baseline count
+  productsNeedingAttentionCount: number;  // SKUs with stockout risk, low supply, or unreported
+
+  // Counts
+  carriedProductsCount: number;
+  reportedProductsCount: number;
+
+  // Products Breakdown
+  products: AdminStorePerformanceSkuItem[];
+}
+
 export interface AdminStoreOperationsData {
   stores: AdminStoreOperationItem[];
   retailers: Array<{
@@ -226,6 +285,7 @@ export interface AdminStoreOperationsData {
   storeInventoryMap: Record<string, AdminStoreInventoryOverview>;
   storeOrdersMap: Record<string, AdminStoreOrdersOverview>;
   storeTrainingMap: Record<string, AdminStoreTrainingOverview>;
+  storePerformanceMap: Record<string, AdminStorePerformanceOverview>;
 }
 
 /**
@@ -970,6 +1030,428 @@ export async function getAdminStoreTrainingData(
   };
 }
 
+/**
+ * Authoritative store-specific sales velocity and estimated movement resolver for Store Operations
+ * ADM-STORE-OPS-P2-004
+ */
+export async function getAdminStorePerformanceData(
+  storeId: string,
+  period: AnalysisPeriod = "all"
+): Promise<AdminStorePerformanceOverview | null> {
+  await verifyAdminSession();
+  const adminClient = createAdminClient();
+
+  // 1. Fetch Store and Company
+  const { data: store, error: storeErr } = await adminClient
+    .from("stores")
+    .select(`
+      id,
+      name,
+      company_id,
+      companies:companies!stores_company_id_fkey (
+        id,
+        name,
+        company_code
+      )
+    `)
+    .eq("id", storeId)
+    .maybeSingle();
+
+  if (storeErr || !store) {
+    return null;
+  }
+
+  const comp = Array.isArray(store.companies) ? store.companies[0] : store.companies;
+  const companyId = store.company_id;
+  const companyName = comp?.name || "Retailer Organization";
+
+  // 2. Fetch Weekly Checks for this Store (Submitted only)
+  let checksQuery = adminClient
+    .from("retailer_weekly_checks")
+    .select(`
+      id,
+      store_id,
+      reporting_week,
+      report_date,
+      status,
+      submitted_at,
+      retailer_weekly_check_items (
+        id,
+        product_id,
+        reported_remaining_qty,
+        previous_reported_qty,
+        delivered_since_previous,
+        estimated_movement,
+        is_counted,
+        retail_price_snapshot,
+        retail_price_basis
+      )
+    `)
+    .eq("store_id", storeId)
+    .eq("status", "submitted")
+    .order("report_date", { ascending: true });
+
+  if (period !== "all") {
+    const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString().split("T")[0];
+    checksQuery = checksQuery.gte("report_date", cutoff);
+  }
+
+  const { data: rawChecks } = await checksQuery;
+  const submittedChecks = rawChecks || [];
+
+  // Also query latest check of any status to determine overall activity
+  const { data: latestAnyCheckRows } = await adminClient
+    .from("retailer_weekly_checks")
+    .select("id, report_date, reporting_week, status")
+    .eq("store_id", storeId)
+    .order("report_date", { ascending: false })
+    .limit(1);
+
+  const latestAnyCheck = latestAnyCheckRows?.[0] || null;
+  const latestSubmittedCheck = submittedChecks.length > 0 ? submittedChecks[submittedChecks.length - 1] : null;
+
+  // 3. Collect relevant products for this store
+  const relevantProductIds = new Set<string>();
+
+  // A. Assortment from retailer_store_products
+  const { data: storeProductRows } = await adminClient
+    .from("retailer_store_products")
+    .select("product_id")
+    .eq("store_id", storeId)
+    .eq("is_active", true);
+
+  (storeProductRows || []).forEach((sp: any) => {
+    if (sp.product_id) relevantProductIds.add(sp.product_id);
+  });
+
+  // B. Products present in any checks for this store
+  const { data: allStoreChecks } = await adminClient
+    .from("retailer_weekly_checks")
+    .select("retailer_weekly_check_items ( product_id )")
+    .eq("store_id", storeId);
+
+  (allStoreChecks || []).forEach((c: any) => {
+    (c.retailer_weekly_check_items || []).forEach((it: any) => {
+      if (it.product_id) relevantProductIds.add(it.product_id);
+    });
+  });
+
+  // C. Products present in store-scoped orders
+  const { data: orderItemRows } = await adminClient
+    .from("retailer_orders")
+    .select("retailer_order_items ( product_id )")
+    .eq("store_id", storeId);
+
+  (orderItemRows || []).forEach((ord: any) => {
+    (ord.retailer_order_items || []).forEach((it: any) => {
+      if (it.product_id) relevantProductIds.add(it.product_id);
+    });
+  });
+
+  // D. Fallback if empty: active selling products
+  if (relevantProductIds.size === 0) {
+    const { data: fallbackProds } = await adminClient
+      .from("products")
+      .select("id")
+      .eq("status", "selling")
+      .limit(10);
+
+    (fallbackProds || []).forEach((p) => relevantProductIds.add(p.id));
+  }
+
+  // 4. Fetch Products Catalog Details
+  const { data: rawProducts } = await adminClient
+    .from("products")
+    .select(`
+      id,
+      name,
+      name_en,
+      category,
+      category_code,
+      brand_id,
+      letusto_sku,
+      manufacture_sku,
+      status,
+      estimated_retail_price,
+      carton_pack_qty,
+      price_additional_info,
+      brands (
+        id,
+        name
+      )
+    `)
+    .in("id", Array.from(relevantProductIds))
+    .order("name", { ascending: true });
+
+  const products = rawProducts || [];
+
+  // 5. Authoritative Product Images
+  let imageMap: Record<string, { primaryUrl: string | null }> = {};
+  try {
+    imageMap = await resolveAuthoritativeProductImages(
+      adminClient,
+      products.map((p) => p.id)
+    );
+  } catch (e) {
+    console.warn("[getAdminStorePerformanceData] Error fetching product images:", e);
+  }
+
+  // 6. Confirmed Fulfillments for Delivery Events
+  const { data: rawFulfillments } = await adminClient
+    .from("retailer_order_fulfillments")
+    .select(`
+      id,
+      fulfillment_number,
+      status,
+      delivered_at,
+      shipped_at,
+      created_at,
+      retailer_order_fulfillment_items (
+        product_id,
+        quantity_shipped,
+        quantity_delivered
+      )
+    `)
+    .eq("store_id", storeId)
+    .in("status", ["shipped", "delivered"]);
+
+  const productReceiptsMap = new Map<string, ReceiptEvent[]>();
+  (rawFulfillments || []).forEach((ff: any) => {
+    const dateStr = ff.delivered_at || ff.shipped_at || ff.created_at;
+    if (!dateStr) return;
+    const receiptDate = dateStr.split("T")[0];
+    (ff.retailer_order_fulfillment_items || []).forEach((it: any) => {
+      if (!it.product_id) return;
+      const qty = Number(it.quantity_delivered || it.quantity_shipped || 0);
+      if (qty <= 0) return;
+      if (!productReceiptsMap.has(it.product_id)) {
+        productReceiptsMap.set(it.product_id, []);
+      }
+      productReceiptsMap.get(it.product_id)!.push({
+        id: it.id || ff.id,
+        orderId: ff.order_id,
+        storeId,
+        productId: it.product_id,
+        quantity: qty,
+        receiptDate,
+        receiptTimestamp: new Date(receiptDate + "T00:00:00Z").getTime(),
+        isEstimated: !ff.delivered_at,
+        deliveryStatus: ff.delivered_at ? "delivered" : "estimated_in_transit",
+      });
+    });
+  });
+
+  // 7. Open Incoming Order Quantities
+  const incomingMap = new Map<string, number>();
+  try {
+    const { data: openOrders } = await adminClient
+      .from("retailer_orders")
+      .select(`
+        id,
+        retailer_order_items (
+          product_id,
+          quantity
+        )
+      `)
+      .eq("store_id", storeId)
+      .in("order_status", ["confirmed", "processing", "partially_shipped", "shipped"]);
+
+    (openOrders || []).forEach((ord: any) => {
+      (ord.retailer_order_items || []).forEach((it: any) => {
+        if (it.product_id) {
+          const prev = incomingMap.get(it.product_id) || 0;
+          incomingMap.set(it.product_id, prev + (Number(it.quantity) || 0));
+        }
+      });
+    });
+  } catch (e) {
+    console.warn("[getAdminStorePerformanceData] Error fetching open orders:", e);
+  }
+
+  // 8. Build Store Sku Performance Items
+  let totalEstimatedUnitsSoldSum = 0;
+  let totalWeeklyVelocitySum = 0;
+  let productsWithComparableIntervalsCount = 0;
+  let productsWithCountedDataCount = 0;
+  let productsNeedingAttentionCount = 0;
+
+  const skuItems: AdminStorePerformanceSkuItem[] = products.map((prod: any) => {
+    const brand = Array.isArray(prod.brands) ? prod.brands[0] : prod.brands;
+    const sku =
+      resolveEffectiveSku(prod.letusto_sku, prod.manufacture_sku) ||
+      prod.letusto_sku ||
+      prod.manufacture_sku ||
+      "KS-SKU";
+    const primaryImg = imageMap[prod.id]?.primaryUrl || null;
+    const incomingQty = incomingMap.get(prod.id) || 0;
+
+    // Pricing
+    const wholesalePrice = Number(prod.price_additional_info?.wholesale_price) || 15;
+    const srpPrice = Number(prod.estimated_retail_price) || wholesalePrice * 2;
+    const pricingInput: PricingInput = {
+      wholesalePrice,
+      catalogErp: srpPrice,
+    };
+
+    // Collect snapshots from submitted checks
+    const snapshots: SnapshotInput[] = [];
+    let lastReportingDate: string | null = null;
+    let lastReportingWeek: string | null = null;
+
+    submittedChecks.forEach((c) => {
+      const it = (c.retailer_weekly_check_items || []).find(
+        (item: any) => item.product_id === prod.id && item.is_counted
+      );
+      if (it && it.reported_remaining_qty !== null && it.reported_remaining_qty !== undefined) {
+        snapshots.push({
+          checkId: c.id,
+          storeId: store.id,
+          reportDate: c.report_date,
+          reportedRemaining: Number(it.reported_remaining_qty),
+          retailPriceSnapshot: it.retail_price_snapshot ? Number(it.retail_price_snapshot) : null,
+          retailPriceBasis: it.retail_price_basis || null,
+        });
+        lastReportingDate = c.report_date;
+        lastReportingWeek = c.reporting_week;
+      }
+    });
+
+    const receipts = productReceiptsMap.get(prod.id) || [];
+    const usableSubmissionsCount = snapshots.length;
+
+    let latestReportedStock: number | null = null;
+    let estimatedUnitsSold: number | null = null;
+    let estimatedWeeklyVelocity: number | null = null;
+    let approxWeeksOfSupply: number | null = null;
+    let performanceStatus: StorePerformanceStatus = "not_reported";
+    let statusLabel = "Not Reported";
+    let statusReason = "No submitted physical inventory reports";
+    let stockRisk: AdminStorePerformanceSkuItem["stockRisk"] = "unreported";
+    let stockRiskLabel = "Unreported";
+
+    if (usableSubmissionsCount === 0) {
+      performanceStatus = "not_reported";
+      statusLabel = "Not Reported";
+      statusReason = "No submitted physical counts for this product";
+      stockRisk = "unreported";
+      stockRiskLabel = "Unreported";
+      productsNeedingAttentionCount++;
+    } else if (usableSubmissionsCount === 1) {
+      productsWithCountedDataCount++;
+      latestReportedStock = snapshots[0].reportedRemaining;
+      performanceStatus = "baseline_only";
+      statusLabel = "Baseline Count";
+      statusReason = "Initial physical count recorded; requires 2nd submission to calculate movement";
+
+      if (latestReportedStock === 0) {
+        stockRisk = "stockout";
+        stockRiskLabel = "Out of Stock";
+        productsNeedingAttentionCount++;
+      } else if (latestReportedStock <= 5) {
+        stockRisk = "low_stock";
+        stockRiskLabel = "Low Stock (≤ 5 units)";
+        productsNeedingAttentionCount++;
+      } else {
+        stockRisk = "sufficient";
+        stockRiskLabel = "In Stock";
+      }
+    } else {
+      // 2 or more submitted checks: pure calculation engine
+      productsWithCountedDataCount++;
+      productsWithComparableIntervalsCount++;
+      latestReportedStock = snapshots[snapshots.length - 1].reportedRemaining;
+
+      const storeSkuEstimate = buildStoreSkuFinancialEstimate({
+        storeId: store.id,
+        storeName: store.name,
+        productId: prod.id,
+        sku,
+        selectedPeriod: period as any,
+        snapshots,
+        receipts,
+        pricing: pricingInput,
+      });
+
+      const metrics = storeSkuEstimate.periodMetrics;
+      estimatedUnitsSold = metrics.estimatedUnitsSold !== null ? Math.round(metrics.estimatedUnitsSold) : null;
+      estimatedWeeklyVelocity = metrics.estimatedWeeklySalesRate !== null ? Math.round(metrics.estimatedWeeklySalesRate * 10) / 10 : null;
+
+      if (estimatedUnitsSold !== null) {
+        totalEstimatedUnitsSoldSum += estimatedUnitsSold;
+      }
+      if (estimatedWeeklyVelocity !== null) {
+        totalWeeklyVelocitySum += estimatedWeeklyVelocity;
+      }
+
+      if (estimatedWeeklyVelocity !== null && estimatedWeeklyVelocity > 0 && latestReportedStock !== null) {
+        approxWeeksOfSupply = Math.round((latestReportedStock / estimatedWeeklyVelocity) * 10) / 10;
+      }
+
+      performanceStatus = "valid_estimate";
+      statusLabel = "Valid Estimate";
+      statusReason = `${usableSubmissionsCount} submissions across ${metrics.observedDays} days`;
+
+      if (latestReportedStock === 0) {
+        stockRisk = "stockout";
+        stockRiskLabel = "Out of Stock";
+        productsNeedingAttentionCount++;
+      } else if (approxWeeksOfSupply !== null && approxWeeksOfSupply < 2) {
+        stockRisk = "low_stock";
+        stockRiskLabel = "Low Stock (< 2 wks)";
+        productsNeedingAttentionCount++;
+      } else if (approxWeeksOfSupply !== null && approxWeeksOfSupply > 6) {
+        stockRisk = "overstock";
+        stockRiskLabel = "Overstock (> 6 wks)";
+      } else {
+        stockRisk = "sufficient";
+        stockRiskLabel = "Optimal Stock";
+      }
+    }
+
+    return {
+      productId: prod.id,
+      productName: prod.name,
+      productNameEn: prod.name_en || null,
+      sku,
+      brandName: brand?.name || "K SELECT Brand",
+      category: prod.category || "Skincare",
+      thumbnailUrl: primaryImg,
+      latestReportedStock,
+      estimatedUnitsSold,
+      estimatedWeeklyVelocity,
+      approxWeeksOfSupply,
+      performanceStatus,
+      statusLabel,
+      statusReason,
+      stockRisk,
+      stockRiskLabel,
+      usableSubmissionsCount,
+      lastReportingDate,
+      lastReportingWeek,
+      incomingQty,
+    };
+  });
+
+  return {
+    storeId: store.id,
+    storeName: store.name,
+    companyId,
+    companyName,
+    selectedPeriod: period,
+    submittedChecksCount: submittedChecks.length,
+    latestReportDate: latestSubmittedCheck?.report_date || latestAnyCheck?.report_date || null,
+    latestReportingWeek: latestSubmittedCheck?.reporting_week || latestAnyCheck?.reporting_week || null,
+    totalEstimatedUnitsSold: productsWithComparableIntervalsCount > 0 ? totalEstimatedUnitsSoldSum : null,
+    averageWeeklyVelocity: productsWithComparableIntervalsCount > 0 ? Math.round(totalWeeklyVelocitySum * 10) / 10 : null,
+    productsWithValidDataCount: productsWithCountedDataCount,
+    productsNeedingAttentionCount,
+    carriedProductsCount: skuItems.length,
+    reportedProductsCount: productsWithCountedDataCount,
+    products: skuItems,
+  };
+}
+
 export async function getAdminStoreOperationsData(): Promise<AdminStoreOperationsData> {
   await verifyAdminSession();
   const adminClient = createAdminClient();
@@ -1283,6 +1765,17 @@ export async function getAdminStoreOperationsData(): Promise<AdminStoreOperation
     }
   }
 
+  // 8. Batch resolve store performance overviews for all stores (ADM-STORE-OPS-P2-004)
+  const storePerformanceMap: Record<string, AdminStorePerformanceOverview> = {};
+  for (const st of formattedStores) {
+    try {
+      const perfOverview = await getAdminStorePerformanceData(st.id, "all");
+      if (perfOverview) storePerformanceMap[st.id] = perfOverview;
+    } catch (e) {
+      console.warn(`[getAdminStoreOperationsData] Warning resolving performance for store ${st.id}:`, e);
+    }
+  }
+
   return {
     stores: formattedStores,
     retailers: Array.from(retailerMap.values()),
@@ -1292,5 +1785,7 @@ export async function getAdminStoreOperationsData(): Promise<AdminStoreOperation
     storeInventoryMap,
     storeOrdersMap,
     storeTrainingMap,
+    storePerformanceMap,
   };
 }
+

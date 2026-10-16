@@ -13,6 +13,9 @@ import type {
   AdminStoreStaffItem,
   AdminStoreTrainingProductItem,
   AdminStoreTrainingOverview,
+  AdminStorePerformanceSkuItem,
+  AdminStorePerformanceOverview,
+  StorePerformanceStatus,
 } from "@/lib/retailer/admin-store-operations";
 
 interface StoreOperationsViewProps {
@@ -39,7 +42,7 @@ const DETAIL_TABS: TabDefinition[] = [
   { key: "overview", label: "Overview", phaseLabel: "Phase 1 (Active)" },
   { key: "inventory", label: "Inventory & Reorder", phaseLabel: "Phase 2 (Active)" },
   { key: "orders", label: "Orders & Deliveries", phaseLabel: "Phase 2 (Active)" },
-  { key: "sales", label: "Sales & Performance", badge: "Phase 4", phaseLabel: "Phase 4 (Planned)" },
+  { key: "sales", label: "Sales & Performance", phaseLabel: "Phase 2 (Active)" },
   { key: "training", label: "Staff & Training", phaseLabel: "Phase 2 (Active)" },
   { key: "fixtures", label: "Fixtures & Placements", badge: "Future", phaseLabel: "Future Phase (Planned)" },
   { key: "activities", label: "Store Activities", badge: "Future", phaseLabel: "Future Phase (Planned)" },
@@ -400,6 +403,75 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
 
     return prods;
   }, [storeTraining, trainingProductSearch, trainingProductFilter, trainingProductSort]);
+
+  // Sales & Performance Tab Search, Filter and Sort States (ADM-STORE-OPS-P2-004)
+  const [salesSearch, setSalesSearch] = useState("");
+  const [salesRiskFilter, setSalesRiskFilter] = useState<string>("ALL");
+  const [salesSort, setSalesSort] = useState<"RISK_FIRST" | "VELOCITY_DESC" | "STOCK_DESC" | "NAME_ASC">("RISK_FIRST");
+
+  const storePerformance = useMemo<AdminStorePerformanceOverview | null>(() => {
+    if (!selectedStoreId || !data.storePerformanceMap) return null;
+    return data.storePerformanceMap[selectedStoreId] || null;
+  }, [selectedStoreId, data.storePerformanceMap]);
+
+  const filteredPerformanceProducts = useMemo<AdminStorePerformanceSkuItem[]>(() => {
+    if (!storePerformance?.products) return [];
+    let prods = [...storePerformance.products];
+
+    // Search filter
+    if (salesSearch.trim()) {
+      const q = salesSearch.toLowerCase().trim();
+      prods = prods.filter(
+        (p) =>
+          p.productName.toLowerCase().includes(q) ||
+          p.brandName.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          p.category.toLowerCase().includes(q)
+      );
+    }
+
+    // Risk / Status filter
+    if (salesRiskFilter !== "ALL") {
+      prods = prods.filter((p) => p.stockRisk === salesRiskFilter);
+    }
+
+    // Sort
+    prods.sort((a, b) => {
+      switch (salesSort) {
+        case "RISK_FIRST": {
+          const getRiskScore = (risk: string) => {
+            if (risk === "stockout") return 0;
+            if (risk === "low_stock") return 1;
+            if (risk === "unreported") return 2;
+            if (risk === "overstock") return 3;
+            if (risk === "sufficient") return 4;
+            return 5;
+          };
+          const scoreDiff = getRiskScore(a.stockRisk) - getRiskScore(b.stockRisk);
+          if (scoreDiff !== 0) return scoreDiff;
+          return a.productName.localeCompare(b.productName);
+        }
+        case "VELOCITY_DESC": {
+          const vA = a.estimatedWeeklyVelocity ?? -1;
+          const vB = b.estimatedWeeklyVelocity ?? -1;
+          if (vA !== vB) return vB - vA;
+          return a.productName.localeCompare(b.productName);
+        }
+        case "STOCK_DESC": {
+          const sA = a.latestReportedStock ?? -1;
+          const sB = b.latestReportedStock ?? -1;
+          if (sA !== sB) return sB - sA;
+          return a.productName.localeCompare(b.productName);
+        }
+        case "NAME_ASC":
+          return a.productName.localeCompare(b.productName);
+        default:
+          return 0;
+      }
+    });
+
+    return prods;
+  }, [storePerformance, salesSearch, salesRiskFilter, salesSort]);
 
   // Filtered stores for list
   const filteredStores = useMemo(() => {
@@ -1856,28 +1928,425 @@ export function StoreOperationsView({ data }: StoreOperationsViewProps) {
             </div>
           )}
 
-          {/* TAB 4: SALES & PERFORMANCE */}
+          {/* TAB 4: SALES & PERFORMANCE (ADM-STORE-OPS-P2-004) */}
           {activeTab === "sales" && (
-            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4" data-testid="tab-content-sales">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-300">
-                  Phase 4 Planned
-                </span>
-                <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
-                  Store Sell-Through Analytics & Movement
-                </h3>
+            <div className="space-y-4" data-testid="tab-content-sales">
+              {/* Header card with store attribution */}
+              <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300">
+                      Phase 2 Active
+                    </span>
+                    <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
+                      Store Estimated Movement & Sales Velocity
+                    </h3>
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Store-specific estimated movement, sales velocity, and inventory supply metrics for{" "}
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">{selectedStore.name}</span> ({selectedStore.companyName}).
+                    Derived authoritatively from weekly physical inventory count submissions and confirmed deliveries.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    href={`/admin/retailers/${selectedStore.companyId}?tab=performance`}
+                    data-testid="sales-retailer-360-link"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800 text-xs font-semibold transition-all shadow-xs"
+                  >
+                    <span>Retailer 360° Performance ↗</span>
+                  </Link>
+                </div>
               </div>
-              <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed max-w-2xl">
-                Store-level estimated movement, weeks of supply, and sales velocity metrics will be exposed in Phase 4. Estimated sales are derived authoritatively from weekly physical inventory count continuity.
-              </p>
-              <div className="pt-2">
-                <Link
-                  href={`/admin/retailers/${selectedStore.companyId}?tab=performance`}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 text-xs font-bold transition-all shadow-xs"
-                >
-                  <span>View Authoritative Performance in Retailer 360° ↗</span>
-                </Link>
-              </div>
+
+              {!storePerformance ? (
+                <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
+                  No performance data available for this store.
+                </div>
+              ) : (
+                <>
+                  {/* 4 Summary KPI Cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {/* KPI 1: Estimated Units Sold */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-sales-estimated-units"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Estimated Units Sold
+                      </span>
+                      <p className="text-lg font-bold text-zinc-900 dark:text-white font-mono">
+                        {storePerformance.totalEstimatedUnitsSold !== null
+                          ? storePerformance.totalEstimatedUnitsSold.toLocaleString()
+                          : "Insufficient Data"}
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        {storePerformance.submittedChecksCount >= 2
+                          ? `${storePerformance.submittedChecksCount} submitted physical counts`
+                          : storePerformance.submittedChecksCount === 1
+                          ? "1 submission (Baseline count recorded)"
+                          : "0 submissions recorded"}
+                      </span>
+                    </div>
+
+                    {/* KPI 2: Estimated Weekly Velocity */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-sales-weekly-velocity"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Estimated Weekly Velocity
+                      </span>
+                      <p className="text-lg font-bold text-zinc-900 dark:text-white font-mono">
+                        {storePerformance.averageWeeklyVelocity !== null
+                          ? `${storePerformance.averageWeeklyVelocity} units/wk`
+                          : "Insufficient Data"}
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        {storePerformance.submittedChecksCount >= 2
+                          ? "Observed run rate across intervals"
+                          : "Requires ≥ 2 submissions to calculate rate"}
+                      </span>
+                    </div>
+
+                    {/* KPI 3: Products with Valid Data */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-sales-valid-products"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Products with Valid Data
+                      </span>
+                      <p className="text-lg font-bold text-zinc-900 dark:text-white font-mono">
+                        {storePerformance.productsWithValidDataCount} / {storePerformance.carriedProductsCount}
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        {storePerformance.productsWithValidDataCount > 0
+                          ? `${Math.round(
+                              (storePerformance.productsWithValidDataCount /
+                                (storePerformance.carriedProductsCount || 1)) *
+                                100
+                            )}% assortment reporting rate`
+                          : "No products reported yet"}
+                      </span>
+                    </div>
+
+                    {/* KPI 4: Products Needing Attention */}
+                    <div
+                      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1"
+                      data-testid="kpi-sales-attention-products"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                        Products Needing Attention
+                      </span>
+                      <p
+                        className={`text-lg font-bold font-mono ${
+                          storePerformance.productsNeedingAttentionCount > 0
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-emerald-600 dark:text-emerald-400"
+                        }`}
+                      >
+                        {storePerformance.productsNeedingAttentionCount}
+                      </p>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        {storePerformance.products.filter((p) => p.stockRisk === "stockout").length} stockout ·{" "}
+                        {storePerformance.products.filter((p) => p.stockRisk === "low_stock").length} low stock ·{" "}
+                        {storePerformance.products.filter((p) => p.stockRisk === "unreported").length} unreported
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Filter & Search Bar */}
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="flex-1 max-w-sm">
+                      <div className="relative">
+                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400 text-xs">
+                          🔍
+                        </span>
+                        <input
+                          type="text"
+                          value={salesSearch}
+                          onChange={(e) => setSalesSearch(e.target.value)}
+                          placeholder="Search product name, brand, SKU..."
+                          data-testid="sales-search-input"
+                          className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Filter by Stock Risk / Status */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-semibold text-zinc-500 uppercase">Status:</span>
+                        <select
+                          value={salesRiskFilter}
+                          onChange={(e) => setSalesRiskFilter(e.target.value)}
+                          data-testid="sales-filter-select"
+                          className="px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none cursor-pointer"
+                        >
+                          <option value="ALL">All Products ({storePerformance.products.length})</option>
+                          <option value="stockout">
+                            Out of Stock ({storePerformance.products.filter((p) => p.stockRisk === "stockout").length})
+                          </option>
+                          <option value="low_stock">
+                            Low Stock ({storePerformance.products.filter((p) => p.stockRisk === "low_stock").length})
+                          </option>
+                          <option value="sufficient">
+                            Optimal / In Stock ({storePerformance.products.filter((p) => p.stockRisk === "sufficient").length})
+                          </option>
+                          <option value="overstock">
+                            Overstock ({storePerformance.products.filter((p) => p.stockRisk === "overstock").length})
+                          </option>
+                          <option value="unreported">
+                            Unreported ({storePerformance.products.filter((p) => p.stockRisk === "unreported").length})
+                          </option>
+                        </select>
+                      </div>
+
+                      {/* Sort Select */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-semibold text-zinc-500 uppercase">Sort:</span>
+                        <select
+                          value={salesSort}
+                          onChange={(e) => setSalesSort(e.target.value as any)}
+                          data-testid="sales-sort-select"
+                          className="px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none cursor-pointer"
+                        >
+                          <option value="RISK_FIRST">Attention Priority</option>
+                          <option value="VELOCITY_DESC">Highest Velocity</option>
+                          <option value="STOCK_DESC">Highest Stock</option>
+                          <option value="NAME_ASC">Product Name A–Z</option>
+                        </select>
+                      </div>
+
+                      <span className="text-xs text-zinc-400 dark:text-zinc-500 pl-1">
+                        Showing {filteredPerformanceProducts.length} of {storePerformance.products.length}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* SKU Performance Table */}
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs overflow-hidden">
+                    <div className="overflow-x-auto scrollbar-thin">
+                      <table className="w-full text-left text-xs" data-testid="sales-table">
+                        <thead className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/75 dark:bg-zinc-800/40 text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                          <tr>
+                            <th className="py-3 px-3 min-w-[200px]">Product & SKU</th>
+                            <th className="py-3 px-3 min-w-[130px]">Brand & Category</th>
+                            <th className="py-3 px-3 text-right min-w-[120px]">Latest Reported Stock</th>
+                            <th className="py-3 px-3 text-right min-w-[130px]">Estimated Units Sold</th>
+                            <th className="py-3 px-3 text-right min-w-[130px]">Weekly Velocity</th>
+                            <th className="py-3 px-3 text-right min-w-[120px]">Weeks of Supply</th>
+                            <th className="py-3 px-3 min-w-[140px]">Status & Risk</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                          {filteredPerformanceProducts.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="py-8 text-center text-xs text-zinc-500">
+                                No products match your current search and filter settings.
+                                <div className="mt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSalesSearch("");
+                                      setSalesRiskFilter("ALL");
+                                    }}
+                                    className="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 font-semibold cursor-pointer"
+                                  >
+                                    Reset Filters
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredPerformanceProducts.map((p) => {
+                              return (
+                                <tr
+                                  key={p.productId}
+                                  data-testid={`sales-table-row-${p.productId}`}
+                                  className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 transition-colors"
+                                >
+                                  {/* Product & SKU */}
+                                  <td className="py-3 px-3">
+                                    <div className="flex items-center gap-2.5">
+                                      <div className="w-8 h-8 rounded-md bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shrink-0 overflow-hidden flex items-center justify-center">
+                                        {p.thumbnailUrl ? (
+                                          <img
+                                            src={p.thumbnailUrl}
+                                            alt={p.productName}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <span className="text-[10px] text-zinc-400">📦</span>
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="font-semibold text-zinc-900 dark:text-white line-clamp-1">
+                                          {p.productName}
+                                        </div>
+                                        <div className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">
+                                          {p.sku}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Brand & Category */}
+                                  <td className="py-3 px-3">
+                                    <div className="text-zinc-700 dark:text-zinc-300 font-medium">
+                                      {p.brandName}
+                                    </div>
+                                    <div className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                                      {p.category}
+                                    </div>
+                                  </td>
+
+                                  {/* Latest Reported Stock */}
+                                  <td className="py-3 px-3 text-right">
+                                    {p.latestReportedStock !== null ? (
+                                      <div>
+                                        <span className="font-mono font-bold text-zinc-900 dark:text-white text-xs">
+                                          {p.latestReportedStock.toLocaleString()}
+                                        </span>
+                                        <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                                          {p.lastReportingWeek || p.lastReportingDate || "Reported"}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                                        Not Reported
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* Estimated Units Sold */}
+                                  <td className="py-3 px-3 text-right">
+                                    {p.performanceStatus === "valid_estimate" && p.estimatedUnitsSold !== null ? (
+                                      <div>
+                                        <span className="font-mono font-bold text-zinc-900 dark:text-white text-xs">
+                                          {p.estimatedUnitsSold.toLocaleString()}
+                                        </span>
+                                        <span className="text-[10px] text-zinc-400 block">units sold</span>
+                                      </div>
+                                    ) : p.performanceStatus === "baseline_only" ? (
+                                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300">
+                                        Baseline Count
+                                      </span>
+                                    ) : (
+                                      <span className="text-zinc-400 dark:text-zinc-500 text-xs">—</span>
+                                    )}
+                                  </td>
+
+                                  {/* Weekly Velocity */}
+                                  <td className="py-3 px-3 text-right">
+                                    {p.performanceStatus === "valid_estimate" && p.estimatedWeeklyVelocity !== null ? (
+                                      <div>
+                                        <span className="font-mono font-bold text-zinc-900 dark:text-white text-xs">
+                                          {p.estimatedWeeklyVelocity}
+                                        </span>
+                                        <span className="text-[10px] text-zinc-400 block">units/wk</span>
+                                      </div>
+                                    ) : p.performanceStatus === "baseline_only" ? (
+                                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500" title="Requires 2nd submission to establish rate">
+                                        Pending 2nd Count
+                                      </span>
+                                    ) : (
+                                      <span className="text-zinc-400 dark:text-zinc-500 text-xs">—</span>
+                                    )}
+                                  </td>
+
+                                  {/* Weeks of Supply */}
+                                  <td className="py-3 px-3 text-right">
+                                    {p.approxWeeksOfSupply !== null ? (
+                                      <div>
+                                        <span
+                                          className={`font-mono font-bold text-xs ${
+                                            p.approxWeeksOfSupply < 2
+                                              ? "text-red-600 dark:text-red-400"
+                                              : p.approxWeeksOfSupply > 6
+                                              ? "text-blue-600 dark:text-blue-400"
+                                              : "text-zinc-900 dark:text-white"
+                                          }`}
+                                        >
+                                          {p.approxWeeksOfSupply} wks
+                                        </span>
+                                      </div>
+                                    ) : p.latestReportedStock === 0 ? (
+                                      <span className="font-mono text-xs text-red-600 dark:text-red-400 font-bold">
+                                        0 wks (Depleted)
+                                      </span>
+                                    ) : (
+                                      <span className="text-zinc-400 dark:text-zinc-500 text-xs">—</span>
+                                    )}
+                                  </td>
+
+                                  {/* Status & Risk */}
+                                  <td className="py-3 px-3">
+                                    <div>
+                                      {p.stockRisk === "stockout" && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:border-red-800 dark:text-red-300">
+                                          <span>🚨</span> Out of Stock
+                                        </span>
+                                      )}
+                                      {p.stockRisk === "low_stock" && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300">
+                                          <span>⚠️</span> Low Stock
+                                        </span>
+                                      )}
+                                      {p.stockRisk === "sufficient" && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300">
+                                          <span>✓</span> In Stock
+                                        </span>
+                                      )}
+                                      {p.stockRisk === "overstock" && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300">
+                                          <span>📦</span> Overstock
+                                        </span>
+                                      )}
+                                      {p.stockRisk === "unreported" && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-600 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400">
+                                          <span>—</span> Unreported
+                                        </span>
+                                      )}
+                                      <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                                        {p.statusLabel}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Authoritative Attribution Policy Banner */}
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/60 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+                    <div className="space-y-1 max-w-3xl">
+                      <div className="flex items-center gap-1.5 font-semibold text-zinc-700 dark:text-zinc-300">
+                        <span>ℹ️</span>
+                        <span>Inventory-Based Performance Methodology</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed">
+                        K SELECT calculates estimated movement and sales velocity using weekly physical count delta analysis (
+                        <code className="text-[10px] bg-zinc-200/60 dark:bg-zinc-800 px-1 py-0.5 rounded font-mono">
+                          Beginning Stock + Delivered Receipts - Ending Stock
+                        </code>
+                        ). These figures represent estimated retail movement derived from physical counts, not real-time point-of-sale (POS) cash register transactions. Single submissions serve as baseline inventory counts until subsequent counts establish run-rate velocity.
+                      </p>
+                    </div>
+                    <Link
+                      href={`/admin/retailers/${selectedStore.companyId}?tab=performance`}
+                      className="shrink-0 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-750 text-xs font-semibold transition-all shadow-xs"
+                    >
+                      <span>Retailer 360° Performance ↗</span>
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
