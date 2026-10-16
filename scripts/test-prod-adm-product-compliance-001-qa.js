@@ -107,19 +107,16 @@ async function runQA() {
 
     // 3. Navigate to Compliance via Sidebar
     console.log('\n2. Testing Sidebar Navigation to Compliance...');
-    // Click K SELECT BRAND section header if collapsed
-    const brandSectionHeader = page.locator('button:has-text("K SELECT BRAND")').first();
-    if (await brandSectionHeader.isVisible()) {
-      await brandSectionHeader.click();
+    const prodBtn = page.locator('aside button:has-text("Products")').first();
+    if (!(await prodBtn.isVisible())) {
+      const brandBtn = page.locator('aside button:has-text("K SELECT BRAND")').first();
+      await brandBtn.click();
       await page.waitForTimeout(500);
     }
 
-    // Click Products menu item if collapsed
-    const productsMenuBtn = page.locator('button:has-text("Products")').first();
-    if (await productsMenuBtn.isVisible()) {
-      await productsMenuBtn.click();
-      await page.waitForTimeout(500);
-    }
+    // Click Products menu item to expand subItems
+    await prodBtn.click();
+    await page.waitForTimeout(600);
 
     // Find and click Compliance link
     const complianceLink = page.locator('aside a[href="/admin/products/compliance"]').first();
@@ -270,7 +267,7 @@ async function runQA() {
     console.log('\n7. Verifying Product Catalog (/admin/products) is Intact & Unaffected...');
     await page.goto(`${ADMIN_URL}/admin/products`, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await page.waitForTimeout(2000);
-    const catalogHeader = page.locator('text=제품 관리').first();
+    const catalogHeader = page.locator('h1:has-text("제품 통합 관리"), h1:has-text("제품 관리")').first();
     const isCatalogHeaderVisible = await catalogHeader.isVisible();
     results['Product_Catalog_Intact'] = isCatalogHeaderVisible;
     console.log(`   [Test 14] Product Catalog is intact & accessible: ${isCatalogHeaderVisible ? 'PASS' : 'FAIL'}`);
