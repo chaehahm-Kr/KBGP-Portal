@@ -232,12 +232,16 @@ COMPLETE
 
 ---
 
-# 27. Standing Rule for Consistent Admin Full-Width Page Standard (어드민 좌측 정렬 풀너비 표준)
-- 어드민의 모든 목록(List), 대시보드(Dashboard), 상세(Detail) 페이지는 반드시 **좌측 정렬 유연 컨테이너 (`w-full min-w-0 space-y-6`)** 표준을 준수해야 합니다.
-- 페이지 상위 레벨에 인위적으로 `max-w-7xl`, `max-w-6xl`, `max-w-5xl`, `mx-auto`, `container mx-auto` 등 중앙 정렬 제한 래퍼를 두지 마십시오.
-- 페이지 바디(`app/admin/**/page.tsx`) 내부에 중복 패딩(`p-4 sm:p-6 lg:p-8`)을 선언하지 마십시오. 공유 셸(`components/admin/layout.tsx`)의 `<main>`이 이미 표준 여백(`px-6 pt-24 pb-12`, 데스크톱 기준 24px)을 제공합니다.
-- 페이지 제목, 서브타이틀, 액션 버튼, KPI 카드 그리드, 탭 바, 검색/필터 툴바, 데이터 테이블 및 페이지네이션은 **하나의 일관된 좌측 기준선(Left Edge, 데스크톱 기준 `left: 280px`)**에 완벽히 정렬되어야 하며, 사이드바 이후 가용한 전체 너비를 유연하게 확장하여 사용해야 합니다.
-- **예외 사항**: 팝업 모달(Modal Dialog), 좁은 단일 입력 폼(Narrow Form), 인증 화면(Auth Screen, e.g. Login), 문서 전용 에디터에 한해서만 국소적 `max-w-*`를 허용합니다.
+# 27. Standing Rule for Admin Responsive 1800px Max-Width Standard (어드민 반응형 1800px 최대 너비 표준)
+- **전역 공유 셸 (Global Admin Shell)**: 모든 K SELECT NETWORK 어드민 페이지(현재 및 향후 신규 추가 라우트 포함)는 단일 공유 반응형 셸(`components/admin/layout.tsx`)을 사용하며, 전체 셸 규격은 `width: 100%; max-width: 1800px;`로 표준화합니다.
+- **1800px 포함 영역**: 사이드바(Sidebar), 상단 헤더(Header), 메인 컨텐츠 영역(Main Content) 및 페이지 내부 거터/패딩을 모두 포함한 전체 레이아웃의 상한선입니다.
+- **반응형 뷰포트 동작**:
+  - **뷰포트 ≤ 1800px**: 100% 가용 너비를 자연스럽게 활용하는 유연한 반응형(Fluid Responsive) 레이아웃을 유지하며, 인위적인 외곽 여백을 두지 않습니다.
+  - **뷰포트 > 1800px**: 전체 셸을 1800px로 제한하고 화면 수평 중앙 정렬(`mx-auto` / `justify-center`)하여 좌우 균등한 바깥 여백(Outer Margins)을 유지합니다.
+- **내부 좌측 정렬 보존**: 메인 컨텐츠 영역(`app/admin/**/page.tsx`)은 셸 내부에서 일관된 좌측 기준선(Left Edge)에 정렬되어야 하며, 개별 페이지 상위 레벨에 인위적인 중복/경쟁 중앙 정렬 제한 래퍼(`max-w-7xl`, `mx-auto`, `container mx-auto` 등)를 추가하지 않습니다.
+- **테이블, 드로어 및 내비게이션 보존**: 가로 폭이 넓은 대형 데이터 테이블은 자체 컨테이너 수평 스크롤을 유지하여 가독성을 보존하고, 슬라이드오버 드로어, 팝업 모달, 사이드바 접기/펼치기 및 모바일 내비게이션 동작을 완벽히 유지합니다.
+- **적용 제외 대상**: 이 규칙은 K SELECT NETWORK 어드민(`/admin/*`)에만 적용되며, 리테일러 포털(Retailer Portal) 및 브랜드 포털(Brand Portal)에는 적용하지 않습니다.
+
 
 ---
 

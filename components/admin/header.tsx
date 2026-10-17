@@ -28,7 +28,7 @@ interface HeaderProps {
   variant?: "fixed" | "sticky";
 }
 
-export default function Header({ isSidebarCollapsed, variant = "fixed" }: HeaderProps) {
+export default function Header({ isSidebarCollapsed, variant = "sticky" }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isDarkMode, setIsDarkMode] = useState(false);

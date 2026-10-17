@@ -161,7 +161,7 @@ export default function Sidebar({
     totalProducts: 0,
   },
   permissions,
-  variant = "fixed",
+  variant = "sticky",
 }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
