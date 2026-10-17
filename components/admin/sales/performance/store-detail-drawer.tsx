@@ -218,6 +218,8 @@ export function StoreDetailDrawer({ store, isOpen, onClose }: StoreDetailDrawerP
                       ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
                       : followUp.status === "attention"
                       ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                      : followUp.status === "data_review"
+                      ? "bg-zinc-800 text-zinc-300 border border-zinc-700"
                       : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                   }`}
                 >

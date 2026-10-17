@@ -214,6 +214,64 @@ describe("ADM-SALES-PERF-002: Retailer Performance Pure Domain Engine", () => {
       expect(followUp.status).toBe("attention");
       expect(followUp.isFollowUpOverdue).toBe(false);
     });
+
+    it("flags 'data_review' when activity data is unavailable or unreadable", () => {
+      const followUpNull = evaluateHqFollowUpStatus(null, "2026-10-17");
+      expect(followUpNull.status).toBe("data_review");
+      expect(followUpNull.totalActivitiesCount).toBe(0);
+
+      const followUpUndef = evaluateHqFollowUpStatus(undefined, "2026-10-17");
+      expect(followUpUndef.status).toBe("data_review");
+    });
+
+    it("flags 'on_track' when active follow-up is scheduled in the future with no overdue gaps", () => {
+      const activities = [
+        {
+          id: "act-1",
+          activity_type: "store_visit",
+          activity_date: "2026-10-15",
+          has_follow_up: true,
+          follow_up_status: "pending",
+          follow_up_date: "2026-10-25", // Future date relative to 2026-10-17
+        },
+      ];
+      const followUp = evaluateHqFollowUpStatus(activities, "2026-10-17");
+      expect(followUp.status).toBe("on_track");
+      expect(followUp.isFollowUpOverdue).toBe(false);
+      expect(followUp.hasPendingFollowUp).toBe(true);
+      expect(followUp.nextFollowUpDate).toBe("2026-10-25");
+    });
+
+    it("ensures KPI counts DISTINCT Stores even if a single store has multiple overdue activities", () => {
+      const storeWithMultipleOverdueActivities = [
+        { id: "act-1", has_follow_up: true, follow_up_status: "pending", follow_up_date: "2026-10-01" },
+        { id: "act-2", has_follow_up: true, follow_up_status: "pending", follow_up_date: "2026-10-05" },
+        { id: "act-3", has_follow_up: true, follow_up_status: "pending", follow_up_date: "2026-10-10" },
+      ];
+      const followUp1 = evaluateHqFollowUpStatus(storeWithMultipleOverdueActivities, "2026-10-17");
+      expect(followUp1.status).toBe("action_required");
+
+      const store2 = {
+        storeId: "store-2",
+        status: "active",
+        sales: { currentNetSalesDollars: 100, previousNetSalesDollars: 100 },
+        supportStatus: "healthy",
+        followUp: { status: "on_track" },
+      } as any;
+
+      const store1 = {
+        storeId: "store-1",
+        status: "active",
+        sales: { currentNetSalesDollars: 200, previousNetSalesDollars: 200 },
+        supportStatus: "action_required",
+        followUp: followUp1,
+      } as any;
+
+      const period = getEvaluationPeriodET("2026-10-17");
+      const kpis = computeKpiSummary([store1, store2], [], period);
+      // Store 1 has 3 overdue activities, but must only count as 1 distinct store in hqFollowUpGapsCount
+      expect(kpis.hqFollowUpGapsCount).toBe(1);
+    });
   });
 
   describe("7. Support Program Recommendations", () => {

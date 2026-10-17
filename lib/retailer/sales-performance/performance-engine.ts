@@ -436,10 +436,24 @@ export function evaluateHqFollowUpStatus(
     has_follow_up?: boolean | null;
     follow_up_date?: string | null;
     follow_up_status?: string | null;
-  }>,
+  }> | null | undefined,
   asOfDateStr: string
 ): StoreFollowUpMetrics {
-  if (!activities || activities.length === 0) {
+  if (activities === null || activities === undefined) {
+    return {
+      status: "data_review",
+      totalActivitiesCount: 0,
+      lastActivityDate: null,
+      lastActivityType: null,
+      lastResponsibleAdmin: null,
+      hasPendingFollowUp: false,
+      nextFollowUpDate: null,
+      isFollowUpOverdue: false,
+      overdueDays: 0,
+    };
+  }
+
+  if (activities.length === 0) {
     return {
       status: "attention",
       totalActivitiesCount: 0,
