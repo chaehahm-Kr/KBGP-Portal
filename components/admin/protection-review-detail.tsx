@@ -449,13 +449,13 @@ export function AdminProtectionReviewDetail({
 
           <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800">
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-              Store Data Coverage
+              Store Participation Rate
             </span>
             <span className="text-lg font-black text-zinc-900 dark:text-white">
               {review.dataCoveragePercent}%
             </span>
             <span className="text-[10px] text-zinc-400 block mt-0.5">
-              {review.storesReporting}/{review.totalStores} stores reporting
+              {review.storesReporting}/{review.totalStores} active stores reporting
             </span>
           </div>
         </div>
@@ -463,11 +463,16 @@ export function AdminProtectionReviewDetail({
 
       {/* Store Location Breakdown Table */}
       <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 sm:p-7 space-y-4 shadow-sm overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-          <span className="text-base">🏬</span>
-          <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider">
-            Store Location Movement Breakdown
-          </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-base">🏬</span>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider">
+              Store Location Movement Breakdown
+            </h3>
+          </div>
+          <span className="text-[11px] text-zinc-500 font-medium">
+            Store-level reporting status (Company trial baseline: {review.protectedQuantity} units)
+          </span>
         </div>
 
         <div className="overflow-x-auto">

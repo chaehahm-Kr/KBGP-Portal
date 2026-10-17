@@ -15,7 +15,7 @@ export default async function ExchangeCreditPage() {
   const data = await getExchangeCreditOverviewData();
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="w-full min-w-0 p-4 sm:p-6 lg:p-8 space-y-6">
       <ExchangeCreditOverviewView initialData={data} />
     </div>
   );

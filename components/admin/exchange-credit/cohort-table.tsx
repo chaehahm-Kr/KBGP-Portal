@@ -94,17 +94,6 @@ export function CohortTable({
             </select>
           )}
         </div>
-
-        {onOpenRegisterModal && isSchemaAvailable && (
-          <button
-            type="button"
-            onClick={onOpenRegisterModal}
-            className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors shrink-0"
-          >
-            <span>+</span>
-            <span>Register Cohort</span>
-          </button>
-        )}
       </div>
 
       {/* Cohorts Table */}

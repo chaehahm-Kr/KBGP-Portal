@@ -897,3 +897,219 @@ export async function getStoreProtectionSummaryAction(
     }),
   };
 }
+
+/**
+ * 9. Get Stores for an Enrolled Company (Guided Cohort Registration)
+ */
+export async function getCompanyStoresForRegistrationAction(companyId: string): Promise<{
+  success: boolean;
+  stores?: Array<{
+    id: string;
+    name: string;
+    storeCode: string | null;
+    city: string | null;
+    state: string | null;
+    status: string | null;
+  }>;
+  error?: string;
+}> {
+  await verifyAdminSession();
+  if (!companyId) return { success: false, error: "Company ID is required." };
+
+  try {
+    const supabase = createAdminClient();
+    const { data: stores, error } = await supabase
+      .from("stores")
+      .select("id, name, store_code, city, state, status")
+      .eq("company_id", companyId)
+      .order("name", { ascending: true });
+
+    if (error) throw error;
+    return {
+      success: true,
+      stores: (stores || []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        storeCode: s.store_code,
+        city: s.city,
+        state: s.state,
+        status: s.status,
+      })),
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * 10. Get Eligible Confirmed B2B Orders for Store (Guided Cohort Registration)
+ */
+export async function getStoreEligibleOrdersForRegistrationAction(
+  companyId: string,
+  storeId: string
+): Promise<{
+  success: boolean;
+  orders?: Array<{
+    id: string;
+    orderNumber: string;
+    orderStatus: string;
+    totalAmount: number;
+    totalItems: number;
+    totalSkus: number;
+    createdAt: string;
+    firstShipmentDate: string | null;
+    carrier: string | null;
+    trackingNumber: string | null;
+    fulfillmentStatus: string | null;
+  }>;
+  error?: string;
+}> {
+  await verifyAdminSession();
+  if (!companyId || !storeId) return { success: false, error: "Company ID and Store ID are required." };
+
+  try {
+    const supabase = createAdminClient();
+    const { data: orders, error } = await supabase
+      .from("retailer_orders")
+      .select(`
+        id,
+        order_number,
+        order_status,
+        total_amount,
+        total_items_count,
+        total_skus_count,
+        created_at,
+        retailer_order_fulfillments (
+          id,
+          status,
+          carrier,
+          tracking_number,
+          shipped_at,
+          delivered_at
+        )
+      `)
+      .eq("company_id", companyId)
+      .eq("store_id", storeId)
+      .not("order_status", "in", '("draft","cancelled")')
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    return {
+      success: true,
+      orders: (orders || []).map((o) => {
+        const fulfills = Array.isArray(o.retailer_order_fulfillments)
+          ? o.retailer_order_fulfillments
+          : o.retailer_order_fulfillments
+          ? [o.retailer_order_fulfillments]
+          : [];
+
+        // Earliest actual shipment date
+        const shippedFulfillments = fulfills.filter((f: any) => f.shipped_at);
+        shippedFulfillments.sort((a: any, b: any) => new Date(a.shipped_at).getTime() - new Date(b.shipped_at).getTime());
+        const firstFulfillment = shippedFulfillments[0] || fulfills[0];
+
+        const firstShipDate = firstFulfillment?.shipped_at
+          ? new Date(firstFulfillment.shipped_at).toISOString().split("T")[0]
+          : null;
+
+        return {
+          id: o.id,
+          orderNumber: o.order_number,
+          orderStatus: o.order_status,
+          totalAmount: Number(o.total_amount || 0),
+          totalItems: o.total_items_count || 0,
+          totalSkus: o.total_skus_count || 0,
+          createdAt: o.created_at,
+          firstShipmentDate: firstShipDate,
+          carrier: firstFulfillment?.carrier || null,
+          trackingNumber: firstFulfillment?.tracking_number || null,
+          fulfillmentStatus: firstFulfillment?.status || null,
+        };
+      }),
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * 11. Get Eligible Order Items for Selected Order with Lifetime Protection Check
+ */
+export async function getOrderEligibleItemsForRegistrationAction(
+  orderId: string,
+  storeId: string
+): Promise<{
+  success: boolean;
+  items?: Array<{
+    id: string;
+    orderId: string;
+    productId: string;
+    sku: string;
+    productName: string;
+    brandName: string;
+    unitWholesalePrice: number;
+    quantity: number;
+    isAlreadyProtected: boolean;
+    existingCohortCode?: string;
+    existingStatus?: string;
+  }>;
+  error?: string;
+}> {
+  await verifyAdminSession();
+  if (!orderId || !storeId) return { success: false, error: "Order ID and Store ID are required." };
+
+  try {
+    const supabase = createAdminClient();
+
+    // 1. Fetch Order Items
+    const { data: rawItems, error: itemsErr } = await supabase
+      .from("retailer_order_items")
+      .select("id, order_id, product_id, sku, product_name, brand_name, unit_wholesale_price, quantity")
+      .eq("order_id", orderId)
+      .order("sku", { ascending: true });
+
+    if (itemsErr) throw itemsErr;
+
+    const items = rawItems || [];
+    const productIds = items.map((i) => i.product_id).filter(Boolean);
+
+    // 2. Check Existing Cohorts for Store + Product (Lifetime 1-Time Rule)
+    const { data: existingCohorts } = await supabase
+      .from("retailer_protected_supply_cohorts")
+      .select("id, cohort_code, product_id, status")
+      .eq("store_id", storeId)
+      .in("product_id", productIds);
+
+    const cohortMap = new Map<string, { code: string; status: string }>();
+    (existingCohorts || []).forEach((c) => {
+      cohortMap.set(c.product_id, { code: c.cohort_code, status: c.status });
+    });
+
+    return {
+      success: true,
+      items: items.map((item) => {
+        const existing = cohortMap.get(item.product_id);
+        return {
+          id: item.id,
+          orderId: item.order_id,
+          productId: item.product_id,
+          sku: item.sku,
+          productName: item.product_name,
+          brandName: item.brand_name,
+          unitWholesalePrice: Number(item.unit_wholesale_price || 0),
+          quantity: item.quantity,
+          isAlreadyProtected: Boolean(existing),
+          existingCohortCode: existing?.code,
+          existingStatus: existing?.status,
+        };
+      }),
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message };
+  }
+}
+

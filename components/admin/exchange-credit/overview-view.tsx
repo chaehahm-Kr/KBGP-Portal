@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type {
   ExchangeCreditOverviewStats,
   CompanyExchangeEnrollment,
@@ -10,7 +12,7 @@ import type {
 import { CohortTable } from "./cohort-table";
 import { CompanySettingsView } from "./company-settings-view";
 import { CohortDetailView } from "./cohort-detail-view";
-import { registerProtectedSupplyCohortAction } from "@/lib/retailer/exchange-credit-actions";
+import { RegisterCohortModal } from "./register-cohort-modal";
 
 interface ExchangeCreditOverviewViewProps {
   initialData: {
@@ -23,70 +25,25 @@ interface ExchangeCreditOverviewViewProps {
 }
 
 export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOverviewViewProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"cohorts" | "companies" | "audit">("cohorts");
   const [selectedCohort, setSelectedCohort] = useState<ProtectedSupplyCohort | null>(null);
   const [showRegisterCohortModal, setShowRegisterCohortModal] = useState(false);
 
-  // Form state for Register Cohort Modal
-  const [companyId, setCompanyId] = useState("");
-  const [storeId, setStoreId] = useState("");
-  const [productId, setProductId] = useState("");
-  const [sourceOrderId, setSourceOrderId] = useState("");
-  const [sourceOrderItemId, setSourceOrderItemId] = useState("");
-  const [protectedQty, setProtectedQty] = useState("");
-  const [unitCost, setUnitCost] = useState("");
-  const [firstShipDate, setFirstShipDate] = useState("");
-  const [registerSubmitting, setRegisterSubmitting] = useState(false);
-  const [registerError, setRegisterError] = useState("");
-
   const { isSchemaAvailable, stats, enrollments, cohorts, auditLogs } = initialData;
 
-  const handleOpenRegisterCohort = () => {
-    setCompanyId("");
-    setStoreId("");
-    setProductId("");
-    setSourceOrderId("");
-    setSourceOrderItemId("");
-    setProtectedQty("");
-    setUnitCost("");
-    setFirstShipDate("");
-    setRegisterError("");
-    setShowRegisterCohortModal(true);
-  };
-
-  const handleRegisterCohortSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setRegisterSubmitting(true);
-    setRegisterError("");
-
-    try {
-      const res = await registerProtectedSupplyCohortAction({
-        companyId: companyId.trim(),
-        storeId: storeId.trim(),
-        productId: productId.trim(),
-        sourceOrderId: sourceOrderId.trim(),
-        sourceOrderItemId: sourceOrderItemId.trim(),
-        protectedQuantity: parseInt(protectedQty, 10),
-        unitWholesalePrice: parseFloat(unitCost),
-        firstShipmentDate: firstShipDate || undefined,
-      });
-
-      if (!res.success) {
-        setRegisterError(res.error || "Failed to register cohort.");
-      } else {
-        setShowRegisterCohortModal(false);
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      setRegisterError(message || "An unexpected error occurred.");
-    } finally {
-      setRegisterSubmitting(false);
-    }
-  };
-
   return (
-    <div className="space-y-6">
-      {/* 1. Schema Availability Banner (Safe Runtime Guarantee) */}
+    <div className="w-full min-w-0 space-y-6">
+      {/* 1. Breadcrumb Navigation */}
+      <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
+        <Link href="/admin" className="hover:text-zinc-900 dark:hover:text-white transition-colors">
+          Admin
+        </Link>
+        <span>/</span>
+        <span className="font-bold text-zinc-900 dark:text-white">90-Day Exchange Credit</span>
+      </div>
+
+      {/* 2. Schema Availability Banner (Safe Runtime Guarantee) */}
       {!isSchemaAvailable && (
         <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-3 shadow-xs">
           <span className="text-xl">⚠️</span>
@@ -111,7 +68,7 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
         </div>
       )}
 
-      {/* 2. Page Header */}
+      {/* 3. Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
         <div>
           <div className="flex items-center gap-2.5">
@@ -125,13 +82,13 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
           </p>
         </div>
 
-        {/* Global Action / Status */}
+        {/* Global Action: ONE Primary Action */}
         <div className="flex items-center gap-2">
           {isSchemaAvailable && (
             <button
               type="button"
-              onClick={handleOpenRegisterCohort}
-              className="px-3.5 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+              onClick={() => setShowRegisterCohortModal(true)}
+              className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition-all active:scale-98"
             >
               <span>+</span>
               <span>Register Protected Cohort</span>
@@ -140,8 +97,8 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
         </div>
       </div>
 
-      {/* 3. KPI Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 4. KPI Summary Cards (4-Column Responsive, Equal-Width) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
         {/* Enrolled Retailers */}
         <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 shadow-xs">
           <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
@@ -153,7 +110,7 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
               ({stats.activeCompaniesCount} active / {stats.pausedCompaniesCount} paused)
             </span>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-500">Companies participating in 90-day program</p>
+          <p className="mt-1 text-[11px] text-zinc-500">Retailers enrolled in 90-day pilot (Active vs Paused)</p>
         </div>
 
         {/* Active Protected Cohorts */}
@@ -165,7 +122,7 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
             <span className="text-3xl font-bold text-emerald-400">{stats.activeProtectedCohortsCount}</span>
             <span className="text-xs text-zinc-500">of {stats.totalProtectedCohortsCount} total</span>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-500">Currently in active 90-day trial window</p>
+          <p className="mt-1 text-[11px] text-zinc-500">Distinct Store+SKU cohorts in active 90-day trial</p>
         </div>
 
         {/* Protected Wholesale Value */}
@@ -178,7 +135,7 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
               ${stats.totalProtectedWholesaleValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-500">Frozen inventory baseline at wholesale cost</p>
+          <p className="mt-1 text-[11px] text-zinc-500">Frozen wholesale cost baseline (at original order price)</p>
         </div>
 
         {/* Upcoming Day 100 Evaluations */}
@@ -190,11 +147,11 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
             <span className="text-3xl font-bold text-indigo-400">{stats.upcomingDay100Count}</span>
             <span className="text-xs text-zinc-500">within next 14 days</span>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-500">Cohorts nearing eligibility determination</p>
+          <p className="mt-1 text-[11px] text-zinc-500">Cohorts reaching Day 100 evaluation</p>
         </div>
       </div>
 
-      {/* 4. Main Body: Drill-down or Tabs */}
+      {/* 5. Main Body: Drill-down or Tabs */}
       {selectedCohort ? (
         <CohortDetailView
           cohort={selectedCohort}
@@ -202,7 +159,7 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
           isSchemaAvailable={isSchemaAvailable}
         />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4 w-full">
           {/* Navigation Tabs */}
           <div className="flex items-center gap-1 border-b border-zinc-800 pb-px">
             <button
@@ -234,7 +191,6 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
             <CohortTable
               cohorts={cohorts}
               onSelectCohort={(c) => setSelectedCohort(c)}
-              onOpenRegisterModal={handleOpenRegisterCohort}
               isSchemaAvailable={isSchemaAvailable}
             />
           )}
@@ -249,144 +205,17 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
         </div>
       )}
 
-      {/* Register Protected Cohort Modal */}
-      {showRegisterCohortModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-800 p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-white">Register Initial Protected Supply Cohort</h3>
-            <p className="text-[11px] text-zinc-400">
-              Establish the initial protected inventory baseline for a Store + SKU combination.
-              Only initial orders are protected; subsequent orders are reorders and disqualified.
-            </p>
-            {registerError && (
-              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs">
-                {registerError}
-              </div>
-            )}
-            <form onSubmit={handleRegisterCohortSubmit} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-zinc-400 font-semibold mb-1">Company UUID *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Company ID"
-                    value={companyId}
-                    onChange={(e) => setCompanyId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-zinc-400 font-semibold mb-1">Store UUID *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Store ID"
-                    value={storeId}
-                    onChange={(e) => setStoreId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 font-semibold mb-1">Product UUID *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Product ID"
-                  value={productId}
-                  onChange={(e) => setProductId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-zinc-400 font-semibold mb-1">Source Order UUID *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Order ID"
-                    value={sourceOrderId}
-                    onChange={(e) => setSourceOrderId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-zinc-400 font-semibold mb-1">Order Item UUID *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Order Item ID"
-                    value={sourceOrderItemId}
-                    onChange={(e) => setSourceOrderItemId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-zinc-400 font-semibold mb-1">Protected Quantity (Units) *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    placeholder="e.g. 50"
-                    value={protectedQty}
-                    onChange={(e) => setProtectedQty(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-zinc-400 font-semibold mb-1">Unit Wholesale Cost ($) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                    placeholder="e.g. 14.50"
-                    value={unitCost}
-                    onChange={(e) => setUnitCost(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 font-semibold mb-1">
-                  First Shipment Date (Day 0 Anchor)
-                </label>
-                <input
-                  type="date"
-                  value={firstShipDate}
-                  onChange={(e) => setFirstShipDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-cyan-500"
-                />
-                <span className="text-[10px] text-zinc-500">Day 0 anchors the 90-day trial, Day 100 evaluation, and Day 150 deadline.</span>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setShowRegisterCohortModal(false)}
-                  className="px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={registerSubmitting}
-                  className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition-colors disabled:opacity-50"
-                >
-                  {registerSubmitting ? "Registering..." : "Register Cohort"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Guided Register Protected Cohort Modal */}
+      <RegisterCohortModal
+        isOpen={showRegisterCohortModal}
+        onClose={() => setShowRegisterCohortModal(false)}
+        onSuccess={() => {
+          setShowRegisterCohortModal(false);
+          router.refresh();
+        }}
+        enrollments={enrollments}
+        onSwitchToCompanyEnrollment={() => setActiveTab("companies")}
+      />
     </div>
   );
 }
