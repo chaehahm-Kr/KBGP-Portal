@@ -24,7 +24,7 @@ export function ExchangeCreditCheckoutSelector({
   totals,
   isGateEnabled = false
 }: ExchangeCreditCheckoutSelectorProps) {
-  if (!credits || credits.length === 0) {
+  if (!isGateEnabled || !credits || credits.length === 0) {
     return null;
   }
 
@@ -79,8 +79,8 @@ export function ExchangeCreditCheckoutSelector({
                   : "border-gray-200 bg-gray-50/60 opacity-80"
               }`}
             >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1.5 sm:gap-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <input
                     type="radio"
                     id={`credit-${credit.id}`}
@@ -101,7 +101,7 @@ export function ExchangeCreditCheckoutSelector({
                   </span>
                 </div>
 
-                <div className="text-right">
+                <div className="text-left sm:text-right pl-6 sm:pl-0">
                   <span className="text-xs text-gray-500">
                     만료일: {new Date(credit.expiresAt).toLocaleDateString("ko-KR")}
                   </span>

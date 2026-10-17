@@ -183,6 +183,7 @@ export interface SubmitOrderPayload {
     productId: string;
     quantity: number;
   }>;
+  exchangeCreditId?: string;
 }
 
 export interface SubmitOrderResult {
@@ -1067,6 +1068,28 @@ export async function submitRetailerOrder(
     if (itemsErr) {
       console.error("Order items insertion error:", itemsErr);
       return { success: false, error: "Failed to attach items to order." };
+    }
+
+    // 8.5. Exchange Credit Redemption Hook Point (Gated: only executes when ENABLE_EXCHANGE_CREDIT_CHECKOUT is true)
+    if (payload.exchangeCreditId) {
+      try {
+        const { handleOrderPaymentConfirmed, isExchangeCreditCheckoutEnabled } = await import(
+          "@/lib/retailer/exchange-credit-checkout"
+        );
+        const isEnabled = await isExchangeCreditCheckoutEnabled();
+        if (isEnabled) {
+          await handleOrderPaymentConfirmed({
+            companyId,
+            orderId: orderRow.id,
+            creditId: payload.exchangeCreditId,
+            paymentIdempotencyKey: `PAY-RED-${orderRow.id}-${payload.exchangeCreditId}`,
+            paymentMethod: payload.paymentMethod || "UNKNOWN",
+            finalPaidCents: Math.round(finalTotalAmount * 100),
+          });
+        }
+      } catch (creditErr) {
+        console.warn("Exchange credit redemption hook notice:", creditErr);
+      }
     }
 
     // 9. Revalidate paths

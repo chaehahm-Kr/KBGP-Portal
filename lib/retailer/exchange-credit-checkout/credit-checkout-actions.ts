@@ -41,6 +41,17 @@ export async function getAvailableCompanyCreditsAction(
     return { success: false, credits: [], evaluations: {}, error: "Unauthorized session." };
   }
 
+  // Feature gate enforcement
+  const gateEnabled = await isExchangeCreditCheckoutEnabled();
+  if (!gateEnabled) {
+    return {
+      success: false,
+      credits: [],
+      evaluations: {},
+      error: "Exchange Credit checkout feature gate is disabled."
+    };
+  }
+
   const adminClient = createAdminClient();
 
   // 1. Resolve Company ID

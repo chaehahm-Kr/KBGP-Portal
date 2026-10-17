@@ -1,4 +1,22 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }));
+vi.mock("@/lib/auth/dal", () => ({
+  verifyRetailerSession: vi.fn().mockResolvedValue({ userId: "retailer-1", role: "retailer", email: "retailer@test.com" }),
+}));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn().mockImplementation(() => ({
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    }),
+    rpc: vi.fn().mockResolvedValue({ data: { success: true }, error: null }),
+  })),
+}));
+
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -20,6 +38,13 @@ import {
   checkExchangeCreditCheckoutEnabled,
   setExchangeCreditCheckoutGateForTesting
 } from "../../lib/retailer/exchange-credit-checkout/credit-checkout-gate";
+import {
+  prepareCheckoutCreditReservation,
+  handleOrderPaymentConfirmed,
+  handleOrderPaymentFailed,
+  handlePreShipmentOrderCancelled
+} from "../../lib/retailer/exchange-credit-checkout/credit-checkout-lifecycle-adapter";
+import { ExchangeCreditCheckoutSelector } from "../../components/retailer/checkout/credit/exchange-credit-checkout-selector";
 
 const BASE_DATE = new Date("2026-10-17T00:00:00.000Z");
 
@@ -586,6 +611,91 @@ describe("Exchange Credit Checkout Engine — Scenarios A through R", () => {
 
     // Verify Transaction Type Check Constraint extension for 'reinstatement'
     expect(sqlContent).toContain("transaction_type IN ('issuance', 'reservation', 'reservation_release', 'redemption', 'expiration', 'void', 'reinstatement')");
+  });
+
+  // Scenario X: Lifecycle Adapter enforces feature gate disabled by default
+  it("Scenario X: Lifecycle adapter returns FEATURE_GATE_DISABLED when gate is off", async () => {
+    // Ensure gate is off
+    await setExchangeCreditCheckoutGateForTesting(false);
+
+    // Reservation attempt
+    const resResult = await prepareCheckoutCreditReservation({
+      companyId: "comp-1",
+      creditId: "crd-1",
+      checkoutSessionId: "sess-1",
+      cartItems: []
+    });
+    expect(resResult.success).toBe(false);
+    expect(resResult.errorCode).toBe("FEATURE_GATE_DISABLED");
+
+    // Redemption attempt
+    const redResult = await handleOrderPaymentConfirmed({
+      companyId: "comp-1",
+      orderId: "ord-1",
+      creditId: "crd-1",
+      paymentIdempotencyKey: "pay-1",
+      paymentMethod: "CARD",
+      finalPaidCents: 5000
+    });
+    expect(redResult.success).toBe(false);
+    expect(redResult.errorCode).toBe("FEATURE_GATE_DISABLED");
+  });
+
+  // Scenario Y: Pre-shipment cancellation routing via lifecycle adapter
+  it("Scenario Y: Pre-shipment cancellation adapter requires policy review for partial cancellations", async () => {
+    const cancelResult = await handlePreShipmentOrderCancelled({
+      companyId: "comp-1",
+      orderId: "ord-1",
+      creditId: "crd-1",
+      isFullCancellation: false, // PARTIAL!
+      cancellationReason: "Customer changed mind on single item"
+    });
+
+    expect(cancelResult.success).toBe(false);
+    expect(cancelResult.requiresPolicyReview).toBe(true);
+    expect(cancelResult.error).toContain("POLICY REVIEW REQUIRED");
+  });
+
+  // Scenario Z: ExchangeCreditCheckoutSelector gate condition
+  it("Scenario Z: ExchangeCreditCheckoutSelector returns null when gate is disabled or credits empty", () => {
+    const credit = createMockCredit();
+    const totals = calculateCheckoutTotalsWithCredit({
+      cartItems: [],
+      companyId: "comp-alpha"
+    });
+
+    // Case 1: isGateEnabled is false -> must return null
+    const resultGated = ExchangeCreditCheckoutSelector({
+      credits: [credit],
+      evaluations: {},
+      selectedCreditId: null,
+      onSelectCredit: () => {},
+      totals,
+      isGateEnabled: false
+    });
+    expect(resultGated).toBeNull();
+
+    // Case 2: credits is empty -> must return null
+    const resultEmpty = ExchangeCreditCheckoutSelector({
+      credits: [],
+      evaluations: {},
+      selectedCreditId: null,
+      onSelectCredit: () => {},
+      totals,
+      isGateEnabled: true
+    });
+    expect(resultEmpty).toBeNull();
+
+    // Case 3: isGateEnabled is true and credits present -> returns valid React element
+    const resultActive = ExchangeCreditCheckoutSelector({
+      credits: [credit],
+      evaluations: {},
+      selectedCreditId: null,
+      onSelectCredit: () => {},
+      totals,
+      isGateEnabled: true
+    });
+    expect(resultActive).not.toBeNull();
   });
 });
 

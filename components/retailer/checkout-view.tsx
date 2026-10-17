@@ -18,6 +18,14 @@ import type {
   ShippingDestinationType,
   ResolvedDefaultShippingDestination,
 } from "@/lib/retailer/shipping-address-types";
+import { ExchangeCreditCheckoutSelector } from "@/components/retailer/checkout/credit/exchange-credit-checkout-selector";
+import {
+  CheckoutCreditItem,
+  CreditEligibilityResult,
+  getAvailableCompanyCreditsAction,
+  calculateCheckoutTotalsWithCredit,
+  CheckoutTotalsCalculationResult,
+} from "@/lib/retailer/exchange-credit-checkout";
 
 interface StoreOption {
   id: string;
@@ -36,6 +44,7 @@ interface CheckoutViewProps {
   stores: StoreOption[];
   savedAddresses?: RetailerShippingAddress[];
   defaultDestination?: ResolvedDefaultShippingDestination | null;
+  isCreditCheckoutEnabled?: boolean;
 }
 
 export function RetailerCheckoutView({
@@ -45,6 +54,7 @@ export function RetailerCheckoutView({
   stores,
   savedAddresses = [],
   defaultDestination = null,
+  isCreditCheckoutEnabled = false,
 }: CheckoutViewProps) {
   const { items, subtotal, totalUnits, totalSkus, couponCode, clearCart, isLoading, syncItemThumbnails } = useCart();
 
@@ -167,6 +177,102 @@ export function RetailerCheckoutView({
   const discountAmount = promoEvaluation?.totalDiscount || 0;
   const effectiveTotal = Math.max(0, subtotal - discountAmount);
 
+  // Exchange Credit States (Feature-gated by isCreditCheckoutEnabled)
+  const [availableCredits, setAvailableCredits] = useState<CheckoutCreditItem[]>([]);
+  const [creditEvaluations, setCreditEvaluations] = useState<Record<string, CreditEligibilityResult>>({});
+  const [selectedCreditId, setSelectedCreditId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isCreditCheckoutEnabled) {
+      setAvailableCredits([]);
+      setCreditEvaluations({});
+      setSelectedCreditId(null);
+      return;
+    }
+
+    if (items.length > 0) {
+      const mappedCartItems = items.map((i) => ({
+        id: i.productId,
+        productId: i.productId,
+        sku: i.sku || "",
+        name: i.productName,
+        unitPriceCents: Math.round((i.wholesalePrice || 0) * 100),
+        quantity: i.quantity,
+      }));
+
+      getAvailableCompanyCreditsAction(selectedStoreId || "", mappedCartItems)
+        .then((res) => {
+          if (res.success) {
+            setAvailableCredits(res.credits || []);
+            setCreditEvaluations(res.evaluations || {});
+          }
+        })
+        .catch((err) => console.error("Exchange credit fetch failed:", err));
+    } else {
+      setAvailableCredits([]);
+      setCreditEvaluations({});
+      setSelectedCreditId(null);
+    }
+  }, [isCreditCheckoutEnabled, items, selectedStoreId]);
+
+  const selectedCredit = useMemo(() => {
+    if (!isCreditCheckoutEnabled || !selectedCreditId) return null;
+    return availableCredits.find((c) => c.id === selectedCreditId) || null;
+  }, [isCreditCheckoutEnabled, selectedCreditId, availableCredits]);
+
+  const creditCheckoutTotals: CheckoutTotalsCalculationResult = useMemo(() => {
+    const mappedCartItems = items.map((i) => ({
+      id: i.productId,
+      productId: i.productId,
+      sku: i.sku || "",
+      name: i.productName,
+      unitPriceCents: Math.round((i.wholesalePrice || 0) * 100),
+      quantity: i.quantity,
+    }));
+
+    if (!isCreditCheckoutEnabled) {
+      return {
+        subtotalCents: Math.round(subtotal * 100),
+        subtotalDollars: subtotal,
+        excludedSkuAmountCents: 0,
+        excludedSkuAmountDollars: 0,
+        eligibleSubtotalCents: Math.round(subtotal * 100),
+        eligibleSubtotalDollars: subtotal,
+        isCreditApplied: false,
+        appliedCreditCode: null,
+        appliedCreditAmountCents: 0,
+        appliedCreditAmountDollars: 0,
+        remainingMerchandiseCents: Math.round(effectiveTotal * 100),
+        remainingMerchandiseDollars: effectiveTotal,
+        fullRedemptionMet: false,
+        shippingCents: 0,
+        shippingDollars: 0,
+        taxCents: 0,
+        taxDollars: 0,
+        processingFeeCents: 0,
+        processingFeeDollars: 0,
+        totalPayableCents: Math.round(effectiveTotal * 100),
+        totalPayableDollars: effectiveTotal,
+      };
+    }
+
+    return calculateCheckoutTotalsWithCredit({
+      cartItems: mappedCartItems,
+      selectedCredit,
+      companyId: (stores[0] as any)?.company_id || "",
+      storeId: selectedStoreId,
+      shippingCents: 0,
+      taxCents: 0,
+      processingFeeCents: 0,
+    });
+  }, [isCreditCheckoutEnabled, items, subtotal, effectiveTotal, selectedCredit, selectedStoreId, stores]);
+
+  const appliedCreditDollars = (isCreditCheckoutEnabled && creditCheckoutTotals.isCreditApplied)
+    ? creditCheckoutTotals.appliedCreditAmountDollars
+    : 0;
+
+  const finalChargeBase = Math.max(0, effectiveTotal - appliedCreditDollars);
+
   // Fresh Checkout entry must NOT silently preselect any payment method (Rule 2)
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<RetailerPaymentMethod | null>(null);
@@ -259,7 +365,7 @@ export function RetailerCheckoutView({
   const processingFeeResult = selectedPaymentMethod
     ? calculateProcessingFee({
         paymentMethod: selectedPaymentMethod,
-        chargeBase: effectiveTotal,
+        chargeBase: finalChargeBase,
         effectivePolicy: paymentEligibility.effectivePolicy,
       })
     : {
@@ -272,7 +378,7 @@ export function RetailerCheckoutView({
       };
 
   const finalPayableTotal = Number(
-    (effectiveTotal + (selectedPaymentMethod ? processingFeeResult.feeAmount : 0)).toFixed(2)
+    (finalChargeBase + (selectedPaymentMethod ? processingFeeResult.feeAmount : 0)).toFixed(2)
   );
 
   // Authoritative Available Credit Check
@@ -368,6 +474,7 @@ export function RetailerCheckoutView({
           productId: i.productId,
           quantity: i.quantity,
         })),
+        exchangeCreditId: (isCreditCheckoutEnabled && selectedCredit) ? selectedCredit.id : undefined,
       });
 
       if (result.success && result.orderId && result.orderNumber) {
@@ -959,6 +1066,20 @@ export function RetailerCheckoutView({
             </div>
           </div>
 
+          {/* Exchange Credit Selector (Gated by isCreditCheckoutEnabled) */}
+          {isCreditCheckoutEnabled && availableCredits.length > 0 && (
+            <div className="space-y-4">
+              <ExchangeCreditCheckoutSelector
+                credits={availableCredits}
+                evaluations={creditEvaluations}
+                selectedCreditId={selectedCreditId}
+                onSelectCredit={setSelectedCreditId}
+                totals={creditCheckoutTotals}
+                isGateEnabled={isCreditCheckoutEnabled}
+              />
+            </div>
+          )}
+
           {/* 2. Payment Method & Terms Selection */}
           <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
@@ -1211,6 +1332,15 @@ export function RetailerCheckoutView({
                   <span>Promotion / Coupon Discount:</span>
                   <span className="font-bold">
                     -${discountAmount.toFixed(2)}
+                  </span>
+                </div>
+              )}
+
+              {isCreditCheckoutEnabled && creditCheckoutTotals.isCreditApplied && (
+                <div className="flex justify-between text-indigo-600 dark:text-indigo-400 font-semibold">
+                  <span>Exchange Credit ({creditCheckoutTotals.appliedCreditCode}):</span>
+                  <span className="font-bold">
+                    -${creditCheckoutTotals.appliedCreditAmountDollars.toFixed(2)}
                   </span>
                 </div>
               )}

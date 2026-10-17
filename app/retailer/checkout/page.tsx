@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { RetailerCheckoutView } from "@/components/retailer/checkout-view";
 import { getRetailerPaymentEligibility } from "@/lib/retailer/payment-actions";
 import { resolveCompanyDefaultShippingDestination } from "@/lib/retailer/shipping-address-actions";
+import { isExchangeCreditCheckoutEnabled } from "@/lib/retailer/exchange-credit-checkout";
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +102,9 @@ export default async function RetailerCheckoutPage() {
     defaultDestination = await resolveCompanyDefaultShippingDestination(companyId, adminClient);
   }
 
+  // 6. Check Exchange Credit Feature Gate (Default: false)
+  const isCreditCheckoutEnabled = await isExchangeCreditCheckoutEnabled();
+
   return (
     <RetailerCheckoutView
       companyName={companyName}
@@ -109,6 +113,7 @@ export default async function RetailerCheckoutPage() {
       stores={stores}
       savedAddresses={savedAddresses}
       defaultDestination={defaultDestination}
+      isCreditCheckoutEnabled={isCreditCheckoutEnabled}
     />
   );
 }
