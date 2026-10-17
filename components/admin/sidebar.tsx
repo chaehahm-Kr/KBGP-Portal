@@ -50,6 +50,7 @@ interface SidebarProps {
   pendingApplicationsCount?: number;
   unreadCounts?: AdminUnreadCounts;
   permissions?: SidebarStaffPermissions;
+  variant?: "fixed" | "sticky";
 }
 
 interface SubItem {
@@ -160,6 +161,7 @@ export default function Sidebar({
     totalProducts: 0,
   },
   permissions,
+  variant = "fixed",
 }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -753,7 +755,11 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`fixed top-0 bottom-0 left-0 z-20 flex flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 transition-all duration-300 ${
+      className={`${
+        variant === "sticky"
+          ? "sticky top-0 h-screen shrink-0"
+          : "fixed top-0 bottom-0 left-0"
+      } z-20 flex flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 transition-all duration-300 ${
         isCollapsed ? "w-16" : "w-64"
       }`}
     >

@@ -25,9 +25,10 @@ import GuideTriggerButton from "@/components/admin/knowledge-guide/guide-trigger
 
 interface HeaderProps {
   isSidebarCollapsed: boolean;
+  variant?: "fixed" | "sticky";
 }
 
-export default function Header({ isSidebarCollapsed }: HeaderProps) {
+export default function Header({ isSidebarCollapsed, variant = "fixed" }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -308,9 +309,11 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
 
   return (
     <header
-      className={`fixed top-0 right-0 z-10 flex h-16 items-center justify-between border-b border-zinc-200 bg-white px-6 dark:border-zinc-800 dark:bg-zinc-950 transition-all duration-300 ${
-        isSidebarCollapsed ? "left-16" : "left-64"
-      }`}
+      className={`${
+        variant === "sticky"
+          ? "sticky top-0 w-full shrink-0"
+          : `fixed top-0 right-0 ${isSidebarCollapsed ? "left-16" : "left-64"}`
+      } z-10 flex h-16 items-center justify-between border-b border-zinc-200 bg-white px-6 dark:border-zinc-800 dark:bg-zinc-950 transition-all duration-300`}
     >
       {/* Left side: Breadcrumbs */}
       <nav className="flex items-center space-x-1 text-sm font-medium text-zinc-500">
