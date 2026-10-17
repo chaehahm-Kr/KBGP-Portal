@@ -155,13 +155,21 @@ function resolveProductSku(prod: any): string {
 let rmaMutationsGateOverride: boolean | null = null;
 
 function checkRmaMutationEnabled(): boolean {
-  if (rmaMutationsGateOverride !== null) {
+  // In production, test overrides are strictly ignored to ensure absolute security and prevent bypass
+  if (process.env.NODE_ENV !== "production" && rmaMutationsGateOverride !== null) {
     return rmaMutationsGateOverride;
   }
-  return process.env.ENABLE_EXCHANGE_RMA_MUTATIONS === "true";
+  return (
+    process.env.ENABLE_RMA_MUTATIONS === "true" ||
+    process.env.ENABLE_EXCHANGE_RMA_MUTATIONS === "true"
+  );
 }
 
 export async function setRmaMutationsGateForTesting(enabled: boolean | null): Promise<void> {
+  // Test helper must not create an unauthorized bypass in production runtime
+  if (process.env.NODE_ENV === "production") {
+    return;
+  }
   rmaMutationsGateOverride = enabled;
 }
 

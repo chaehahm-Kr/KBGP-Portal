@@ -49,12 +49,31 @@ describe("EXCHANGE-CREDIT-PH3-006: RMA Server Actions Feature Gate Enforcement",
     expect(await isRmaMutationEnabled()).toBe(false);
   });
 
-  it("isRmaMutationEnabled returns true when ENABLE_EXCHANGE_RMA_MUTATIONS='true'", async () => {
-    process.env.ENABLE_EXCHANGE_RMA_MUTATIONS = "true";
+  it("isRmaMutationEnabled returns true when ENABLE_RMA_MUTATIONS='true'", async () => {
+    process.env.ENABLE_RMA_MUTATIONS = "true";
     expect(await isRmaMutationEnabled()).toBe(true);
+    delete process.env.ENABLE_RMA_MUTATIONS;
   });
 
-  it("setRmaMutationsGateForTesting overrides environment configuration", async () => {
+  it("prevents test helper bypass in production mode (NODE_ENV=production)", async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    try {
+      (process.env as any).NODE_ENV = "production";
+      delete process.env.ENABLE_RMA_MUTATIONS;
+      delete process.env.ENABLE_EXCHANGE_RMA_MUTATIONS;
+
+      // Attempt test override in production
+      await setRmaMutationsGateForTesting(true);
+
+      // Must remain false in production
+      expect(await isRmaMutationEnabled()).toBe(false);
+    } finally {
+      (process.env as any).NODE_ENV = originalNodeEnv;
+      await setRmaMutationsGateForTesting(null);
+    }
+  });
+
+  it("setRmaMutationsGateForTesting overrides environment configuration in non-production", async () => {
     process.env.ENABLE_EXCHANGE_RMA_MUTATIONS = "true";
     await setRmaMutationsGateForTesting(false);
     expect(await isRmaMutationEnabled()).toBe(false);
