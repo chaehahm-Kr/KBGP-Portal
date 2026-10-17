@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS public.retailer_exchange_credit_transactions (
   balance_after_cents BIGINT NOT NULL CHECK (balance_after_cents >= 0),
 
   -- External References (Checkout & Order Integration for PH4-002)
-  reference_order_id UUID NULL REFERENCES public.orders(id) ON DELETE RESTRICT,
+  reference_order_id UUID NULL REFERENCES public.retailer_orders(id) ON DELETE RESTRICT,
   reference_checkout_session_id TEXT NULL,
   performed_by UUID NOT NULL REFERENCES auth.users(id),
   idempotency_key TEXT NULL,
