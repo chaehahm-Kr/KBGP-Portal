@@ -9,10 +9,12 @@ import type {
   ProtectedSupplyCohort,
   EnrollmentAuditLog,
 } from "@/lib/retailer/exchange-credit-types";
+import type { RmaAggregate } from "@/lib/retailer/rma";
 import { CohortTable } from "./cohort-table";
 import { CompanySettingsView } from "./company-settings-view";
 import { CohortDetailView } from "./cohort-detail-view";
 import { RegisterCohortModal } from "./register-cohort-modal";
+import { AdminRmaOverview } from "./rma/admin-rma-overview";
 
 interface ExchangeCreditOverviewViewProps {
   initialData: {
@@ -21,16 +23,20 @@ interface ExchangeCreditOverviewViewProps {
     enrollments: CompanyExchangeEnrollment[];
     cohorts: ProtectedSupplyCohort[];
     auditLogs: EnrollmentAuditLog[];
+    rmas?: RmaAggregate[];
+    isRmaSchemaAvailable?: boolean;
   };
 }
 
 export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOverviewViewProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"cohorts" | "companies" | "audit">("cohorts");
+  const [activeTab, setActiveTab] = useState<"cohorts" | "companies" | "rmas" | "audit">("cohorts");
   const [selectedCohort, setSelectedCohort] = useState<ProtectedSupplyCohort | null>(null);
   const [showRegisterCohortModal, setShowRegisterCohortModal] = useState(false);
 
   const { isSchemaAvailable, stats, enrollments, cohorts, auditLogs } = initialData;
+  const rmas = initialData.rmas || [];
+  const isRmaSchemaAvailable = initialData.isRmaSchemaAvailable ?? isSchemaAvailable;
 
   return (
     <div className="w-full min-w-0 space-y-6">
@@ -184,6 +190,17 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
             >
               Company Enrollments & Policies ({enrollments.length})
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("rmas")}
+              className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
+                activeTab === "rmas"
+                  ? "border-cyan-500 text-cyan-400 bg-cyan-500/5"
+                  : "border-transparent text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Option B Returns & RMA ({rmas.length})
+            </button>
           </div>
 
           {/* Tab Content */}
@@ -201,6 +218,23 @@ export function ExchangeCreditOverviewView({ initialData }: ExchangeCreditOvervi
               auditLogs={auditLogs}
               isSchemaAvailable={isSchemaAvailable}
             />
+          )}
+
+          {activeTab === "rmas" && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-cyan-950/20 border border-cyan-800/40 text-cyan-300 text-xs flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🛡️</span>
+                  <span>
+                    <strong>Phase 3 Read-Only Integration:</strong> Option B Returns & RMA queue is synchronized with authoritative Production schema (SQL 0179). All RMA mutations remain strictly feature-gated until live operational activation.
+                  </span>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-900/60 border border-cyan-700/50 text-cyan-200 uppercase tracking-wider">
+                  Read-Only Mode
+                </span>
+              </div>
+              <AdminRmaOverview rmas={rmas} isLoading={false} />
+            </div>
           )}
         </div>
       )}

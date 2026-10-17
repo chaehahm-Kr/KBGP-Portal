@@ -146,6 +146,30 @@ function resolveProductSku(prod: any): string {
 }
 
 /**
+ * Phase 3 Feature Gate:
+ * RMA mutations (Create RMA, Box Allocation, Tracking, Inspection Draft, Finalize Inspection, Exceptions, Cancellation)
+ * are feature-gated to strictly protect production until coordinated live release approval.
+ * When disabled (default), all state-changing RMA actions return errorCode: "FEATURE_GATED".
+ * Read-only queries (listRmasAction, getRmaDetailAction, getProposedSettlementInstructionAction) remain accessible.
+ */
+let rmaMutationsGateOverride: boolean | null = null;
+
+function checkRmaMutationEnabled(): boolean {
+  if (rmaMutationsGateOverride !== null) {
+    return rmaMutationsGateOverride;
+  }
+  return process.env.ENABLE_EXCHANGE_RMA_MUTATIONS === "true";
+}
+
+export async function setRmaMutationsGateForTesting(enabled: boolean | null): Promise<void> {
+  rmaMutationsGateOverride = enabled;
+}
+
+export async function isRmaMutationEnabled(): Promise<boolean> {
+  return checkRmaMutationEnabled();
+}
+
+/**
  * 2. Create RMA from Approved Claim with Option B items
  * Enforces:
  * - One consolidated RMA per Store claim
@@ -155,6 +179,14 @@ function resolveProductSku(prod: any): string {
  * - Executes via atomic stored procedure create_exchange_rma_atomic (or fallback)
  */
 export async function createRmaFromClaimAction(claimId: string): Promise<CreateRmaResult> {
+  if (!checkRmaMutationEnabled()) {
+    return {
+      success: false,
+      error: "RMA mutations are currently disabled (feature-gated for Phase 3 read-only preview).",
+      errorCode: "FEATURE_GATED",
+    };
+  }
+
   const session = await verifyAdminSession();
   if (!session || !session.userId || session.role !== "admin") {
     return { success: false, error: "Unauthorized: Admin session required.", errorCode: "UNAUTHORIZED" };
@@ -400,6 +432,14 @@ export async function createRmaFromClaimAction(claimId: string): Promise<CreateR
  * Enforces 14-calendar-day shipping deadline
  */
 export async function approveRmaAction(input: ApproveRmaInput): Promise<ApproveRmaResult> {
+  if (!checkRmaMutationEnabled()) {
+    return {
+      success: false,
+      error: "RMA mutations are currently disabled (feature-gated for Phase 3 read-only preview).",
+      errorCode: "FEATURE_GATED",
+    };
+  }
+
   const session = await verifyAdminSession();
   if (!session || !session.userId || session.role !== "admin") {
     return { success: false, error: "Unauthorized: Admin session required.", errorCode: "UNAUTHORIZED" };
@@ -511,6 +551,14 @@ export async function approveRmaAction(input: ApproveRmaInput): Promise<ApproveR
 export async function saveRmaBoxAllocationsAction(
   input: SaveBoxAllocationInput
 ): Promise<SaveBoxAllocationResult> {
+  if (!checkRmaMutationEnabled()) {
+    return {
+      success: false,
+      error: "RMA mutations are currently disabled (feature-gated for Phase 3 read-only preview).",
+      errorCode: "FEATURE_GATED",
+    };
+  }
+
   const session = await verifyAdminSession();
   if (!session || !session.userId || session.role !== "admin") {
     return { success: false, error: "Unauthorized: Admin session required.", errorCode: "UNAUTHORIZED" };
@@ -649,6 +697,14 @@ export async function saveRmaBoxAllocationsAction(
 export async function recordRmaCarrierTrackingEventAction(
   input: RecordTrackingEventInput
 ): Promise<RecordTrackingEventResult> {
+  if (!checkRmaMutationEnabled()) {
+    return {
+      success: false,
+      error: "RMA mutations are currently disabled (feature-gated for Phase 3 read-only preview).",
+      errorCode: "FEATURE_GATED",
+    };
+  }
+
   const session = await verifyAdminSession();
   if (!session || !session.userId || session.role !== "admin") {
     return { success: false, error: "Unauthorized: Admin session required.", errorCode: "UNAUTHORIZED" };
@@ -777,6 +833,14 @@ export async function recordRmaCarrierTrackingEventAction(
 export async function saveWarehouseInspectionDraftAction(
   input: SaveInspectionDraftInput
 ): Promise<InspectionActionResult> {
+  if (!checkRmaMutationEnabled()) {
+    return {
+      success: false,
+      error: "RMA mutations are currently disabled (feature-gated for Phase 3 read-only preview).",
+      errorCode: "FEATURE_GATED",
+    };
+  }
+
   const session = await verifyAdminSession();
   if (!session || !session.userId || session.role !== "admin") {
     return { success: false, error: "Unauthorized: Admin/Inspector session required.", errorCode: "UNAUTHORIZED" };
@@ -977,6 +1041,14 @@ export async function saveWarehouseInspectionDraftAction(
 export async function completeWarehouseInspectionAction(
   input: CompleteInspectionInput
 ): Promise<InspectionActionResult> {
+  if (!checkRmaMutationEnabled()) {
+    return {
+      success: false,
+      error: "RMA mutations are currently disabled (feature-gated for Phase 3 read-only preview).",
+      errorCode: "FEATURE_GATED",
+    };
+  }
+
   const session = await verifyAdminSession();
   if (!session || !session.userId || session.role !== "admin") {
     return { success: false, error: "Unauthorized: Admin/Inspector session required.", errorCode: "UNAUTHORIZED" };
@@ -1218,6 +1290,14 @@ export async function completeWarehouseInspectionAction(
 export async function recordRmaExceptionAction(
   input: RecordExceptionInput
 ): Promise<ExceptionActionResult> {
+  if (!checkRmaMutationEnabled()) {
+    return {
+      success: false,
+      error: "RMA mutations are currently disabled (feature-gated for Phase 3 read-only preview).",
+      errorCode: "FEATURE_GATED",
+    };
+  }
+
   const session = await verifyAdminSession();
   if (!session || !session.userId || session.role !== "admin") {
     return { success: false, error: "Unauthorized: Admin session required.", errorCode: "UNAUTHORIZED" };
@@ -1280,6 +1360,14 @@ export async function recordRmaExceptionAction(
 export async function resolveRmaExceptionAction(
   input: ResolveExceptionInput
 ): Promise<ExceptionActionResult> {
+  if (!checkRmaMutationEnabled()) {
+    return {
+      success: false,
+      error: "RMA mutations are currently disabled (feature-gated for Phase 3 read-only preview).",
+      errorCode: "FEATURE_GATED",
+    };
+  }
+
   const session = await verifyAdminSession();
   if (!session || !session.userId || session.role !== "admin") {
     return { success: false, error: "Unauthorized: Admin session required.", errorCode: "UNAUTHORIZED" };
