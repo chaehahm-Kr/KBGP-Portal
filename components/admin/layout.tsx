@@ -77,7 +77,7 @@ export default function AdminLayout({
           />
 
           {/* Scrollable Page Body */}
-          <main className="flex-1 px-6 pt-8 pb-12 overflow-y-auto">
+          <main className="flex-1 px-6 pt-8 pb-12 overflow-y-auto min-w-0 max-w-full">
             {children}
           </main>
         </div>

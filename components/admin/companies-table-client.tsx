@@ -460,23 +460,23 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
       </div>
 
       {/* Companies Table Card */}
-      <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden w-full max-w-full">
+        <div className="overflow-x-auto w-full max-w-full">
           <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
             <thead>
-              <tr className="border-b border-zinc-150 bg-zinc-50 font-bold text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-white">
-                <th className="px-6 py-3.5 font-semibold">회사명</th>
-                <th className="px-6 py-3.5 font-semibold">유형</th>
-                <th className="px-6 py-3.5 font-semibold">국가</th>
-                <th className="px-6 py-3.5 font-semibold text-center">브랜드 수</th>
-                <th className="px-6 py-3.5 font-semibold text-center">등록 제품 수</th>
-                <th className="px-6 py-3.5 font-semibold text-center">온보딩</th>
-                <th className="px-6 py-3.5 font-semibold">파트너 상태</th>
-                <th className="px-6 py-3.5 font-semibold">주 컨택 담당자</th>
-                <th className="px-6 py-3.5 font-semibold text-center">등록 인원</th>
+              <tr className="border-b border-zinc-150 bg-zinc-50 font-bold text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-white whitespace-nowrap text-xs">
+                <th className="px-4 py-3 font-semibold min-w-[140px]">회사명</th>
+                <th className="px-4 py-3 font-semibold min-w-[100px]">유형</th>
+                <th className="px-4 py-3 font-semibold min-w-[80px]">국가</th>
+                <th className="px-4 py-3 font-semibold text-center min-w-[65px]">브랜드 수</th>
+                <th className="px-4 py-3 font-semibold text-center min-w-[75px]">등록 제품 수</th>
+                <th className="px-4 py-3 font-semibold text-center min-w-[85px]">온보딩</th>
+                <th className="px-4 py-3 font-semibold min-w-[90px]">파트너 상태</th>
+                <th className="px-4 py-3 font-semibold min-w-[110px]">주 컨택 담당자</th>
+                <th className="px-4 py-3 font-semibold text-center min-w-[65px]">등록 인원</th>
                 <th
                   onClick={toggleSortLatestLogin}
-                  className="px-6 py-3.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors select-none group"
+                  className="px-4 py-3 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors select-none group min-w-[125px]"
                   title="미국 동부시간 (ET) 기준 최근 로그인 일시 (클릭하여 정렬)"
                 >
                   <div className="flex items-center gap-1.5">
@@ -486,7 +486,9 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                     </span>
                   </div>
                 </th>
-                <th className="px-6 py-3.5 font-semibold text-right">관리</th>
+                <th className="sticky right-0 z-10 bg-zinc-50 dark:bg-zinc-900/95 px-4 py-3 font-semibold text-right min-w-[90px] whitespace-nowrap shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)]">
+                  관리
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -507,8 +509,8 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                     : "bg-zinc-50 text-zinc-700 border-zinc-100 dark:bg-zinc-850 dark:text-zinc-300 dark:border-zinc-700";
 
                 return (
-                  <tr key={company.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
-                    <td className="px-6 py-3.5 font-bold text-zinc-955 dark:text-white">
+                  <tr key={company.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50 group transition-colors">
+                    <td className="px-4 py-3 font-bold text-zinc-955 dark:text-white min-w-[140px]">
                       <Link
                         href={`/admin/companies/${company.id}`}
                         className="hover:underline hover:text-zinc-900 dark:hover:text-zinc-300"
@@ -516,7 +518,7 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                         {company.name}
                       </Link>
                     </td>
-                    <td className="px-6 py-3.5">
+                    <td className="px-4 py-3 min-w-[100px]">
                       <div className="flex flex-wrap items-center gap-1">
                         {(company.types && company.types.length > 0 ? company.types : [company.type || "Brand Owner"]).map((t, idx) => (
                           <span
@@ -530,16 +532,16 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                         ))}
                       </div>
                     </td>
-                    <td className="px-6 py-3.5 text-zinc-700 dark:text-zinc-300 font-medium">
+                    <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300 font-medium whitespace-nowrap min-w-[80px]">
                       {getCountryDisplayLabel(company.country, "ko")}
                     </td>
-                    <td className="px-6 py-3.5 text-center text-zinc-900 dark:text-white font-semibold">
+                    <td className="px-4 py-3 text-center text-zinc-900 dark:text-white font-semibold min-w-[65px]">
                       {company.brandsCount}
                     </td>
-                    <td className="px-6 py-3.5 text-center text-zinc-900 dark:text-white font-semibold">
+                    <td className="px-4 py-3 text-center text-zinc-900 dark:text-white font-semibold min-w-[75px]">
                       {company.productsCount}
                     </td>
-                    <td className="px-6 py-3.5 text-center">
+                    <td className="px-4 py-3 text-center min-w-[85px]">
                       <CompanyOnboardingPopover
                         companyId={company.id}
                         onboardingStatus={company.onboardingStatus}
@@ -549,14 +551,14 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                         steps={company.onboardingSteps}
                       />
                     </td>
-                    <td className="px-6 py-3.5">
+                    <td className="px-4 py-3 min-w-[90px] whitespace-nowrap">
                       <span className={`inline-block rounded px-2.5 py-0.5 text-[10px] font-bold border ${statusClass}`}>
                         {statusConfig.label}
                       </span>
                     </td>
                     
                     {/* Primary Contact with Portal-based Popover */}
-                    <td className="px-6 py-3.5">
+                    <td className="px-4 py-3 min-w-[110px]">
                       <CompanyContactPopover
                         contactName={company.contactName}
                         contactEnglishName={company.contactEnglishName}
@@ -568,7 +570,7 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                     </td>
                     
                     {/* Registered Users Count Column (Admin + Staff) */}
-                    <td className="px-6 py-3.5 text-center">
+                    <td className="px-4 py-3 text-center min-w-[65px]">
                       <span className="inline-flex items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white px-2.5 py-0.5 font-bold font-mono text-xs border border-zinc-200 dark:border-zinc-700">
                         {company.users && company.users.length > 0
                           ? company.users.filter((u) => u.name || u.email).length
@@ -576,7 +578,7 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                       </span>
                     </td>
 
-                    <td className="px-6 py-3.5 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap min-w-[125px]">
                       {company.latestLoginAt ? (
                         <span
                           className="font-mono text-xs text-zinc-750 dark:text-zinc-250 font-medium cursor-default"
@@ -594,10 +596,10 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-3.5 text-right font-semibold text-zinc-900 dark:text-white">
+                    <td className="sticky right-0 z-10 bg-white dark:bg-zinc-900 group-hover:bg-zinc-50 dark:group-hover:bg-zinc-850 px-4 py-3 text-right font-semibold text-zinc-900 dark:text-white min-w-[90px] whitespace-nowrap shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] transition-colors">
                       <Link
                         href={`/admin/companies/${company.id}`}
-                        className="rounded border border-zinc-200 bg-white px-2.5 py-1 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                        className="inline-flex items-center justify-center shrink-0 rounded border border-zinc-200 bg-white px-3 py-1.5 min-h-[30px] text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 whitespace-nowrap transition-colors"
                       >
                         상세보기
                       </Link>

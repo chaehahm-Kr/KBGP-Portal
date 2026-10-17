@@ -579,12 +579,12 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
       )}
 
       {/* Products Table Card */}
-      <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="overflow-x-auto">
+      <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-sm dark:border-zinc-800 dark:bg-zinc-900 w-full max-w-full">
+        <div className="overflow-x-auto w-full max-w-full">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-500 font-bold dark:border-zinc-800 dark:bg-zinc-900/50">
-                <th className="w-10 px-4 py-3.5 text-center">
+              <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-500 font-bold dark:border-zinc-800 dark:bg-zinc-900/50 whitespace-nowrap text-xs">
+                <th className="w-10 px-3.5 py-3 text-center">
                   <input
                     type="checkbox"
                     checked={isAllSelected}
@@ -595,18 +595,20 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 cursor-pointer"
                   />
                 </th>
-                <th className="px-5 py-3.5 whitespace-nowrap">사진</th>
-                <th className="px-5 py-3.5 whitespace-nowrap">Letusto SKU</th>
-                <th className="px-5 py-3.5 whitespace-nowrap">제조사 SKU</th>
-                <th className="px-5 py-3.5 whitespace-nowrap">제품명</th>
-                <th className="px-5 py-3.5 whitespace-nowrap">회사명</th>
-                <th className="px-5 py-3.5 whitespace-nowrap">브랜드</th>
-                <th className="px-5 py-3.5 whitespace-nowrap">속성 완성도</th>
-                <th className="px-5 py-3.5 whitespace-nowrap">등록 상태</th>
-                <th className="px-5 py-3.5 whitespace-nowrap">선정 상태</th>
-                <th className="px-5 py-3.5 whitespace-nowrap">운영 상태</th>
-                <th className="px-5 py-3.5 whitespace-nowrap">최종 수정</th>
-                <th className="px-5 py-3.5 whitespace-nowrap text-right">관리</th>
+                <th className="px-3.5 py-3 whitespace-nowrap w-14 text-center">사진</th>
+                <th className="px-3.5 py-3 whitespace-nowrap min-w-[110px]">Letusto SKU</th>
+                <th className="px-3.5 py-3 whitespace-nowrap min-w-[110px]">제조사 SKU</th>
+                <th className="px-3.5 py-3 whitespace-nowrap min-w-[180px]">제품명</th>
+                <th className="px-3.5 py-3 whitespace-nowrap min-w-[100px]">회사명</th>
+                <th className="px-3.5 py-3 whitespace-nowrap min-w-[100px]">브랜드</th>
+                <th className="px-3.5 py-3 whitespace-nowrap min-w-[85px]">속성 완성도</th>
+                <th className="px-3.5 py-3 whitespace-nowrap min-w-[95px]">등록 상태</th>
+                <th className="px-3.5 py-3 whitespace-nowrap min-w-[90px]">선정 상태</th>
+                <th className="px-3.5 py-3 whitespace-nowrap min-w-[90px]">운영 상태</th>
+                <th className="px-3.5 py-3 whitespace-nowrap min-w-[105px]">최종 수정</th>
+                <th className="sticky right-0 z-10 bg-zinc-50 dark:bg-zinc-900/95 px-3.5 py-3 whitespace-nowrap text-right min-w-[95px] shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)]">
+                  관리
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
@@ -617,12 +619,12 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                 return (
                   <tr
                     key={product.id}
-                    className={`hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20 transition-colors ${
+                    className={`hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20 transition-colors group ${
                       isChecked ? "bg-blue-50/30 dark:bg-blue-950/10" : ""
                     }`}
                   >
                     {/* Checkbox Column */}
-                    <td className="w-10 px-4 py-4 text-center align-middle">
+                    <td className="w-10 px-3.5 py-3 text-center align-middle">
                       <input
                         type="checkbox"
                         checked={isChecked}
@@ -632,9 +634,9 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* Photo Column */}
-                    <td className="px-5 py-4 align-middle">
+                    <td className="w-14 px-3.5 py-3 align-middle text-center">
                       {product.photoUrl ? (
-                        <div className="h-12 w-12 rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-1 shadow-sm overflow-hidden">
+                        <div className="h-10 w-10 mx-auto rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-0.5 shadow-xs overflow-hidden">
                           <img
                             src={product.photoUrl}
                             alt={product.display_name}
@@ -642,40 +644,40 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                           />
                         </div>
                       ) : (
-                        <div className="h-12 w-12 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400 dark:bg-zinc-800 text-[10px] font-bold border border-dashed border-zinc-200 dark:border-zinc-700">
+                        <div className="h-10 w-10 mx-auto rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400 dark:bg-zinc-800 text-[9px] font-bold border border-dashed border-zinc-200 dark:border-zinc-700">
                           No Pic
                         </div>
                       )}
                     </td>
 
                     {/* Letusto SKU */}
-                    <td className="px-5 py-4 align-middle font-mono font-bold text-zinc-955 dark:text-white whitespace-nowrap">
+                    <td className="px-3.5 py-3 align-middle font-mono font-bold text-zinc-955 dark:text-white whitespace-nowrap min-w-[110px]">
                       {product.letusto_sku || (
                         <span className="text-zinc-350 dark:text-zinc-650 italic font-sans font-normal">지정 대기 중</span>
                       )}
                     </td>
 
                     {/* Manufacture SKU */}
-                    <td className="px-5 py-4 align-middle font-mono font-semibold text-zinc-900 dark:text-white whitespace-nowrap">
+                    <td className="px-3.5 py-3 align-middle font-mono font-semibold text-zinc-900 dark:text-white whitespace-nowrap min-w-[110px]">
                       {product.display_manufacture_sku || (
                         <span className="text-zinc-350 dark:text-zinc-650 italic">미입력</span>
                       )}
                     </td>
 
                     {/* Product Name */}
-                    <td className="px-5 py-4 align-middle font-bold text-zinc-900 dark:text-white min-w-[200px]">
+                    <td className="px-3.5 py-3 align-middle font-bold text-zinc-900 dark:text-white min-w-[180px]">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {!product.admin_read_at && <NewBadge />}
                           <Link
                             href={`/admin/products/${product.id}`}
-                            className="hover:text-zinc-950 dark:hover:text-white hover:underline transition-all block text-sm"
+                            className="hover:text-zinc-950 dark:hover:text-white hover:underline transition-all block text-xs font-bold leading-snug"
                           >
                             {product.display_name}
                           </Link>
                         </div>
                         {product.category_code && product.category_full_path ? (
-                          <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 block pt-0.5">
+                          <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 block pt-0.5 leading-tight">
                             {product.category_full_path}
                           </span>
                         ) : (
@@ -690,29 +692,31 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* Company Name */}
-                    <td className="px-5 py-4 align-middle text-zinc-600 dark:text-zinc-355 font-medium whitespace-nowrap max-w-[120px] truncate">
+                    <td className="px-3.5 py-3 align-middle text-zinc-600 dark:text-zinc-355 font-medium whitespace-nowrap max-w-[120px] truncate min-w-[100px]">
                       <Link
                         href={`/admin/companies/${product.company_id}`}
-                        className="hover:underline hover:text-zinc-950 dark:hover:text-white cursor-pointer transition-colors"
+                        className="hover:underline hover:text-zinc-950 dark:hover:text-white cursor-pointer transition-colors block truncate"
+                        title={product.companyName}
                       >
                         {product.companyName}
                       </Link>
                     </td>
 
                     {/* Brand Name */}
-                    <td className="px-5 py-4 align-middle text-zinc-600 dark:text-zinc-300 font-medium whitespace-nowrap max-w-[120px] truncate">
+                    <td className="px-3.5 py-3 align-middle text-zinc-600 dark:text-zinc-300 font-medium whitespace-nowrap max-w-[120px] truncate min-w-[100px]">
                       <Link
                         href={`/admin/brands?search=${encodeURIComponent(product.brandName)}`}
-                        className="hover:underline hover:text-zinc-950 dark:hover:text-white cursor-pointer transition-colors"
+                        className="hover:underline hover:text-zinc-950 dark:hover:text-white cursor-pointer transition-colors block truncate"
+                        title={product.brandName}
                       >
                         {product.brandName}
                       </Link>
                     </td>
 
                     {/* 속성 완성도 Column */}
-                    <td className="px-5 py-4 align-middle whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <div className="w-14 bg-zinc-200 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
+                    <td className="px-3.5 py-3 align-middle whitespace-nowrap min-w-[85px]">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-12 bg-zinc-200 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${
                               percent === 100
@@ -724,7 +728,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                             style={{ width: `${percent}%` }}
                           />
                         </div>
-                        <span className={`text-xs font-bold font-mono ${
+                        <span className={`text-[11px] font-bold font-mono ${
                           percent === 100
                             ? "text-emerald-700 dark:text-emerald-400"
                             : "text-zinc-700 dark:text-zinc-300"
@@ -735,22 +739,20 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* ① 제품 등록 상태 배지 */}
-                    <td className="px-5 py-4 align-middle">
+                    <td className="px-3.5 py-3 align-middle min-w-[95px] whitespace-nowrap">
                       {product.deleted_at ? (
                         <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
                           Deleted (삭제됨)
                         </span>
                       ) : product.is_draft ? (
-                        <div className="space-y-1">
+                        <div className="space-y-0.5">
                           <span className="inline-flex items-center rounded bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 px-2 py-0.5 text-[10px] font-bold border border-amber-200 dark:border-amber-900/50 whitespace-nowrap">
                             Draft (보완 대기)
                           </span>
                           {product.missing_fields && product.missing_fields.length > 0 && (
-                            <div className="text-[9px] text-amber-700 dark:text-amber-400 leading-tight max-w-[140px]">
-                              <span className="font-semibold block">* 누락 항목:</span>
-                              <span className="block truncate" title={product.missing_fields.join(", ")}>
-                                {product.missing_fields.join(", ")}
-                              </span>
+                            <div className="text-[9px] text-amber-700 dark:text-amber-400 leading-tight max-w-[120px] truncate" title={product.missing_fields.join(", ")}>
+                              <span className="font-semibold">* 누락: </span>
+                              {product.missing_fields.join(", ")}
                             </div>
                           )}
                         </div>
@@ -762,7 +764,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* ② 제품 선정 상태 인라인 셀렉터 */}
-                    <td className="px-5 py-4 align-middle">
+                    <td className="px-3.5 py-3 align-middle min-w-[90px] whitespace-nowrap">
                       <select
                         value={product.selection_status}
                         onChange={(e) => handleInlineStatusChange(product.id, "selection_status", e.target.value)}
@@ -780,7 +782,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* ③ 제품 운영 상태 인라인 셀렉터 */}
-                    <td className="px-5 py-4 align-middle">
+                    <td className="px-3.5 py-3 align-middle min-w-[90px] whitespace-nowrap">
                       <select
                         value={product.trading_status}
                         onChange={(e) => handleInlineStatusChange(product.id, "trading_status", e.target.value)}
@@ -798,26 +800,32 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* ④ 최종 수정 정보 */}
-                    <td className="px-5 py-4 align-middle whitespace-nowrap">
+                    <td className="px-3.5 py-3 align-middle whitespace-nowrap min-w-[105px]">
                       {formatLastUpdated(product)}
                     </td>
 
-                    {/* Actions */}
-                    <td className="px-5 py-4 align-middle text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
+                    {/* Actions (Sticky Right Column) */}
+                    <td
+                      className={`sticky right-0 z-10 px-3.5 py-3 align-middle text-right whitespace-nowrap min-w-[95px] shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] transition-colors ${
+                        isChecked
+                          ? "bg-blue-50 dark:bg-blue-950/80"
+                          : "bg-white dark:bg-zinc-900 group-hover:bg-zinc-50 dark:group-hover:bg-zinc-850"
+                      }`}
+                    >
+                      <div className="flex items-center justify-end gap-1.5 shrink-0">
                         {product.deleted_at ? (
                           <button
                             type="button"
                             disabled={restoringId === product.id}
                             onClick={() => handleRestore(product.id)}
-                            className="rounded bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 font-bold text-xs transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                            className="inline-flex items-center justify-center shrink-0 rounded bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 min-h-[30px] font-bold text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
                           >
                             {restoringId === product.id ? "복구 중..." : "🔄 복구"}
                           </button>
                         ) : null}
                         <Link
                           href={`/admin/products/${product.id}`}
-                          className="rounded bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 px-3 py-1.5 font-bold text-xs transition-all"
+                          className="inline-flex items-center justify-center shrink-0 rounded bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 px-3 py-1.5 min-h-[30px] font-bold text-xs transition-all whitespace-nowrap"
                         >
                           상세/수정
                         </Link>
