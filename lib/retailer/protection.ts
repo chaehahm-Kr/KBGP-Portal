@@ -4,6 +4,10 @@ import { verifyRetailerSession } from "@/lib/auth/dal";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { formatCategoryName } from "@/lib/retailer/products";
 import { getRetailerAccessibleStores } from "@/lib/retailer/weekly-check";
+import {
+  aggregateProtectionMovement,
+  type WeeklyCheckInput,
+} from "@/lib/protection/aggregation";
 
 export type ProtectionStatus =
   | "pending_start"
@@ -52,10 +56,11 @@ export interface ProtectionItemSummary {
 export interface StoreMovementBreakdown {
   storeId: string;
   storeName: string;
-  estimatedMovement: number;
+  estimatedMovement: number | null;
   currentRemainingQty: number | null;
   lastCheckDate: string | null;
   reportingStatus: "reported" | "missing";
+  movementEvidence?: "verified_store_check" | "insufficient_data";
 }
 
 export interface ProtectionItemDetail extends ProtectionItemSummary {
@@ -482,39 +487,81 @@ export async function getRetailerProtectionDetail(
   const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - today.getTime()) / msPerDay));
   const isPeriodEnded = today.getTime() >= endDate.getTime();
 
-  // Movement & Store breakdown
-  let estimatedMovement = 0;
-  if (p.letusto_sku === "TEST-SKN-001") {
-    estimatedMovement = 14;
-  } else if (p.letusto_sku === "TEST-SKN-002") {
-    estimatedMovement = 24;
-  } else if (p.letusto_sku === "TEST-SKN-003") {
-    estimatedMovement = 14;
-  } else if (p.letusto_sku === "TEST-CLN-001") {
-    estimatedMovement = 8;
-  } else if (p.letusto_sku === "TEST-HAR-001") {
-    estimatedMovement = 8;
-  } else if (p.letusto_sku === "TEST-TRD-001") {
-    estimatedMovement = 11;
-  } else {
-    estimatedMovement = Math.min(row.protected_quantity, Math.round(row.protected_quantity * 0.4));
-  }
+  // Fetch weekly checks and check items for this company & product
+  const { data: rawChecks } = await adminClient
+    .from("retailer_weekly_checks")
+    .select(`
+      id,
+      store_id,
+      reporting_week,
+      report_date,
+      status,
+      submitted_at,
+      retailer_weekly_check_items (
+        product_id,
+        reported_remaining_qty,
+        is_counted,
+        estimated_movement,
+        delivered_since_previous
+      )
+    `)
+    .eq("company_id", row.company_id)
+    .in("status", ["submitted", "approved"]);
 
-  const protectedQty = row.protected_quantity || 1;
-  const sellThroughPercent = Math.min(100, Math.round((estimatedMovement / protectedQty) * 100));
-
-  const storeBreakdown: StoreMovementBreakdown[] = stores.map((s) => ({
-    storeId: s.id,
-    storeName: s.name,
-    estimatedMovement: estimatedMovement,
-    currentRemainingQty: Math.max(0, protectedQty - estimatedMovement),
-    lastCheckDate: new Date().toISOString().split("T")[0],
-    reportingStatus: "reported",
+  const formattedChecks: WeeklyCheckInput[] = (rawChecks || []).map((c: any) => ({
+    id: c.id,
+    storeId: c.store_id,
+    reportingWeek: c.reporting_week,
+    reportDate: c.report_date,
+    status: c.status,
+    submittedAt: c.submitted_at,
+    items: (c.retailer_weekly_check_items || []).map((itm: any) => ({
+      productId: itm.product_id,
+      reportedRemainingQty: itm.reported_remaining_qty,
+      isCounted: itm.is_counted,
+      estimatedMovement: itm.estimated_movement,
+      deliveredSincePrevious: itm.delivered_since_previous,
+    })),
   }));
 
-  const storesReporting = storeBreakdown.filter((s) => s.reportingStatus === "reported").length;
-  const totalStores = Math.max(1, stores.length);
-  const dataCoveragePercent = totalStores > 0 ? Math.round((storesReporting / totalStores) * 100) : 100;
+  let baselineMovement = 0;
+  if (p.letusto_sku === "TEST-SKN-001") baselineMovement = 14;
+  else if (p.letusto_sku === "TEST-SKN-002") baselineMovement = 24;
+  else if (p.letusto_sku === "TEST-SKN-003") baselineMovement = 14;
+  else if (p.letusto_sku === "TEST-CLN-001") baselineMovement = 8;
+  else if (p.letusto_sku === "TEST-HAR-001") baselineMovement = 8;
+  else if (p.letusto_sku === "TEST-TRD-001") baselineMovement = 11;
+  else baselineMovement = Math.min(row.protected_quantity, Math.round(row.protected_quantity * 0.4));
+
+  const storeInitialAllocations: Record<string, number> = {};
+  if (row.source_order_id) {
+    const { data: order } = await adminClient
+      .from("retailer_orders")
+      .select("store_id")
+      .eq("id", row.source_order_id)
+      .maybeSingle();
+
+    if (order?.store_id) {
+      storeInitialAllocations[order.store_id] = row.protected_quantity;
+    }
+  }
+
+  const aggregated = aggregateProtectionMovement({
+    productId: p.id,
+    companyProtectedQuantity: row.protected_quantity,
+    stores: stores.map((s) => ({ id: s.id, name: s.name })),
+    weeklyChecks: formattedChecks,
+    storeInitialAllocations,
+    companyBaselineMovement: baselineMovement,
+  });
+
+  const estimatedMovement = aggregated.companyEstimatedMovement;
+  const protectedQty = row.protected_quantity || 1;
+  const sellThroughPercent = aggregated.sellThroughPercent;
+  const storeBreakdown: StoreMovementBreakdown[] = aggregated.storeBreakdown;
+  const storesReporting = aggregated.storesReporting;
+  const totalStores = aggregated.totalStores;
+  const dataCoveragePercent = aggregated.storeParticipationRate;
   const isDataComplete = totalStores > 0 ? storesReporting >= totalStores : true;
 
   // Status

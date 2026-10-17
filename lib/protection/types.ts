@@ -55,11 +55,13 @@ export interface AdminProtectionReviewDetail extends AdminProtectionReviewItem {
   storeBreakdown: Array<{
     storeId: string;
     storeName: string;
-    estimatedMovement: number;
+    estimatedMovement: number | null;
     currentRemainingQty: number | null;
     lastCheckDate: string | null;
     reportingStatus: "reported" | "missing";
+    movementEvidence?: "verified_store_check" | "insufficient_data";
   }>;
+  movementBasis?: "aggregated_store_checks" | "company_level_baseline";
 }
 
 export interface AdminProtectionReviewCounts {

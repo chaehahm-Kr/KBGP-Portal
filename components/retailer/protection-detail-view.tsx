@@ -487,15 +487,31 @@ export function ProtectionDetailView({
                     {sb.storeName}
                   </td>
                   <td className="py-3 px-3 text-right font-black text-zinc-900 dark:text-white">
-                    {sb.estimatedMovement} units
+                    {sb.estimatedMovement !== null ? (
+                      `${sb.estimatedMovement} units`
+                    ) : (
+                      <span className="text-zinc-400 font-normal italic text-[11px]">
+                        Insufficient Data
+                      </span>
+                    )}
                   </td>
                   <td className="py-3 px-3 text-right text-zinc-600 dark:text-zinc-300">
-                    {sb.currentRemainingQty !== null ? `${sb.currentRemainingQty} units` : "—"}
+                    {sb.currentRemainingQty !== null ? (
+                      `${sb.currentRemainingQty} units`
+                    ) : (
+                      <span className="text-zinc-400 italic text-[11px]">Unreported</span>
+                    )}
                   </td>
                   <td className="py-3 px-3 text-right">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                      ✓ Weekly Check Active
-                    </span>
+                    {sb.reportingStatus === "reported" ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        ✓ Weekly Check Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                        No Store Report
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
