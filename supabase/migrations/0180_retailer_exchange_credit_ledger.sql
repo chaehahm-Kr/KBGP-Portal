@@ -1,10 +1,10 @@
 -- ==============================================================================
 -- Migration: 0180_retailer_exchange_credit_ledger.sql
--- Task ID: EXCHANGE-CREDIT-PH4-001
+-- Task ID: EXCHANGE-CREDIT-PH4-001 / EXCHANGE-CREDIT-PH4-001-R1
 -- Description: Authoritative 90-Day Exchange Credit Ledger & Expiration Foundation,
 --              Company-Scoped Balances, Immutable Audit Transactions,
---              PostgreSQL Atomicity RPC, Anti-Duplicate Issuance Constraints,
---              and Least-Privilege Row-Level Security (RLS) Policies.
+--              PostgreSQL Atomicity RPC with Full Database-Level Policy Enforcement,
+--              Anti-Duplicate Issuance Constraints, and Least-Privilege RLS Policies.
 -- Safety: Non-destructive, idempotent (IF NOT EXISTS), zero table resets.
 -- Execution Mode: PREPARED FILE ONLY (REQUIRES OWNER REVIEW & APPROVAL)
 -- Dependencies: 0002_companies.sql, 0175, 0176, 0177, 0178, 0179.
@@ -112,6 +112,8 @@ CREATE INDEX IF NOT EXISTS idx_credit_tx_company ON public.retailer_exchange_cre
 CREATE OR REPLACE FUNCTION public.trg_prevent_exchange_credit_ledger_mutation()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
@@ -151,6 +153,8 @@ CREATE TRIGGER trg_credit_ledger_immutability
 CREATE OR REPLACE FUNCTION public.trg_prevent_exchange_credit_tx_mutation()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
@@ -169,7 +173,7 @@ CREATE TRIGGER trg_credit_tx_append_only
   FOR EACH ROW
   EXECUTE FUNCTION public.trg_prevent_exchange_credit_tx_mutation();
 
--- 5. Atomic Credit Issuance Stored Procedure (RPC)
+-- 5. Atomic Credit Issuance Stored Procedure (RPC) with Database-Level Authorization & Policy Verification
 CREATE OR REPLACE FUNCTION public.issue_exchange_credit_atomic(
   p_issuance_source TEXT,
   p_claim_id UUID,
@@ -197,8 +201,69 @@ DECLARE
   v_existing_credit RECORD;
   v_unresolved_count INT;
 BEGIN
-  -- 1. Idempotency Check: Return existing record if exact idempotency key matches
-  SELECT id, credit_code, status, credit_amount, remaining_balance, expires_at
+  -- A. Database-Level Authorization Enforcement: Caller must be Admin or service_role
+  IF (auth.role() <> 'service_role') AND NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'admin'
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized: Only authorized administrators or service_role can issue exchange credits.';
+  END IF;
+
+  -- B. Financial Integrity Precondition: Strict Positive Amounts and Cent/Dollar Consistency
+  IF p_amount_cents <= 0 OR p_amount_dollars <= 0.00 THEN
+    RAISE EXCEPTION 'Financial Integrity Violation: Credit amount must be strictly greater than zero.';
+  END IF;
+  IF p_amount_cents <> ROUND(p_amount_dollars * 100)::BIGINT THEN
+    RAISE EXCEPTION 'Financial Integrity Violation: Cent amount (%) does not match dollar amount (%).',
+      p_amount_cents, p_amount_dollars;
+  END IF;
+
+  -- C. Policy Contract Validation
+  IF p_issuance_source = 'option_a_claim_approved' THEN
+    -- Option A requires approved/resolved claim
+    IF NOT EXISTS (
+      SELECT 1 FROM public.retailer_exchange_claims
+      WHERE id = p_claim_id AND status IN ('approved', 'resolved')
+    ) THEN
+      RAISE EXCEPTION 'Policy Violation: Option A credit requires a finalized, approved claim.';
+    END IF;
+
+    -- Option A requires claim line item to be Option A and not rejected/cancelled
+    IF NOT EXISTS (
+      SELECT 1 FROM public.retailer_exchange_claim_items
+      WHERE id = p_claim_item_id AND claim_id = p_claim_id AND selected_option = 'A'
+        AND status NOT IN ('rejected', 'cancelled')
+    ) THEN
+      RAISE EXCEPTION 'Policy Violation: Claim line item must be Option A and not rejected or cancelled.';
+    END IF;
+
+  ELSIF p_issuance_source = 'option_b_inspection_passed' THEN
+    -- Option B requires valid RMA and inspection references
+    IF p_inspection_id IS NULL OR p_rma_id IS NULL THEN
+      RAISE EXCEPTION 'Policy Violation: Option B credit requires valid RMA and warehouse inspection references.';
+    END IF;
+
+    -- Option B strictly forbids draft inspections
+    IF EXISTS (
+      SELECT 1 FROM public.retailer_exchange_rma_inspections
+      WHERE id = p_inspection_id AND is_draft = true
+    ) THEN
+      RAISE EXCEPTION 'Policy Violation: Option B credit cannot be issued from a draft inspection.';
+    END IF;
+
+    -- Option B requires approved RMA
+    IF EXISTS (
+      SELECT 1 FROM public.retailer_exchange_rmas
+      WHERE id = p_rma_id AND status IN ('cancelled', 'expired', 'awaiting_admin_approval')
+    ) THEN
+      RAISE EXCEPTION 'Policy Violation: RMA must be approved and inspection completed.';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'Policy Violation: Invalid issuance source "%".', p_issuance_source;
+  END IF;
+
+  -- 1. Idempotency Check: Return full existing record if exact idempotency key matches
+  SELECT *
   INTO v_existing_credit
   FROM public.retailer_exchange_credit_ledger
   WHERE idempotency_key = p_idempotency_key;
@@ -207,10 +272,24 @@ BEGIN
     RETURN jsonb_build_object(
       'id', v_existing_credit.id,
       'creditCode', v_existing_credit.credit_code,
-      'status', v_existing_credit.status,
+      'companyId', v_existing_credit.company_id,
+      'storeId', v_existing_credit.store_id,
+      'issuanceSource', v_existing_credit.issuance_source,
+      'sourceClaimId', v_existing_credit.source_claim_id,
+      'sourceClaimItemId', v_existing_credit.source_claim_item_id,
+      'sourceRmaId', v_existing_credit.source_rma_id,
+      'sourceInspectionId', v_existing_credit.source_inspection_id,
       'creditAmount', v_existing_credit.credit_amount,
+      'creditAmountCents', v_existing_credit.credit_amount_cents,
       'remainingBalance', v_existing_credit.remaining_balance,
+      'remainingBalanceCents', v_existing_credit.remaining_balance_cents,
+      'currency', v_existing_credit.currency,
+      'status', v_existing_credit.status,
+      'issuedAt', v_existing_credit.issued_at,
       'expiresAt', v_existing_credit.expires_at,
+      'issuedBy', v_existing_credit.issued_by,
+      'idempotencyKey', v_existing_credit.idempotency_key,
+      'metadata', v_existing_credit.metadata,
       'idempotentReplay', true
     );
   END IF;
@@ -417,8 +496,12 @@ CREATE POLICY p_retailer_select_credit_tx ON public.retailer_exchange_credit_tra
     )
   );
 
--- Direct mutations by client roles are forbidden (only Security Definer RPC or service role)
+-- 7. Direct Mutation Restrictions & RPC Execution Privileges
 REVOKE INSERT, UPDATE, DELETE ON public.retailer_exchange_credit_ledger FROM authenticated, anon;
 REVOKE INSERT, UPDATE, DELETE ON public.retailer_exchange_credit_transactions FROM authenticated, anon;
 GRANT SELECT ON public.retailer_exchange_credit_ledger TO authenticated;
 GRANT SELECT ON public.retailer_exchange_credit_transactions TO authenticated;
+
+-- RPC Execution Privileges (Blocked for anonymous users; checked for admin role inside RPC)
+REVOKE EXECUTE ON FUNCTION public.issue_exchange_credit_atomic FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.issue_exchange_credit_atomic TO authenticated, service_role;
