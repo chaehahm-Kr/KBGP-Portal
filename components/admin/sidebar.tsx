@@ -378,7 +378,8 @@ export default function Sidebar({
       subItems: [
         { name: "Retailers", href: "/admin/retailers" },
         { name: "Store Operations", href: "/admin/store-operations" },
-        { name: "Protection Reviews", href: "/admin/protection-reviews" },
+        { name: "90-Day Exchange Credit", href: "/admin/exchange-credit" },
+        { name: "Initial Trial Reviews", href: "/admin/protection-reviews" },
       ],
     },
     {

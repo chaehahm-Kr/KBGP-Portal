@@ -4,7 +4,7 @@ import { getAdminProtectionReviews } from "@/lib/protection/admin-actions";
 import { AdminProtectionReviewsList } from "@/components/admin/protection-reviews-list";
 
 export const metadata: Metadata = {
-  title: "90-Day Protection Reviews | K SELECT NETWORK Admin",
+  title: "Initial Trial Reviews | K SELECT NETWORK Admin",
 };
 
 export default async function AdminProtectionReviewsPage() {

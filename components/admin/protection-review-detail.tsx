@@ -86,24 +86,77 @@ export function AdminProtectionReviewDetail({
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-24">
-      {/* Top Navigation Bar */}
-      <div className="flex items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-4">
+    <div className="w-full space-y-6 pb-24">
+      {/* Breadcrumb Navigation */}
+      <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+        <Link href="/admin" className="hover:text-zinc-900 dark:hover:text-white transition-colors">
+          Admin
+        </Link>
+        <span>/</span>
         <Link
           href="/admin/protection-reviews"
-          className="inline-flex items-center gap-2 text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+          className="hover:text-zinc-900 dark:hover:text-white transition-colors"
         >
-          <span>←</span>
-          <span>Back to Protection Reviews Queue</span>
+          Initial Trial Reviews
         </Link>
+        <span>/</span>
+        <span className="font-semibold text-zinc-800 dark:text-zinc-200">Detail</span>
+      </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg">
+      {/* Top Header & Quick Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
+        <div>
+          <Link
+            href="/admin/protection-reviews"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors mb-2"
+          >
+            <span>←</span>
+            <span>Back to Initial Trial Reviews</span>
+          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
+              Initial Trial Review
+            </h1>
+            <span
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black tracking-wide uppercase ${
+                review.decision === "approved"
+                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                  : review.decision === "rejected"
+                  ? "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700"
+                  : review.decision === "needs_information"
+                  ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-800"
+                  : review.status === "in_review"
+                  ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800"
+                  : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-300 dark:border-purple-800"
+              }`}
+            >
+              {review.decision === "approved"
+                ? "Approved"
+                : review.decision === "rejected"
+                ? "Rejected"
+                : review.decision === "needs_information"
+                ? "Needs Info"
+                : review.status === "in_review"
+                ? "In Review"
+                : "Pending Review"}
+            </span>
+          </div>
+          <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-1 font-medium">
+            {review.companyName} <span className="text-zinc-400">•</span> {review.productName}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs font-mono font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700">
             SKU: {review.sku}
           </span>
-          <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg">
-            {review.companyName}
-          </span>
+          <a
+            href="#decision-area"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-100 shadow-sm transition-all"
+          >
+            <span>Review Decision</span>
+            <span>↓</span>
+          </a>
         </div>
       </div>
 
@@ -189,9 +242,9 @@ export function AdminProtectionReviewDetail({
       </div>
 
       {/* Retailer & Product 2-Column Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
         {/* Retailer Information Box */}
-        <div className="md:col-span-5 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 shadow-sm">
+        <div className="lg:col-span-5 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 shadow-sm">
           <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3">
             <span className="text-base">🏢</span>
             <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
@@ -242,7 +295,7 @@ export function AdminProtectionReviewDetail({
         </div>
 
         {/* Product Information Box */}
-        <div className="md:col-span-7 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 shadow-sm">
+        <div className="lg:col-span-7 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 shadow-sm">
           <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3">
             <span className="text-base">📦</span>
             <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
@@ -487,7 +540,7 @@ export function AdminProtectionReviewDetail({
       </div>
 
       {/* Admin Decision Action Panel */}
-      <div className="rounded-3xl border-2 border-zinc-900 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-6 sm:p-8 space-y-6 shadow-md">
+      <div id="decision-area" className="rounded-3xl border-2 border-zinc-900 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-6 sm:p-8 space-y-6 shadow-md scroll-mt-6">
         <div className="border-b border-zinc-100 dark:border-zinc-800 pb-4">
           <div className="flex items-center gap-2">
             <span className="text-lg">⚖️</span>

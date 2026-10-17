@@ -79,28 +79,38 @@ export function AdminProtectionReviewsList({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🛡️</span>
-            <h1 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-white tracking-tight">
-              90-Day Initial Trial Protection Reviews
-            </h1>
-          </div>
-          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Evaluate retailer sell-through performance, inspect store-level counts, and record authorized resolution decisions.
-          </p>
+    <div className="w-full space-y-6 pb-16">
+      {/* Breadcrumb & Header */}
+      <div className="space-y-2 border-b border-zinc-200 dark:border-zinc-800 pb-5">
+        <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
+          <Link href="/admin" className="hover:text-zinc-900 dark:hover:text-white transition-colors">
+            Admin
+          </Link>
+          <span>/</span>
+          <span className="font-bold text-zinc-900 dark:text-white">Initial Trial Reviews</span>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-bold text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700">
-          <span>K SELECT Admin Resolution Queue</span>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🛡️</span>
+              <h1 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-white tracking-tight">
+                Initial Trial Reviews
+              </h1>
+            </div>
+            <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+              Review initial trial performance, verify sell-through, and manage retailer resolution decisions.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs font-bold text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700 shrink-0 self-start sm:self-auto">
+            <span>K SELECT Admin Resolution Queue</span>
+          </div>
         </div>
       </div>
 
       {/* Metrics Summary Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 w-full">
         <div
           onClick={() => setActiveTab("all")}
           className={`p-4 rounded-2xl border transition-all cursor-pointer ${
@@ -196,8 +206,8 @@ export function AdminProtectionReviewsList({
         </div>
       )}
 
-      {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      {/* Filter Tabs & Search Bar Toolbar */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 w-full">
         <div className="flex items-center gap-1.5 p-1 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl border border-zinc-200 dark:border-zinc-700/60 overflow-x-auto">
           <button
             type="button"
@@ -257,19 +267,19 @@ export function AdminProtectionReviewsList({
         </div>
 
         {/* Search Bar */}
-        <div className="relative flex-1 sm:max-w-xs">
+        <div className="relative w-full md:w-80 lg:w-96 shrink-0">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search Retailer, Product, SKU..."
-            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"
+            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-8 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all shadow-sm"
           />
           <span className="absolute left-3 top-2.5 text-zinc-400 text-xs">🔍</span>
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs font-bold"
+              className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs font-bold p-0.5"
             >
               ✕
             </button>

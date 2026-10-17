@@ -294,6 +294,10 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
         uuidNameMap[path] || (
           path === "admin"
             ? "Admin"
+            : path === "protection-reviews"
+            ? "Initial Trial Reviews"
+            : path === "exchange-credit"
+            ? "90-Day Exchange Credit"
             : path.charAt(0).toUpperCase() + path.slice(1).replace("-", " ")
         );
       return { label, href, isLast: index === paths.length - 1 };

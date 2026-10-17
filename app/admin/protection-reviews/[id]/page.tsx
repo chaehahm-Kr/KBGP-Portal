@@ -10,7 +10,7 @@ interface AdminProtectionDetailPageProps {
 }
 
 export const metadata: Metadata = {
-  title: "Protection Review Detail | K SELECT NETWORK Admin",
+  title: "Initial Trial Review Detail | K SELECT NETWORK Admin",
 };
 
 export default async function AdminProtectionDetailPage({
@@ -23,13 +23,13 @@ export default async function AdminProtectionDetailPage({
 
   if (error) {
     return (
-      <div className="max-w-5xl mx-auto py-12 px-4">
+      <div className="w-full py-12 px-4">
         <div className="rounded-3xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 p-8 text-center space-y-4 shadow-sm">
           <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-900/50 text-red-600 flex items-center justify-center text-xl mx-auto">
             ⚠️
           </div>
           <h2 className="text-base font-bold text-red-900 dark:text-red-200">
-            Failed to Load Protection Review
+            Failed to Load Initial Trial Review
           </h2>
           <p className="text-xs text-red-700 dark:text-red-300 max-w-md mx-auto">
             {error}
@@ -39,7 +39,7 @@ export default async function AdminProtectionDetailPage({
               href="/admin/protection-reviews"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:opacity-90 transition-opacity"
             >
-              ← Back to Reviews Queue
+              ← Back to Initial Trial Reviews
             </Link>
           </div>
         </div>
