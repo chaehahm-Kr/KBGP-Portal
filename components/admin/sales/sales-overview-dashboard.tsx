@@ -120,6 +120,8 @@ export function SalesOverviewDashboard({
 
   const { kpis, period, activeStoresCount, reconciliation, actionCenter, lastRefreshedAt } = data;
 
+  const hasQualifiedSales = (kpis.b2bNetSales.value ?? 0) > 0 || kpis.salesGrowth.previousSales > 0;
+
   // Maximum value for daily sales trend bar chart scaling
   const maxTrendSales = Math.max(
     ...kpis.dailySalesTrend.map((p) => Math.max(p.currentNetSales, p.previousNetSales)),
@@ -398,66 +400,73 @@ export function SalesOverviewDashboard({
           </div>
         </div>
 
-        {/* Interactive Bar Chart Visualization */}
+        {/* Interactive Bar Chart Visualization or Compact Empty State */}
         <div className="mt-6">
-          <div className="flex h-44 items-end gap-1.5 sm:gap-2 px-1 pb-2 pt-4">
-            {kpis.dailySalesTrend.map((pt, idx) => {
-              const curHeight = (pt.currentNetSales / maxTrendSales) * 100;
-              const prevHeight = (pt.previousNetSales / maxTrendSales) * 100;
-              const isHovered = hoveredTrendIndex === idx;
+          {hasQualifiedSales ? (
+            <div className="flex h-44 items-end gap-1.5 sm:gap-2 px-1 pb-2 pt-4">
+              {kpis.dailySalesTrend.map((pt, idx) => {
+                const curHeight = (pt.currentNetSales / maxTrendSales) * 100;
+                const prevHeight = (pt.previousNetSales / maxTrendSales) * 100;
+                const isHovered = hoveredTrendIndex === idx;
 
-              return (
-                <div
-                  key={pt.date}
-                  onMouseEnter={() => setHoveredTrendIndex(idx)}
-                  onMouseLeave={() => setHoveredTrendIndex(null)}
-                  className="group relative flex flex-1 flex-col items-center justify-end h-full cursor-pointer"
-                >
-                  {/* Tooltip Popup on Hover */}
-                  {isHovered && (
-                    <div className="absolute -top-20 z-20 whitespace-nowrap rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-[10px] text-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950 pointer-events-none">
-                      <p className="font-bold text-zinc-200">{pt.date}</p>
-                      <p className="text-emerald-400">
-                        Current: ${pt.currentNetSales.toLocaleString()} ({pt.currentOrdersCount} ord)
-                      </p>
-                      <p className="text-zinc-400">
-                        Prior: ${pt.previousNetSales.toLocaleString()} ({pt.previousOrdersCount} ord)
-                      </p>
+                return (
+                  <div
+                    key={pt.date}
+                    onMouseEnter={() => setHoveredTrendIndex(idx)}
+                    onMouseLeave={() => setHoveredTrendIndex(null)}
+                    className="group relative flex flex-1 flex-col items-center justify-end h-full cursor-pointer"
+                  >
+                    {/* Tooltip Popup on Hover */}
+                    {isHovered && (
+                      <div className="absolute -top-20 z-20 whitespace-nowrap rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-[10px] text-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950 pointer-events-none">
+                        <p className="font-bold text-zinc-200">{pt.date}</p>
+                        <p className="text-emerald-400">
+                          Current: ${pt.currentNetSales.toLocaleString()} ({pt.currentOrdersCount} ord)
+                        </p>
+                        <p className="text-zinc-400">
+                          Prior: ${pt.previousNetSales.toLocaleString()} ({pt.previousOrdersCount} ord)
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Bars side-by-side or stacked */}
+                    <div className="flex w-full items-end justify-center gap-0.5 h-36">
+                      <div
+                        style={{ height: `${Math.max(4, curHeight)}%` }}
+                        className={`w-full max-w-[12px] rounded-t transition-all ${
+                          pt.currentNetSales > 0
+                            ? "bg-zinc-900 hover:bg-zinc-700 dark:bg-white dark:hover:bg-zinc-200"
+                            : "bg-zinc-100 dark:bg-zinc-800"
+                        }`}
+                      />
+                      <div
+                        style={{ height: `${Math.max(2, prevHeight)}%` }}
+                        className={`w-full max-w-[12px] rounded-t transition-all ${
+                          pt.previousNetSales > 0
+                            ? "bg-zinc-300 hover:bg-zinc-400 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+                            : "bg-zinc-50 dark:bg-zinc-900"
+                        }`}
+                      />
                     </div>
-                  )}
-
-                  {/* Bars side-by-side or stacked */}
-                  <div className="flex w-full items-end justify-center gap-0.5 h-36">
-                    <div
-                      style={{ height: `${Math.max(4, curHeight)}%` }}
-                      className={`w-full max-w-[12px] rounded-t transition-all ${
-                        pt.currentNetSales > 0
-                          ? "bg-zinc-900 hover:bg-zinc-700 dark:bg-white dark:hover:bg-zinc-200"
-                          : "bg-zinc-100 dark:bg-zinc-800"
-                      }`}
-                    />
-                    <div
-                      style={{ height: `${Math.max(2, prevHeight)}%` }}
-                      className={`w-full max-w-[12px] rounded-t transition-all ${
-                        pt.previousNetSales > 0
-                          ? "bg-zinc-300 hover:bg-zinc-400 dark:bg-zinc-700 dark:hover:bg-zinc-600"
-                          : "bg-zinc-50 dark:bg-zinc-900"
-                      }`}
-                    />
+                    <span className="mt-1 text-[9px] text-zinc-400 truncate max-w-full">
+                      {idx % Math.ceil(kpis.dailySalesTrend.length / 10) === 0 ? pt.dayLabel : ""}
+                    </span>
                   </div>
-                  <span className="mt-1 text-[9px] text-zinc-400 truncate max-w-full">
-                    {idx % Math.ceil(kpis.dailySalesTrend.length / 10) === 0 ? pt.dayLabel : ""}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Zero Sales Empty Notice if Applicable */}
-          {kpis.b2bNetSales.value === 0 && kpis.salesGrowth.previousSales === 0 && (
-            <div className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/50 p-4 text-center dark:border-zinc-800 dark:bg-zinc-900/50 mt-2">
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                No non-test qualified B2B sales were completed in the selected {period.daysInPeriod}-day window or its prior comparison period.
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex min-h-[175px] flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-6 text-center dark:border-zinc-800 dark:bg-zinc-900/40">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <p className="mt-2.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                No Qualified B2B Sales Activity
+              </p>
+              <p className="mt-1 max-w-md text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                No non-test qualified B2B sales were completed in the evaluated {period.daysInPeriod}-day period ({period.currentPeriodStart} ~ {period.currentPeriodEnd}) or prior comparison period.
               </p>
             </div>
           )}

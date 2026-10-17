@@ -73,11 +73,11 @@ export interface ExchangeExposureSummary {
 }
 
 export interface DataCompletenessSummary {
-  costCoveragePercent: number | null; // % of B2B Net Sales with verified historical Landed COGS
+  costCoveragePercent: number | null; // % of B2B Net Sales with verified historical Landed COGS (null when B2B Net Sales = 0)
   totalOrderLinesCount: number;
   orderLinesWithVerifiedCostCount: number;
   orderLinesMissingCostCount: number;
-  storeAttributionRatePercent: number; // % of orders attributed to stores vs unallocated
+  storeAttributionRatePercent: number | null; // % of orders attributed to stores vs unallocated (null when B2B Net Sales = 0)
   unallocatedOrdersCount: number;
 }
 

@@ -496,7 +496,7 @@ export function aggregateSalesOverviewData(input: AggregationEngineInput): Sales
   // Rule: Gross Profit must be N/A where historical COGS coverage is incomplete (< 100%)
   // --------------------------------------------------------------------------
   const costCoveragePercent =
-    currentB2bNetSales > 0 ? safeRound((netSalesWithVerifiedCost / currentB2bNetSales) * 100, 1) : 100.0;
+    currentB2bNetSales > 0 ? safeRound((netSalesWithVerifiedCost / currentB2bNetSales) * 100, 1) : null;
 
   const isCostCoverageComplete = orderLinesMissingCostCount === 0 && totalOrderLinesCount > 0;
 
@@ -691,7 +691,7 @@ export function aggregateSalesOverviewData(input: AggregationEngineInput): Sales
     orderLinesWithVerifiedCostCount,
     orderLinesMissingCostCount,
     storeAttributionRatePercent:
-      currentB2bNetSales > 0 ? safeRound((storeAttributedSales / currentB2bNetSales) * 100, 1) ?? 0 : 100.0,
+      currentB2bNetSales > 0 ? safeRound((storeAttributedSales / currentB2bNetSales) * 100, 1) ?? 0 : null,
     unallocatedOrdersCount,
   };
 

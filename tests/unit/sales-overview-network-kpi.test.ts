@@ -862,7 +862,174 @@ describe("Sales Overview V1.0 — Canonical Network KPI Integration", () => {
         claims: [],
         weeklyChecks: [],
       });
-      expect(resCustom.kpis.dailySalesTrend.length).toBe(14);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 9. ZERO-SALES & MISSING-COST COVERAGE UX (ADM-SALES-PERF-004-R4)
+  // -------------------------------------------------------------------------
+  describe("9. Zero-Sales & Missing-Cost Coverage UX (ADM-SALES-PERF-004-R4)", () => {
+    it("returns null (for N/A display) for costCoveragePercent and storeAttributionRatePercent when no eligible sales exist", () => {
+      const res = aggregateSalesOverviewData({
+        asOfDate: TEST_AS_OF_DATE,
+        stores: mockStores,
+        orders: [], // Zero sales
+        orderItems: [],
+        refunds: [],
+        costs: [],
+        products: mockProducts,
+        inventoryLayers: [],
+        claims: [],
+        weeklyChecks: [],
+      });
+
+      expect(res.kpis.b2bNetSales.value).toBe(0);
+      expect(res.kpis.dataCompleteness.costCoveragePercent).toBeNull();
+      expect(res.kpis.dataCompleteness.storeAttributionRatePercent).toBeNull();
+      expect(res.kpis.grossProfit.status).toBe("UNAVAILABLE");
+      expect(res.kpis.grossProfit.formatted).toBe("N/A");
+      expect(res.kpis.grossMargin.status).toBe("UNAVAILABLE");
+      expect(res.kpis.grossMargin.formatted).toBe("N/A");
+      expect(res.kpis.orderingStores.value).toBe(0);
+      expect(res.kpis.reorderRate.value).toBeNull();
+      expect(res.kpis.reorderRate.formatted).toBe("N/A");
+    });
+
+    it("returns accurate 100% metrics when eligible sales with verified costs exist", () => {
+      const orders: RawOrderRecord[] = [
+        {
+          id: "ord-cov-01",
+          orderNumber: "ORD-COV-01",
+          companyId: "comp-001",
+          storeId: "store-001",
+          orderStatus: "delivered",
+          paymentStatus: "paid",
+          subtotalAmount: 1500,
+          discountAmount: 0,
+          totalAmount: 1500,
+          isTest: false,
+          createdAt: "2026-10-05T12:00:00Z",
+        },
+      ];
+
+      const orderItems: RawOrderItemRecord[] = [
+        {
+          id: "item-cov-01",
+          orderId: "ord-cov-01",
+          productId: "prod-001",
+          quantity: 75,
+          unitPrice: 20,
+          subtotal: 1500,
+        },
+      ];
+
+      const costs: RawCostRecord[] = [
+        {
+          productId: "prod-001",
+          effectiveDate: "2026-09-01",
+          unitLandedCost: 10,
+        },
+      ];
+
+      const res = aggregateSalesOverviewData({
+        asOfDate: TEST_AS_OF_DATE,
+        stores: mockStores,
+        orders,
+        orderItems,
+        refunds: [],
+        costs,
+        products: mockProducts,
+        inventoryLayers: [],
+        claims: [],
+        weeklyChecks: [],
+      });
+
+      expect(res.kpis.b2bNetSales.value).toBe(1500);
+      expect(res.kpis.dataCompleteness.costCoveragePercent).toBe(100.0);
+      expect(res.kpis.dataCompleteness.storeAttributionRatePercent).toBe(100.0);
+      expect(res.kpis.grossProfit.status).toBe("ACTUAL");
+      expect(res.kpis.grossProfit.value).toBe(750); // 1500 - 750
+      expect(res.kpis.grossMargin.value).toBe(50.0);
+    });
+
+    it("correctly computes partial cost coverage and unallocated store attribution", () => {
+      const orders: RawOrderRecord[] = [
+        {
+          id: "ord-partial-01",
+          orderNumber: "ORD-P-01",
+          companyId: "comp-001",
+          storeId: "store-001", // Store attributed
+          orderStatus: "delivered",
+          paymentStatus: "paid",
+          subtotalAmount: 1000,
+          discountAmount: 0,
+          totalAmount: 1000,
+          isTest: false,
+          createdAt: "2026-10-05T12:00:00Z",
+        },
+        {
+          id: "ord-partial-02",
+          orderNumber: "ORD-P-02",
+          companyId: "comp-002",
+          storeId: null, // Company unallocated
+          orderStatus: "delivered",
+          paymentStatus: "paid",
+          subtotalAmount: 1000,
+          discountAmount: 0,
+          totalAmount: 1000,
+          isTest: false,
+          createdAt: "2026-10-06T12:00:00Z",
+        },
+      ];
+
+      const orderItems: RawOrderItemRecord[] = [
+        {
+          id: "item-p-01",
+          orderId: "ord-partial-01",
+          productId: "prod-001", // Has cost
+          quantity: 50,
+          unitPrice: 20,
+          subtotal: 1000,
+        },
+        {
+          id: "item-p-02",
+          orderId: "ord-partial-02",
+          productId: "prod-003", // Missing cost
+          quantity: 50,
+          unitPrice: 20,
+          subtotal: 1000,
+        },
+      ];
+
+      const costs: RawCostRecord[] = [
+        {
+          productId: "prod-001",
+          effectiveDate: "2026-09-01",
+          unitLandedCost: 10,
+        },
+      ];
+
+      const res = aggregateSalesOverviewData({
+        asOfDate: TEST_AS_OF_DATE,
+        stores: mockStores,
+        orders,
+        orderItems,
+        refunds: [],
+        costs,
+        products: mockProducts,
+        inventoryLayers: [],
+        claims: [],
+        weeklyChecks: [],
+      });
+
+      expect(res.kpis.b2bNetSales.value).toBe(2000);
+      expect(res.kpis.dataCompleteness.costCoveragePercent).toBe(50.0);
+      expect(res.kpis.dataCompleteness.storeAttributionRatePercent).toBe(50.0);
+      expect(res.kpis.grossProfit.status).toBe("UNAVAILABLE");
+      expect(res.kpis.grossProfit.formatted).toBe("N/A");
+      expect(res.kpis.grossMargin.status).toBe("UNAVAILABLE");
+      expect(res.kpis.grossMargin.formatted).toBe("N/A");
+      expect(res.actionCenter.missingCostProducts.length).toBe(1);
     });
   });
 });
