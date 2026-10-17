@@ -20,6 +20,15 @@ import {
   RetailerClaimSummaryItem,
   CLAIM_STATUS_CONFIG,
 } from "./exchange-credit-claim-types";
+import { getRetailerAccessibleStores } from "@/lib/retailer/weekly-check";
+import {
+  adaptCohortToWizardProductItem,
+  RawCohortWithRelations,
+} from "./exchange-credit-wizard-adapter";
+import {
+  ClaimWizardStore,
+  ClaimWizardProductItem,
+} from "@/components/retailer/exchange-credit/claim-wizard-types";
 
 /**
  * Pre-validate claim before submission without writing to database.
@@ -427,4 +436,330 @@ export async function cancelPendingClaim(
   });
 
   return { success: true };
+}
+
+export interface RetailerClaimWizardDataResult {
+  success: boolean;
+  stores: ClaimWizardStore[];
+  selectedStoreId: string;
+  products: ClaimWizardProductItem[];
+  companyEnrollmentStatus: "active" | "paused" | "terminated" | "none";
+  error?: string;
+}
+
+/**
+ * Authoritative Server-Side Data Fetcher for Retailer Claim Wizard (3-Step Wizard)
+ *
+ * Requirements:
+ * 1. Authenticate via verifyRetailerSession() and resolve company_id from DB (never trust client).
+ * 2. Load assigned stores and multi-store tenant isolation.
+ * 3. Load actual protected cohorts, products, brands, and stores.
+ * 4. Load official weekly inventory reports, shipment dates, available stock, prior claims, and confirmed reorders.
+ * 5. Run evaluateCohortEligibility via adaptCohortToWizardProductItem to determine live statuses and credit estimates.
+ * 6. 100% read-only: does not mutate or write anything to production database.
+ */
+export async function getRetailerClaimWizardData(
+  targetStoreId?: string
+): Promise<RetailerClaimWizardDataResult> {
+  const session = await verifyRetailerSession();
+  if (!session || !session.userId) {
+    return {
+      success: false,
+      stores: [],
+      selectedStoreId: "",
+      products: [],
+      companyEnrollmentStatus: "none",
+      error: "인증되지 않은 사용자입니다. 로그인 후 다시 시도해 주세요.",
+    };
+  }
+
+  const adminClient = createAdminClient();
+
+  // 1. Authoritative Company ID from company_users (NEVER TRUST CLIENT COMPANY ID)
+  const { data: userRow } = await adminClient
+    .from("company_users")
+    .select("company_id")
+    .eq("id", session.userId)
+    .maybeSingle();
+
+  if (!userRow?.company_id) {
+    return {
+      success: false,
+      stores: [],
+      selectedStoreId: "",
+      products: [],
+      companyEnrollmentStatus: "none",
+      error: "소속 리테일러 회사 정보를 확인할 수 없습니다.",
+    };
+  }
+
+  const companyId = userRow.company_id;
+
+  // 2. Fetch accessible stores for this user (multi-store tenant isolation)
+  const { stores: accessibleStores } = await getRetailerAccessibleStores();
+  const stores: ClaimWizardStore[] = (accessibleStores || []).map((s: any) => ({
+    id: s.id,
+    name: s.name,
+    code: s.code || null,
+    city: s.city || null,
+    state: s.state || null,
+  }));
+
+  if (stores.length === 0) {
+    return {
+      success: true,
+      stores: [],
+      selectedStoreId: "",
+      products: [],
+      companyEnrollmentStatus: "none",
+    };
+  }
+
+  // 3. Resolve selectedStoreId
+  let selectedStoreId = stores[0].id;
+  if (targetStoreId && stores.some((s) => s.id === targetStoreId)) {
+    selectedStoreId = targetStoreId;
+  }
+
+  // 4. Check company enrollment
+  let companyEnrollmentStatus: "active" | "paused" | "terminated" | "none" = "none";
+  try {
+    const { data: enrollment } = await adminClient
+      .from("retailer_exchange_program_enrollments")
+      .select("status, option_a_credit_rate")
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (enrollment) {
+      companyEnrollmentStatus = enrollment.status as any;
+    }
+  } catch {
+    // Schema availability fallback
+  }
+
+  // 5. Fetch Protected Cohorts for the company's accessible stores
+  const storeIds = stores.map((s) => s.id);
+  const { data: cohorts, error: cohortErr } = await adminClient
+    .from("retailer_protected_supply_cohorts")
+    .select(`
+      *,
+      products (
+        id,
+        name,
+        name_en,
+        sku,
+        thumbnail_url,
+        brands (
+          id,
+          name
+        )
+      ),
+      stores (
+        id,
+        name,
+        code
+      )
+    `)
+    .eq("company_id", companyId)
+    .in("store_id", storeIds)
+    .order("created_at", { ascending: false });
+
+  if (cohortErr || !cohorts || cohorts.length === 0) {
+    return {
+      success: true,
+      stores,
+      selectedStoreId,
+      products: [],
+      companyEnrollmentStatus,
+    };
+  }
+
+  const cohortIds = cohorts.map((c) => c.id);
+
+  // A. Fetch shipments for all cohorts
+  const { data: allShipments } = await adminClient
+    .from("retailer_protected_supply_shipments")
+    .select("*")
+    .in("cohort_id", cohortIds);
+
+  const shipmentsByCohort = new Map<string, any[]>();
+  for (const s of allShipments || []) {
+    const list = shipmentsByCohort.get(s.cohort_id) || [];
+    list.push(s);
+    shipmentsByCohort.set(s.cohort_id, list);
+  }
+
+  // B. Fetch submitted weekly checks for these stores
+  const { data: allChecks } = await adminClient
+    .from("retailer_weekly_checks")
+    .select(`
+      id,
+      store_id,
+      reporting_week,
+      report_date,
+      submitted_at,
+      status,
+      is_test,
+      retailer_weekly_check_items (
+        product_id,
+        reported_remaining_qty,
+        is_counted
+      )
+    `)
+    .in("store_id", storeIds)
+    .eq("status", "submitted");
+
+  const checksByStoreProduct = new Map<string, any[]>();
+  for (const ck of allChecks || []) {
+    if (ck.is_test) continue;
+    const items = (ck.retailer_weekly_check_items as any[]) || [];
+    for (const it of items) {
+      if (!it.product_id) continue;
+      const key = `${ck.store_id}_${it.product_id}`;
+      const list = checksByStoreProduct.get(key) || [];
+      list.push({
+        reportingWeek: ck.reporting_week,
+        reportDate: ck.report_date,
+        submittedAt: ck.submitted_at,
+        status: ck.status,
+        onHandQuantity: it.reported_remaining_qty ?? null,
+      });
+      checksByStoreProduct.set(key, list);
+    }
+  }
+
+  // C. Fetch confirmed reorders for these stores and products
+  const { data: allOrders } = await adminClient
+    .from("retailer_orders")
+    .select(`
+      id,
+      order_number,
+      store_id,
+      order_date,
+      order_status,
+      retailer_order_items (
+        product_id,
+        quantity
+      )
+    `)
+    .in("store_id", storeIds)
+    .in("order_status", ["confirmed", "processing", "shipped", "delivered", "completed", "paid"]);
+
+  const reordersByStoreProduct = new Map<string, any[]>();
+  for (const ord of allOrders || []) {
+    const items = (ord.retailer_order_items as any[]) || [];
+    for (const it of items) {
+      if (!it.product_id) continue;
+      const key = `${ord.store_id}_${it.product_id}`;
+      const list = reordersByStoreProduct.get(key) || [];
+      list.push({
+        orderId: ord.id,
+        orderNumber: ord.order_number,
+        storeId: ord.store_id,
+        productId: it.product_id,
+        orderDate: ord.order_date,
+        status: ord.order_status,
+      });
+      reordersByStoreProduct.set(key, list);
+    }
+  }
+
+  // D. Fetch existing claim items for these cohorts (excluding cancelled)
+  const { data: allClaimItems } = await adminClient
+    .from("retailer_exchange_claim_items")
+    .select("id, cohort_id, status")
+    .in("cohort_id", cohortIds)
+    .neq("status", "cancelled");
+
+  const claimItemByCohort = new Map<string, any>();
+  for (const ci of allClaimItems || []) {
+    claimItemByCohort.set(ci.cohort_id, ci);
+  }
+
+  // E. Transform each cohort using adaptCohortToWizardProductItem
+  const products: ClaimWizardProductItem[] = [];
+
+  for (const c of cohorts) {
+    const cohortShipments = (shipmentsByCohort.get(c.id) || []).map((s) => ({
+      shipmentId: s.id,
+      shipmentDate: s.shipment_date || s.created_at,
+      deliveredAt: s.delivered_at || null,
+      quantityShipped: s.quantity_shipped,
+      quantityDelivered: s.quantity_delivered,
+      isFirstShipment: s.is_first_shipment,
+      isSplitShipment: s.shipment_sequence > 1,
+    }));
+
+    const key = `${c.store_id}_${c.product_id}`;
+    const cohortChecks = checksByStoreProduct.get(key) || [];
+
+    const rawReorders = reordersByStoreProduct.get(key) || [];
+    const cohortReorders = rawReorders.map((ro) => ({
+      ...ro,
+      isSplitShipmentOfInitial: ro.orderId === c.source_order_id,
+    }));
+
+    const existingClaim = claimItemByCohort.get(c.id);
+
+    // Latest on-hand quantity from weekly checks
+    let latestStock = c.current_stock ?? c.fulfilled_protected_quantity;
+    if (cohortChecks.length > 0) {
+      const sortedChecks = [...cohortChecks].sort((a, b) =>
+        (a.submittedAt || "").localeCompare(b.submittedAt || "")
+      );
+      const last = sortedChecks[sortedChecks.length - 1];
+      if (last.onHandQuantity !== null && last.onHandQuantity !== undefined) {
+        latestStock = last.onHandQuantity;
+      }
+    }
+
+    const prodObj = c.products || {};
+    const brandName = prodObj.brands?.name || null;
+    const storeObj = c.stores || {};
+
+    const rawCohortData: RawCohortWithRelations = {
+      cohort: {
+        id: c.id,
+        cohort_code: c.cohort_code,
+        company_id: c.company_id,
+        store_id: c.store_id,
+        product_id: c.product_id,
+        total_protected_quantity: c.total_protected_quantity,
+        fulfilled_protected_quantity: c.fulfilled_protected_quantity,
+        frozen_unit_wholesale_price: Number(c.frozen_unit_wholesale_price),
+        frozen_option_a_rate: Number(c.frozen_option_a_rate),
+        frozen_option_b_rate: Number(c.frozen_option_b_rate || 1.0),
+        current_stock: latestStock,
+        status: c.status,
+      },
+      product: {
+        id: prodObj.id || c.product_id,
+        name: prodObj.name || "상품",
+        sku: prodObj.sku || null,
+        brand_name: brandName,
+        thumbnail_url: prodObj.thumbnail_url || null,
+      },
+      store: {
+        id: storeObj.id || c.store_id,
+        name: storeObj.name || "매장",
+        code: storeObj.code || null,
+      },
+      shipments: cohortShipments,
+      weeklyChecks: cohortChecks,
+      reorders: cohortReorders,
+      existingClaimState: existingClaim ? { lifecycleState: existingClaim.status } : undefined,
+      currentVerifiedStock: latestStock,
+    };
+
+    const wizardItem = adaptCohortToWizardProductItem(rawCohortData);
+    products.push(wizardItem);
+  }
+
+  return {
+    success: true,
+    stores,
+    selectedStoreId,
+    products,
+    companyEnrollmentStatus,
+  };
 }

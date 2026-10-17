@@ -218,7 +218,7 @@ export function ClaimWizardContainer({
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="w-full max-w-6xl space-y-6">
       {/* 1. Header with Title & Cancel */}
       <div className="flex items-center justify-between gap-4 border-b border-zinc-800/80 pb-5">
         <div>

@@ -182,8 +182,12 @@ export function calculateWizardTotals(
 
 /**
  * Currency formatter helper
+ * Gracefully displays "—" for unknown or undefined amounts rather than misleading $0.
  */
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined || isNaN(amount) || amount < 0) {
+    return "—";
+  }
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",

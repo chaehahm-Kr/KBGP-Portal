@@ -108,8 +108,17 @@ export function ProtectionListView({
           </p>
         </div>
 
-        <div className="text-xs font-bold px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 self-start sm:self-auto border border-zinc-200 dark:border-zinc-700">
-          Company: <span className="text-zinc-900 dark:text-white">{companyName}</span>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="text-xs font-bold px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+            Company: <span className="text-zinc-900 dark:text-white">{companyName}</span>
+          </div>
+          <Link
+            href="/retailer/protection/claim"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm"
+          >
+            <span>교환 크레딧 신청 위자드</span>
+            <span>→</span>
+          </Link>
         </div>
       </div>
 
