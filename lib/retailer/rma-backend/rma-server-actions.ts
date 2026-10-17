@@ -138,6 +138,14 @@ function generateFallbackRmaNumber(): string {
 }
 
 /**
+ * Helper to safely resolve product SKU across live DB columns (letusto_sku, child_sku) and mocks
+ */
+function resolveProductSku(prod: any): string {
+  if (!prod) return "SKU";
+  return prod.letusto_sku || prod.child_sku || prod.sku || prod.parent_sku || "SKU";
+}
+
+/**
  * 2. Create RMA from Approved Claim with Option B items
  * Enforces:
  * - One consolidated RMA per Store claim
@@ -207,7 +215,7 @@ export async function createRmaFromClaimAction(claimId: string): Promise<CreateR
       selected_option,
       selected_quantity,
       frozen_unit_wholesale_price,
-      products (name, sku)
+      products (name, letusto_sku, child_sku)
     `)
     .eq("claim_id", claimId);
 
@@ -225,7 +233,7 @@ export async function createRmaFromClaimAction(claimId: string): Promise<CreateR
     cohortId: item.cohort_id,
     productId: item.product_id,
     productName: item.products?.name || "Product",
-    productSku: item.products?.sku || "SKU",
+    productSku: resolveProductSku(item.products),
     selectedOption: item.selected_option as "A" | "B",
     selectedQuantity: item.selected_quantity,
     frozenUnitWholesalePrice: Number(item.frozen_unit_wholesale_price),
@@ -517,7 +525,7 @@ export async function saveRmaBoxAllocationsAction(
 
   const { data: lines, error: linesErr } = await supabase
     .from("retailer_exchange_rma_lines")
-    .select("id, quantity_authorized, product_id, products(sku)")
+    .select("id, quantity_authorized, product_id, products(letusto_sku, child_sku)")
     .eq("rma_id", input.rmaId);
 
   if (linesErr || !lines || lines.length === 0) {
@@ -531,7 +539,7 @@ export async function saveRmaBoxAllocationsAction(
     cohortId: "",
     productId: l.product_id,
     productName: "",
-    productSku: l.products?.sku || "SKU",
+    productSku: resolveProductSku(l.products),
     selectedOption: "B",
     quantityRequested: l.quantity_authorized,
     quantityAuthorized: l.quantity_authorized,
@@ -799,7 +807,7 @@ export async function saveWarehouseInspectionDraftAction(
   // 2. Fetch authorized lines for draft validation
   const { data: lines, error: linesErr } = await supabase
     .from("retailer_exchange_rma_lines")
-    .select("id, product_id, quantity_authorized, products(sku, name)")
+    .select("id, product_id, quantity_authorized, products(name, letusto_sku, child_sku)")
     .eq("rma_id", input.rmaId);
 
   if (linesErr || !lines || lines.length === 0) {
@@ -813,7 +821,7 @@ export async function saveWarehouseInspectionDraftAction(
     cohortId: "",
     productId: l.product_id,
     productName: l.products?.name || "Product",
-    productSku: l.products?.sku || "SKU",
+    productSku: resolveProductSku(l.products),
     selectedOption: "B",
     quantityRequested: l.quantity_authorized,
     quantityAuthorized: l.quantity_authorized,
@@ -1003,7 +1011,7 @@ export async function completeWarehouseInspectionAction(
       id,
       product_id,
       quantity_authorized,
-      products (name, sku)
+      products (name, letusto_sku, child_sku)
     `)
     .eq("rma_id", input.rmaId);
 
@@ -1018,7 +1026,7 @@ export async function completeWarehouseInspectionAction(
     cohortId: "",
     productId: l.product_id,
     productName: l.products?.name || "Product",
-    productSku: l.products?.sku || "SKU",
+    productSku: resolveProductSku(l.products),
     selectedOption: "B",
     quantityRequested: l.quantity_authorized,
     quantityAuthorized: l.quantity_authorized,
@@ -1364,7 +1372,7 @@ export async function getProposedSettlementInstructionAction(
     .from("retailer_exchange_rmas")
     .select(`
       *,
-      retailer_exchange_rma_lines (*, products(sku)),
+      retailer_exchange_rma_lines (*, products(letusto_sku, child_sku)),
       retailer_exchange_rma_inspections (*, retailer_exchange_rma_inspection_lines(*))
     `)
     .eq("id", rmaId)
@@ -1390,7 +1398,7 @@ export async function getProposedSettlementInstructionAction(
     cohortId: l.cohort_id,
     productId: l.product_id,
     productName: "",
-    productSku: l.products?.sku || "SKU",
+    productSku: resolveProductSku(l.products),
     selectedOption: "B",
     quantityRequested: l.quantity_requested,
     quantityAuthorized: l.quantity_authorized,
@@ -1490,7 +1498,7 @@ export async function listRmasAction(): Promise<ListRmasResult> {
     .from("retailer_exchange_rmas")
     .select(`
       *,
-      retailer_exchange_rma_lines (*, products(sku)),
+      retailer_exchange_rma_lines (*, products(letusto_sku, child_sku)),
       retailer_exchange_rma_boxes (*),
       retailer_exchange_rma_exceptions (*)
     `)
@@ -1517,7 +1525,7 @@ export async function listRmasAction(): Promise<ListRmasResult> {
       cohortId: l.cohort_id,
       productId: l.product_id,
       productName: "",
-      productSku: l.products?.sku || "SKU",
+      productSku: resolveProductSku(l.products),
       selectedOption: "B",
       quantityRequested: l.quantity_requested,
       quantityAuthorized: l.quantity_authorized,
@@ -1581,7 +1589,7 @@ export async function getRmaDetailAction(rmaId: string): Promise<GetRmaDetailRes
     .from("retailer_exchange_rmas")
     .select(`
       *,
-      retailer_exchange_rma_lines (*, products(sku, name)),
+      retailer_exchange_rma_lines (*, products(name, letusto_sku, child_sku)),
       retailer_exchange_rma_boxes (*),
       retailer_exchange_rma_inspections (*, retailer_exchange_rma_inspection_lines(*)),
       retailer_exchange_rma_exceptions (*),
@@ -1648,7 +1656,7 @@ export async function getRmaDetailAction(rmaId: string): Promise<GetRmaDetailRes
       cohortId: l.cohort_id,
       productId: l.product_id,
       productName: l.products?.name || "Product",
-      productSku: l.products?.sku || "SKU",
+      productSku: resolveProductSku(l.products),
       selectedOption: "B",
       quantityRequested: l.quantity_requested,
       quantityAuthorized: l.quantity_authorized,
