@@ -98,12 +98,42 @@ export function calculateSettlementReadyAmount(
     const acceptedUnits = inspectedLine.quantityAcceptedResaleable;
     totalAcceptedUnits += acceptedUnits;
 
-    // Integer cents arithmetic
+    // Integer cents arithmetic with strict overflow guard
     const priceCents = originalLine.frozenWholesalePriceCents;
+    if (!Number.isSafeInteger(priceCents) || priceCents < 0) {
+      return {
+        success: false,
+        errorCode: "INVALID_WHOLESALE_PRICE_CENTS",
+        error: `Line "${originalLine.productSku}": Invalid wholesale price cents (${priceCents}).`,
+      };
+    }
+    if (!Number.isSafeInteger(acceptedUnits) || acceptedUnits < 0) {
+      return {
+        success: false,
+        errorCode: "INVALID_ACCEPTED_UNITS",
+        error: `Line "${originalLine.productSku}": Invalid accepted units (${acceptedUnits}).`,
+      };
+    }
+
     const lineSettlementCents = acceptedUnits * priceCents;
-    const lineSettlementDollars = Math.round(lineSettlementCents) / 100;
+    if (!Number.isSafeInteger(lineSettlementCents) || lineSettlementCents > Number.MAX_SAFE_INTEGER) {
+      return {
+        success: false,
+        errorCode: "MONEY_OVERFLOW",
+        error: `Line "${originalLine.productSku}": Settlement calculation resulted in integer overflow.`,
+      };
+    }
 
     totalSettlementCents += lineSettlementCents;
+    if (!Number.isSafeInteger(totalSettlementCents) || totalSettlementCents > Number.MAX_SAFE_INTEGER) {
+      return {
+        success: false,
+        errorCode: "MONEY_OVERFLOW",
+        error: "Total settlement calculation resulted in integer overflow.",
+      };
+    }
+
+    const lineSettlementDollars = Math.round(lineSettlementCents) / 100;
 
     settlementLines.push({
       lineId: inspectedLine.lineId,

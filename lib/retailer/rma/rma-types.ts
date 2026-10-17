@@ -179,6 +179,7 @@ export interface InspectionRecord {
   totalRejected: number;
   totalMissing: number;
   hasDiscrepancies: boolean;
+  isDraft?: boolean;
   overallNotes?: string | null;
 }
 
@@ -199,6 +200,7 @@ export interface WarehouseInspectionInput {
   inspectedAt?: string;            // Default: current time
   boxCondition: BoxPhysicalCondition;
   lineInspections: WarehouseInspectionLineInput[];
+  isDraft?: boolean;
   overallNotes?: string | null;
 }
 

@@ -38,10 +38,12 @@ export interface InspectionReconciliationResult {
 export function reconcileWarehouseInspection(
   authorizedLines: RmaItemLine[],
   input: WarehouseInspectionInput,
-  rmaId: string
+  rmaId: string,
+  options?: { isDraft?: boolean }
 ): InspectionReconciliationResult {
   const errors: string[] = [];
   const exceptionsRaised: RmaException[] = [];
+  const isDraft = options?.isDraft ?? input.isDraft ?? false;
 
   // 1. Validate Inspector Attribution
   if (!input.inspectedBy || !input.inspectedBy.userId || !input.inspectedBy.name) {
@@ -86,7 +88,9 @@ export function reconcileWarehouseInspection(
     const insp = inputMap.get(line.id);
 
     if (!insp) {
-      errors.push(`Authorized line "${line.id}" (${line.productSku}) was not inspected.`);
+      if (!isDraft) {
+        errors.push(`Authorized line "${line.id}" (${line.productSku}) was not inspected.`);
+      }
       continue;
     }
 
@@ -109,20 +113,31 @@ export function reconcileWarehouseInspection(
       );
     }
 
-    // INVARIANT 3: accepted + rejected === received
-    if (accepted + rejected !== received) {
-      errors.push(
-        `Line "${line.productSku}": Received units (${received}) must equal accepted (${accepted}) + rejected (${rejected}). Unaccounted difference: ${
-          received - (accepted + rejected)
-        }.`
-      );
-    }
+    // INVARIANT 3: accepted + rejected check
+    if (isDraft) {
+      // In Draft mode, unclassified units (received > accepted + rejected) are permitted.
+      // But sum cannot exceed total received.
+      if (accepted + rejected > received) {
+        errors.push(
+          `Line "${line.productSku}": Sum of accepted (${accepted}) and rejected (${rejected}) cannot exceed received units (${received}).`
+        );
+      }
+    } else {
+      // In Final mode, full reconciliation is required: accepted + rejected === received
+      if (accepted + rejected !== received) {
+        errors.push(
+          `Line "${line.productSku}": Received units (${received}) must equal accepted (${accepted}) + rejected (${rejected}). Unaccounted difference: ${
+            received - (accepted + rejected)
+          }.`
+        );
+      }
 
-    // INVARIANT 4: Rejection reason required if rejected > 0
-    if (rejected > 0 && !insp.rejectionReason) {
-      errors.push(
-        `Line "${line.productSku}": Rejection reason is required when rejecting units (${rejected} rejected).`
-      );
+      // INVARIANT 4: Rejection reason required if rejected > 0 (mandatory for final)
+      if (rejected > 0 && !insp.rejectionReason) {
+        errors.push(
+          `Line "${line.productSku}": Rejection reason is required when rejecting units (${rejected} rejected).`
+        );
+      }
     }
 
     const missing = Math.max(0, authorized - received);
@@ -250,6 +265,7 @@ export function reconcileWarehouseInspection(
     totalRejected,
     totalMissing,
     hasDiscrepancies,
+    isDraft,
     overallNotes: input.overallNotes || null,
   };
 
