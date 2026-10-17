@@ -149,6 +149,7 @@ export async function validateClaimBeforeSubmission(
   return {
     success: true,
     totals: validation.totals,
+    validatedLines: validation.validatedLines,
   };
 }
 
@@ -214,8 +215,68 @@ export async function submitExchangeClaim(
   const claimNumber = `EXC-${datePrefix}-${randomSuffix}`;
 
   const totals = preValidation.totals!;
+  const validatedLinesMap = new Map((preValidation.validatedLines || []).map((l) => [l.cohortId, l]));
 
-  // 5. Insert Claim Record
+  // 5. Attempt Atomic Submission via RPC (Migration 0178)
+  const rpcPayload = {
+    claim_number: claimNumber,
+    company_id: companyId,
+    store_id: input.storeId,
+    user_id: session.userId,
+    total_items_count: totals.totalItemsCount,
+    total_units_count: totals.totalUnitsCount,
+    total_option_a_units: totals.totalOptionAUnits,
+    total_option_b_units: totals.totalOptionBUnits,
+    estimated_credit_option_a: totals.estimatedCreditOptionA,
+    estimated_credit_option_b: totals.estimatedCreditOptionB,
+    total_estimated_credit: totals.totalEstimatedCredit,
+    stock_reconfirmed_by: session.userId,
+    stock_reconfirmed_at: new Date().toISOString(),
+    retailer_notes: input.retailerNotes || null,
+    items: input.items.map((item) => {
+      const vLine = validatedLinesMap.get(item.cohortId);
+      const unitPrice = vLine ? vLine.unitWholesalePrice : 20.0;
+      const creditRate = vLine ? vLine.creditRate : (item.selectedOption === "A" ? 0.4 : 1.0);
+      const estCredit = vLine ? vLine.estimatedCreditAmount : Math.round(item.selectedQuantity * unitPrice * creditRate * 100) / 100;
+      const maxClaimable = vLine ? vLine.maxClaimableQuantity : item.selectedQuantity;
+      return {
+        cohort_id: item.cohortId,
+        product_id: item.productId,
+        selected_option: item.selectedOption,
+        selected_quantity: item.selectedQuantity,
+        max_claimable_quantity: maxClaimable,
+        frozen_unit_wholesale_price: unitPrice,
+        frozen_credit_rate: creditRate,
+        estimated_credit_amount: estCredit,
+        day_100_snapshot: vLine?.day100Snapshot || { snapshotVersion: "2.0.0", submittedAt: new Date().toISOString() },
+        evidence_provenance: vLine?.evidenceProvenance || { source: "Authoritative Eligibility Evaluator" },
+      };
+    }),
+  };
+
+  const { data: rpcData, error: rpcErr } = await adminClient.rpc(
+    "submit_exchange_claim_atomic",
+    { p_claim_payload: rpcPayload }
+  );
+
+  if (!rpcErr && rpcData && (rpcData as any).success) {
+    return {
+      success: true,
+      claimId: (rpcData as any).claim_id,
+      claimNumber: (rpcData as any).claim_number,
+      status: "submitted",
+      totals,
+    };
+  }
+
+  if (rpcErr && rpcErr.code === "23505") {
+    return {
+      success: false,
+      error: "해당 품목에 대해 이미 제출되었거나 처리 중인 클레임이 존재합니다. (중복 신청 방지)",
+    };
+  }
+
+  // 6. Fallback: Sequential Insert with Compensating Delete (Pre-0178 compatibility)
   const { data: claimRecord, error: insertClaimErr } = await adminClient
     .from("retailer_exchange_claims")
     .insert({
@@ -246,8 +307,14 @@ export async function submitExchangeClaim(
     };
   }
 
-  // 6. Insert Claim Items with Single-Claim Constraint
+  // 7. Insert Claim Items with Single-Claim Constraint (Fallback)
   for (const item of input.items) {
+    const vLine = validatedLinesMap.get(item.cohortId);
+    const unitPrice = vLine ? vLine.unitWholesalePrice : 20.0;
+    const creditRate = vLine ? vLine.creditRate : (item.selectedOption === "A" ? 0.4 : 1.0);
+    const estCredit = vLine ? vLine.estimatedCreditAmount : Math.round(item.selectedQuantity * unitPrice * creditRate * 100) / 100;
+    const maxClaimable = vLine ? vLine.maxClaimableQuantity : item.selectedQuantity;
+
     const { error: itemErr } = await adminClient
       .from("retailer_exchange_claim_items")
       .insert({
@@ -258,13 +325,13 @@ export async function submitExchangeClaim(
         company_id: companyId,
         selected_option: item.selectedOption,
         selected_quantity: item.selectedQuantity,
-        max_claimable_quantity: item.selectedQuantity,
-        frozen_unit_wholesale_price: 20.0,
-        frozen_credit_rate: item.selectedOption === "A" ? 0.4 : 1.0,
-        estimated_credit_amount: item.selectedOption === "A" ? item.selectedQuantity * 20 * 0.4 : item.selectedQuantity * 20,
+        max_claimable_quantity: maxClaimable,
+        frozen_unit_wholesale_price: unitPrice,
+        frozen_credit_rate: creditRate,
+        estimated_credit_amount: estCredit,
         status: "submitted",
-        day_100_snapshot: { snapshotVersion: "2.0.0", submittedAt: new Date().toISOString() },
-        evidence_provenance: { source: "Authoritative Eligibility Evaluator" },
+        day_100_snapshot: vLine?.day100Snapshot || { snapshotVersion: "2.0.0", submittedAt: new Date().toISOString() },
+        evidence_provenance: vLine?.evidenceProvenance || { source: "Authoritative Eligibility Evaluator" },
       });
 
     if (itemErr) {

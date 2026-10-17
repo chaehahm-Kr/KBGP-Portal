@@ -81,6 +81,18 @@ export interface ClaimSubmissionResult {
   totals?: ClaimTotalsCalculation;
   error?: string;
   validationErrors?: ClaimValidationError[];
+  validatedLines?: Array<{
+    cohortId: string;
+    productId: string;
+    selectedOption: "A" | "B";
+    selectedQuantity: number;
+    maxClaimableQuantity: number;
+    unitWholesalePrice: number;
+    creditRate: number;
+    estimatedCreditAmount: number;
+    day100Snapshot: any;
+    evidenceProvenance: any;
+  }>;
 }
 
 export interface RetailerClaimItemDetail {
