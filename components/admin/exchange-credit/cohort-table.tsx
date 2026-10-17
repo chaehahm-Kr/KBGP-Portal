@@ -7,14 +7,12 @@ import { COHORT_STATUS_CONFIG } from "@/lib/retailer/exchange-credit-types";
 interface CohortTableProps {
   cohorts: ProtectedSupplyCohort[];
   onSelectCohort?: (cohort: ProtectedSupplyCohort) => void;
-  onOpenRegisterModal?: () => void;
   isSchemaAvailable: boolean;
 }
 
 export function CohortTable({
   cohorts,
   onSelectCohort,
-  onOpenRegisterModal,
   isSchemaAvailable,
 }: CohortTableProps) {
   const [searchTerm, setSearchTerm] = useState("");

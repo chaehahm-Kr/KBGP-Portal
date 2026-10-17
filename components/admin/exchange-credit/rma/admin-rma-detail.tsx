@@ -51,7 +51,7 @@ export function AdminRmaDetail({
   const settlementPreviewDollars = settlementPreviewCents / 100;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 w-full min-w-0">
       {/* 1. Header & Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
         <div className="space-y-1">

@@ -232,6 +232,15 @@ COMPLETE
 
 ---
 
+# 27. Standing Rule for Consistent Admin Full-Width Page Standard (어드민 좌측 정렬 풀너비 표준)
+- 어드민의 모든 목록(List), 대시보드(Dashboard), 상세(Detail) 페이지는 반드시 **좌측 정렬 유연 컨테이너 (`w-full min-w-0 space-y-6`)** 표준을 준수해야 합니다.
+- 페이지 상위 레벨에 인위적으로 `max-w-7xl`, `max-w-6xl`, `max-w-5xl`, `mx-auto`, `container mx-auto` 등 중앙 정렬 제한 래퍼를 두지 마십시오.
+- 페이지 바디(`app/admin/**/page.tsx`) 내부에 중복 패딩(`p-4 sm:p-6 lg:p-8`)을 선언하지 마십시오. 공유 셸(`components/admin/layout.tsx`)의 `<main>`이 이미 표준 여백(`px-6 pt-24 pb-12`, 데스크톱 기준 24px)을 제공합니다.
+- 페이지 제목, 서브타이틀, 액션 버튼, KPI 카드 그리드, 탭 바, 검색/필터 툴바, 데이터 테이블 및 페이지네이션은 **하나의 일관된 좌측 기준선(Left Edge, 데스크톱 기준 `left: 280px`)**에 완벽히 정렬되어야 하며, 사이드바 이후 가용한 전체 너비를 유연하게 확장하여 사용해야 합니다.
+- **예외 사항**: 팝업 모달(Modal Dialog), 좁은 단일 입력 폼(Narrow Form), 인증 화면(Auth Screen, e.g. Login), 문서 전용 에디터에 한해서만 국소적 `max-w-*`를 허용합니다.
+
+---
+
 <!-- BEGIN:deploy-std-001-rules -->
 # [DEPLOY-STD-001] Standard Development → Git → Vercel Production Deployment Workflow
 
