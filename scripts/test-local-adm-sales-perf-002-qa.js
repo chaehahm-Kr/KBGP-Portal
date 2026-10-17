@@ -88,17 +88,21 @@ async function runLocalQA() {
     });
     console.log('Main container contains artificial max-w (Rule 27 violation):', mainHasMaxW);
 
-    // 4. Verify Top 4 KPI Cards
-    console.log('\n--- Step 4: Verifying Top 4 KPI Summary Cards ---');
+    // 4. Verify Top 4 Primary KPI Cards in Owner-Approved Order & Secondary Banner
+    console.log('\n--- Step 4: Verifying Top 4 Primary KPI Cards & Secondary Evaluated Stores Banner ---');
     const kpiCards = await page.locator('.grid.grid-cols-1.sm\\:grid-cols-2.lg\\:grid-cols-4 > div').count();
-    console.log('KPI Cards Count:', kpiCards);
+    console.log('Primary KPI Cards Count:', kpiCards);
     report.kpiCardsVerified = kpiCards === 4;
 
-    const evaluatedStoresKpi = await page.locator('text=Evaluated Stores').isVisible();
-    const netSalesKpi = await page.locator('text=60D Net Product Sales').isVisible();
-    const hqGapsKpi = await page.locator('text=HQ Follow-up Gaps').isVisible();
-    const supportNeedsKpi = await page.locator('text=Support Program Needs').isVisible();
-    console.log(`KPIs: Evaluated Stores (${evaluatedStoresKpi}), Net Sales (${netSalesKpi}), HQ Gaps (${hqGapsKpi}), Support Needs (${supportNeedsKpi})`);
+    const kpiGrid = page.locator('.grid.grid-cols-1.sm\\:grid-cols-2.lg\\:grid-cols-4');
+    const netSalesKpi = await kpiGrid.locator('text=B2B Net Sales').isVisible();
+    const salesGrowthKpi = await kpiGrid.locator('text=Sales Growth').isVisible();
+    const supportRequiredKpi = await kpiGrid.locator('text=Support Required Stores').isVisible();
+    const hqGapsKpi = await kpiGrid.locator('text=HQ Follow-up Gaps').isVisible();
+    const secondaryEvaluatedStores = await page.locator('text=Evaluated Stores:').isVisible();
+
+    console.log(`KPIs: 1. Net Sales (${netSalesKpi}), 2. Sales Growth (${salesGrowthKpi}), 3. Support Required Stores (${supportRequiredKpi}), 4. HQ Follow-up Gaps (${hqGapsKpi})`);
+    console.log(`Secondary Summary: Evaluated Stores in Banner (${secondaryEvaluatedStores})`);
 
     // 5. Verify Store View Table & Day 0-59 New Store Status
     console.log('\n--- Step 5: Verifying Store View Table & Day 0–59 Isolation ---');

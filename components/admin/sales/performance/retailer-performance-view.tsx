@@ -14,6 +14,7 @@ import {
   StoreIcon as Store,
   BuildingIcon as Building2,
   TrendingUpIcon as TrendingUp,
+  TrendingDownIcon as TrendingDown,
   AlertTriangleIcon as AlertTriangle,
   ShieldCheckIcon as ShieldCheck,
   SearchIcon as Search,
@@ -282,8 +283,8 @@ export function RetailerPerformanceView({
         </div>
       )}
 
-      {/* 2. Evaluation Window & Non-overlapping Context Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/40 text-xs text-zinc-400">
+      {/* 2. Evaluation Window & Store Scope Secondary Summary Banner */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/40 text-xs text-zinc-400">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5 text-zinc-300">
             <Calendar className="w-3.5 h-3.5 text-cyan-400" />
@@ -295,6 +296,18 @@ export function RetailerPerformanceView({
             <span className="font-medium text-zinc-300">Previous 60D:</span>{" "}
             {kpis.evaluationPeriod.previousPeriodStart} – {kpis.evaluationPeriod.previousPeriodEnd}
           </div>
+          <span className="text-zinc-600 hidden sm:inline">|</span>
+          <div className="flex items-center gap-1.5 text-zinc-300">
+            <Store className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="font-medium text-white">Evaluated Stores:</span>{" "}
+            <span className="text-white font-bold">{kpis.totalActiveStoresCount} active</span>
+            <span className="text-zinc-500">/ {data.stores.length} total</span>
+            {newStoresCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                {newStoresCount} New (Day 0–59)
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1 text-[11px] text-zinc-500 font-mono">
           <Clock className="w-3 h-3 text-zinc-400" />
@@ -302,32 +315,12 @@ export function RetailerPerformanceView({
         </div>
       </div>
 
-      {/* 3. Top 4 KPI Summary Cards */}
+      {/* 3. Top 4 Primary KPI Summary Cards (Owner Approved Order) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: Stores Evaluated */}
+        {/* KPI 1: B2B Net Sales */}
         <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 shadow-xs">
           <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
-            <span>Evaluated Stores</span>
-            <Store className="w-4 h-4 text-cyan-400" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-white">
-              {kpis.totalActiveStoresCount}
-            </span>
-            <span className="text-xs text-zinc-500">
-              active / {data.stores.length} total
-            </span>
-          </div>
-          <div className="mt-1.5 text-xs text-zinc-400 flex items-center gap-1">
-            <span className="inline-block w-2 h-2 rounded-full bg-cyan-400" />
-            {newStoresCount} Day 0–59 New Stores
-          </div>
-        </div>
-
-        {/* KPI 2: 60D Net Product Sales */}
-        <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 shadow-xs">
-          <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
-            <span>60D Net Product Sales</span>
+            <span>B2B Net Sales</span>
             <TrendingUp className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -335,13 +328,13 @@ export function RetailerPerformanceView({
               {formatCurrency(kpis.totalNetSalesDollars)}
             </span>
             <span className="text-xs text-zinc-500">
-              Prev: {formatCurrency(kpis.previousNetSalesDollars)}
+              60D Net Sales
             </span>
           </div>
           <div className="mt-1.5 text-xs text-zinc-400">
             {totalUnallocatedDollars > 0 ? (
               <span className="text-amber-400 font-medium">
-                Includes {formatCurrency(totalUnallocatedDollars)} unallocated company sales
+                Includes {formatCurrency(totalUnallocatedDollars)} unallocated
               </span>
             ) : (
               <span>100% orders store-attributed</span>
@@ -349,7 +342,55 @@ export function RetailerPerformanceView({
           </div>
         </div>
 
-        {/* KPI 3: HQ Action Attention */}
+        {/* KPI 2: Sales Growth */}
+        <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 shadow-xs">
+          <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
+            <span>Sales Growth</span>
+            {kpis.salesGrowthPercent !== null && kpis.salesGrowthPercent < 0 ? (
+              <TrendingDown className="w-4 h-4 text-rose-400" />
+            ) : (
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+            )}
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            {kpis.salesGrowthLabel === "New Revenue" ? (
+              <span className="text-2xl font-bold text-emerald-400">New Revenue</span>
+            ) : kpis.salesGrowthPercent !== null && kpis.salesGrowthPercent > 0 ? (
+              <span className="text-2xl font-bold text-emerald-400">{kpis.salesGrowthLabel}</span>
+            ) : kpis.salesGrowthPercent !== null && kpis.salesGrowthPercent < 0 ? (
+              <span className="text-2xl font-bold text-rose-400">{kpis.salesGrowthLabel}</span>
+            ) : (
+              <span className="text-2xl font-bold text-zinc-400">{kpis.salesGrowthLabel}</span>
+            )}
+            <span className="text-xs text-zinc-500">
+              vs prev 60D
+            </span>
+          </div>
+          <div className="mt-1.5 text-xs text-zinc-400">
+            Prev: {formatCurrency(kpis.previousNetSalesDollars)} (non-overlapping)
+          </div>
+        </div>
+
+        {/* KPI 3: Support Required Stores */}
+        <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 shadow-xs">
+          <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
+            <span>Support Required Stores</span>
+            <ShieldCheck className="w-4 h-4 text-purple-400" />
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-white">
+              {kpis.supportRequiredStoresCount}
+            </span>
+            <span className="text-xs text-zinc-500">
+              distinct stores diagnosed
+            </span>
+          </div>
+          <div className="mt-1.5 text-xs text-zinc-400">
+            Tailored programs diagnosed from store metrics
+          </div>
+        </div>
+
+        {/* KPI 4: HQ Follow-up Gaps */}
         <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 shadow-xs">
           <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
             <span>HQ Follow-up Gaps</span>
@@ -364,26 +405,7 @@ export function RetailerPerformanceView({
             </span>
           </div>
           <div className="mt-1.5 text-xs text-zinc-400">
-            Distinct stores flagged Action Required or Attention
-          </div>
-        </div>
-
-        {/* KPI 4: Support Required Stores */}
-        <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 shadow-xs">
-          <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
-            <span>Support Program Needs</span>
-            <ShieldCheck className="w-4 h-4 text-purple-400" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-white">
-              {kpis.supportRequiredStoresCount}
-            </span>
-            <span className="text-xs text-zinc-500">
-              stores recommended
-            </span>
-          </div>
-          <div className="mt-1.5 text-xs text-zinc-400">
-            Tailored programs diagnosed from store metrics
+            Overdue tasks or unrecorded engagement
           </div>
         </div>
       </div>
