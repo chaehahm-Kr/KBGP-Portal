@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import {
   ActivityType,
   ACTIVITY_TYPE_CONFIGS,
@@ -59,6 +59,39 @@ export function StoreActivityModal({
   );
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Reset or populate fields whenever activityToEdit or isOpen changes
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (activityToEdit) {
+      setActivityType(activityToEdit.activityType || "store_visit");
+      setTitle(activityToEdit.title || "");
+      setDescription(activityToEdit.description || "");
+      setActivityDate(
+        activityToEdit.activityDate || new Date().toISOString().split("T")[0]
+      );
+      setResponsibleAdminName(activityToEdit.responsibleAdminName || "");
+      setHasFollowUp(Boolean(activityToEdit.hasFollowUp));
+      setFollowUpDate(
+        activityToEdit.followUpDate ||
+          new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0]
+      );
+      setFollowUpNote(activityToEdit.followUpNote || "");
+    } else {
+      setActivityType("store_visit");
+      setTitle("");
+      setDescription("");
+      setActivityDate(new Date().toISOString().split("T")[0]);
+      setResponsibleAdminName("");
+      setHasFollowUp(false);
+      setFollowUpDate(
+        new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0]
+      );
+      setFollowUpNote("");
+    }
+    setErrorMsg(null);
+  }, [activityToEdit, isOpen]);
 
   if (!isOpen) return null;
 

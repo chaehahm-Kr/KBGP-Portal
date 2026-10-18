@@ -575,15 +575,18 @@ export function StoreActivitiesTab({
       )}
 
       {/* 5. Modal for Logging & Editing Activity */}
-      <StoreActivityModal
-        storeId={overview.storeId}
-        storeName={overview.storeName}
-        isSchemaPending={overview.isSchemaPending}
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        activityToEdit={activityToEdit}
-        onSuccess={() => router.refresh()}
-      />
+      {isModalOpen && (
+        <StoreActivityModal
+          key={activityToEdit ? activityToEdit.id : "new"}
+          storeId={overview.storeId}
+          storeName={overview.storeName}
+          isSchemaPending={overview.isSchemaPending}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          activityToEdit={activityToEdit}
+          onSuccess={() => router.refresh()}
+        />
+      )}
     </div>
   );
 }
