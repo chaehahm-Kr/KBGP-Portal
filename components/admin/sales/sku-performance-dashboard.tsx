@@ -10,6 +10,12 @@ import type {
   ProductPerformanceQueryOptions,
 } from "@/lib/product/performance/types";
 import { fetchProductPerformancePageAction } from "@/lib/product/performance/performance-actions";
+import { SkuReadinessDrawer } from "./sku-readiness-drawer";
+import {
+  evaluateSkuDataReadiness,
+  matchesReadinessFilter,
+  type SkuDataReadiness,
+} from "@/lib/product/performance/sku-readiness";
 
 interface FilterOption {
   id?: string;
@@ -87,11 +93,16 @@ export function SkuPerformanceDashboard({
   const [search, setSearch] = useState("");
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [readinessFilter, setReadinessFilter] = useState("ALL");
   const [lookbackDays, setLookbackDays] = useState(60);
   const [sortBy, setSortBy] = useState<"sales" | "profit" | "inventory" | "confidence" | "name">("sales");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Readiness Drawer State
+  const [selectedReadinessSku, setSelectedReadinessSku] = useState<ProductPerformanceSummary | null>(null);
+  const [isReadinessDrawerOpen, setIsReadinessDrawerOpen] = useState(false);
 
   // Reload data from server action
   const loadData = (options: {
@@ -150,13 +161,32 @@ export function SkuPerformanceDashboard({
     setSearch("");
     setSelectedBrand("");
     setSelectedCategory("");
+    setReadinessFilter("ALL");
     setCurrentPage(1);
     loadData({ query: "", brand: "", cat: "", page: 1 });
   };
 
-  // Client-side sorting on retrieved page items
+  // Client-side filtering & sorting on retrieved page items
   const sortedItems = useMemo(() => {
-    const items = [...data.items];
+    let items = [...data.items];
+
+    if (readinessFilter !== "ALL") {
+      items = items.filter((item) => {
+        const readiness =
+          item.dataReadiness ||
+          evaluateSkuDataReadiness({
+            productId: item.productId,
+            onHandUnits: item.kpis?.inventory?.hqAvailableUnits?.value ?? 0,
+            kpis: item.kpis,
+            completedOrdersCount: item.gradeReadiness.metrics.completedOrdersCount,
+            distinctStoresCount: item.gradeReadiness.metrics.distinctStoresCount,
+            weeklyChecksCount: item.kpis?.velocity?.weeklyReportsCount?.value ?? 0,
+            asOfDate: data.period.asOfDate,
+          });
+        return matchesReadinessFilter(readiness, readinessFilter);
+      });
+    }
+
     switch (sortBy) {
       case "sales":
         return items.sort(
@@ -182,7 +212,7 @@ export function SkuPerformanceDashboard({
       default:
         return items;
     }
-  }, [data.items, sortBy]);
+  }, [data.items, sortBy, readinessFilter, data.period.asOfDate]);
 
   const kpiSummary = data.kpiSummary;
 
@@ -413,8 +443,25 @@ export function SkuPerformanceDashboard({
               <option value="name">Sort: Product Name (A-Z)</option>
             </select>
 
+            {/* Data Readiness Filter */}
+            <select
+              value={readinessFilter}
+              onChange={(e) => setReadinessFilter(e.target.value)}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-800 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+            >
+              <option value="ALL">All Readiness Statuses</option>
+              <option value="COST_MISSING">🔴 Missing Cost (Tier 4)</option>
+              <option value="COST_OVERRIDE">🟡 Static Override (Tier 3)</option>
+              <option value="START_DATE_UNVERIFIED">⚪ Start Date Unverified (N/A)</option>
+              <option value="NEW_INCUBATION">🔵 New Incubation (&lt;60d)</option>
+              <option value="INSUFFICIENT_ORDERS">🟠 Orders &lt; 3</option>
+              <option value="INSUFFICIENT_STORES">🟠 Stores &lt; 3</option>
+              <option value="VALUATION_PENDING">⚠️ Valuation Pending (N/A)</option>
+              <option value="READY_SIMULATION">🟢 Simulation Ready</option>
+            </select>
+
             {/* Clear Filters Button */}
-            {(search || selectedBrand || selectedCategory) && (
+            {(search || selectedBrand || selectedCategory || readinessFilter !== "ALL") && (
               <button
                 type="button"
                 onClick={handleResetFilters}
@@ -456,7 +503,7 @@ export function SkuPerformanceDashboard({
                 <th className="py-3 px-3 text-right min-w-[120px]">Gross Profit / Margin</th>
                 <th className="py-3 px-3 text-right min-w-[120px]">HQ Inventory</th>
                 <th className="py-3 px-3 text-center min-w-[100px]">Exchange Stores</th>
-                <th className="py-3 px-3 text-center min-w-[110px]">Grade Status</th>
+                <th className="py-3 px-3 text-center min-w-[140px]">Data Readiness</th>
                 <th className="py-3 px-3 text-center min-w-[130px]">Risk Flags</th>
                 <th className="py-3 px-3 text-center min-w-[100px]">Confidence</th>
                 <th className="py-3 px-4 text-right min-w-[110px]">Action</th>
@@ -472,6 +519,17 @@ export function SkuPerformanceDashboard({
                 </tr>
               ) : (
                 sortedItems.map((item) => {
+                  const readiness: SkuDataReadiness =
+                    item.dataReadiness ||
+                    evaluateSkuDataReadiness({
+                      productId: item.productId,
+                      onHandUnits: item.kpis?.inventory?.hqAvailableUnits?.value ?? 0,
+                      kpis: item.kpis,
+                      completedOrdersCount: item.gradeReadiness.metrics.completedOrdersCount,
+                      distinctStoresCount: item.gradeReadiness.metrics.distinctStoresCount,
+                      weeklyChecksCount: item.kpis?.velocity?.weeklyReportsCount?.value ?? 0,
+                      asOfDate: data.period.asOfDate,
+                    });
                   const grossProfitVal = item.kpis.financial.grossProfit.value;
                   const grossMarginVal = item.kpis.financial.grossMargin.value;
                   const hqVal = item.kpis.inventory.hqInventoryValue.value;
@@ -563,7 +621,16 @@ export function SkuPerformanceDashboard({
 
                       {/* HQ Inventory */}
                       <td className="py-3 px-3 text-right">
-                        {hqVal !== null ? (
+                        {readiness.isInventoryValuationPending ? (
+                          <>
+                            <div className="font-semibold text-zinc-900 dark:text-white">
+                              {availUnits} units
+                            </div>
+                            <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-400">
+                              PENDING COST
+                            </span>
+                          </>
+                        ) : hqVal !== null ? (
                           <>
                             <div className="font-semibold text-zinc-900 dark:text-white">
                               {formatCurrency(hqVal)}
@@ -595,15 +662,32 @@ export function SkuPerformanceDashboard({
                         </span>
                       </td>
 
-                      {/* Grade Status */}
+                      {/* Data Readiness & Eligibility Status */}
                       <td className="py-3 px-3 text-center">
-                        <div className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
-                          <span>🔒</span>
-                          <span>POLICY PENDING</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedReadinessSku(item);
+                            setIsReadinessDrawerOpen(true);
+                          }}
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold transition-transform hover:scale-105 cursor-pointer ${readiness.gateBadgeColor}`}
+                          title="Click to inspect Data Readiness & Missing Evidence"
+                        >
+                          <span>{readiness.gateLabel}</span>
+                        </button>
+                        <div className="text-[9px] text-zinc-500 dark:text-zinc-400 mt-1 flex items-center justify-center gap-1 font-mono">
+                          <span>Coverage: {readiness.dataCoveragePercent}%</span>
                         </div>
-                        <div className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-0.5">
-                          {item.gradeReadiness.evaluationStatus} ({item.gradeReadiness.metrics.operatingHistoryDays}d)
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedReadinessSku(item);
+                            setIsReadinessDrawerOpen(true);
+                          }}
+                          className="text-[9px] font-semibold text-blue-600 hover:text-blue-500 dark:text-blue-400 mt-0.5 inline-block cursor-pointer"
+                        >
+                          Inspect &rarr;
+                        </button>
                       </td>
 
                       {/* Risk Status Badges */}
@@ -646,12 +730,25 @@ export function SkuPerformanceDashboard({
 
                       {/* Action */}
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <Link
-                          href={`/admin/sales/sku/${item.productId}`}
-                          className="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                        >
-                          View Details →
-                        </Link>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedReadinessSku(item);
+                              setIsReadinessDrawerOpen(true);
+                            }}
+                            className="inline-flex items-center rounded-lg border border-blue-200 bg-blue-50/60 px-2 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/50 transition-colors cursor-pointer"
+                            title="Inspect Data Readiness & Missing Evidence"
+                          >
+                            Readiness
+                          </button>
+                          <Link
+                            href={`/admin/sales/sku/${item.productId}`}
+                            className="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                          >
+                            Details &rarr;
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -710,6 +807,14 @@ export function SkuPerformanceDashboard({
           </div>
         </div>
       </div>
+
+      {/* Sku Readiness Detail Drawer */}
+      <SkuReadinessDrawer
+        item={selectedReadinessSku}
+        isOpen={isReadinessDrawerOpen}
+        onClose={() => setIsReadinessDrawerOpen(false)}
+        asOfDate={data.period.asOfDate}
+      />
     </div>
   );
 }

@@ -19,6 +19,7 @@ import { resolveEvaluationPeriod, daysBetween, safeRound } from "./helpers";
 import { calculateProductPerformanceKpis } from "./master-engine";
 import { checkProductEligibility } from "./grade-policy";
 import { buildMasterProductPerformanceInput } from "./data-adapter";
+import { evaluateSkuDataReadiness } from "./sku-readiness";
 import type {
   ProductPerformanceQueryOptions,
   ProductPerformanceQueryResult,
@@ -524,12 +525,39 @@ export async function queryProductPerformanceList(
     const completedOrdersCount = completedOrdersSet.size;
     const distinctStoresCount = distinctStoresSet.size;
     const hasHistoricalCost = kpis.financial.landedCogs.status !== "UNAVAILABLE";
-    const operatingHistoryDays = daysBetween(product.created_at.slice(0, 10), period.asOfDate);
+
+    // 1. Operating Age Anchor (DATA RULES 1 & 2: First fulfilled B2B shipment is the anchor; never default to created_at)
+    const productFulfillmentItems = fulfillmentItems.filter(
+      (fi) => fi.product_id === product.id
+    );
+    const fulfilledDates: string[] = [];
+    for (const fi of productFulfillmentItems) {
+      const ful = fulfillmentsMap.get(fi.fulfillment_id);
+      if (
+        ful &&
+        (ful.status === "shipped" || ful.status === "delivered" || (fi.quantity_shipped || 0) > 0) &&
+        ful.shipped_at
+      ) {
+        fulfilledDates.push(ful.shipped_at.slice(0, 10));
+      }
+    }
+    fulfilledDates.sort();
+    const earliestFulfilledShipmentDate = fulfilledDates.length > 0 ? fulfilledDates[0] : null;
+    const firstShipmentDateOnProduct = (product as any).first_shipment_date || null;
+
+    const resolvedFirstShipmentDate = firstShipmentDateOnProduct
+      ? firstShipmentDateOnProduct.slice(0, 10)
+      : earliestFulfilledShipmentDate;
+
+    const operatingHistoryDays = resolvedFirstShipmentDate
+      ? Math.max(0, daysBetween(resolvedFirstShipmentDate, period.asOfDate))
+      : 0;
 
     // Grade Eligibility check from authoritative R3 engine
     const gradeEligibility = checkProductEligibility({
       product_id: product.id,
       operatingHistoryDays,
+      firstShipmentDate: resolvedFirstShipmentDate,
       completedOrdersCount,
       distinctStoresCount,
       hasHistoricalCost,
@@ -547,6 +575,24 @@ export async function queryProductPerformanceList(
         note: "Automatic A/B/C/D grading is strictly disabled pending Owner scoring normalization approval.",
       },
     };
+
+    // Calculate Comprehensive SKU Data Readiness
+    const dataReadiness = evaluateSkuDataReadiness({
+      productId: product.id,
+      firstShipmentDateOnProduct,
+      earliestFulfilledShipmentDate,
+      costRecords: masterInput.financial.costRecords,
+      activeLayers: masterInput.inventory.activeLayers,
+      overrideLandedCost: product.override_landed_cost,
+      overrideUpdatedAt: product.override_landed_cost_updated_at,
+      onHandUnits: kpis.inventory.hqAvailableUnits.value ?? 0,
+      kpis,
+      completedOrdersCount,
+      distinctStoresCount,
+      weeklyChecksCount: masterInput.velocity.weeklyReports.length,
+      maturedCohortDays: null,
+      asOfDate: period.asOfDate,
+    });
 
     let summary: ProductPerformanceSummary = {
       productId: product.id,
@@ -568,6 +614,7 @@ export async function queryProductPerformanceList(
       createdAt: product.created_at,
       kpis,
       gradeReadiness,
+      dataReadiness,
       overallDataConfidence: deriveOverallDataConfidence(kpis),
       riskFlags: deriveRiskFlags(kpis),
     };

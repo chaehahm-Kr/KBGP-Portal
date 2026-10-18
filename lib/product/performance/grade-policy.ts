@@ -58,10 +58,23 @@ export interface GradeBandDefinition {
   label: string;
 }
 
+export interface GradePolicyContract {
+  evaluationPeriodDays: number;
+  eligibility: {
+    minOperatingHistoryDays: number;
+    minCompletedOrders: number;
+    minDistinctStores: number;
+    missingHistoricalCostPolicy: "N/A";
+  };
+  weights: Record<PillarName, number>;
+  gradeBands: Record<ProductPerformanceGrade, GradeBandDefinition>;
+  automaticGradingEnabled: boolean;
+}
+
 /**
  * Authoritative Owner-Approved Grade Policy Contract.
  */
-export const OWNER_APPROVED_GRADE_POLICY = {
+export const OWNER_APPROVED_GRADE_POLICY: GradePolicyContract = {
   evaluationPeriodDays: 60,
   eligibility: {
     minOperatingHistoryDays: 60,
@@ -77,19 +90,19 @@ export const OWNER_APPROVED_GRADE_POLICY = {
     retailVelocity: 10,
     growthPotential: 5,
     operationalReliability: 5,
-  } as const satisfies Record<PillarName, number>,
+  },
   gradeBands: {
     A: { grade: "A", min: 80, max: 100, label: "A: 80–100" },
     B: { grade: "B", min: 65, max: 80, label: "B: 65–<80" },
     C: { grade: "C", min: 50, max: 65, label: "C: 50–<65" },
     D: { grade: "D", min: 0, max: 50, label: "D: 0–<50" },
-  } as const satisfies Record<ProductPerformanceGrade, GradeBandDefinition>,
+  },
   /**
    * Safety Gate: Automatic grading remains disabled until Owner approves
    * the scoring normalization curves and thresholds.
    */
   automaticGradingEnabled: false,
-} as const;
+};
 
 // ============================================================================
 // 2. ELIGIBILITY INTERFACES
@@ -171,12 +184,14 @@ export interface ProductGradeEvaluationResult {
  * Validates the mathematical and structural integrity of the grade policy.
  * Asserts that weights sum to exactly 100 and grade bands cover 0–100 contiguously.
  */
-export function validateGradePolicyIntegrity(): {
+export function validateGradePolicyIntegrity(
+  policy: GradePolicyContract = OWNER_APPROVED_GRADE_POLICY
+): {
   isValid: boolean;
   totalWeight: number;
   bandErrors: string[];
 } {
-  const weights = OWNER_APPROVED_GRADE_POLICY.weights;
+  const weights = policy.weights;
   const totalWeight = Object.values(weights).reduce((sum, w) => sum + w, 0);
 
   const bandErrors: string[] = [];
@@ -184,7 +199,7 @@ export function validateGradePolicyIntegrity(): {
     bandErrors.push(`Total weights sum to ${totalWeight}, expected exactly 100.`);
   }
 
-  const { A, B, C, D } = OWNER_APPROVED_GRADE_POLICY.gradeBands;
+  const { A, B, C, D } = policy.gradeBands;
   if (D.min !== 0 || D.max !== 50) bandErrors.push("Band D must be 0 to <50.");
   if (C.min !== 50 || C.max !== 65) bandErrors.push("Band C must be 50 to <65.");
   if (B.min !== 65 || B.max !== 80) bandErrors.push("Band B must be 65 to <80.");
@@ -201,14 +216,15 @@ export function validateGradePolicyIntegrity(): {
  * Evaluates whether a product meets the Owner-approved eligibility criteria.
  */
 export function checkProductEligibility(
-  input: ProductEligibilityInput
+  input: ProductEligibilityInput,
+  policy: GradePolicyContract = OWNER_APPROVED_GRADE_POLICY
 ): ProductEligibilityResult {
   const {
     minOperatingHistoryDays,
     minCompletedOrders,
     minDistinctStores,
     missingHistoricalCostPolicy,
-  } = OWNER_APPROVED_GRADE_POLICY.eligibility;
+  } = policy.eligibility;
 
   // Resolve operating history days
   let operatingHistoryDays = 0;
@@ -301,7 +317,8 @@ export function checkProductEligibility(
  * Returns null if score is null, undefined, or NaN.
  */
 export function mapScoreToGradeBand(
-  score: number | null | undefined
+  score: number | null | undefined,
+  gradeBands: Record<ProductPerformanceGrade, GradeBandDefinition> = OWNER_APPROVED_GRADE_POLICY.gradeBands
 ): GradeBandDefinition | null {
   if (score === null || score === undefined || !Number.isFinite(score) || Number.isNaN(score)) {
     return null;
@@ -309,7 +326,7 @@ export function mapScoreToGradeBand(
 
   // Clamp score safely into [0, 100]
   const clampedScore = Math.max(0, Math.min(100, score));
-  const { A, B, C, D } = OWNER_APPROVED_GRADE_POLICY.gradeBands;
+  const { A, B, C, D } = gradeBands;
 
   if (clampedScore >= A.min) {
     return A;
@@ -328,13 +345,13 @@ export function mapScoreToGradeBand(
  * Returns null if any pillar score is missing or invalid.
  */
 export function calculateCompositeScore(
-  pillarScores?: PillarScoresInput
+  pillarScores?: PillarScoresInput,
+  weights: Record<PillarName, number> = OWNER_APPROVED_GRADE_POLICY.weights
 ): CompositeScoreResult | null {
   if (!pillarScores) {
     return null;
   }
 
-  const weights = OWNER_APPROVED_GRADE_POLICY.weights;
   const pillars = Object.keys(weights) as PillarName[];
 
   const weightedContributions: Partial<Record<PillarName, number>> = {};
@@ -373,11 +390,12 @@ export function calculateCompositeScore(
  * without explicit manual/approved pillar scores or until scoring normalization is approved.
  */
 export function evaluateProductGrade(
-  input: ProductGradeEvaluationInput
+  input: ProductGradeEvaluationInput,
+  policy: GradePolicyContract = OWNER_APPROVED_GRADE_POLICY
 ): ProductGradeEvaluationResult {
   const evaluatedAt = input.asOfDate || new Date().toISOString();
-  const eligibility = checkProductEligibility(input.eligibilityInput);
-  const { automaticGradingEnabled } = OWNER_APPROVED_GRADE_POLICY;
+  const eligibility = checkProductEligibility(input.eligibilityInput, policy);
+  const { automaticGradingEnabled } = policy;
 
   // Initialize default empty breakdown
   const emptyPillars: Record<PillarName, number | null> = {
@@ -427,9 +445,9 @@ export function evaluateProductGrade(
   // Case 3: Product is ELIGIBLE
   // Check if manual pillar scores are provided and permitted
   if (input.allowManualPillarScores && input.pillarScores) {
-    const composite = calculateCompositeScore(input.pillarScores);
+    const composite = calculateCompositeScore(input.pillarScores, policy.weights);
     if (composite) {
-      const gradeBand = mapScoreToGradeBand(composite.score);
+      const gradeBand = mapScoreToGradeBand(composite.score, policy.gradeBands);
       return {
         product_id: input.eligibilityInput.product_id,
         status: "GRADED",

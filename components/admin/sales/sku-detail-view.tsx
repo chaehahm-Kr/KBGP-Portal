@@ -5,6 +5,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { ProductPerformanceSummary } from "@/lib/product/performance/types";
+import { SkuReadinessDrawer } from "./sku-readiness-drawer";
+import {
+  evaluateSkuDataReadiness,
+  type SkuDataReadiness,
+} from "@/lib/product/performance/sku-readiness";
 
 interface SkuDetailViewProps {
   summary: ProductPerformanceSummary;
@@ -24,11 +29,24 @@ function formatCurrency(val: number | null | undefined): string {
 export function SkuDetailView({ summary, lookbackDays: initialDays }: SkuDetailViewProps) {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<
-    "overview" | "sales" | "profit" | "inventory" | "exchange" | "stores" | "actions"
+    "overview" | "sales" | "profit" | "inventory" | "exchange" | "stores" | "actions" | "readiness"
   >("overview");
   const [lookbackDays, setLookbackDays] = useState(initialDays);
+  const [isReadinessDrawerOpen, setIsReadinessDrawerOpen] = useState(false);
 
   const { kpis, gradeReadiness, overallDataConfidence, riskFlags } = summary;
+
+  const readiness: SkuDataReadiness =
+    summary.dataReadiness ||
+    evaluateSkuDataReadiness({
+      productId: summary.productId,
+      onHandUnits: kpis?.inventory?.hqAvailableUnits?.value ?? 0,
+      kpis,
+      completedOrdersCount: gradeReadiness.metrics.completedOrdersCount,
+      distinctStoresCount: gradeReadiness.metrics.distinctStoresCount,
+      weeklyChecksCount: kpis?.velocity?.weeklyReportsCount?.value ?? 0,
+      asOfDate: new Date().toISOString().split("T")[0],
+    });
 
   const handlePeriodChange = (days: number) => {
     setLookbackDays(days);
@@ -43,6 +61,7 @@ export function SkuDetailView({ summary, lookbackDays: initialDays }: SkuDetailV
     { key: "exchange", label: "5. Exchange & Risk" },
     { key: "stores", label: "6. Stores & Growth" },
     { key: "actions", label: "7. Actions & History" },
+    { key: "readiness", label: "8. Data Readiness & Remediation" },
   ];
 
   return (
@@ -136,6 +155,25 @@ export function SkuDetailView({ summary, lookbackDays: initialDays }: SkuDetailV
               ))}
             </div>
 
+            {/* Data Readiness Indicator & Drawer Trigger */}
+            <div className="flex flex-col items-start lg:items-end gap-1.5">
+              <div className="flex items-center gap-2">
+                <span className={`rounded px-2 py-0.5 text-xs font-bold border ${readiness.gateBadgeColor}`}>
+                  {readiness.gateLabel}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsReadinessDrawerOpen(true)}
+                  className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-500 shadow-xs transition-colors cursor-pointer"
+                >
+                  Inspect Readiness &rarr;
+                </button>
+              </div>
+              <div className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
+                Coverage: <strong>{readiness.dataCoveragePercent}%</strong> · Confidence: <strong>{readiness.dataConfidencePercent}%</strong>
+              </div>
+            </div>
+
             {/* Business Grade & Gate Indicator */}
             <div className="rounded-lg border border-amber-200/80 bg-amber-50/70 p-2.5 text-right dark:border-amber-900/40 dark:bg-amber-950/20">
               <div className="flex items-center justify-end gap-1.5 text-amber-800 dark:text-amber-300">
@@ -206,7 +244,14 @@ export function SkuDetailView({ summary, lookbackDays: initialDays }: SkuDetailV
                 {kpis.inventory.hqAvailableUnits.value ?? 0}
               </p>
               <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                Valuation: {formatCurrency(kpis.inventory.hqInventoryValue.value)}
+                Valuation:{" "}
+                {readiness.isInventoryValuationPending ? (
+                  <span className="font-semibold text-rose-600 dark:text-rose-400">
+                    PENDING COST (N/A)
+                  </span>
+                ) : (
+                  formatCurrency(kpis.inventory.hqInventoryValue.value)
+                )}
               </p>
             </div>
 
@@ -233,9 +278,11 @@ export function SkuDetailView({ summary, lookbackDays: initialDays }: SkuDetailV
             </h3>
             <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
               <div className="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
-                <dt className="text-zinc-500 dark:text-zinc-400">Operating History</dt>
+                <dt className="text-zinc-500 dark:text-zinc-400">Commercial Operating Age</dt>
                 <dd className="mt-1 font-semibold text-zinc-900 dark:text-white">
-                  {gradeReadiness.metrics.operatingHistoryDays} days (Launched {summary.createdAt.slice(0, 10)})
+                  {readiness.firstShipmentDate
+                    ? `${readiness.operatingAgeDays} days (First B2B Shipment: ${readiness.firstShipmentDate})`
+                    : "N/A (Start Date Unverified — Zero B2B Shipments; Does Not Default to Created Date)"}
                 </dd>
               </div>
 
@@ -617,6 +664,142 @@ export function SkuDetailView({ summary, lookbackDays: initialDays }: SkuDetailV
           </div>
         </div>
       )}
+
+      {/* ==================================================================== */}
+      {/* SECTION 8: DATA READINESS & REMEDIATION */}
+      {/* ==================================================================== */}
+      {activeSection === "readiness" && (
+        <div className="space-y-6">
+          {/* Header Card */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <span className={`inline-block rounded px-2 py-0.5 text-xs font-bold border ${readiness.gateBadgeColor}`}>
+                  {readiness.gateLabel}
+                </span>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white mt-1">
+                  Product Data Readiness &amp; Investment Remediation Contract
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Authoritative review under Owner Decision D1, D2, and ADM-GRADING-DATA-002 specification.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsReadinessDrawerOpen(true)}
+                className="rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Open Slide-Over Evidence Drawer &rarr;
+              </button>
+            </div>
+
+            {/* Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5 pt-4 border-t border-zinc-100 dark:border-zinc-800 text-xs">
+              <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/40">
+                <span className="text-zinc-500 dark:text-zinc-400">Data Coverage</span>
+                <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">
+                  {readiness.dataCoveragePercent}%
+                </p>
+                <div className="mt-1.5 h-1.5 w-full rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+                  <div
+                    style={{ width: `${readiness.dataCoveragePercent}%` }}
+                    className={`h-full rounded-full ${
+                      readiness.dataCoveragePercent >= 80
+                        ? "bg-emerald-500"
+                        : readiness.dataCoveragePercent >= 40
+                        ? "bg-amber-500"
+                        : "bg-rose-500"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/40">
+                <span className="text-zinc-500 dark:text-zinc-400">Cost Provenance</span>
+                <p className="text-sm font-bold text-zinc-900 dark:text-white mt-1">
+                  {readiness.costProvenanceLabel}
+                </p>
+                <span className="text-[10px] text-zinc-400 mt-1 block">
+                  {readiness.isHistoricalCostVerified
+                    ? "Verified Historical Cost (COGS/Margin)"
+                    : "Provisional / Unverified Historical Cost"}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/40">
+                <span className="text-zinc-500 dark:text-zinc-400">HQ Stock Valuation</span>
+                <p className={`text-sm font-bold mt-1 ${readiness.isInventoryValuationPending ? "text-rose-600 dark:text-rose-400" : "text-zinc-900 dark:text-white"}`}>
+                  {readiness.inventoryValuationDisplay}
+                </p>
+                <span className="text-[10px] text-zinc-400 mt-1 block">
+                  {readiness.inventoryUnitsOnHand} units on hand
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Active Deficiency Codes */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-3">
+              Active Data Deficiency Reason Codes ({readiness.reasonCodes.length})
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              {readiness.reasonCodes.map((code) => (
+                <div
+                  key={code}
+                  className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30 flex items-center justify-between"
+                >
+                  <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">{code}</span>
+                  <span className="text-[10px] text-zinc-400">Action Required</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Remediation Action Plan */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-3">
+              Actionable Remediation Plan ({readiness.remediationActions.length} Actions)
+            </h3>
+            <div className="space-y-2.5">
+              {readiness.remediationActions.map((act, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30 space-y-1.5 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-blue-600 dark:text-blue-400 uppercase text-[10px]">
+                      {act.team}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                        act.priority === "CRITICAL"
+                          ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
+                          : act.priority === "HIGH"
+                          ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                          : "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                      }`}>
+                        {act.priority}
+                      </span>
+                      <span className="text-[10px] text-zinc-400">SLA: {act.sla}</span>
+                    </div>
+                  </div>
+                  <p className="font-medium text-zinc-900 dark:text-white">{act.action}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sku Readiness Detail Drawer */}
+      <SkuReadinessDrawer
+        item={summary}
+        isOpen={isReadinessDrawerOpen}
+        onClose={() => setIsReadinessDrawerOpen(false)}
+        asOfDate={new Date().toISOString().split("T")[0]}
+      />
     </div>
   );
 }

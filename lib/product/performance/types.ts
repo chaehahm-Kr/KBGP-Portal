@@ -4,6 +4,8 @@
  * Location: lib/product/performance/types.ts
  */
 
+import type { SkuDataReadiness } from "./sku-readiness";
+
 export type KpiStatus = "ACTUAL" | "ESTIMATED" | "PARTIAL" | "UNAVAILABLE";
 export type KpiUnit = "USD" | "PERCENT" | "DAYS" | "UNITS" | "COUNT" | "RATIO";
 
@@ -204,6 +206,7 @@ export interface VelocityKpis {
   estimatedRetailerSellThroughWeeklyRate: KpiResult<number>;
   reportingQualification: KpiResult<ReportingQualification>;
   replenishmentAdjustmentUnits: KpiResult<number>;
+  weeklyReportsCount?: KpiResult<number>;
 }
 
 // -------------------------------------------------------------
@@ -558,6 +561,7 @@ export interface ProductPerformanceSummary {
   createdAt: string;
   kpis: ProductPerformanceKpis;
   gradeReadiness: GradeReadinessSummary;
+  dataReadiness?: SkuDataReadiness;
   overallDataConfidence: number; // 0.0 - 1.0 aggregate
   riskFlags: string[];
 }
