@@ -1204,10 +1204,10 @@ export function AdminOrdersTable({
       ) : (
         <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs min-w-[1240px]">
+            <table className="w-full text-left text-xs">
               <thead className="bg-zinc-50 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 uppercase tracking-wider font-semibold text-[10px]">
                 <tr>
-                  <th className="py-3 px-3 w-8 text-center">
+                  <th className="py-2.5 px-2 w-8 text-center">
                     <input
                       type="checkbox"
                       checked={isAllSelected}
@@ -1216,46 +1216,46 @@ export function AdminOrdersTable({
                     />
                   </th>
                   <th
-                    className="py-3 px-3 cursor-pointer hover:text-zinc-900 dark:hover:text-white"
+                    className="py-2.5 px-2.5 whitespace-nowrap cursor-pointer hover:text-zinc-900 dark:hover:text-white"
                     onClick={() => handleSort("order_number")}
                   >
                     Order # {sortBy === "order_number" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
                   <th
-                    className="py-3 px-3 cursor-pointer hover:text-zinc-900 dark:hover:text-white"
+                    className="py-2.5 px-2.5 whitespace-nowrap cursor-pointer hover:text-zinc-900 dark:hover:text-white"
                     onClick={() => handleSort("created_at")}
                   >
                     Date & Activity {sortBy === "created_at" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
                   <th
-                    className="py-3 px-3 text-center cursor-pointer hover:text-zinc-900 dark:hover:text-white"
+                    className="py-2.5 px-2 text-center whitespace-nowrap cursor-pointer hover:text-zinc-900 dark:hover:text-white"
                     onClick={() => handleSort("days_open")}
                   >
                     Days Open {sortBy === "days_open" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
                   <th
-                    className="py-3 px-3 cursor-pointer hover:text-zinc-900 dark:hover:text-white"
+                    className="py-2.5 px-2.5 min-w-[140px] cursor-pointer hover:text-zinc-900 dark:hover:text-white"
                     onClick={() => handleSort("retailer")}
                   >
                     Retailer & Destination {sortBy === "retailer" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
-                  <th className="py-3 px-3 text-center">SKUs / Units</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">SKUs / Units</th>
                   <th
-                    className="py-3 px-3 text-center cursor-pointer hover:text-zinc-900 dark:hover:text-white"
+                    className="py-2.5 px-2 text-center whitespace-nowrap cursor-pointer hover:text-zinc-900 dark:hover:text-white"
                     onClick={() => handleSort("remaining")}
                   >
                     Fulfillment Progress {sortBy === "remaining" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
-                  <th className="py-3 px-3">Order Status</th>
-                  <th className="py-3 px-3 text-center">Tracking & Cartons</th>
-                  <th className="py-3 px-3">Invoice & Terms</th>
+                  <th className="py-2.5 px-2 whitespace-nowrap">Order Status</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Tracking & Cartons</th>
+                  <th className="py-2.5 px-2 whitespace-nowrap">Invoice & Terms</th>
                   <th
-                    className="py-3 px-3 text-right cursor-pointer hover:text-zinc-900 dark:hover:text-white"
+                    className="py-2.5 px-2.5 text-right whitespace-nowrap cursor-pointer hover:text-zinc-900 dark:hover:text-white"
                     onClick={() => handleSort("total")}
                   >
                     Total Amount {sortBy === "total" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
-                  <th className="py-3 px-3 text-right">Action</th>
+                  <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
@@ -1274,7 +1274,7 @@ export function AdminOrdersTable({
                       }`}
                     >
                       {/* Checkbox */}
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-2.5 px-2 text-center">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -1284,7 +1284,7 @@ export function AdminOrdersTable({
                       </td>
 
                       {/* Order # and Priority Indicator */}
-                      <td className="py-3 px-3">
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <Link
                             href={`/admin/sales/orders/${ord.id}`}
@@ -1298,13 +1298,13 @@ export function AdminOrdersTable({
                             </span>
                           )}
                         </div>
-                        <div className="mt-1">
+                        <div className="mt-0.5">
                           {getActionBadge(ord)}
                         </div>
                       </td>
 
                       {/* Date & Activity */}
-                      <td className="py-3 px-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap" suppressHydrationWarning>
+                      <td className="py-2.5 px-2.5 text-zinc-600 dark:text-zinc-400 whitespace-nowrap" suppressHydrationWarning>
                         <div className="font-medium text-zinc-900 dark:text-white" suppressHydrationWarning>
                           {formatOrderDate(ord.createdAt)}
                         </div>
@@ -1314,26 +1314,26 @@ export function AdminOrdersTable({
                       </td>
 
                       {/* Days Open */}
-                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-center whitespace-nowrap">
                         {ord.isCompleted || ord.daysOpen === null ? (
                           <span className="text-zinc-400 text-xs font-mono">—</span>
                         ) : ord.daysOpen >= 7 ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30 animate-pulse">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30 animate-pulse">
                             {ord.daysOpen}d
                           </span>
                         ) : ord.daysOpen >= 3 ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
                             {ord.daysOpen}d
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                             {ord.daysOpen}d
                           </span>
                         )}
                       </td>
 
                       {/* Retailer & Destination */}
-                      <td className="py-3 px-3">
+                      <td className="py-2.5 px-2.5">
                         <div className="font-semibold text-zinc-900 dark:text-white leading-tight">
                           {ord.companyName}
                         </div>
@@ -1348,7 +1348,7 @@ export function AdminOrdersTable({
                       </td>
 
                       {/* SKUs & Units */}
-                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-center whitespace-nowrap">
                         <span className="font-mono text-xs font-bold text-zinc-900 dark:text-white">
                           {ord.totalSkusCount} {ord.totalSkusCount === 1 ? "SKU" : "SKUs"}
                         </span>
@@ -1358,8 +1358,8 @@ export function AdminOrdersTable({
                       </td>
 
                       {/* Fulfillment Progress */}
-                      <td className="py-3 px-3">
-                        <div className="w-36 mx-auto space-y-1">
+                      <td className="py-2.5 px-2">
+                        <div className="w-28 mx-auto space-y-1">
                           <div className="flex items-center justify-between text-[11px] font-mono">
                             <span className="font-bold text-indigo-600 dark:text-indigo-400">
                               {ord.totalShippedUnits}/{ord.totalOrderedUnits}
@@ -1390,12 +1390,12 @@ export function AdminOrdersTable({
                       </td>
 
                       {/* Unified Status */}
-                      <td className="py-3 px-3 whitespace-nowrap">
+                      <td className="py-2.5 px-2 whitespace-nowrap">
                         {getStatusBadge(ord.orderStatus)}
                       </td>
 
                       {/* Tracking & Cartons */}
-                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-center whitespace-nowrap">
                         {!ord.hasConfirmedDispatch ? (
                           <span className="text-zinc-400 text-xs italic">— Not Shipped</span>
                         ) : ord.untrackedDispatchesCount > 0 ? (
@@ -1405,7 +1405,7 @@ export function AdminOrdersTable({
                               setViewingTrackingOrder(ord);
                               setInitialFocusDispatchId("incomplete");
                             }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-300/80 dark:border-amber-700/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors cursor-pointer shadow-2xs"
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-300/80 dark:border-amber-700/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors cursor-pointer shadow-2xs"
                           >
                             <span>📦</span>
                             <span>
@@ -1421,7 +1421,7 @@ export function AdminOrdersTable({
                               setViewingTrackingOrder(ord);
                               setInitialFocusDispatchId(null);
                             }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-zinc-50 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors cursor-pointer shadow-2xs"
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-bold bg-zinc-50 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors cursor-pointer shadow-2xs"
                           >
                             <span>📦</span>
                             <span>
@@ -1433,7 +1433,7 @@ export function AdminOrdersTable({
                       </td>
 
                       {/* Invoice & Terms */}
-                      <td className="py-3 px-3 whitespace-nowrap">
+                      <td className="py-2.5 px-2 whitespace-nowrap">
                         {ord.invoices && ord.invoices.length > 0 ? (
                           <div className="space-y-0.5">
                             {ord.invoices.map((inv) => (
@@ -1461,30 +1461,30 @@ export function AdminOrdersTable({
                       </td>
 
                       {/* Total Amount */}
-                      <td className="py-3 px-3 text-right font-black text-zinc-900 dark:text-white whitespace-nowrap">
+                      <td className="py-2.5 px-2.5 text-right font-black text-zinc-900 dark:text-white whitespace-nowrap">
                         ${ord.totalAmount.toFixed(2)}
                       </td>
 
                       {/* Action Button */}
-                      <td className="py-3 px-3 text-right">
+                      <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
                         {ord.cancellationRequested ? (
                           <Link
                             href={`/admin/sales/orders/${ord.id}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 shadow-2xs transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-600 text-white hover:bg-rose-700 shadow-2xs transition-colors"
                           >
                             Review Hold 🛑
                           </Link>
                         ) : ord.totalRemainingUnits > 0 ? (
                           <Link
                             href={`/admin/sales/orders/${ord.id}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 shadow-2xs transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 shadow-2xs transition-colors"
                           >
                             {ord.totalShippedUnits === 0 ? "Process Order ⚡" : `Ship Rem (${ord.totalRemainingUnits}) 📦`}
                           </Link>
                         ) : (
                           <Link
                             href={`/admin/sales/orders/${ord.id}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 transition-colors"
                           >
                             View Details ↗
                           </Link>

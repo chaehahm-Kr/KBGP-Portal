@@ -612,12 +612,12 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/70 text-zinc-600 font-bold dark:border-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-300">
-                <th className="px-4 py-3.5 whitespace-nowrap w-[60px]">사진</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">Letusto SKU</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">제조사 SKU</th>
+                <th className="px-2 py-2.5 whitespace-nowrap w-[48px]">사진</th>
+                <th className="px-2 py-2.5 whitespace-nowrap">Letusto SKU</th>
+                <th className="px-2 py-2.5 whitespace-nowrap">제조사 SKU</th>
                 <th
                   onClick={() => handleSort("name")}
-                  className="px-4 py-3.5 whitespace-nowrap cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
+                  className="px-2 py-2.5 whitespace-nowrap cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none min-w-[140px]"
                 >
                   <div className="flex items-center gap-1">
                     <span>제품명</span>
@@ -628,10 +628,10 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     )}
                   </div>
                 </th>
-                <th className="px-4 py-3.5 whitespace-nowrap">브랜드 / 회사</th>
+                <th className="px-2 py-2.5 whitespace-nowrap min-w-[100px]">브랜드 / 회사</th>
                 <th
                   onClick={() => handleSort("wholesale")}
-                  className="px-4 py-3.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
+                  className="px-2 py-2.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
                 >
                   <div className="flex items-center justify-end gap-1">
                     <span>Wholesale</span>
@@ -644,7 +644,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                 </th>
                 <th
                   onClick={() => handleSort("retail")}
-                  className="px-4 py-3.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
+                  className="px-2 py-2.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
                 >
                   <div className="flex items-center justify-end gap-1">
                     <span>Retail Price</span>
@@ -657,7 +657,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                 </th>
                 <th
                   onClick={() => handleSort("moq")}
-                  className="px-4 py-3.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
+                  className="px-2 py-2.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
                 >
                   <div className="flex items-center justify-end gap-1">
                     <span>Retail MOQ</span>
@@ -670,7 +670,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                 </th>
                 <th
                   onClick={() => handleSort("margin")}
-                  className="px-4 py-3.5 whitespace-nowrap text-center cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
+                  className="px-2 py-2.5 whitespace-nowrap text-center cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>Margin %</span>
@@ -683,7 +683,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                 </th>
                 <th
                   onClick={() => handleSort("onhand")}
-                  className="px-4 py-3.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
+                  className="px-2 py-2.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
                 >
                   <div className="flex items-center justify-end gap-1">
                     <span>OnHand</span>
@@ -696,7 +696,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                 </th>
                 <th
                   onClick={() => handleSort("available")}
-                  className="px-4 py-3.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
+                  className="px-2 py-2.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
                 >
                   <div className="flex items-center justify-end gap-1">
                     <span>Available</span>
@@ -707,9 +707,9 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     )}
                   </div>
                 </th>
-                <th className="px-4 py-3.5 whitespace-nowrap text-center">운영 상태</th>
-                <th className="px-4 py-3.5 whitespace-nowrap text-center">노출 상태</th>
-                <th className="px-4 py-3.5 whitespace-nowrap text-right">관리</th>
+                <th className="px-1.5 py-2.5 whitespace-nowrap text-center min-w-[80px]">운영 상태</th>
+                <th className="px-1.5 py-2.5 whitespace-nowrap text-center min-w-[80px]">노출 상태</th>
+                <th className="px-2 py-2.5 whitespace-nowrap text-right">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -723,24 +723,24 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     }`}
                   >
                     {/* 1. Photo */}
-                    <td className="px-4 py-3 align-middle">
+                    <td className="px-2 py-2 align-middle">
                       <div className="relative h-10 w-10 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 shrink-0">
                         <ProductThumbnail photoUrl={product.photoUrl} alt={product.display_name} />
                       </div>
                     </td>
 
                     {/* 2. Letusto SKU */}
-                    <td className="px-4 py-3 align-middle font-mono font-bold text-xs whitespace-nowrap text-zinc-900 dark:text-white">
+                    <td className="px-2 py-2 align-middle font-mono font-bold text-xs whitespace-nowrap text-zinc-900 dark:text-white">
                       {product.letusto_sku || "—"}
                     </td>
 
                     {/* 3. Mfg SKU */}
-                    <td className="px-4 py-3 align-middle font-mono text-xs whitespace-nowrap text-zinc-600 dark:text-zinc-400">
+                    <td className="px-2 py-2 align-middle font-mono text-xs whitespace-nowrap text-zinc-600 dark:text-zinc-400">
                       {product.display_manufacture_sku || product.manufacture_sku || "—"}
                     </td>
 
                     {/* 4. Product Name */}
-                    <td className="px-4 py-3 align-middle">
+                    <td className="px-2 py-2 align-middle">
                       <Link
                         href={`/admin/products/trading/${product.id}`}
                         className="font-bold text-zinc-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors line-clamp-1"
@@ -753,7 +753,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     </td>
 
                     {/* 5. Brand & Company */}
-                    <td className="px-4 py-3 align-middle whitespace-nowrap">
+                    <td className="px-2 py-2 align-middle whitespace-nowrap">
                       <div className="font-bold text-zinc-900 dark:text-white text-xs">
                         {product.brandName}
                       </div>
@@ -763,7 +763,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     </td>
 
                     {/* 6. Wholesale Price */}
-                    <td className="px-4 py-3 align-middle text-right font-mono text-xs whitespace-nowrap">
+                    <td className="px-2 py-2 align-middle text-right font-mono text-xs whitespace-nowrap">
                       {product.formattedWholesale !== "—" ? (
                         <div className="flex flex-col items-end">
                           <span className="font-bold text-indigo-600 dark:text-indigo-400">
@@ -781,7 +781,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     </td>
 
                     {/* 7. Retail Price */}
-                    <td className="px-4 py-3 align-middle text-right font-mono text-xs whitespace-nowrap">
+                    <td className="px-2 py-2 align-middle text-right font-mono text-xs whitespace-nowrap">
                       {product.formattedRetail !== "—" ? (
                         <span className="font-bold text-zinc-900 dark:text-white">
                           {product.formattedRetail}
@@ -794,7 +794,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     </td>
 
                     {/* 8. Retail MOQ */}
-                    <td className="px-4 py-3 align-middle text-right font-mono text-xs whitespace-nowrap">
+                    <td className="px-2 py-2 align-middle text-right font-mono text-xs whitespace-nowrap">
                       {typeof product.moq === "number" && !isNaN(product.moq) && product.moq > 0 ? (
                         <span className="font-bold text-zinc-900 dark:text-white">
                           {product.moq} EA
@@ -807,7 +807,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     </td>
 
                     {/* 9. Retailer Margin */}
-                    <td className="px-4 py-3 align-middle text-center whitespace-nowrap">
+                    <td className="px-2 py-2 align-middle text-center whitespace-nowrap">
                       {product.formattedMargin !== "—" ? (
                         <div className="flex flex-col items-center gap-0.5">
                           <span className="font-mono font-bold text-xs text-zinc-900 dark:text-white">
@@ -832,12 +832,12 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     </td>
 
                     {/* 9. Qty On Hand */}
-                    <td className="px-4 py-3 align-middle text-right font-mono font-bold text-zinc-900 dark:text-white">
+                    <td className="px-2 py-2 align-middle text-right font-mono font-bold text-zinc-900 dark:text-white">
                       {product.qty_on_hand} EA
                     </td>
 
                     {/* 10. Qty Available (Out of Stock indicator) */}
-                    <td className="px-4 py-3 align-middle text-right font-mono text-xs whitespace-nowrap">
+                    <td className="px-2 py-2 align-middle text-right font-mono text-xs whitespace-nowrap">
                       {product.qty_available > 0 ? (
                         product.qty_available <= 5 ? (
                           <span className="font-bold text-amber-600 dark:text-amber-400">
@@ -863,42 +863,42 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     </td>
 
                     {/* 11. Operational Status Inline Select */}
-                    <td className="px-4 py-3 align-middle text-center whitespace-nowrap">
+                    <td className="px-1.5 py-2 align-middle text-center whitespace-nowrap">
                       <select
                         value={product.trading_status}
                         onChange={(e) => handleTradingStatusSelect(product, e.target.value)}
-                        className={`rounded-lg px-2 py-1 text-[11px] font-bold border outline-none cursor-pointer ${
+                        className={`rounded-lg px-2 py-1 text-[11px] font-bold border outline-none cursor-pointer w-[82px] text-center ${
                           TRADING_COLORS[product.trading_status] || TRADING_COLORS.inactive
                         }`}
                       >
-                        <option value="active" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">운영 중 (Active)</option>
-                        <option value="inactive" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">운영 중지 (Inactive)</option>
-                        <option value="historical" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">운영 종료 (Historical)</option>
+                        <option value="active" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">Active</option>
+                        <option value="inactive" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">Inactive</option>
+                        <option value="historical" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">Historical</option>
                       </select>
                     </td>
 
                     {/* 12. Admin Visibility Setting Inline Select */}
-                    <td className="px-4 py-3 align-middle text-center whitespace-nowrap">
+                    <td className="px-1.5 py-2 align-middle text-center whitespace-nowrap">
                       <select
                         value={product.retailer_visibility}
                         onChange={(e) => handleVisibilitySelect(product, e.target.value)}
                         disabled={product.trading_status !== "active"}
-                        className={`rounded-lg px-2 py-1 text-[11px] font-bold border outline-none ${
+                        className={`rounded-lg px-2 py-1 text-[11px] font-bold border outline-none w-[82px] text-center ${
                           product.trading_status !== "active"
                             ? "opacity-60 cursor-not-allowed bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700"
                             : VISIBILITY_COLORS[product.retailer_visibility] || VISIBILITY_COLORS.hidden
                         }`}
                       >
-                        <option value="visible" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">노출 (Visible)</option>
-                        <option value="hidden" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">비노출 (Hidden)</option>
+                        <option value="visible" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">Visible</option>
+                        <option value="hidden" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">Hidden</option>
                       </select>
                     </td>
 
                     {/* 13. Action CTA */}
-                    <td className="px-4 py-3 align-middle text-right whitespace-nowrap">
+                    <td className="px-2 py-2 align-middle text-right whitespace-nowrap">
                       <Link
                         href={`/admin/products/trading/${product.id}`}
-                        className="inline-flex items-center px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 text-[11px] font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+                        className="inline-flex items-center px-2 py-1 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 text-[11px] font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
                       >
                         상품 운영
                       </Link>

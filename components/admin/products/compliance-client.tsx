@@ -964,17 +964,17 @@ export function ComplianceClient({
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/80 font-semibold text-zinc-600 dark:text-zinc-300">
-              <th className="py-3 px-3 w-14 text-center">Image</th>
-              <th className="py-3 px-4 min-w-[220px]">Product Name / SKU</th>
-              <th className="py-3 px-3 min-w-[140px]">Brand / Company</th>
-              <th className="py-3 px-3 min-w-[120px]">Category</th>
-              <th className="py-3 px-3 min-w-[110px]">FDA Status</th>
-              <th className="py-3 px-3 min-w-[110px]">MoCRA Status</th>
-              <th className="py-3 px-3 min-w-[100px]">OTC Status</th>
-              <th className="py-3 px-3 min-w-[110px]">Drug Facts</th>
-              <th className="py-3 px-3 min-w-[100px]">Label Review</th>
-              <th className="py-3 px-3 min-w-[110px]">Import Ready</th>
-              <th className="py-3 px-3 text-right min-w-[190px]">Actions</th>
+              <th className="py-3 px-2 w-12 text-center">Image</th>
+              <th className="py-3 px-3 min-w-[200px]">Product Name / SKU</th>
+              <th className="py-3 px-2.5 min-w-[130px]">Brand / Company</th>
+              <th className="py-3 px-2.5 min-w-[110px]">Category</th>
+              <th className="py-3 px-2 text-center min-w-[95px]">FDA Status</th>
+              <th className="py-3 px-2 text-center min-w-[95px]">MoCRA Status</th>
+              <th className="py-3 px-2 text-center min-w-[90px]">OTC Status</th>
+              <th className="py-3 px-2 text-center min-w-[95px]">Drug Facts</th>
+              <th className="py-3 px-2 text-center min-w-[95px]">Label Review</th>
+              <th className="py-3 px-2 text-center min-w-[95px]">Import Ready</th>
+              <th className="py-3 px-2 text-center w-[148px] min-w-[140px]">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 text-zinc-800 dark:text-zinc-200">
@@ -1078,37 +1078,43 @@ export function ComplianceClient({
                     })()}
                   </td>
 
-                  {/* Actions: Review Checklist, Catalog, Contact Brand */}
-                  <td className="py-2.5 px-3 text-right space-x-1.5 whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedProduct(p)}
-                      className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:opacity-90 transition-opacity"
-                    >
-                      Review Checklist
-                    </button>
-                    <Link
-                      href={`/admin/products/${p.id}`}
-                      target="_blank"
-                      data-testid={`catalog-link-${p.id}`}
-                      className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                      title="Open authoritative Product Catalog editor"
-                    >
-                      Catalog ↗
-                    </Link>
-                    <Link
-                      href={`/admin/partner-inquiries?type=brand&newCase=1&productId=${encodeURIComponent(p.id)}`}
-                      target="_blank"
-                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
-                      title={`Open Brand Inquiries for ${p.brand_name} (${p.company_name})`}
-                    >
-                      <span>Contact ↗</span>
-                      {Boolean(p.inquiries && p.inquiries.length > 0) && (
-                        <span className="px-1.5 py-0.2 rounded-full bg-purple-600 text-white font-mono text-[9px] font-bold" title={`${p.inquiries!.length} linked inquiry cases`}>
-                          {p.inquiries!.length}
-                        </span>
-                      )}
-                    </Link>
+                  {/* Actions: Compact Two-Row Layout */}
+                  <td className="py-2 px-2 text-center whitespace-nowrap">
+                    <div className="flex flex-col items-center gap-1 w-[138px] mx-auto">
+                      {/* Row 1: Review Checklist */}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProduct(p)}
+                        className="w-full inline-flex items-center justify-center px-2 py-1 rounded-md text-[11px] font-semibold bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
+                      >
+                        Review Checklist
+                      </button>
+                      {/* Row 2: Catalog | Contact */}
+                      <div className="w-full grid grid-cols-2 gap-1">
+                        <Link
+                          href={`/admin/products/${p.id}`}
+                          target="_blank"
+                          data-testid={`catalog-link-${p.id}`}
+                          className="inline-flex items-center justify-center px-1 py-0.5 rounded-md text-[10px] font-medium border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                          title="Open authoritative Product Catalog editor"
+                        >
+                          Catalog ↗
+                        </Link>
+                        <Link
+                          href={`/admin/partner-inquiries?type=brand&newCase=1&productId=${encodeURIComponent(p.id)}`}
+                          target="_blank"
+                          className="inline-flex items-center justify-center gap-1 px-1 py-0.5 rounded-md text-[10px] font-medium border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
+                          title={`Open Brand Inquiries for ${p.brand_name} (${p.company_name})`}
+                        >
+                          <span>Contact ↗</span>
+                          {Boolean(p.inquiries && p.inquiries.length > 0) && (
+                            <span className="px-1 rounded-full bg-purple-600 text-white font-mono text-[8px] font-bold" title={`${p.inquiries!.length} linked inquiry cases`}>
+                              {p.inquiries!.length}
+                            </span>
+                          )}
+                        </Link>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ))

@@ -205,19 +205,19 @@ export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
           <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
             <thead>
               <tr className="border-b border-zinc-150 bg-zinc-50/50 font-bold text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-white">
-                <th className="px-6 py-3.5 font-semibold w-16">로고</th>
-                <th className="px-6 py-3.5 font-semibold">브랜드 코드</th>
-                <th className="px-6 py-3.5 font-semibold">브랜드명</th>
-                <th className="px-6 py-3.5 font-semibold">보유 회사</th>
-                <th className="px-6 py-3.5 font-semibold text-center">상태</th>
-                <th className="px-6 py-3.5 font-semibold text-center">대한민국 상표권</th>
-                <th className="px-6 py-3.5 font-semibold text-center">미국 USPTO</th>
-                <th className="px-3 py-3.5 font-semibold text-center w-16">전체</th>
-                <th className="px-3 py-3.5 font-semibold text-center w-16 text-emerald-700 dark:text-emerald-400">완료</th>
-                <th className="px-3 py-3.5 font-semibold text-center w-16 text-rose-700 dark:text-rose-400">보완</th>
-                <th className="px-3 py-3.5 font-semibold text-center w-16 text-zinc-500 dark:text-zinc-400">삭제</th>
-                <th className="px-6 py-3.5 font-semibold">최근 업데이트일</th>
-                <th className="px-6 py-3.5 font-semibold text-right">관리</th>
+                <th className="px-3 py-3 font-semibold w-14 text-center">로고</th>
+                <th className="px-3 py-3 font-semibold whitespace-nowrap">브랜드 코드</th>
+                <th className="px-3 py-3 font-semibold">브랜드명</th>
+                <th className="px-3 py-3 font-semibold">보유 회사</th>
+                <th className="px-3 py-3 font-semibold text-center whitespace-nowrap min-w-[76px]">상태</th>
+                <th className="px-3 py-3 font-semibold text-center whitespace-nowrap">대한민국 상표권</th>
+                <th className="px-3 py-3 font-semibold text-center whitespace-nowrap">미국 USPTO</th>
+                <th className="px-2 py-3 font-semibold text-center w-14">전체</th>
+                <th className="px-2 py-3 font-semibold text-center w-14 text-emerald-700 dark:text-emerald-400">완료</th>
+                <th className="px-2 py-3 font-semibold text-center w-14 text-rose-700 dark:text-rose-400">보완</th>
+                <th className="px-2 py-3 font-semibold text-center w-14 text-zinc-500 dark:text-zinc-400">삭제</th>
+                <th className="px-3 py-3 font-semibold whitespace-nowrap">최근 업데이트일</th>
+                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -227,30 +227,30 @@ export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
                   className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50 transition-colors"
                 >
                   {/* Logo */}
-                  <td className="px-6 py-3">
+                  <td className="px-3 py-2.5 text-center">
                     {brand.logoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={brand.logoUrl}
                         alt=""
-                        className="h-8 w-8 rounded-md border border-zinc-200 object-cover bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950"
+                        className="h-8 w-8 rounded-md border border-zinc-200 object-cover bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 mx-auto"
                       />
                     ) : (
-                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold text-zinc-400 select-none">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold text-zinc-400 select-none mx-auto">
                         LOGO
                       </div>
                     )}
                   </td>
 
                   {/* Brand Code */}
-                  <td className="px-6 py-3.5 font-mono font-bold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
+                  <td className="px-3 py-2.5 font-mono font-bold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
                     <span className="inline-block rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 border border-zinc-200/80 dark:border-zinc-700">
                       {brand.brandCode || "-"}
                     </span>
                   </td>
 
                   {/* Brand Name */}
-                  <td className="px-6 py-3.5 font-bold text-zinc-950 dark:text-white">
+                  <td className="px-3 py-2.5 font-bold text-zinc-950 dark:text-white">
                     <Link
                       href={`/admin/brands/${brand.id}`}
                       className="hover:underline hover:text-zinc-900 dark:hover:text-zinc-300"
@@ -260,7 +260,7 @@ export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
                   </td>
 
                   {/* Company Name */}
-                  <td className="px-6 py-3.5 text-zinc-700 dark:text-zinc-300">
+                  <td className="px-3 py-2.5 text-zinc-700 dark:text-zinc-300">
                     <Link
                       href={`/admin/companies/${brand.companyId}`}
                       className="hover:underline text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
@@ -270,49 +270,49 @@ export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
                   </td>
 
                   {/* Status */}
-                  <td className="px-6 py-3.5 text-center">
+                  <td className="px-3 py-2.5 text-center whitespace-nowrap min-w-[76px]">
                     {brand.isActive ? (
-                      <span className="inline-block rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-705 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-900/50">
+                      <span className="inline-block whitespace-nowrap rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-705 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-900/50">
                         사용 중
                       </span>
                     ) : (
-                      <span className="inline-block rounded bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                      <span className="inline-block whitespace-nowrap rounded bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
                         사용 중단
                       </span>
                     )}
                   </td>
 
                   {/* KR Trademark */}
-                  <td className="px-6 py-3.5 text-center">
+                  <td className="px-3 py-2.5 text-center whitespace-nowrap">
                     {brand.hasKr ? (
-                      <span className="inline-block rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-705 dark:bg-emerald-950/40 dark:text-emerald-300">
+                      <span className="inline-block whitespace-nowrap rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-705 dark:bg-emerald-950/40 dark:text-emerald-300">
                         보유
                       </span>
                     ) : (
-                      <span className="inline-block rounded bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-400 dark:bg-zinc-850 dark:text-zinc-600">
+                      <span className="inline-block whitespace-nowrap rounded bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-400 dark:bg-zinc-850 dark:text-zinc-600">
                         미보유
                       </span>
                     )}
                   </td>
 
                   {/* US Trademark */}
-                  <td className="px-6 py-3.5 text-center">
+                  <td className="px-3 py-2.5 text-center whitespace-nowrap">
                     {brand.hasUs ? (
-                      <span className="inline-block rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-705 dark:bg-emerald-950/40 dark:text-emerald-300">
+                      <span className="inline-block whitespace-nowrap rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-705 dark:bg-emerald-950/40 dark:text-emerald-300">
                         보유
                       </span>
                     ) : (
-                      <span className="inline-block rounded bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-400 dark:bg-zinc-850 dark:text-zinc-600">
+                      <span className="inline-block whitespace-nowrap rounded bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-400 dark:bg-zinc-850 dark:text-zinc-600">
                         미보유
                       </span>
                     )}
                   </td>
 
                   {/* Total Count Column */}
-                  <td className="px-3 py-3.5 text-center font-mono text-xs">
+                  <td className="px-2 py-2.5 text-center font-mono text-xs whitespace-nowrap">
                     <Link
                       href={`/admin/products?brand_id=${brand.id}`}
-                      className={`inline-block w-9 py-0.5 rounded font-bold transition-colors ${
+                      className={`inline-block w-8 py-0.5 rounded font-bold transition-colors ${
                         brand.productCount.total > 0
                           ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-700"
                           : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
@@ -324,10 +324,10 @@ export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
                   </td>
 
                   {/* Complete Count Column */}
-                  <td className="px-3 py-3.5 text-center font-mono text-xs">
+                  <td className="px-2 py-2.5 text-center font-mono text-xs whitespace-nowrap">
                     <Link
                       href={`/admin/products?brand_id=${brand.id}&reg_status=active`}
-                      className={`inline-block w-9 py-0.5 rounded font-bold transition-colors ${
+                      className={`inline-block w-8 py-0.5 rounded font-bold transition-colors ${
                         brand.productCount.complete > 0
                           ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
                           : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
@@ -339,10 +339,10 @@ export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
                   </td>
 
                   {/* Draft Count Column */}
-                  <td className="px-3 py-3.5 text-center font-mono text-xs">
+                  <td className="px-2 py-2.5 text-center font-mono text-xs whitespace-nowrap">
                     <Link
                       href={`/admin/products?brand_id=${brand.id}&reg_status=draft`}
-                      className={`inline-block w-9 py-0.5 rounded font-bold transition-colors ${
+                      className={`inline-block w-8 py-0.5 rounded font-bold transition-colors ${
                         brand.productCount.draft > 0
                           ? "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50"
                           : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
@@ -354,10 +354,10 @@ export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
                   </td>
 
                   {/* Deleted Count Column */}
-                  <td className="px-3 py-3.5 text-center font-mono text-xs">
+                  <td className="px-2 py-2.5 text-center font-mono text-xs whitespace-nowrap">
                     <Link
                       href={`/admin/products?brand_id=${brand.id}&reg_status=deleted`}
-                      className={`inline-block w-9 py-0.5 rounded font-bold transition-colors ${
+                      className={`inline-block w-8 py-0.5 rounded font-bold transition-colors ${
                         brand.productCount.deleted > 0
                           ? "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
                           : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
@@ -369,13 +369,13 @@ export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
                   </td>
 
                   {/* Last Updated */}
-                  <td className="px-6 py-3.5 text-zinc-400">
+                  <td className="px-3 py-2.5 text-zinc-400 whitespace-nowrap">
                     {brand.lastUpdated}
                   </td>
 
                   {/* Management Action */}
-                  <td className="px-6 py-3.5 text-right font-semibold text-zinc-900 dark:text-white">
-                    <div className="flex items-center justify-end gap-3">
+                  <td className="px-4 py-2.5 text-right font-semibold text-zinc-900 dark:text-white whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-2.5">
                       <Link
                         href={`/admin/brands/${brand.id}`}
                         className="hover:underline"
