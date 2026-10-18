@@ -543,7 +543,7 @@ export async function queryProductPerformanceList(
     }
     fulfilledDates.sort();
     const earliestFulfilledShipmentDate = fulfilledDates.length > 0 ? fulfilledDates[0] : null;
-    const firstShipmentDateOnProduct = (product as any).first_shipment_date || null;
+    const firstShipmentDateOnProduct = product.first_shipment_date || null;
 
     const resolvedFirstShipmentDate = firstShipmentDateOnProduct
       ? firstShipmentDateOnProduct.slice(0, 10)

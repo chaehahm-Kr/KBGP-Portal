@@ -62,6 +62,7 @@ describe("Product Performance V2.0 — Canonical Data Adapter & Service (R5)", (
     category_code: "CAT_SKIN",
     status: "active",
     created_at: "2026-05-01T10:00:00Z",
+    first_shipment_date: "2026-05-01",
     override_landed_cost: 12.5,
     override_landed_cost_updated_at: "2026-08-01T12:00:00Z",
     override_landed_cost_reason: "Direct air freight renegotiation",

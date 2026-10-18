@@ -310,6 +310,7 @@ export interface RawDbProduct {
   category_code?: string | null;
   status?: string | null;
   created_at: string;
+  first_shipment_date?: string | null;
   override_landed_cost?: number | null;
   override_landed_cost_updated_at?: string | null;
   override_landed_cost_reason?: string | null;
