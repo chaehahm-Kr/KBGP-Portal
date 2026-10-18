@@ -516,6 +516,9 @@ export interface ProductPerformanceQueryOptions {
   brandId?: string;
   categoryId?: string;
   searchQuery?: string;
+  readinessFilter?: string;
+  sortBy?: "sales" | "profit" | "inventory" | "confidence" | "name";
+  sortOrder?: "asc" | "desc";
   asOfDate?: string; // YYYY-MM-DD (defaults to today ET)
   lookbackDays?: number; // defaults to 60 days
   timezone?: string; // defaults to "America/New_York"

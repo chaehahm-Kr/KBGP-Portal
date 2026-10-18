@@ -96,8 +96,8 @@ export function SkuPerformanceDashboard({
   const [readinessFilter, setReadinessFilter] = useState("ALL");
   const [lookbackDays, setLookbackDays] = useState(60);
   const [sortBy, setSortBy] = useState<"sales" | "profit" | "inventory" | "confidence" | "name">("sales");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [currentPage, setCurrentPage] = useState(initialResult.page || 1);
+  const [pageSize, setPageSize] = useState(initialResult.pageSize || 25);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Readiness Drawer State
@@ -112,21 +112,35 @@ export function SkuPerformanceDashboard({
     cat?: string;
     query?: string;
     size?: number;
+    readiness?: string;
+    sort?: "sales" | "profit" | "inventory" | "confidence" | "name";
   }) => {
     startTransition(async () => {
       setErrorMsg(null);
+      const targetPage = options.page ?? currentPage;
+      const targetSize = options.size ?? pageSize;
+      const targetDays = options.days ?? lookbackDays;
+      const targetBrand = options.brand !== undefined ? options.brand : selectedBrand;
+      const targetCat = options.cat !== undefined ? options.cat : selectedCategory;
+      const targetQuery = options.query !== undefined ? options.query : search;
+      const targetReadiness = options.readiness !== undefined ? options.readiness : readinessFilter;
+      const targetSort = options.sort !== undefined ? options.sort : sortBy;
+
       const res = await fetchProductPerformancePageAction({
-        page: options.page ?? currentPage,
-        pageSize: options.size ?? pageSize,
-        lookbackDays: options.days ?? lookbackDays,
-        brandId: options.brand ?? (selectedBrand || undefined),
-        categoryId: options.cat ?? (selectedCategory || undefined),
-        searchQuery: options.query !== undefined ? options.query : (search || undefined),
+        page: targetPage,
+        pageSize: targetSize,
+        lookbackDays: targetDays,
+        brandId: targetBrand || undefined,
+        categoryId: targetCat || undefined,
+        searchQuery: targetQuery ? targetQuery.trim() : undefined,
+        readinessFilter: targetReadiness || undefined,
+        sortBy: targetSort,
       });
 
       if (res.success && res.data) {
         setData(res.data);
-        if (options.page !== undefined) setCurrentPage(options.page);
+        setCurrentPage(res.data.page);
+        setPageSize(res.data.pageSize);
       } else {
         setErrorMsg(res.error || "Failed to load performance metrics.");
       }
@@ -157,62 +171,38 @@ export function SkuPerformanceDashboard({
     loadData({ cat: catCode, page: 1 });
   };
 
+  const handleSortChange = (newSort: "sales" | "profit" | "inventory" | "confidence" | "name") => {
+    setSortBy(newSort);
+    setCurrentPage(1);
+    loadData({ sort: newSort, page: 1 });
+  };
+
+  const handleReadinessFilterChange = (newFilter: string) => {
+    setReadinessFilter(newFilter);
+    setCurrentPage(1);
+    loadData({ readiness: newFilter, page: 1 });
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setCurrentPage(1);
+    loadData({ size: newSize, page: 1 });
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    loadData({ page: newPage });
+  };
+
   const handleResetFilters = () => {
     setSearch("");
     setSelectedBrand("");
     setSelectedCategory("");
     setReadinessFilter("ALL");
+    setSortBy("sales");
     setCurrentPage(1);
-    loadData({ query: "", brand: "", cat: "", page: 1 });
+    loadData({ query: "", brand: "", cat: "", readiness: "ALL", sort: "sales", page: 1 });
   };
-
-  // Client-side filtering & sorting on retrieved page items
-  const sortedItems = useMemo(() => {
-    let items = [...data.items];
-
-    if (readinessFilter !== "ALL") {
-      items = items.filter((item) => {
-        const readiness =
-          item.dataReadiness ||
-          evaluateSkuDataReadiness({
-            productId: item.productId,
-            onHandUnits: item.kpis?.inventory?.hqAvailableUnits?.value ?? 0,
-            kpis: item.kpis,
-            completedOrdersCount: item.gradeReadiness.metrics.completedOrdersCount,
-            distinctStoresCount: item.gradeReadiness.metrics.distinctStoresCount,
-            weeklyChecksCount: item.kpis?.velocity?.weeklyReportsCount?.value ?? 0,
-            asOfDate: data.period.asOfDate,
-          });
-        return matchesReadinessFilter(readiness, readinessFilter);
-      });
-    }
-
-    switch (sortBy) {
-      case "sales":
-        return items.sort(
-          (a, b) => (b.kpis.financial.b2bNetSales.value || 0) - (a.kpis.financial.b2bNetSales.value || 0)
-        );
-      case "profit":
-        return items.sort((a, b) => {
-          const profA = a.kpis.financial.grossProfit.value;
-          const profB = b.kpis.financial.grossProfit.value;
-          if (profA === null && profB === null) return 0;
-          if (profA === null) return 1;
-          if (profB === null) return -1;
-          return profB - profA;
-        });
-      case "inventory":
-        return items.sort(
-          (a, b) => (b.kpis.inventory.hqInventoryValue.value || 0) - (a.kpis.inventory.hqInventoryValue.value || 0)
-        );
-      case "confidence":
-        return items.sort((a, b) => b.overallDataConfidence - a.overallDataConfidence);
-      case "name":
-        return items.sort((a, b) => a.productName.localeCompare(b.productName));
-      default:
-        return items;
-    }
-  }, [data.items, sortBy, readinessFilter, data.period.asOfDate]);
 
   const kpiSummary = data.kpiSummary;
 
@@ -433,7 +423,7 @@ export function SkuPerformanceDashboard({
             {/* Sort Dropdown */}
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
+              onChange={(e) => handleSortChange(e.target.value as any)}
               className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-800 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
             >
               <option value="sales">Sort: Net Sales (High to Low)</option>
@@ -446,7 +436,7 @@ export function SkuPerformanceDashboard({
             {/* Data Readiness Filter */}
             <select
               value={readinessFilter}
-              onChange={(e) => setReadinessFilter(e.target.value)}
+              onChange={(e) => handleReadinessFilterChange(e.target.value)}
               className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-800 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
             >
               <option value="ALL">All Readiness Statuses</option>
@@ -510,7 +500,7 @@ export function SkuPerformanceDashboard({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {sortedItems.length === 0 ? (
+              {data.items.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-12 text-center text-zinc-500 dark:text-zinc-400">
                     <p className="text-sm font-semibold">No products found</p>
@@ -518,7 +508,7 @@ export function SkuPerformanceDashboard({
                   </td>
                 </tr>
               ) : (
-                sortedItems.map((item) => {
+                data.items.map((item) => {
                   const readiness: SkuDataReadiness =
                     item.dataReadiness ||
                     evaluateSkuDataReadiness({
@@ -762,19 +752,14 @@ export function SkuPerformanceDashboard({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
           <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
             <span>
-              Showing {data.items.length > 0 ? (data.page - 1) * data.pageSize + 1 : 0} to{" "}
+              Showing {data.totalCount > 0 ? (data.page - 1) * data.pageSize + 1 : 0} to{" "}
               {Math.min(data.page * data.pageSize, data.totalCount)} of {data.totalCount} products
             </span>
             <div className="flex items-center gap-1">
               <span>Rows per page:</span>
               <select
                 value={pageSize}
-                onChange={(e) => {
-                  const newSize = Number(e.target.value);
-                  setPageSize(newSize);
-                  setCurrentPage(1);
-                  loadData({ size: newSize, page: 1 });
-                }}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
                 className="rounded border border-zinc-200 bg-white px-2 py-0.5 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
               >
                 <option value={10}>10</option>
@@ -788,7 +773,7 @@ export function SkuPerformanceDashboard({
             <button
               type="button"
               disabled={currentPage <= 1 || isPending}
-              onClick={() => loadData({ page: currentPage - 1 })}
+              onClick={() => handlePageChange(currentPage - 1)}
               className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
             >
               Previous
@@ -799,7 +784,7 @@ export function SkuPerformanceDashboard({
             <button
               type="button"
               disabled={currentPage >= data.totalPages || isPending}
-              onClick={() => loadData({ page: currentPage + 1 })}
+              onClick={() => handlePageChange(currentPage + 1)}
               className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
             >
               Next

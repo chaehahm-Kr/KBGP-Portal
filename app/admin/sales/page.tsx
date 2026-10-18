@@ -23,8 +23,11 @@ interface AdminSalesPageProps {
     days?: string;
     q?: string;
     page?: string;
+    size?: string;
     brand?: string;
     cat?: string;
+    readiness?: string;
+    sort?: string;
     start?: string;
     end?: string;
   }>;
@@ -47,10 +50,12 @@ export default async function AdminSalesPage(props: AdminSalesPageProps) {
       fetchProductPerformancePageAction({
         lookbackDays,
         page,
-        pageSize: 25,
+        pageSize: searchParams.size ? Number(searchParams.size) : 25,
         searchQuery: searchParams.q,
         brandId: searchParams.brand,
         categoryId: searchParams.cat,
+        readinessFilter: searchParams.readiness,
+        sortBy: searchParams.sort as any,
       }),
       fetchPerformanceFilterOptionsAction(),
     ]);

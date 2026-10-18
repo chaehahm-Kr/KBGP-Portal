@@ -19,7 +19,7 @@ import { resolveEvaluationPeriod, daysBetween, safeRound } from "./helpers";
 import { calculateProductPerformanceKpis } from "./master-engine";
 import { checkProductEligibility } from "./grade-policy";
 import { buildMasterProductPerformanceInput } from "./data-adapter";
-import { evaluateSkuDataReadiness } from "./sku-readiness";
+import { evaluateSkuDataReadiness, matchesReadinessFilter } from "./sku-readiness";
 import type {
   ProductPerformanceQueryOptions,
   ProductPerformanceQueryResult,
@@ -250,43 +250,47 @@ export async function queryProductPerformanceList(
     productQuery = productQuery.eq("brand_id", options.brandId);
   }
 
+  if (options.categoryId) {
+    productQuery = productQuery.or(`category_code.eq.${options.categoryId},category.eq.${options.categoryId}`);
+  }
+
   if (options.searchQuery) {
     const q = options.searchQuery.trim();
-    productQuery = productQuery.or(`name.ilike.%${q}%,letusto_sku.ilike.%${q}%`);
+    productQuery = productQuery.or(`name.ilike.%${q}%,name_en.ilike.%${q}%,letusto_sku.ilike.%${q}%,manufacture_sku.ilike.%${q}%`);
   }
 
   // Ordering
   productQuery = productQuery.order("name", { ascending: true });
 
-  // Pagination
-  const page = Math.max(1, options.page || 1);
-  const pageSize = Math.max(1, Math.min(100, options.pageSize || 50));
-  const fromIndex = (page - 1) * pageSize;
-  const toIndex = fromIndex + pageSize - 1;
-
-  // Retrieve products
-  const { data: rawProducts, count: rawCount, error: productError } = await productQuery.range(
-    fromIndex,
-    toIndex
-  );
+  // Retrieve matching products
+  const { data: rawProducts, error: productError } = await productQuery;
 
   if (productError) {
     throw new Error(`Failed to query products from database: ${productError.message}`);
   }
 
   const products: RawDbProduct[] = (rawProducts || []) as any[];
-  const totalCount = rawCount !== null && rawCount !== undefined ? rawCount : products.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
 
   if (products.length === 0) {
     return {
       items: [],
       totalCount: 0,
-      page,
-      pageSize,
+      page: 1,
+      pageSize: Math.max(1, Math.min(100, options.pageSize || 25)),
       totalPages: 0,
       period,
       benchmarkMs: Date.now() - startTime,
+      kpiSummary: {
+        totalB2bNetSales: 0,
+        totalGrossProfit: 0,
+        aggregateGrossMargin: null,
+        totalHqInventoryValue: 0,
+        totalAvailableUnits: 0,
+        uniqueExchangeClaimingStores: 0,
+        productsNeedingAction: "POLICY PENDING",
+        hasMissingCostProvenance: false,
+        hasMissingInventoryCost: false,
+      },
     };
   }
 
@@ -626,16 +630,48 @@ export async function queryProductPerformanceList(
     items.push(summary);
   }
 
-  // 5. Aggregate KPI Summary across evaluated items
+  // 5. Apply Readiness Filter across complete evaluated dataset if specified
+  let applicableItems = items;
+  if (options.readinessFilter && options.readinessFilter !== "ALL") {
+    applicableItems = items.filter((item) => {
+      const readiness =
+        item.dataReadiness ||
+        evaluateSkuDataReadiness({
+          productId: item.productId,
+          onHandUnits: item.kpis?.inventory?.hqAvailableUnits?.value ?? 0,
+          kpis: item.kpis,
+          completedOrdersCount: item.gradeReadiness.metrics.completedOrdersCount,
+          distinctStoresCount: item.gradeReadiness.metrics.distinctStoresCount,
+          weeklyChecksCount: item.kpis?.velocity?.weeklyReportsCount?.value ?? 0,
+          asOfDate: period.asOfDate,
+        });
+      return matchesReadinessFilter(readiness, options.readinessFilter!);
+    });
+  }
+
+  // 6. Aggregate KPI Summary across the complete applicable filtered dataset
   let totalB2bNetSales = 0;
   let totalGrossProfit: number | null = 0;
   let totalHqInventoryValue: number | null = 0;
   let totalAvailableUnits = 0;
   let hasMissingCostProvenance = false;
   let hasMissingInventoryCost = false;
+
+  const applicableProductIdsSet = new Set(applicableItems.map((i) => i.productId));
   const distinctClaimingStoresSet = new Set<string>();
 
-  for (const item of items) {
+  for (const claim of claimItems) {
+    if (
+      applicableProductIdsSet.has(claim.product_id) &&
+      claim.status !== "cancelled" &&
+      claim.status !== "rejected" &&
+      claim.store_id
+    ) {
+      distinctClaimingStoresSet.add(claim.store_id);
+    }
+  }
+
+  for (const item of applicableItems) {
     const netSales = item.kpis.financial.b2bNetSales.value || 0;
     totalB2bNetSales += netSales;
 
@@ -649,17 +685,22 @@ export async function queryProductPerformanceList(
     const availUnits = item.kpis.inventory.hqAvailableUnits.value || 0;
     totalAvailableUnits += availUnits;
 
-    if (item.kpis.inventory.hqInventoryValue.status === "UNAVAILABLE") {
+    if (
+      item.kpis.inventory.hqInventoryValue.status === "UNAVAILABLE" ||
+      item.dataReadiness?.isInventoryValuationPending
+    ) {
       hasMissingInventoryCost = true;
       totalHqInventoryValue = null;
     } else if (totalHqInventoryValue !== null) {
       totalHqInventoryValue += item.kpis.inventory.hqInventoryValue.value || 0;
     }
 
-    const claimingStores = item.kpis.exchange.uniqueClaimingStoreCount.value || 0;
-    if (claimingStores > 0) {
-      for (let i = 0; i < claimingStores; i++) {
-        distinctClaimingStoresSet.add(`${item.productId}:store:${i}`);
+    if (distinctClaimingStoresSet.size === 0) {
+      const claimingStores = item.kpis.exchange.uniqueClaimingStoreCount.value || 0;
+      if (claimingStores > 0) {
+        for (let i = 0; i < claimingStores; i++) {
+          distinctClaimingStoresSet.add(`${item.productId}:store:${i}`);
+        }
       }
     }
   }
@@ -681,8 +722,78 @@ export async function queryProductPerformanceList(
     hasMissingInventoryCost,
   };
 
+  // 7. Stable Sorting of complete applicable dataset before pagination
+  const sortBy = options.sortBy || "sales";
+  const sortOrder = options.sortOrder || (sortBy === "name" ? "asc" : "desc");
+
+  const sortedItems = [...applicableItems].sort((a, b) => {
+    let cmp = 0;
+    switch (sortBy) {
+      case "sales": {
+        const valA = a.kpis.financial.b2bNetSales.value ?? 0;
+        const valB = b.kpis.financial.b2bNetSales.value ?? 0;
+        cmp = valB - valA;
+        break;
+      }
+      case "profit": {
+        const valA = a.kpis.financial.grossProfit.value;
+        const valB = b.kpis.financial.grossProfit.value;
+        if (valA === null && valB === null) cmp = 0;
+        else if (valA === null) cmp = 1;
+        else if (valB === null) cmp = -1;
+        else cmp = valB - valA;
+        break;
+      }
+      case "inventory": {
+        const valA = a.kpis.inventory.hqInventoryValue.value ?? 0;
+        const valB = b.kpis.inventory.hqInventoryValue.value ?? 0;
+        cmp = valB - valA;
+        break;
+      }
+      case "confidence": {
+        cmp = b.overallDataConfidence - a.overallDataConfidence;
+        break;
+      }
+      case "name": {
+        cmp = a.productName.localeCompare(b.productName);
+        break;
+      }
+      default:
+        cmp = 0;
+    }
+
+    if (sortOrder === "asc" && sortBy !== "name") {
+      cmp = -cmp;
+    } else if (sortOrder === "desc" && sortBy === "name") {
+      cmp = -cmp;
+    }
+
+    // Deterministic tie-breaker for pagination stability
+    if (cmp === 0) {
+      cmp = a.productId.localeCompare(b.productId);
+    }
+    return cmp;
+  });
+
+  // 8. Pagination Metadata & Sliced Page Extraction
+  const totalCount = sortedItems.length;
+  const pageSize = Math.max(1, Math.min(100, options.pageSize || 25));
+  const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / pageSize);
+
+  let page = Math.max(1, options.page || 1);
+  if (totalPages > 0 && page > totalPages) {
+    page = totalPages;
+  }
+  if (totalCount === 0) {
+    page = 1;
+  }
+
+  const fromIndex = (page - 1) * pageSize;
+  const toIndex = fromIndex + pageSize;
+  const pagedItems = sortedItems.slice(fromIndex, toIndex);
+
   return {
-    items,
+    items: pagedItems,
     totalCount,
     page,
     pageSize,
