@@ -96,7 +96,7 @@ export interface TrainingProductDetail extends TrainingProductSummary {
 export interface OfficialCoverageData {
   scope: "company" | "store";
   label: string;
-  percent: number;
+  percent: number | null;
   coveredCount: number;
   totalCount: number;
   unitLabel: string;

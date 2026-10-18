@@ -135,18 +135,34 @@ export function TrainingListView({
 
             <h2 className="text-base sm:text-lg font-black tracking-tight">
               {stats.officialCoverage
-                ? `${stats.officialCoverage.label}: ${stats.officialCoverage.percent}%`
-                : `${stats.completedCount} of ${stats.availableCount} Modules Verified Complete`}
+                ? stats.officialCoverage.percent !== null
+                  ? `${stats.officialCoverage.label}: ${stats.officialCoverage.percent}%`
+                  : `${stats.officialCoverage.label}: N/A`
+                : stats.availableCount > 0
+                ? `${stats.completedCount} of ${stats.availableCount} Modules Verified Complete`
+                : "No Modules Available"}
             </h2>
 
             <p className="text-xs text-blue-100/90 leading-relaxed">
               {stats.officialCoverage && (
                 <span>
-                  Official Store Coverage: <strong className="text-white">{stats.officialCoverage.coveredCount} of {stats.officialCoverage.totalCount} {stats.officialCoverage.unitLabel}</strong> covered by certified staff passes.{" "}
+                  Official Store Coverage:{" "}
+                  <strong className="text-white">
+                    {stats.officialCoverage.totalCount > 0
+                      ? `${stats.officialCoverage.coveredCount} of ${stats.officialCoverage.totalCount} ${stats.officialCoverage.unitLabel}`
+                      : "0 of 0 (No Published Modules)"}
+                  </strong>{" "}
+                  {stats.officialCoverage.totalCount > 0 ? "covered by certified staff passes. " : " "}
                 </span>
               )}
               <span>
-                My Verified Learning: <strong className="text-emerald-300">{stats.completedCount} of {stats.availableCount} modules ({stats.percent}%)</strong> passed.
+                My Verified Learning:{" "}
+                <strong className="text-emerald-300">
+                  {stats.availableCount > 0
+                    ? `${stats.completedCount} of ${stats.availableCount} modules (${stats.percent}%)`
+                    : "0 of 0 modules (N/A)"}
+                </strong>{" "}
+                passed.
               </span>
             </p>
 
@@ -170,13 +186,13 @@ export function TrainingListView({
                     Official Coverage
                   </span>
                   <span className="text-base font-black text-white">
-                    {stats.officialCoverage.percent}%
+                    {stats.officialCoverage.percent !== null ? `${stats.officialCoverage.percent}%` : "N/A"}
                   </span>
                 </div>
                 <div className="w-full bg-white/20 rounded-full h-1.5 overflow-hidden my-1">
                   <div
                     className="bg-emerald-400 h-full rounded-full transition-all duration-500 ease-out"
-                    style={{ width: `${stats.officialCoverage.percent}%` }}
+                    style={{ width: `${stats.officialCoverage.percent ?? 0}%` }}
                   />
                 </div>
                 <span className="text-[9px] text-blue-200/90 block">
@@ -192,13 +208,13 @@ export function TrainingListView({
                   My Verified Learning
                 </span>
                 <span className="text-base font-black text-emerald-300">
-                  {stats.percent}%
+                  {stats.availableCount > 0 ? `${stats.percent}%` : "N/A"}
                 </span>
               </div>
               <div className="w-full bg-white/20 rounded-full h-1.5 overflow-hidden my-1">
                 <div
                   className="bg-emerald-400 h-full rounded-full transition-all duration-500 ease-out"
-                  style={{ width: `${stats.percent}%` }}
+                  style={{ width: `${stats.availableCount > 0 ? stats.percent : 0}%` }}
                 />
               </div>
               <span className="text-[9px] text-blue-200/90 block">

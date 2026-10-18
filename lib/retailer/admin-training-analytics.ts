@@ -277,14 +277,15 @@ export async function computeRetailerTrainingAnalytics({
     console.warn("[Training Analytics] Error fetching retailer_weekly_checks:", err);
   }
 
-  const distinctProductIds = Array.from(allCompanyProductIds);
+  const rawDistinctProductIds = Array.from(allCompanyProductIds);
 
   // 2. Fetch Catalog Details, Images & Training Content for candidate products
   const productCatalogMap = new Map<string, any>();
   const trainingContentMap = new Map<string, any>();
   let productImagesMap: Record<string, { primaryUrl: string | null; galleryUrls: string[] }> = {};
+  let distinctProductIds: string[] = [];
 
-  if (distinctProductIds.length > 0) {
+  if (rawDistinctProductIds.length > 0) {
     try {
       const [prodsRes, tContentsRes, imagesResult] = await Promise.all([
         adminClient
@@ -297,13 +298,15 @@ export async function computeRetailerTrainingAnalytics({
             category_code,
             letusto_sku,
             manufacture_sku,
+            status,
             price_additional_info,
             brands (
               id,
               name
             )
           `)
-          .in("id", distinctProductIds),
+          .in("id", rawDistinctProductIds)
+          .neq("status", "discontinued"),
         adminClient
           .from("retailer_product_training_content")
           .select(`
@@ -315,13 +318,30 @@ export async function computeRetailerTrainingAnalytics({
             quiz_questions,
             published_at
           `)
-          .in("product_id", distinctProductIds),
-        resolveAuthoritativeProductImages(adminClient, distinctProductIds),
+          .in("product_id", rawDistinctProductIds),
+        resolveAuthoritativeProductImages(adminClient, rawDistinctProductIds),
       ]);
 
-      (prodsRes.data || []).forEach((p) => productCatalogMap.set(p.id, p));
+      const activeCatalogIds = new Set<string>();
+      (prodsRes.data || []).forEach((p) => {
+        productCatalogMap.set(p.id, p);
+        activeCatalogIds.add(p.id);
+      });
       (tContentsRes.data || []).forEach((tc) => trainingContentMap.set(tc.product_id, tc));
       productImagesMap = imagesResult || {};
+
+      // Filter distinct product IDs and store assortments to strictly exclude discontinued or uncataloged products
+      distinctProductIds = rawDistinctProductIds.filter((pId) => activeCatalogIds.has(pId));
+      stores.forEach((st) => {
+        const pSet = storeProductsMap.get(st.id);
+        if (pSet) {
+          for (const pId of Array.from(pSet)) {
+            if (!activeCatalogIds.has(pId)) {
+              pSet.delete(pId);
+            }
+          }
+        }
+      });
     } catch (err) {
       console.warn("[Training Analytics] Error fetching catalog & training data:", err);
     }
@@ -802,6 +822,27 @@ export async function computeBatchRetailersTrainingCoverage(
       return resultMap;
     }
 
+    // Exclude discontinued products from candidate published training products
+    const candidatePublishedIds = Array.from(publishedProductIds);
+    if (candidatePublishedIds.length > 0) {
+      const { data: nonDiscProds } = await adminClient
+        .from("products")
+        .select("id")
+        .in("id", candidatePublishedIds)
+        .neq("status", "discontinued");
+
+      const nonDiscSet = new Set((nonDiscProds || []).map((p) => p.id));
+      for (const pid of candidatePublishedIds) {
+        if (!nonDiscSet.has(pid)) {
+          publishedProductIds.delete(pid);
+        }
+      }
+    }
+
+    if (publishedProductIds.size === 0) {
+      return resultMap;
+    }
+
     const publishedIdList = Array.from(publishedProductIds);
 
     // 2. Fetch relevant company data in parallel
@@ -865,8 +906,13 @@ export async function computeBatchRetailersTrainingCoverage(
     // A. From retailer_store_products
     (spRes.data || []).forEach((row: any) => {
       const stMap = companyStoreProducts.get(row.company_id);
-      if (stMap && row.store_id && stMap.has(row.store_id) && publishedProductIds.has(row.product_id)) {
-        stMap.get(row.store_id)!.add(row.product_id);
+      if (stMap && publishedProductIds.has(row.product_id)) {
+        const storeIds = Array.from(stMap.keys());
+        if (row.store_id && stMap.has(row.store_id)) {
+          stMap.get(row.store_id)!.add(row.product_id);
+        } else if (storeIds.length === 1) {
+          stMap.get(storeIds[0])!.add(row.product_id);
+        }
       }
     });
 
@@ -893,10 +939,13 @@ export async function computeBatchRetailersTrainingCoverage(
       if (!stMap) return;
       const targetStoreId = chk.store_id;
       const items = (chk.retailer_weekly_check_items as any[]) || [];
+      const storeIds = Array.from(stMap.keys());
       items.forEach((it) => {
         if (!it.is_counted || !it.product_id || !publishedProductIds.has(it.product_id)) return;
         if (targetStoreId && stMap.has(targetStoreId)) {
           stMap.get(targetStoreId)!.add(it.product_id);
+        } else if (storeIds.length === 1) {
+          stMap.get(storeIds[0])!.add(it.product_id);
         }
       });
     });
@@ -1002,7 +1051,7 @@ export async function computeBatchRetailersTrainingCoverage(
 export interface AuthoritativeCoverageMetric {
   scope: "company" | "store";
   label: string;
-  percent: number;
+  percent: number | null;
   coveredCount: number;
   totalCount: number;
   unitLabel: string;
@@ -1032,47 +1081,70 @@ export async function getAuthoritativeTrainingCoverage(
 
   const userIds = (companyUsers || []).map((cu: any) => cu.id);
   const storeAccessMap = new Map<string, Array<{ id: string; name: string }>>();
-  const allStoresAccessMap = new Map<string, boolean>();
+  const userRolesMap = new Map<string, any>();
 
   if (userIds.length > 0) {
     try {
-      const { data: accessRows } = await adminClient
-        .from("retailer_user_store_access")
-        .select(`
-          user_id,
-          has_all_stores_access,
-          store_id,
-          stores (
-            id,
-            name
-          )
-        `)
-        .in("user_id", userIds);
+      const [rolesRes, accessRes] = await Promise.all([
+        adminClient
+          .from("retailer_user_roles")
+          .select("user_id, role, has_all_stores_access")
+          .eq("company_id", companyId)
+          .in("user_id", userIds),
+        adminClient
+          .from("retailer_user_store_access")
+          .select(`
+            user_id,
+            store_id,
+            stores (
+              id,
+              name
+            )
+          `)
+          .eq("company_id", companyId)
+          .in("user_id", userIds),
+      ]);
 
-      (accessRows || []).forEach((row: any) => {
-        if (row.has_all_stores_access) {
-          allStoresAccessMap.set(row.user_id, true);
-        }
+      (rolesRes.data || []).forEach((r: any) => {
+        userRolesMap.set(r.user_id, r);
+      });
+
+      (accessRes.data || []).forEach((row: any) => {
         if (row.stores) {
           const list = storeAccessMap.get(row.user_id) || [];
           list.push({ id: row.stores.id, name: row.stores.name });
           storeAccessMap.set(row.user_id, list);
         }
       });
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn("[getAuthoritativeTrainingCoverage] Error fetching roles or access:", err);
     }
   }
 
+  const validRoles = ["owner", "buyer", "store_manager", "employee", "accounting"];
   const members = (companyUsers || []).map((cu: any) => {
-    const isOwnerRole = cu.company_role === "company_admin" || cu.company_role === "owner";
+    const r = userRolesMap.get(cu.id);
+    let resolvedRole = "employee";
+    if (r?.role && validRoles.includes(r.role)) {
+      resolvedRole = r.role;
+    } else if (cu.company_role === "owner" || cu.company_role === "company_admin") {
+      resolvedRole = "owner";
+    } else if (cu.company_role && validRoles.includes(cu.company_role)) {
+      resolvedRole = cu.company_role;
+    }
+
+    const hasAllStoresAccess = resolvedRole === "owner" || Boolean(r?.has_all_stores_access);
+    const assignedStores = hasAllStoresAccess
+      ? stores.map((s) => ({ id: s.id, name: s.name }))
+      : storeAccessMap.get(cu.id) || [];
+
     return {
       id: cu.id,
       fullName: cu.name,
       email: cu.email,
-      role: cu.company_role || "employee",
-      hasAllStoresAccess: isOwnerRole || allStoresAccessMap.get(cu.id) === true,
-      assignedStores: storeAccessMap.get(cu.id) || [],
+      role: resolvedRole,
+      hasAllStoresAccess,
+      assignedStores,
     };
   });
 
@@ -1087,7 +1159,7 @@ export async function getAuthoritativeTrainingCoverage(
     return {
       scope: "company",
       label: "Official Company Coverage",
-      percent: analytics.summary.storeCoveragePercent ?? 0,
+      percent: analytics.summary.storeCoveragePercent,
       coveredCount: analytics.summary.coveredPairsCount,
       totalCount: analytics.summary.eligiblePairsCount,
       unitLabel: "Store/Product Pairs",
@@ -1099,7 +1171,7 @@ export async function getAuthoritativeTrainingCoverage(
     return {
       scope: "store",
       label: `${matchedStore.storeName} Coverage`,
-      percent: matchedStore.coveragePercent ?? 0,
+      percent: matchedStore.coveragePercent,
       coveredCount: matchedStore.coveredProductsCount,
       totalCount: matchedStore.publishedProductsCount,
       unitLabel: "Store Products",
@@ -1109,7 +1181,7 @@ export async function getAuthoritativeTrainingCoverage(
   return {
     scope: "store",
     label: "Store Coverage",
-    percent: 0,
+    percent: null,
     coveredCount: 0,
     totalCount: 0,
     unitLabel: "Store Products",
