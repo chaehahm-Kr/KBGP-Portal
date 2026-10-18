@@ -7,6 +7,7 @@ import {
   FollowUpStatus,
   StoreTimelineItem,
   UpdateStoreActivityInput,
+  formatWeeklyInventoryCheckDescription,
 } from "@/lib/retailer/admin-store-activities-types";
 
 // Helper validator replicating server action rules in lib/retailer/admin-activity-actions.ts
@@ -538,6 +539,69 @@ describe("Store Activities Persistence Lifecycle & Security Contracts (ADM-STORE
 
       expect(items[0].id).toBe("item_new");
       expect(items[1].id).toBe("item_old");
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // 6. INVENTORY EVENT STATUS MESSAGING (ADM-STORE-OPS-P4-006-R6)
+  // --------------------------------------------------------------------------
+  describe("6. Weekly Inventory Check Status-Specific Messaging (ADM-STORE-OPS-P4-006-R6)", () => {
+    it("returns draft description (in progress) when status is 'draft'", () => {
+      const desc = formatWeeklyInventoryCheckDescription("draft");
+      expect(desc).toBe("Store inventory stock check draft in progress by on-site retailer personnel.");
+      expect(desc).not.toContain("submitted");
+    });
+
+    it("returns submitted description (completed) when status is 'submitted'", () => {
+      const desc = formatWeeklyInventoryCheckDescription("submitted");
+      expect(desc).toBe("Official store inventory stock check submitted by on-site retailer personnel.");
+      expect(desc).toContain("submitted");
+    });
+
+    it("handles case insensitivity for draft and submitted statuses", () => {
+      expect(formatWeeklyInventoryCheckDescription("DRAFT")).toBe(
+        "Store inventory stock check draft in progress by on-site retailer personnel."
+      );
+      expect(formatWeeklyInventoryCheckDescription("Draft")).toBe(
+        "Store inventory stock check draft in progress by on-site retailer personnel."
+      );
+      expect(formatWeeklyInventoryCheckDescription("SUBMITTED")).toBe(
+        "Official store inventory stock check submitted by on-site retailer personnel."
+      );
+      expect(formatWeeklyInventoryCheckDescription("Submitted")).toBe(
+        "Official store inventory stock check submitted by on-site retailer personnel."
+      );
+    });
+
+    it("handles null or unknown status with safe fallback", () => {
+      expect(formatWeeklyInventoryCheckDescription(null)).toBe(
+        "Store inventory stock check (Unknown) by on-site retailer personnel."
+      );
+      expect(formatWeeklyInventoryCheckDescription("under_review")).toBe(
+        "Store inventory stock check (under_review) by on-site retailer personnel."
+      );
+    });
+
+    it("preserves draft checks in timeline alongside submitted checks without omission", () => {
+      const rawChecks = [
+        { id: "chk_1", reporting_week: "2026-W42", status: "submitted", report_date: "2026-10-12" },
+        { id: "chk_2", reporting_week: "2026-W41", status: "draft", report_date: "2026-10-08" },
+        { id: "chk_3", reporting_week: "2026-W40", status: "draft", report_date: "2026-09-28" },
+      ];
+
+      const projected = rawChecks.map((chk) => ({
+        id: `chk_${chk.id}`,
+        sourceType: "inventory_check" as const,
+        title: `Weekly Inventory Check (${chk.reporting_week})`,
+        subtitle: `Reporting Week: ${chk.reporting_week} • Status: ${chk.status}`,
+        description: formatWeeklyInventoryCheckDescription(chk.status),
+      }));
+
+      // Verify all 3 items (including both drafts and submitted) are retained in timeline
+      expect(projected).toHaveLength(3);
+      expect(projected[0].description).toBe("Official store inventory stock check submitted by on-site retailer personnel.");
+      expect(projected[1].description).toBe("Store inventory stock check draft in progress by on-site retailer personnel.");
+      expect(projected[2].description).toBe("Store inventory stock check draft in progress by on-site retailer personnel.");
     });
   });
 });

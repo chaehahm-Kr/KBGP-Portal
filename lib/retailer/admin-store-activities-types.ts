@@ -207,3 +207,18 @@ export interface UpdateStoreActivityInput {
   followUpDate?: string | null;
   followUpNote?: string | null;
 }
+
+/**
+ * Formats the operational timeline description for a weekly inventory check based on its status.
+ * Differentiates draft (in progress) from submitted (completed) stock checks.
+ */
+export function formatWeeklyInventoryCheckDescription(status?: string | null): string {
+  const normalized = (status || "").toLowerCase().trim();
+  if (normalized === "draft") {
+    return "Store inventory stock check draft in progress by on-site retailer personnel.";
+  }
+  if (normalized === "submitted") {
+    return "Official store inventory stock check submitted by on-site retailer personnel.";
+  }
+  return `Store inventory stock check (${status || "Unknown"}) by on-site retailer personnel.`;
+}

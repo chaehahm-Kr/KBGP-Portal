@@ -10,6 +10,7 @@ import {
   StoreTimelineItem,
   ActivityKpiSummary,
   AdminStoreActivitiesOverview,
+  formatWeeklyInventoryCheckDescription,
 } from "./admin-store-activities-types";
 
 /**
@@ -246,14 +247,16 @@ export async function getAdminStoreActivitiesData(
 
     (rawChecks || []).forEach((chk: any) => {
       const chkDate = chk.report_date ? `${chk.report_date}T12:00:00Z` : chk.created_at;
+      const statusNormalized = (chk.status || "").toLowerCase().trim();
+      const statusDisplay = statusNormalized === "draft" ? "draft" : statusNormalized === "submitted" ? "submitted" : (chk.status || "submitted");
       timelineItems.push({
         id: `chk_${chk.id}`,
         sourceType: "inventory_check",
         timestamp: chkDate,
         date: chk.report_date || (chk.created_at ? chk.created_at.split("T")[0] : new Date().toISOString().split("T")[0]),
         title: `Weekly Inventory Check (${chk.reporting_week || "Weekly Report"})`,
-        subtitle: `Reporting Week: ${chk.reporting_week || "N/A"} • Status: ${chk.status || "Submitted"}`,
-        description: "Official store inventory stock check submitted by on-site retailer personnel.",
+        subtitle: `Reporting Week: ${chk.reporting_week || "N/A"} • Status: ${statusDisplay}`,
+        description: formatWeeklyInventoryCheckDescription(chk.status),
         categoryLabel: "Inventory Check",
         badgeVariant: "emerald",
         icon: "📋",
