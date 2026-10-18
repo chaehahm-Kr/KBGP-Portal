@@ -87,13 +87,23 @@ export async function validateClaimBeforeSubmission(
 
     const { data: checks } = await adminClient
       .from("retailer_weekly_checks")
-      .select("reporting_week, report_date, submitted_at, status")
+      .select(`
+        id,
+        reporting_week,
+        report_date,
+        submitted_at,
+        status,
+        retailer_weekly_check_items (
+          product_id,
+          reported_remaining_qty
+        )
+      `)
       .eq("store_id", c.store_id)
       .eq("status", "submitted");
 
     const { data: reorders } = await adminClient
       .from("retailer_orders")
-      .select("id, order_number, order_date, status")
+      .select("id, order_number, order_date, order_status")
       .eq("store_id", c.store_id);
 
     // Look for existing claim item
@@ -105,7 +115,7 @@ export async function validateClaimBeforeSubmission(
 
     const formattedShipments = (shipments || []).map((s: any) => ({
       shipmentId: s.id,
-      shipmentDate: s.shipped_at || s.created_at,
+      shipmentDate: s.shipped_at || c.first_shipment_date,
       deliveredAt: s.delivered_at,
       quantityShipped: s.quantity_shipped,
       quantityDelivered: s.quantity_delivered,
@@ -113,13 +123,40 @@ export async function validateClaimBeforeSubmission(
       isSplitShipment: s.shipment_sequence > 1,
     }));
 
-    const formattedChecks = (checks || []).map((ck: any) => ({
-      reportingWeek: ck.reporting_week,
-      reportDate: ck.report_date,
-      submittedAt: ck.submitted_at,
-      status: ck.status,
-      onHandQuantity: c.current_stock || 10,
-    }));
+    if (formattedShipments.length === 0 && c.first_shipment_date) {
+      formattedShipments.push({
+        shipmentId: `ship-${c.id}`,
+        shipmentDate: c.first_shipment_date,
+        deliveredAt: c.first_shipment_date,
+        quantityShipped: c.fulfilled_protected_quantity,
+        quantityDelivered: c.fulfilled_protected_quantity,
+        isFirstShipment: true,
+        isSplitShipment: false,
+      });
+    }
+
+    const formattedChecks = (checks || []).map((ck: any) => {
+      const items = (ck.retailer_weekly_check_items as any[]) || [];
+      const it = items.find((item: any) => item.product_id === c.product_id);
+      return {
+        reportingWeek: ck.reporting_week,
+        reportDate: ck.report_date,
+        submittedAt: ck.submitted_at,
+        status: ck.status,
+        onHandQuantity: it?.reported_remaining_qty ?? (c.fulfilled_protected_quantity || 10),
+      };
+    });
+
+    let latestStock = c.fulfilled_protected_quantity;
+    if (formattedChecks.length > 0) {
+      const sortedChecks = [...formattedChecks].sort((a, b) =>
+        (a.submittedAt || "").localeCompare(b.submittedAt || "")
+      );
+      const last = sortedChecks[sortedChecks.length - 1];
+      if (last.onHandQuantity !== null && last.onHandQuantity !== undefined) {
+        latestStock = last.onHandQuantity;
+      }
+    }
 
     const formattedReorders = (reorders || []).map((ro: any) => ({
       orderId: ro.id,
@@ -127,7 +164,7 @@ export async function validateClaimBeforeSubmission(
       storeId: c.store_id,
       productId: c.product_id,
       orderDate: ro.order_date,
-      status: ro.status,
+      status: ro.order_status,
       isSplitShipmentOfInitial: ro.id === c.source_order_id,
     }));
 
@@ -138,7 +175,7 @@ export async function validateClaimBeforeSubmission(
       salesEvidence: {
         source: "pos_verified",
         isTrustworthy: true,
-        cumulativeSoldUnits: Math.max(0, c.total_protected_quantity - (c.current_stock || 10)),
+        cumulativeSoldUnits: Math.max(0, c.total_protected_quantity - latestStock),
       },
       reorders: formattedReorders,
       existingClaimState: existingClaimItem ? { lifecycleState: existingClaimItem.status } : undefined,
@@ -547,8 +584,8 @@ export async function getRetailerClaimWizardData(
         id,
         name,
         name_en,
-        sku,
-        thumbnail_url,
+        letusto_sku,
+        manufacture_sku,
         brands (
           id,
           name
@@ -557,7 +594,7 @@ export async function getRetailerClaimWizardData(
       stores (
         id,
         name,
-        code
+        store_code
       )
     `)
     .eq("company_id", companyId)
@@ -682,13 +719,25 @@ export async function getRetailerClaimWizardData(
   for (const c of cohorts) {
     const cohortShipments = (shipmentsByCohort.get(c.id) || []).map((s) => ({
       shipmentId: s.id,
-      shipmentDate: s.shipment_date || s.created_at,
+      shipmentDate: s.shipped_at || s.shipment_date || c.first_shipment_date,
       deliveredAt: s.delivered_at || null,
       quantityShipped: s.quantity_shipped,
       quantityDelivered: s.quantity_delivered,
       isFirstShipment: s.is_first_shipment,
       isSplitShipment: s.shipment_sequence > 1,
     }));
+
+    if (cohortShipments.length === 0 && c.first_shipment_date) {
+      cohortShipments.push({
+        shipmentId: `ship-${c.id}`,
+        shipmentDate: c.first_shipment_date,
+        deliveredAt: c.first_shipment_date,
+        quantityShipped: c.fulfilled_protected_quantity,
+        quantityDelivered: c.fulfilled_protected_quantity,
+        isFirstShipment: true,
+        isSplitShipment: false,
+      });
+    }
 
     const key = `${c.store_id}_${c.product_id}`;
     const cohortChecks = checksByStoreProduct.get(key) || [];
@@ -735,14 +784,14 @@ export async function getRetailerClaimWizardData(
       product: {
         id: prodObj.id || c.product_id,
         name: prodObj.name || "상품",
-        sku: prodObj.sku || null,
+        sku: prodObj.letusto_sku || prodObj.manufacture_sku || null,
         brand_name: brandName,
-        thumbnail_url: prodObj.thumbnail_url || null,
+        thumbnail_url: null,
       },
       store: {
         id: storeObj.id || c.store_id,
         name: storeObj.name || "매장",
-        code: storeObj.code || null,
+        code: storeObj.store_code || storeObj.code || null,
       },
       shipments: cohortShipments,
       weeklyChecks: cohortChecks,

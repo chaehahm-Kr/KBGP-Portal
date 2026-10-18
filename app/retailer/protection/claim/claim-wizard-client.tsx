@@ -30,7 +30,7 @@ export function ClaimWizardClient({
         selectedStoreId={selectedStoreId}
         products={products}
         onCancel={() => router.push("/retailer/protection")}
-        isPreviewMode={true}
+        isPreviewMode={false}
       />
     </div>
   );

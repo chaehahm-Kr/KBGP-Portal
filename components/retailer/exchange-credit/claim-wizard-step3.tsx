@@ -18,6 +18,9 @@ interface Step3ReviewSubmitProps {
   onBack: () => void;
   // Read-only / Preview mode prop
   isPreviewMode?: boolean;
+  onSubmit?: () => void;
+  isSubmitting?: boolean;
+  submissionError?: string | null;
 }
 
 export function ClaimWizardStep3({
@@ -26,24 +29,29 @@ export function ClaimWizardStep3({
   selectedItems,
   onBack,
   isPreviewMode = true,
+  onSubmit,
+  isSubmitting = false,
+  submissionError = null,
 }: Step3ReviewSubmitProps) {
   const [isStockReconfirmed, setIsStockReconfirmed] = useState(false);
   const totals = calculateWizardTotals(selectedItems);
 
   return (
     <div className="space-y-6">
-      {/* 1. Mandatory Preview Mode Banner */}
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 sm:p-5 flex items-start gap-3.5">
-        <span className="text-xl flex-shrink-0">⚠️</span>
-        <div>
-          <h2 className="text-sm font-bold text-amber-400 uppercase tracking-wide">
-            Preview Mode — 제출 비활성화 안내 (Not Submitted)
-          </h2>
-          <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
-            현재 화면은 90일 교환 크레딧 신청 UI 컴포넌트 프리뷰 상태입니다. 실제 데이터베이스 클레임 테이블 및 제출 액션은 후속 태스크에서 안전하게 연동될 예정이며, 현재 단계에서는 <strong>서버 제출이 의도적으로 비활성화</strong>되어 있습니다.
-          </p>
+      {/* 1. Preview Mode Banner (shown only when isPreviewMode is true) */}
+      {isPreviewMode && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 sm:p-5 flex items-start gap-3.5">
+          <span className="text-xl flex-shrink-0">⚠️</span>
+          <div>
+            <h2 className="text-sm font-bold text-amber-400 uppercase tracking-wide">
+              Preview Mode — 제출 비활성화 안내 (Not Submitted)
+            </h2>
+            <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+              현재 화면은 90일 교환 크레딧 신청 UI 컴포넌트 프리뷰 상태입니다. 실제 데이터베이스 클레임 테이블 및 제출 액션은 후속 태스크에서 안전하게 연동될 예정이며, 현재 단계에서는 <strong>서버 제출이 의도적으로 비활성화</strong>되어 있습니다.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 2. Store & Claim Summary Card */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
@@ -200,28 +208,59 @@ export function ClaimWizardStep3({
         </label>
       </div>
 
-      {/* 6. Bottom Navigation and Disabled Submission Button */}
+      {/* Error Banner */}
+      {submissionError && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 text-xs text-rose-300 font-medium flex items-center gap-2">
+          <span>⚠️</span>
+          <span>{submissionError}</span>
+        </div>
+      )}
+
+      {/* 6. Bottom Navigation and Submission Button */}
       <div className="sticky bottom-0 bg-zinc-950/95 backdrop-blur border-t border-zinc-800 p-4 -mx-4 sm:-mx-6 sm:px-6 rounded-b-xl flex flex-col sm:flex-row items-center justify-between gap-3">
         <button
           type="button"
           onClick={onBack}
+          disabled={isSubmitting}
           className="w-full sm:w-auto px-4 py-2.5 rounded-lg text-sm font-medium border border-zinc-700 hover:bg-zinc-800 text-zinc-300 transition-colors"
         >
           ← 이전 단계
         </button>
 
         <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            disabled={true}
-            title="현재 프리뷰 모드에서는 서버 제출이 비활성화되어 있습니다."
-            className="w-full sm:w-auto px-6 py-2.5 rounded-lg text-sm font-bold bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/50 shadow-inner flex items-center justify-center gap-2"
-          >
-            <span>🔒 교환 크레딧 신청 제출</span>
-            <span className="text-[11px] font-normal px-2 py-0.5 rounded bg-zinc-700/60 text-zinc-400">
-              프리뷰 — 제출 비활성화
-            </span>
-          </button>
+          {isPreviewMode || !onSubmit ? (
+            <button
+              type="button"
+              disabled={true}
+              title="현재 프리뷰 모드에서는 서버 제출이 비활성화되어 있습니다."
+              className="w-full sm:w-auto px-6 py-2.5 rounded-lg text-sm font-bold bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/50 shadow-inner flex items-center justify-center gap-2"
+            >
+              <span>🔒 교환 크레딧 신청 제출</span>
+              <span className="text-[11px] font-normal px-2 py-0.5 rounded bg-zinc-700/60 text-zinc-400">
+                프리뷰 — 제출 비활성화
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!isStockReconfirmed || isSubmitting}
+              className={`w-full sm:w-auto px-6 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
+                !isStockReconfirmed || isSubmitting
+                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/50"
+                  : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950/40 cursor-pointer"
+              }`}
+            >
+              {isSubmitting ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>제출 처리 중...</span>
+                </>
+              ) : (
+                <span>✓ 교환 크레딧 신청 제출</span>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

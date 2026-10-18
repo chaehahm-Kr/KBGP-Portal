@@ -13,6 +13,7 @@ import {
 import { ClaimWizardStep1 } from "./claim-wizard-step1";
 import { ClaimWizardStep2 } from "./claim-wizard-step2";
 import { ClaimWizardStep3 } from "./claim-wizard-step3";
+import { submitExchangeClaim } from "@/lib/retailer/exchange-credit-claim-actions";
 
 export type WizardStep = 1 | 2 | 3;
 
@@ -180,6 +181,39 @@ export function ClaimWizardContainer({
 
   const currentStore = stores.find((s) => s.id === selectedStoreId);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+
+  const handleSubmitClaim = async () => {
+    if (!selectedStoreId || selectedItems.length === 0) return;
+    setIsSubmitting(true);
+    setSubmissionError(null);
+    try {
+      const res = await submitExchangeClaim({
+        storeId: selectedStoreId,
+        items: selectedItems.map((item) => ({
+          cohortId: item.cohortId,
+          productId: item.productId,
+          selectedOption: item.selectedOption,
+          selectedQuantity: item.selectedQuantity,
+          currentConfirmedStock: item.selectedQuantity,
+        })),
+        isStockReconfirmed: true,
+        retailerNotes: "Submitted via Retailer Exchange Credit Claim Wizard",
+      });
+
+      if (res.success) {
+        window.location.href = `/retailer/protection?claim_submitted=${res.claimId || "success"}`;
+      } else {
+        setSubmissionError(res.error || "클레임 제출에 실패했습니다.");
+      }
+    } catch (err: any) {
+      setSubmissionError(err.message || "네트워크 오류가 발생했습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Stepper UI Steps Definition
   const STEP_DEFINITIONS = [
     { num: 1, label: "품목 선택", sublabel: "보증 대상 SKU 확인" },
@@ -332,6 +366,9 @@ export function ClaimWizardContainer({
           selectedItems={selectedItems}
           onBack={() => setStep(2)}
           isPreviewMode={isPreviewMode}
+          onSubmit={handleSubmitClaim}
+          isSubmitting={isSubmitting}
+          submissionError={submissionError}
         />
       )}
     </div>
