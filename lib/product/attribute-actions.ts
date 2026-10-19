@@ -672,6 +672,7 @@ export async function adminImportMasterExcel(base64Data: string) {
   revalidatePath("/admin/settings/categories");
   revalidatePath("/admin/settings/attributes");
   revalidatePath("/admin/settings/attribute-profiles");
+  revalidatePath("/admin/settings/category-attribute");
   return { success: true };
   } catch (error: any) {
     console.error("Excel import failed:", error);
@@ -688,6 +689,7 @@ export async function toggleCategoryActive(code: string, isActive: boolean) {
   const admin = createAdminClient();
   await admin.from("categories").update({ is_active: isActive }).eq("code", code);
   revalidatePath("/admin/settings/categories");
+  revalidatePath("/admin/settings/category-attribute");
 }
 
 export async function toggleProfileActive(code: string, isActive: boolean) {
@@ -696,6 +698,7 @@ export async function toggleProfileActive(code: string, isActive: boolean) {
   const admin = createAdminClient();
   await admin.from("attribute_profiles").update({ is_active: isActive }).eq("code", code);
   revalidatePath("/admin/settings/attribute-profiles");
+  revalidatePath("/admin/settings/category-attribute");
 }
 
 export async function toggleAttributeActive(code: string, isActive: boolean) {
@@ -704,6 +707,7 @@ export async function toggleAttributeActive(code: string, isActive: boolean) {
   const admin = createAdminClient();
   await admin.from("attributes").update({ is_active: isActive }).eq("code", code);
   revalidatePath("/admin/settings/attributes");
+  revalidatePath("/admin/settings/category-attribute");
 }
 
 export interface ProfileSummaryItem {
@@ -847,6 +851,7 @@ export async function saveCategory(category: {
     }
 
     revalidatePath("/admin/settings/categories");
+    revalidatePath("/admin/settings/category-attribute");
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || "카테고리 저장 중 예외가 발생했습니다." };
@@ -870,6 +875,7 @@ export async function deleteCategory(code: string) {
   }
 
   revalidatePath("/admin/settings/categories");
+  revalidatePath("/admin/settings/category-attribute");
   return { success: true };
 }
 
@@ -968,6 +974,7 @@ export async function saveAttribute(
     }
 
     revalidatePath("/admin/settings/attributes");
+    revalidatePath("/admin/settings/category-attribute");
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || "속성 저장에 실패했습니다." };
@@ -991,6 +998,7 @@ export async function deleteAttribute(code: string) {
   }
 
   revalidatePath("/admin/settings/attributes");
+  revalidatePath("/admin/settings/category-attribute");
   return { success: true };
 }
 
@@ -1023,6 +1031,7 @@ export async function saveAttributeProfile(profile: {
   }
 
   revalidatePath("/admin/settings/attribute-profiles");
+  revalidatePath("/admin/settings/category-attribute");
   return { success: true };
 }
 
@@ -1070,6 +1079,7 @@ export async function saveProfileAttributeMappings(
   }
 
   revalidatePath("/admin/settings/attribute-profiles");
+  revalidatePath("/admin/settings/category-attribute");
   return { success: true };
 }
 
@@ -1107,6 +1117,7 @@ export async function saveCategoryProfileMapping(categoryCode: string, profileCo
     }
 
     revalidatePath("/admin/settings/categories");
+    revalidatePath("/admin/settings/category-attribute");
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || "카테고리 프로필 매핑 중 예외가 발생했습니다." };
