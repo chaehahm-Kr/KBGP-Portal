@@ -26,7 +26,6 @@ import {
   CompanyConfigsIcon,
   WarehousesIcon,
   CategoriesSubIcon,
-  CurationSettingsIcon,
   PaymentSettingsIcon,
 } from "./icons";
 
@@ -331,7 +330,7 @@ export default function Sidebar({
         { name: "Inventory Overview", href: "/admin/inventory" },
         { name: "Compliance", href: "/admin/products/compliance" },
         { name: "Pricing Simulator", href: "/admin/products/pricing-profitability" },
-        { name: "Curation", href: "/admin/products/curation" },
+        { name: "Curation Management", href: "/admin/products/curation" },
       ],
     },
     {
@@ -423,7 +422,6 @@ export default function Sidebar({
       { name: "Company Configs", href: "/admin/settings/company-configs", icon: CompanyConfigsIcon },
       { name: "Warehouses", href: "/admin/settings/warehouses", icon: WarehousesIcon },
       { name: "Categories & Attribute", href: "/admin/settings/category-attribute", icon: CategoriesSubIcon },
-      { name: "Curation Settings", href: "/admin/settings/curation", icon: CurationSettingsIcon },
       { name: "Agreement Templates", href: "/admin/settings/agreement-templates", icon: EmailTemplatesIcon },
       { name: "Email Templates", href: "/admin/settings/email-templates", icon: EmailTemplatesIcon },
       { name: "Knowledge Center", href: "/admin/knowledge", icon: KnowledgeSubIcon },

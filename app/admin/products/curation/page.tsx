@@ -1,57 +1,98 @@
 import React from "react";
-import Link from "next/link";
 import { verifyAdminSession } from "@/lib/auth/dal";
-import { createClient } from "@/lib/supabase/server";
-import { CurationControlClient } from "./curation-control-client";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { CurationManagementView } from "./curation-management-view";
 
 export const metadata = {
-  title: "큐레이션 컨트롤 센터 | K SELECT NETWORK 어드민",
+  title: "큐레이션 관리 | K SELECT NETWORK 어드민",
+  description: "Display Program별 진열 세트 상품 구성(Control) 및 마스터 프로필 설정(Settings)을 통합 관리합니다.",
 };
 
-export default async function CurationControlCenterPage() {
+export default async function CurationManagementPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   await verifyAdminSession();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
-  // 1. Fetch Assortment Profiles
-  const { data: aps, error: apError } = await supabase
-    .from("assortment_profiles")
-    .select("*")
-    .order("code", { ascending: true });
+  const resolved = searchParams ? await searchParams : {};
+  const rawTab = typeof resolved.tab === "string" ? resolved.tab : undefined;
 
+  // Parallel fetch: 1. Display programs, 2. Assortment profiles with matching tags, 3. Curation matrix items
+  const [
+    { data: displayPrograms, error: progError },
+    { data: profilesWithTags, error: apError },
+    { data: matrixItems, error: matrixError },
+  ] = await Promise.all([
+    supabase
+      .from("display_programs")
+      .select("*")
+      .order("code", { ascending: true }),
+    supabase
+      .from("assortment_profiles")
+      .select(`
+        *,
+        ap_matching_tags(
+          display_order,
+          matching_tags(
+            id,
+            tag_code,
+            name_ko,
+            name_en,
+            is_active
+          )
+        )
+      `)
+      .order("display_program", { ascending: true })
+      .order("code", { ascending: true }),
+    supabase
+      .from("product_curation_matrix")
+      .select(`
+        ap_id,
+        priority_role,
+        product_id,
+        products (
+          brand_id,
+          estimated_retail_price,
+          price_usd_fob,
+          sales_status,
+          product_curations (
+            wholesale_price,
+            suggest_retail_price
+          )
+        )
+      `)
+      .neq("priority_role", "EXCLUDE"),
+  ]);
+
+  if (progError) {
+    console.error("Failed to load display programs:", progError);
+  }
   if (apError) {
     console.error("Failed to load assortment profiles:", apError);
   }
-
-  // 2. Fetch Curation Matrix mapping items (with product brand and pricing)
-  const { data: matrixItems, error: matrixError } = await supabase
-    .from("product_curation_matrix")
-    .select(`
-      ap_id,
-      priority_role,
-      product_id,
-      products (
-        brand_id,
-        estimated_retail_price,
-        price_usd_fob,
-        sales_status,
-        product_curations (
-          wholesale_price,
-          suggest_retail_price
-        )
-      )
-    `)
-    .neq("priority_role", "EXCLUDE");
-
   if (matrixError) {
     console.error("Failed to load curation matrix:", matrixError);
   }
 
-  // Initialize Stats
+  // Initialize Stats for Curation Control
   const programStats: Record<string, { activeSku: number; brandIds: Set<string>; apCount: number; status: string }> = {
     START_4FT: { activeSku: 0, brandIds: new Set<string>(), apCount: 6, status: "ACTIVE" },
     GROW_8FT: { activeSku: 0, brandIds: new Set<string>(), apCount: 6, status: "ACTIVE" },
     EXPAND_12FT: { activeSku: 0, brandIds: new Set<string>(), apCount: 6, status: "ACTIVE" },
   };
+
+  (displayPrograms || []).forEach((dp) => {
+    if (!programStats[dp.code]) {
+      programStats[dp.code] = {
+        activeSku: 0,
+        brandIds: new Set<string>(),
+        apCount: 6,
+        status: dp.is_active ? "ACTIVE" : "HOLD",
+      };
+    }
+  });
 
   const apStats: Record<number, {
     selectedSku: number;
@@ -60,7 +101,7 @@ export default async function CurationControlCenterPage() {
     msrpSum: number;
   }> = {};
 
-  (aps || []).forEach((ap) => {
+  (profilesWithTags || []).forEach((ap) => {
     apStats[ap.id] = {
       selectedSku: 0,
       brandIds: new Set(),
@@ -73,7 +114,7 @@ export default async function CurationControlCenterPage() {
     const prod = row.products;
     if (!prod) return;
 
-    const ap = (aps || []).find((a) => a.id === row.ap_id);
+    const ap = (profilesWithTags || []).find((a) => a.id === row.ap_id);
     if (!ap) return;
 
     // 1. Program Stats
@@ -114,7 +155,7 @@ export default async function CurationControlCenterPage() {
     }
   });
 
-  // Map to serializable structures for Client Component
+  // Map to serializable structures for CurationControlClient
   const serializablePrograms = Object.keys(programStats).map((key) => ({
     key,
     activeSku: programStats[key].activeSku,
@@ -123,7 +164,7 @@ export default async function CurationControlCenterPage() {
     status: programStats[key].status,
   }));
 
-  const serializableAPs = (aps || []).map((ap) => {
+  const serializableAPs = (profilesWithTags || []).map((ap) => {
     const stats = apStats[ap.id] || { selectedSku: 0, brandIds: new Set(), supplySum: 0, msrpSum: 0 };
     const totalSupply = stats.supplySum;
     const totalMsrp = stats.msrpSum;
@@ -146,18 +187,12 @@ export default async function CurationControlCenterPage() {
   });
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-bold text-zinc-900 dark:text-white">큐레이션 컨트롤 센터 (Curation Control Center)</h1>
-        <p className="text-xs text-zinc-400 dark:text-zinc-500">
-          전체 Assortment와 SKU 구성을 관리하고 Display Program별 진열 세트 구성을 분석합니다.
-        </p>
-      </div>
-
-      <CurationControlClient
-        initialPrograms={serializablePrograms}
-        initialAPs={serializableAPs}
-      />
-    </div>
+    <CurationManagementView
+      initialPrograms={serializablePrograms}
+      initialAPs={serializableAPs}
+      settingsPrograms={displayPrograms || []}
+      settingsProfiles={profilesWithTags || []}
+      initialTab={rawTab}
+    />
   );
 }

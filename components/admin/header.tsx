@@ -295,6 +295,8 @@ export default function Header({ isSidebarCollapsed, variant = "sticky" }: Heade
         uuidNameMap[path] || (
           path === "admin"
             ? "Admin"
+            : path === "curation"
+            ? "Curation Management"
             : path === "protection-reviews"
             ? "Initial Trial Reviews"
             : path === "exchange-credit"

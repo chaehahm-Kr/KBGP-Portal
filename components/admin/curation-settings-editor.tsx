@@ -10,7 +10,7 @@ import {
   adminCreateMatchingTag,
 } from "@/lib/product/admin-actions";
 
-interface DisplayProgram {
+export interface DisplayProgram {
   code: string;
   name: string;
   description: string | null;
@@ -19,7 +19,7 @@ interface DisplayProgram {
   is_active: boolean;
 }
 
-interface MatchingTag {
+export interface MatchingTag {
   id: number;
   tag_code: string;
   name_ko: string;
@@ -27,12 +27,12 @@ interface MatchingTag {
   is_active: boolean;
 }
 
-interface ApMatchingTagRelation {
+export interface ApMatchingTagRelation {
   display_order: number;
   matching_tags: MatchingTag | null;
 }
 
-interface AssortmentProfile {
+export interface AssortmentProfile {
   id: number;
   display_program: string;
   code: string;

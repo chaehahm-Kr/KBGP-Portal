@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 
-interface ProgramInfo {
+export interface ProgramInfo {
   key: string;
   activeSku: number;
   brandCount: number;
@@ -11,7 +11,7 @@ interface ProgramInfo {
   status: string;
 }
 
-interface APInfo {
+export interface APInfo {
   id: number;
   display_program: string;
   code: string;
