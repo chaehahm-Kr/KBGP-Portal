@@ -39,6 +39,7 @@ export async function GET(
       headers: {
         "Content-Type": item.contentType,
         "Cache-Control": "public, max-age=31536000, immutable",
+        "Access-Control-Allow-Origin": "*",
       },
     });
   }
@@ -67,6 +68,7 @@ export async function GET(
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "public, max-age=31536000, immutable",
+        "Access-Control-Allow-Origin": "*",
       },
     });
   } catch (err: any) {

@@ -263,7 +263,11 @@ export async function importZipPackage(
   // 2. Identify candidate HTML files
   const htmlFiles = fileEntries.filter((f) => {
     const ext = path.extname(f).toLowerCase();
-    return ext === ".html" || ext === ".htm";
+    if (ext !== ".html" && ext !== ".htm") return false;
+    // Exclude design canvas files (.dc.html) and design system bundles
+    if (f.toLowerCase().endsWith(".dc.html")) return false;
+    if (f.startsWith("_ds/") || f.includes("/_ds/")) return false;
+    return true;
   });
 
   if (htmlFiles.length === 0) {
@@ -281,21 +285,28 @@ export async function importZipPackage(
     };
   }
 
+  // Filter out preview files if non-preview versions exist
+  const productionCandidates = htmlFiles.filter((f) => !f.toLowerCase().includes("preview"));
+  const pool = productionCandidates.length > 0 ? productionCandidates : htmlFiles;
+
+  // Sort descending so highest version (outreach-03 > 02 > 01) or index.html comes first
+  pool.sort((a, b) => {
+    const aBase = path.basename(a).toLowerCase();
+    const bBase = path.basename(b).toLowerCase();
+    if (aBase === "index.html" || aBase === "index.htm") return -1;
+    if (bBase === "index.html" || bBase === "index.htm") return 1;
+    return b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" });
+  });
+
   // Pick selected HTML file
-  let selectedHtmlFile = htmlFiles[0];
+  let selectedHtmlFile = pool[0];
   if (preferredHtmlFile && htmlFiles.includes(preferredHtmlFile)) {
     selectedHtmlFile = preferredHtmlFile;
-  } else {
-    // Prefer index.html if present
-    const indexCandidate = htmlFiles.find((f) => path.basename(f).toLowerCase() === "index.html");
-    if (indexCandidate) {
-      selectedHtmlFile = indexCandidate;
-    }
   }
 
   if (htmlFiles.length > 1) {
     warnings.push(
-      `Multiple HTML files detected in package: [${htmlFiles.join(", ")}]. Currently using "${selectedHtmlFile}".`
+      `Multiple HTML files detected in package: [${pool.join(", ")}]. Currently using "${selectedHtmlFile}".`
     );
   }
 
@@ -304,7 +315,7 @@ export async function importZipPackage(
   let sanitizedHtml = sanitizeEmailHtml(rawHtml);
   const plainText = convertHtmlToPlainText(sanitizedHtml);
 
-  // 4. Extract Images and build asset map
+  // 4. Extract Images and build asset map (Parallel upload to prevent timeout)
   const imageEntries = fileEntries.filter((f) => {
     const ext = path.extname(f).toLowerCase();
     return ALLOWED_IMAGE_EXTENSIONS.has(ext);
@@ -313,37 +324,79 @@ export async function importZipPackage(
   const extractedAssets: ExtractedAssetItem[] = [];
   const assetMap = new Map<string, string>(); // originalPath/basename -> hostedUrl
 
-  for (const imgPath of imageEntries) {
-    try {
-      const buffer = await zip.files[imgPath].async("nodebuffer");
-      const mime = getMimeType(imgPath);
-      const filename = path.basename(imgPath);
-      const hostedUrl = await hostTemplateAsset(templateId, filename, buffer, mime);
+  await Promise.all(
+    imageEntries.map(async (imgPath) => {
+      try {
+        const buffer = await zip.files[imgPath].async("nodebuffer");
+        const mime = getMimeType(imgPath);
+        const filename = path.basename(imgPath);
+        const hostedUrl = await hostTemplateAsset(templateId, filename, buffer, mime);
 
-      extractedAssets.push({
-        originalPath: imgPath,
-        hostedUrl,
-        byteSize: buffer.length,
-        contentType: mime,
-      });
+        extractedAssets.push({
+          originalPath: imgPath,
+          hostedUrl,
+          byteSize: buffer.length,
+          contentType: mime,
+        });
 
-      // Index by both exact relative path and base filename for flexible matching
-      assetMap.set(imgPath.toLowerCase(), hostedUrl);
-      assetMap.set(imgPath.replace(/^\.\//, "").toLowerCase(), hostedUrl);
-      assetMap.set(filename.toLowerCase(), hostedUrl);
-    } catch (err: any) {
-      warnings.push(`Failed to extract image "${imgPath}": ${err.message}`);
-    }
-  }
+        // Index by both exact relative path, normalized path, and base filename for flexible matching
+        assetMap.set(imgPath.toLowerCase(), hostedUrl);
+        assetMap.set(imgPath.replace(/^\.\//, "").toLowerCase(), hostedUrl);
+        assetMap.set(filename.toLowerCase(), hostedUrl);
+      } catch (err: any) {
+        warnings.push(`Failed to extract image "${imgPath}": ${err.message}`);
+      }
+    })
+  );
 
-  // 5. Rewrite Local Image Paths in HTML to Hosted URLs
+  // 5. Rewrite Local & Placeholder Image Paths in HTML to Hosted URLs
   const unresolvedImages: string[] = [];
+
+  const resolveAssetUrl = (rawSrc: string): string | null => {
+    const trimmed = rawSrc.trim();
+    if (!trimmed || trimmed.startsWith("data:")) return null;
+
+    if (trimmed.includes("/api/marketing/assets/templates/")) {
+      return trimmed;
+    }
+
+    const cleanSrc = trimmed.replace(/^\.\//, "").toLowerCase();
+    let baseName = "";
+    try {
+      const urlObj = new URL(trimmed, "http://localhost");
+      baseName = path.basename(urlObj.pathname).toLowerCase();
+    } catch {
+      baseName = path.basename(trimmed).toLowerCase();
+    }
+
+    // Direct match by clean path or base filename
+    const hosted = assetMap.get(cleanSrc) || assetMap.get(baseName);
+    if (hosted) return hosted;
+
+    // Suffix match
+    for (const [k, v] of assetMap.entries()) {
+      if (cleanSrc.endsWith(k) || k.endsWith(cleanSrc)) return v;
+    }
+
+    // Fallback for placeholder hero images
+    if (baseName.includes("hero")) {
+      for (const [k, v] of assetMap.entries()) {
+        if (k.includes("hero-kbeauty-journey")) return v;
+      }
+    }
+
+    return null;
+  };
 
   // Match <img ... src="..." ...>
   sanitizedHtml = sanitizedHtml.replace(/(<img\b[^>]*?\bsrc=["'])([^"']+)(["'][^>]*>)/gi, (match, prefix, src, suffix) => {
     const trimmed = src.trim();
+    const resolved = resolveAssetUrl(trimmed);
+    if (resolved) {
+      return `${prefix}${resolved}${suffix}`;
+    }
 
-    // Preserve external HTTPS
+    // Preserve external HTTPS that did not match any zip asset
     if (trimmed.startsWith("https://") || trimmed.startsWith("//")) {
       return match;
     }
@@ -357,15 +410,6 @@ export async function importZipPackage(
       return match;
     }
 
-    // Attempt to match in extracted assets
-    const cleanSrc = trimmed.replace(/^\.\//, "").toLowerCase();
-    const baseName = path.basename(trimmed).toLowerCase();
-
-    const hosted = assetMap.get(cleanSrc) || assetMap.get(baseName);
-    if (hosted) {
-      return `${prefix}${hosted}${suffix}`;
-    }
-
     unresolvedImages.push(trimmed);
     return match;
   });
@@ -373,16 +417,13 @@ export async function importZipPackage(
   // Match CSS background-image: url(...)
   sanitizedHtml = sanitizedHtml.replace(/(url\(["']?)([^"')]+)(["']?\))/gi, (match, prefix, urlVal, suffix) => {
     const trimmed = urlVal.trim();
-    if (trimmed.startsWith("https://") || trimmed.startsWith("data:") || trimmed.startsWith("//")) {
-      return match;
+    const resolved = resolveAssetUrl(trimmed);
+    if (resolved) {
+      return `${prefix}${resolved}${suffix}`;
     }
 
-    const cleanUrl = trimmed.replace(/^\.\//, "").toLowerCase();
-    const baseName = path.basename(trimmed).toLowerCase();
-    const hosted = assetMap.get(cleanUrl) || assetMap.get(baseName);
-
-    if (hosted) {
-      return `${prefix}${hosted}${suffix}`;
+    if (trimmed.startsWith("https://") || trimmed.startsWith("data:") || trimmed.startsWith("//")) {
+      return match;
     }
 
     return match;

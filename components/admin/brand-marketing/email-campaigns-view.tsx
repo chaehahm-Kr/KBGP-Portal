@@ -34,6 +34,7 @@ import { personalizeEmail } from "@/lib/brand-marketing/personalization-engine";
 import { ImageTemplateComposer } from "./image-template-composer";
 import { DesignerGuideModal } from "./designer-guide-modal";
 import { MarketingFooterSettingsView } from "./marketing-footer-settings-view";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface EmailCampaignsViewProps {
   candidates?: any[];
@@ -82,8 +83,6 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
 
   // Template Upload Modal Form State
   const [uploadName, setUploadName] = useState("");
-  const [uploadSubject, setUploadSubject] = useState("");
-  const [uploadLanguage, setUploadLanguage] = useState<"ko" | "en">("ko");
   const [uploadTemplateType, setUploadTemplateType] = useState<TemplateType>("HTML");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadHtmlText, setUploadHtmlText] = useState("");
@@ -453,7 +452,6 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   // --------------------------------------------------------------------------
   const handleOpenUploadModal = () => {
     setUploadName("");
-    setUploadSubject("");
     setUploadFile(null);
     setUploadHtmlText("");
     setUploadError(null);
@@ -466,8 +464,8 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     setUploadError(null);
     setUploadWarnings([]);
 
-    if (!uploadName.trim() || !uploadSubject.trim()) {
-      setUploadError("Template Name and Default Email Subject are required.");
+    if (!uploadName.trim()) {
+      setUploadError("Template Name is required.");
       return;
     }
 
@@ -482,10 +480,10 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
         }
 
         const res = await uploadMarketingTemplateAction({
-          name: uploadName,
+          name: uploadName.trim(),
           templateType: "IMAGE",
-          subject: uploadSubject,
-          language: uploadLanguage,
+          subject: uploadName.trim(),
+          language: "ko",
           imageSections: uploadImageSections,
         });
 
@@ -499,10 +497,10 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
         }
       } else {
         const formData = new FormData();
-        formData.set("name", uploadName);
+        formData.set("name", uploadName.trim());
         formData.set("templateType", "HTML");
-        formData.set("language", uploadLanguage);
-        formData.set("subject", uploadSubject);
+        formData.set("language", "ko");
+        formData.set("subject", uploadName.trim());
 
         if (uploadFile) {
           formData.set("file", uploadFile);
@@ -514,7 +512,9 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
           return;
         }
 
-        const res = await uploadTemplatePackageFileAction(formData);
+        // Stage large files (> 3.5MB) directly to Supabase storage to bypass Vercel 4.5MB Serverless Function payload limit
+        const stagedFormData = await stageLargeFiles(formData);
+        const res = await uploadTemplatePackageFileAction(stagedFormData);
 
         if (res.success && res.template) {
           setTemplates((prev) => [res.template!, ...prev]);
@@ -1922,46 +1922,17 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
             </div>
 
             {/* Common Metadata Fields */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Template Name *
-                </label>
-                <input
-                  type="text"
-                  placeholder="예: 2026 Fall Buyer Outreach - Package 01"
-                  value={uploadName}
-                  onChange={(e) => setUploadName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Language *
-                </label>
-                <select
-                  value={uploadLanguage}
-                  onChange={(e) => setUploadLanguage(e.target.value as any)}
-                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                >
-                  <option value="ko">한국어 (Korean)</option>
-                  <option value="en">English (글로벌)</option>
-                </select>
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Default Email Subject * (Supports &#123;&#123;company_name&#125;&#125;, &#123;&#123;brand_name&#125;&#125;)
-                </label>
-                <input
-                  type="text"
-                  placeholder="예: [K SELECT] {{company_name}}의 북미 리테일 입점 제안서"
-                  value={uploadSubject}
-                  onChange={(e) => setUploadSubject(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                />
-              </div>
+            <div>
+              <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                Template Name *
+              </label>
+              <input
+                type="text"
+                placeholder="예: 2026 Fall Buyer Outreach - Package 01"
+                value={uploadName}
+                onChange={(e) => setUploadName(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+              />
             </div>
 
             {/* Mode-Specific Content */}

@@ -1,7 +1,10 @@
 "use server";
 
+import path from "path";
 import { revalidatePath } from "next/cache";
 import { verifyAdminSession, getAdminStaffContext } from "@/lib/auth/dal";
+import { unstageFormData } from "@/lib/files/staged-upload";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   MarketingCampaign,
   MarketingTemplatePackage,
@@ -73,7 +76,7 @@ export async function uploadMarketingTemplateAction(payload: {
   templateType?: TemplateType;
   version?: string;
   language?: "ko" | "en";
-  subject: string;
+  subject?: string;
   previewText?: string;
   htmlContent?: string;
   landingPageUrl?: string;
@@ -88,6 +91,8 @@ export async function uploadMarketingTemplateAction(payload: {
   try {
     const admin = await requireCampaignAdmin();
     const templateType: TemplateType = payload.templateType || "HTML";
+    const resolvedSubject = (payload.subject || payload.name || "K SELECT NETWORK Email").trim();
+    const resolvedLanguage = payload.language || "ko";
     let finalHtml = "";
     let finalPlainText = "";
     let detectedVars: string[] = ["company_name", "contact_name", "brand_name", "custom_message"];
@@ -96,8 +101,8 @@ export async function uploadMarketingTemplateAction(payload: {
     if (templateType === "IMAGE") {
       const compileRes = compileImageTemplateToHtml({
         sections: payload.imageSections || [],
-        language: payload.language || "ko",
-        subject: payload.subject,
+        language: resolvedLanguage,
+        subject: resolvedSubject,
         previewText: payload.previewText,
         defaultLandingUrl: payload.landingPageUrl || "https://www.kselectnetwork.com",
       });
@@ -116,7 +121,7 @@ export async function uploadMarketingTemplateAction(payload: {
       // HTML template path
       const validation = validateAndSanitizeTemplate(
         payload.htmlContent || "",
-        payload.subject,
+        resolvedSubject,
         payload.landingPageUrl
       );
 
@@ -138,8 +143,8 @@ export async function uploadMarketingTemplateAction(payload: {
         name: payload.name.trim(),
         templateType,
         version: payload.version || "1.0.0",
-        language: payload.language || "ko",
-        subject: payload.subject.trim(),
+        language: resolvedLanguage,
+        subject: resolvedSubject,
         previewText: payload.previewText?.trim() || "",
         htmlContent: finalHtml,
         plainText: finalPlainText,
@@ -353,7 +358,7 @@ export async function approveMarketingCampaignAction(
  * Uploads an HTML or ZIP email design package with automatic image hosting.
  */
 export async function uploadTemplatePackageFileAction(
-  formData: FormData
+  rawFormData: FormData
 ): Promise<{
   success: boolean;
   template?: MarketingTemplatePackage;
@@ -363,15 +368,18 @@ export async function uploadTemplatePackageFileAction(
 }> {
   try {
     const admin = await requireCampaignAdmin();
+    // Safely unstage large files (> 3.5MB) directly uploaded to Supabase Storage
+    const formData = await unstageFormData(rawFormData);
+
     const name = String(formData.get("name") || "").trim();
     const templateType = (formData.get("templateType") || "HTML") as TemplateType;
     const language = (formData.get("language") || "ko") as "ko" | "en";
-    const subject = String(formData.get("subject") || "").trim();
+    const subject = String(formData.get("subject") || name || "K SELECT NETWORK Email").trim();
     const file = formData.get("file") as File | null;
     const rawHtmlFallback = String(formData.get("rawHtml") || "").trim();
 
-    if (!name || !subject) {
-      return { success: false, error: "Template Name and Default Email Subject are required." };
+    if (!name) {
+      return { success: false, error: "Template Name is required." };
     }
 
     const tempId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "00000000-0000-4000-b000-" + Date.now().toString(16).padStart(12, "0");
@@ -427,6 +435,24 @@ export async function uploadTemplatePackageFileAction(
       },
       admin.userId
     );
+
+    // Record extracted assets in marketing_template_assets table (Migration 0188)
+    if (importRes.extractedAssets && importRes.extractedAssets.length > 0) {
+      try {
+        const adminClient = createAdminClient();
+        const assetRows = importRes.extractedAssets.map((a) => ({
+          template_id: tempId,
+          original_filename: path.basename(a.originalPath),
+          storage_path: `marketing/templates/${tempId}/${path.basename(a.originalPath).replace(/[^a-zA-Z0-9._-]/g, "_")}`,
+          public_url: a.hostedUrl,
+          content_type: a.contentType,
+          byte_size: a.byteSize,
+        }));
+        await adminClient.from("marketing_template_assets").insert(assetRows);
+      } catch (assetErr) {
+        console.warn("[campaign-actions] Failed to insert into marketing_template_assets:", assetErr);
+      }
+    }
 
     try { revalidatePath("/admin/brand-marketing"); } catch {}
 
