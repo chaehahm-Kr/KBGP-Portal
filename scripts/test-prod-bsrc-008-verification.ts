@@ -96,13 +96,14 @@ async function runProdVerification() {
     const portalDiag = await portalDiagRes.json();
     console.log("   Portal Diagnostics Commit SHA:", portalDiag?.deployment?.commitSha);
 
+    const expectedSha = process.env.EXPECTED_SHA || "d542a2fe1e4a67e89e765f1d4d83f2be88ffaa80";
     if (
-      adminDiag?.deployment?.commitSha === "eab01f557f4d53d2282a0613d978e270db314971" &&
-      portalDiag?.deployment?.commitSha === "eab01f557f4d53d2282a0613d978e270db314971"
+      adminDiag?.deployment?.commitSha === expectedSha &&
+      portalDiag?.deployment?.commitSha === expectedSha
     ) {
-      console.log("\n🎉 PRODUCTION DEPLOYMENT FINGERPRINT VERIFIED: 100% MATCH!");
+      console.log(`\n🎉 PRODUCTION DEPLOYMENT FINGERPRINT VERIFIED: 100% MATCH (${expectedSha})!`);
     } else {
-      console.error("\n❌ FINGERPRINT MISMATCH!");
+      console.error(`\n❌ FINGERPRINT MISMATCH! Expected ${expectedSha}, got Admin: ${adminDiag?.deployment?.commitSha}, Portal: ${portalDiag?.deployment?.commitSha}`);
       process.exit(1);
     }
 
