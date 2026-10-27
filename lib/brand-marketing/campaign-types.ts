@@ -73,9 +73,23 @@ export interface MarketingTemplatePackage {
   isDefault?: boolean;
   imageSections?: ImageTemplateSection[];
   designerPromptSettings?: DesignerPromptSettings;
+  importedAssets?: Array<{
+    originalPath: string;
+    hostedUrl: string;
+    byteSize: number;
+    contentType: string;
+  }>;
   metadata?: Record<string, any>;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface TemplateFilterOptions {
+  searchQuery?: string;
+  templateType?: "ALL" | "HTML" | "IMAGE";
+  language?: "ALL" | "ko" | "en";
+  status?: "ALL" | "ACTIVE" | "ARCHIVED";
+  sortBy?: "recent" | "name";
 }
 
 export interface RecipientSelectionCriteria {
@@ -129,6 +143,8 @@ export interface CampaignApprovalSnapshot {
   sendableCount: number;
   dryRunReportId?: string;
   senderAddress: string;
+  footerVersion?: string | null;
+  footerSettingsSnapshot?: Record<string, any> | null;
   hash: string;
 }
 
@@ -141,6 +157,8 @@ export interface MarketingCampaign {
   templateId?: string | null;
   templateVersion?: string | null;
   subjectOverride?: string | null;
+  previewText?: string | null;
+  landingPageUrl?: string | null;
   status: CampaignStatus;
   approvalStatus: CampaignApprovalStatus;
   approvedBy?: string | null;

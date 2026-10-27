@@ -75,7 +75,7 @@ export const DESIGNER_GUIDE_SECTIONS: DesignerGuideSection[] = [
       },
       {
         subtitle: "법적 고지 및 수신 거부 푸터",
-        description: "하단에 발신 주체(Letusto Inc. / K SELECT NETWORK), 본사 정보, 고객지원 이메일(support@kselectnetwork.com) 및 수신 거부 안내가 반드시 포함되어야 합니다.",
+        description: "하단에 발신 주체(Letusto Inc. / K SELECT NETWORK), 본사 정보, 고객지원 이메일(Contact@letusto.com) 및 수신 거부 안내가 반드시 포함되어야 합니다.",
       },
     ],
   },

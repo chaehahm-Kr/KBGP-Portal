@@ -122,8 +122,8 @@ export function compileImageTemplateToHtml(
   // Footer text
   const footerCompanyName = "K SELECT NETWORK · Letusto Inc.";
   const footerUnsubscribe = isKorean
-    ? "본 메일은 수신 동의 또는 공개된 비즈니스 파트너십 채널을 기반으로 발송되었습니다. 수신을 원치 않으시면 support@kselectnetwork.com으로 회신해 주시기 바랍니다."
-    : "This email was sent based on business partnership inquiries or professional directory contact. If you no longer wish to receive updates, please reply to support@kselectnetwork.com.";
+    ? "본 메일은 수신 동의 또는 공개된 비즈니스 파트너십 채널을 기반으로 발송되었습니다. 수신을 원치 않으시면 Contact@letusto.com으로 회신해 주시기 바랍니다."
+    : "This email was sent based on business partnership inquiries or professional directory contact. If you no longer wish to receive updates, please reply to Contact@letusto.com.";
 
   // Full email markup
   const html = `<!DOCTYPE html>

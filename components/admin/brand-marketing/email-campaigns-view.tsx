@@ -1,39 +1,52 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useTransition } from "react";
+import React, { useState, useEffect, useMemo, useTransition, useRef } from "react";
 import {
   MarketingCampaign,
   MarketingTemplatePackage,
-  CampaignStatus,
   DryRunReport,
-  SampleRecipientPreview,
+  ImageTemplateSection,
+  TemplateType,
 } from "@/lib/brand-marketing/campaign-types";
 import {
   listMarketingTemplatesAction,
   uploadMarketingTemplateAction,
+  uploadTemplatePackageFileAction,
+  duplicateMarketingTemplateAction,
+  archiveMarketingTemplateAction,
+  restoreMarketingTemplateAction,
+  deleteMarketingTemplateAction,
+  getMarketingFooterSettingsAction,
+  validateCampaignPreApprovalAction,
   listMarketingCampaignsAction,
   getMarketingCampaignByIdAction,
   saveMarketingCampaignAction,
-  duplicateMarketingCampaignAction,
-  archiveMarketingCampaignAction,
   runCampaignDryRunAction,
   sendTestCampaignEmailAction,
   approveMarketingCampaignAction,
 } from "@/lib/brand-marketing/campaign-actions";
+import {
+  assembleEmailWithMarketingFooter,
+  DEFAULT_MARKETING_FOOTER,
+  MarketingFooterSettings,
+} from "@/lib/brand-marketing/marketing-footer";
 import { personalizeEmail } from "@/lib/brand-marketing/personalization-engine";
 import { ImageTemplateComposer } from "./image-template-composer";
 import { DesignerGuideModal } from "./designer-guide-modal";
-import { ImageTemplateSection, TemplateType } from "@/lib/brand-marketing/campaign-types";
+import { MarketingFooterSettingsView } from "./marketing-footer-settings-view";
 
 interface EmailCampaignsViewProps {
   candidates?: any[];
 }
 
 export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps) {
-  // Navigation State
+  // Top-level Navigation Tabs
+  const [mainTab, setMainTab] = useState<"campaigns" | "library" | "footer">("campaigns");
+
+  // Campaign View Mode & Step
   const [viewMode, setViewMode] = useState<"list" | "editor">("list");
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   // Campaign List State
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
@@ -44,18 +57,42 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   // Active Campaign in Editor
   const [editingCampaign, setEditingCampaign] = useState<MarketingCampaign | null>(null);
 
+  // Central Marketing Footer State
+  const [footerSettings, setFooterSettings] = useState<MarketingFooterSettings>({ ...DEFAULT_MARKETING_FOOTER });
+
   // Template Library State
   const [templates, setTemplates] = useState<MarketingTemplatePackage[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const [previewViewport, setPreviewViewport] = useState<"desktop" | "mobile">("desktop");
 
-  // Designer Guide Modal State
-  const [showGuideModal, setShowGuideModal] = useState(false);
+  // Template Library Filters
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateFormatFilter, setTemplateFormatFilter] = useState<"ALL" | "HTML" | "IMAGE">("ALL");
+  const [templateLangFilter, setTemplateLangFilter] = useState<"ALL" | "ko" | "en">("ALL");
+  const [templateStatusFilter, setTemplateStatusFilter] = useState<"ALL" | "ACTIVE" | "ARCHIVED">("ALL");
+  const [templateSortBy, setTemplateSortBy] = useState<"recent" | "name">("recent");
 
-  // Template Type & Image Sections Form State
-  const [uploadTemplateType, setUploadTemplateType] = useState<TemplateType>("IMAGE");
-  const [uploadVersion, setUploadVersion] = useState("1.0.0");
+  // Modals State
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const [previewModalTemplate, setPreviewModalTemplate] = useState<MarketingTemplatePackage | null>(null);
+  const [duplicateModalTemplate, setDuplicateModalTemplate] = useState<MarketingTemplatePackage | null>(null);
+  const [duplicateNewName, setDuplicateNewName] = useState("");
+  const [deleteConfirmTemplate, setDeleteConfirmTemplate] = useState<MarketingTemplatePackage | null>(null);
+
+  // Template Upload Modal Form State
+  const [uploadName, setUploadName] = useState("");
+  const [uploadSubject, setUploadSubject] = useState("");
+  const [uploadLanguage, setUploadLanguage] = useState<"ko" | "en">("ko");
+  const [uploadTemplateType, setUploadTemplateType] = useState<TemplateType>("HTML");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadHtmlText, setUploadHtmlText] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Image Composer Slices
   const [uploadImageSections, setUploadImageSections] = useState<ImageTemplateSection[]>([
     {
       id: "slice-1",
@@ -79,16 +116,6 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     },
   ]);
 
-  // New Template Upload Form
-  const [uploadName, setUploadName] = useState("");
-  const [uploadSubject, setUploadSubject] = useState("");
-  const [uploadPreviewText, setUploadPreviewText] = useState("");
-  const [uploadHtml, setUploadHtml] = useState("");
-  const [uploadLandingUrl, setUploadLandingUrl] = useState("https://www.kselectnetwork.com");
-  const [uploadLanguage, setUploadLanguage] = useState<"ko" | "en">("ko");
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
-
   // Recipient Selection State
   const [selectedGrades, setSelectedGrades] = useState<string[]>([]);
   const [selectedCompanyTypes, setSelectedCompanyTypes] = useState<string[]>([]);
@@ -98,15 +125,24 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   // Dry Run & Test Send State
   const [dryRunReport, setDryRunReport] = useState<DryRunReport | null>(null);
   const [isRunningDryRun, setIsRunningDryRun] = useState(false);
-  const [testEmailAddress, setTestEmailAddress] = useState("test@letusto.com");
+  const [testEmailAddress, setTestEmailAddress] = useState("qa-admin-test@letusto.com");
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testSendResult, setTestSendResult] = useState<{ success?: boolean; message?: string } | null>(null);
+
+  // Pre-Approval Checks State
+  const [preApprovalChecks, setPreApprovalChecks] = useState<Array<{ name: string; status: "PASS" | "FAIL"; detail: string }>>([]);
+  const [isValidatingApproval, setIsValidatingApproval] = useState(false);
 
   // Audit Logs State
   const [campaignLogs, setCampaignLogs] = useState<any[]>([]);
 
-  // Feedback notifications
+  // Notification Toast
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const showNotification = (type: "success" | "error", text: string) => {
+    setNotification({ type, text });
+    setTimeout(() => setNotification(null), 5000);
+  };
 
   // --------------------------------------------------------------------------
   // INITIAL DATA LOADING
@@ -114,9 +150,10 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   const refreshCampaignsAndTemplates = async () => {
     setIsLoadingList(true);
     try {
-      const [cRes, tRes] = await Promise.all([
+      const [cRes, tRes, fRes] = await Promise.all([
         listMarketingCampaignsAction(),
-        listMarketingTemplatesAction(),
+        listMarketingTemplatesAction({ status: "ALL" }),
+        getMarketingFooterSettingsAction(),
       ]);
       if (cRes.success && cRes.campaigns) {
         setCampaigns(cRes.campaigns);
@@ -124,8 +161,12 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       if (tRes.success && tRes.templates) {
         setTemplates(tRes.templates);
         if (tRes.templates.length > 0 && !selectedTemplateId) {
-          setSelectedTemplateId(tRes.templates[0].id);
+          const defaultTpl = tRes.templates.find((t) => t.isDefault) || tRes.templates[0];
+          setSelectedTemplateId(defaultTpl.id);
         }
+      }
+      if (fRes.success && fRes.settings) {
+        setFooterSettings(fRes.settings);
       }
     } catch (err: any) {
       console.warn("Failed to load initial campaign data:", err);
@@ -138,26 +179,52 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     refreshCampaignsAndTemplates();
   }, []);
 
-  const showNotification = (type: "success" | "error", text: string) => {
-    setNotification({ type, text });
-    setTimeout(() => setNotification(null), 4000);
-  };
+  // Filtered Templates based on search & filter bar
+  const filteredTemplates = useMemo(() => {
+    return templates
+      .filter((t) => {
+        if (templateFormatFilter !== "ALL" && t.templateType !== templateFormatFilter) {
+          return false;
+        }
+        if (templateLangFilter !== "ALL" && t.language !== templateLangFilter) {
+          return false;
+        }
+        if (templateStatusFilter === "ACTIVE" && t.status === "ARCHIVED") {
+          return false;
+        }
+        if (templateStatusFilter === "ARCHIVED" && t.status !== "ARCHIVED") {
+          return false;
+        }
+        if (templateSearch.trim()) {
+          const q = templateSearch.toLowerCase().trim();
+          const matchName = t.name.toLowerCase().includes(q);
+          const matchSubject = t.subject?.toLowerCase().includes(q);
+          if (!matchName && !matchSubject) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (templateSortBy === "name") {
+          return a.name.localeCompare(b.name);
+        }
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      });
+  }, [templates, templateFormatFilter, templateLangFilter, templateStatusFilter, templateSearch, templateSortBy]);
 
-  // Currently selected template object
+  // Active Template object
   const activeTemplate = useMemo(() => {
     return templates.find((t) => t.id === selectedTemplateId) || templates[0] || null;
   }, [templates, selectedTemplateId]);
 
-  // --------------------------------------------------------------------------
-    // Current effective campaign subject
+  // Current effective subject
   const currentEffectiveSubject = useMemo(() => {
     if (!editingCampaign) return activeTemplate?.subject || "";
     return editingCampaign.subjectOverride !== undefined && editingCampaign.subjectOverride !== null
       ? editingCampaign.subjectOverride
-      : (activeTemplate?.subject || "");
+      : activeTemplate?.subject || "";
   }, [editingCampaign, activeTemplate]);
 
-  // Sample resolved subject preview with sample Korean company
+  // Sample resolved subject preview
   const sampleResolvedSubject = useMemo(() => {
     if (!currentEffectiveSubject) return "";
     return currentEffectiveSubject
@@ -167,21 +234,44 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       .replace(/\{\{custom_message\}\}/g, "맞춤 제안 안내");
   }, [currentEffectiveSubject]);
 
-// FILTERED CANDIDATES FOR RECIPIENT SELECTION
-  // --------------------------------------------------------------------------
+  // Assembled Send-Ready HTML Preview (includes authoritative campaign settings and central footer)
+  const assembledPreviewHtml = useMemo(() => {
+    if (!activeTemplate?.htmlContent) return "";
+
+    const raw = activeTemplate.htmlContent;
+    const personalized = personalizeEmail(
+      currentEffectiveSubject || activeTemplate.subject,
+      raw,
+      "",
+      {
+        companyName: "(주)아모레퍼시픽",
+        contactName: "김대표",
+        brandName: "라네즈",
+        customMessage: editingCampaign?.customMessage || "귀사의 북미 진출을 위한 맞춤 제안입니다.",
+        language: editingCampaign?.language || "ko",
+      }
+    );
+
+    return assembleEmailWithMarketingFooter(personalized.html, {
+      footerSettings,
+      language: editingCampaign?.language || "ko",
+      unsubscribeUrl: "https://admin.kselectnetwork.com/unsubscribe?token=sample-preview-token",
+      previewText: editingCampaign?.previewText || "",
+      landingPageUrl: editingCampaign?.landingPageUrl || "https://www.kselectnetwork.com",
+    });
+  }, [activeTemplate, currentEffectiveSubject, editingCampaign, footerSettings]);
+
+  // Filtered Candidates for Recipient Selection
   const filteredCandidates = useMemo(() => {
     return candidates.filter((c) => {
-      // Grade filter
       if (selectedGrades.length > 0 && !selectedGrades.includes(c.grade || "UNRATED")) {
         return false;
       }
-      // Company type filter
       if (selectedCompanyTypes.length > 0) {
         const types: string[] = c.business_types || [];
         const match = selectedCompanyTypes.some((t) => types.includes(t));
         if (!match) return false;
       }
-      // Consent filter
       if (requireConsentedOnly && c.marketing_consent_status !== "CONSENTED") {
         return false;
       }
@@ -189,15 +279,25 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     });
   }, [candidates, selectedGrades, selectedCompanyTypes, requireConsentedOnly]);
 
-  // Auto-select filtered candidate IDs when filter changes
   useEffect(() => {
     if (viewMode === "editor" && currentStep === 3) {
       setSelectedCompanyIds(filteredCandidates.map((c) => c.id));
     }
   }, [filteredCandidates.length, viewMode, currentStep]);
 
+  // Pre-approval checklist loader
+  useEffect(() => {
+    if (viewMode === "editor" && currentStep === 6 && editingCampaign?.id) {
+      setIsValidatingApproval(true);
+      validateCampaignPreApprovalAction(editingCampaign.id)
+        .then((res) => setPreApprovalChecks(res.checks || []))
+        .catch(() => {})
+        .finally(() => setIsValidatingApproval(false));
+    }
+  }, [viewMode, currentStep, editingCampaign?.id]);
+
   // --------------------------------------------------------------------------
-  // ACTIONS: CREATE / EDIT / SAVE CAMPAIGN
+  // ACTIONS: CAMPAIGN CRUD
   // --------------------------------------------------------------------------
   const handleCreateNewCampaign = () => {
     const defaultTpl = templates.find((t) => t.isDefault) || templates[0];
@@ -210,9 +310,11 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       templateId: defaultTpl?.id || null,
       templateVersion: defaultTpl?.version || "1.0.0",
       subjectOverride: defaultTpl?.subject || "",
+      previewText: "",
+      landingPageUrl: "https://www.kselectnetwork.com",
       status: "DRAFT",
       approvalStatus: "PENDING",
-      isLiveModeEnabled: false, // STRICTLY FALSE
+      isLiveModeEnabled: false,
       filterCriteria: {},
       customMessage: "귀사의 우수한 뷰티 라인업에 깊은 인상을 받아 파트너십을 제안드립니다.",
       stats: {
@@ -250,29 +352,30 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     } catch {}
 
     setCurrentStep(1);
-    setDryRunReport(null);
-    setTestSendResult(null);
     setViewMode("editor");
   };
 
-  const handleSaveDraft = async () => {
+  const handleSaveCampaignDraft = async () => {
     if (!editingCampaign) return;
     try {
-      const res = await saveMarketingCampaignAction({
+      const payload: Partial<MarketingCampaign> & { name: string } = {
         ...editingCampaign,
-        templateId: selectedTemplateId,
-        subjectOverride: editingCampaign.subjectOverride,
+        templateId: selectedTemplateId || editingCampaign.templateId,
+        subjectOverride: currentEffectiveSubject,
+        previewText: editingCampaign.previewText || "",
+        landingPageUrl: editingCampaign.landingPageUrl || "https://www.kselectnetwork.com",
         filterCriteria: {
           grades: selectedGrades as any,
           companyTypes: selectedCompanyTypes,
           requireConsentedOnly,
           companyIds: selectedCompanyIds,
         },
-      });
+      };
 
+      const res = await saveMarketingCampaignAction(payload);
       if (res.success && res.campaign) {
         setEditingCampaign(res.campaign);
-        showNotification("success", "Campaign draft saved successfully.");
+        showNotification("success", `Campaign "${res.campaign.name}" saved to database successfully.`);
         refreshCampaignsAndTemplates();
       } else {
         showNotification("error", res.error || "Failed to save campaign");
@@ -282,29 +385,63 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     }
   };
 
-  const handleDuplicateCampaign = async (campaignId: string) => {
+  // --------------------------------------------------------------------------
+  // ACTIONS: TEMPLATE MANAGEMENT (Duplicate, Archive, Restore, Delete)
+  // --------------------------------------------------------------------------
+  const handleOpenDuplicateModal = (tpl: MarketingTemplatePackage, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setDuplicateModalTemplate(tpl);
+    setDuplicateNewName(`${tpl.name} (Copy)`);
+  };
+
+  const handleExecuteDuplicate = async () => {
+    if (!duplicateModalTemplate || !duplicateNewName.trim()) return;
     try {
-      const res = await duplicateMarketingCampaignAction(campaignId);
-      if (res.success) {
-        showNotification("success", "Campaign duplicated as new draft.");
+      const res = await duplicateMarketingTemplateAction(duplicateModalTemplate.id, duplicateNewName.trim());
+      if (res.success && res.template) {
+        showNotification("success", `Template duplicated: "${res.template.name}"`);
+        setDuplicateModalTemplate(null);
         refreshCampaignsAndTemplates();
       } else {
-        showNotification("error", res.error || "Duplicate failed");
+        showNotification("error", res.error || "Failed to duplicate template");
       }
     } catch (err: any) {
       showNotification("error", err.message);
     }
   };
 
-  const handleArchiveCampaign = async (campaignId: string) => {
-    if (!confirm("Are you sure you want to archive this campaign?")) return;
+  const handleToggleArchiveTemplate = async (tpl: MarketingTemplatePackage, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const isArchived = tpl.status === "ARCHIVED";
     try {
-      const res = await archiveMarketingCampaignAction(campaignId);
+      const action = isArchived ? restoreMarketingTemplateAction : archiveMarketingTemplateAction;
+      const res = await action(tpl.id);
       if (res.success) {
-        showNotification("success", "Campaign archived.");
+        showNotification("success", isArchived ? `Template restored: "${tpl.name}"` : `Template archived: "${tpl.name}"`);
         refreshCampaignsAndTemplates();
       } else {
-        showNotification("error", res.error || "Archive failed");
+        showNotification("error", res.error || "Action failed");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message);
+    }
+  };
+
+  const handleDeleteTemplate = async (tpl: MarketingTemplatePackage, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setDeleteConfirmTemplate(tpl);
+  };
+
+  const handleExecuteDelete = async () => {
+    if (!deleteConfirmTemplate) return;
+    try {
+      const res = await deleteMarketingTemplateAction(deleteConfirmTemplate.id);
+      if (res.success) {
+        showNotification("success", `Template "${deleteConfirmTemplate.name}" deleted successfully.`);
+        setDeleteConfirmTemplate(null);
+        refreshCampaignsAndTemplates();
+      } else {
+        showNotification("error", res.error || "Failed to delete template");
       }
     } catch (err: any) {
       showNotification("error", err.message);
@@ -312,65 +449,99 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   };
 
   // --------------------------------------------------------------------------
-  // ACTIONS: TEMPLATE UPLOAD
+  // ACTIONS: TEMPLATE UPLOAD (HTML / ZIP)
   // --------------------------------------------------------------------------
-  const handleUploadTemplate = async (e: React.FormEvent) => {
+  const handleOpenUploadModal = () => {
+    setUploadName("");
+    setUploadSubject("");
+    setUploadFile(null);
+    setUploadHtmlText("");
+    setUploadError(null);
+    setUploadWarnings([]);
+    setShowUploadModal(true);
+  };
+
+  const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setUploadError(null);
     setUploadWarnings([]);
 
-    if (uploadTemplateType === "IMAGE") {
-      if (!uploadName.trim() || !uploadSubject.trim()) {
-        setUploadError("Template Name and Default Email Subject are required.");
-        return;
-      }
-      if (!uploadImageSections || uploadImageSections.length === 0) {
-        setUploadError("At least one image slice section is required for an Image Template.");
-        return;
-      }
-    } else {
-      if (!uploadName.trim() || !uploadSubject.trim() || !uploadHtml.trim()) {
-        setUploadError("Template Name, Default Email Subject, and HTML content are required.");
-        return;
-      }
+    if (!uploadName.trim() || !uploadSubject.trim()) {
+      setUploadError("Template Name and Default Email Subject are required.");
+      return;
     }
 
-    try {
-      const res = await uploadMarketingTemplateAction({
-        name: uploadName,
-        templateType: uploadTemplateType,
-        subject: uploadSubject,
-        previewText: uploadPreviewText,
-        htmlContent: uploadTemplateType === "HTML" ? uploadHtml : undefined,
-        imageSections: uploadTemplateType === "IMAGE" ? uploadImageSections : undefined,
-        landingPageUrl: uploadLandingUrl,
-        language: uploadLanguage,
-        version: uploadVersion,
-      });
+    setIsUploading(true);
 
-      if (res.success && res.template) {
-        setTemplates((prev) => [res.template!, ...prev]);
-        setSelectedTemplateId(res.template.id);
-        setShowUploadModal(false);
-        showNotification("success", "Template package saved successfully!");
-        if (res.warnings && res.warnings.length > 0) {
-          setUploadWarnings(res.warnings);
+    try {
+      if (uploadTemplateType === "IMAGE") {
+        if (!uploadImageSections || uploadImageSections.length === 0) {
+          setUploadError("At least one image slice section is required for an Image Template.");
+          setIsUploading(false);
+          return;
         }
-        // Reset form
-        setUploadName("");
-        setUploadSubject("");
-        setUploadPreviewText("");
-        setUploadHtml("");
+
+        const res = await uploadMarketingTemplateAction({
+          name: uploadName,
+          templateType: "IMAGE",
+          subject: uploadSubject,
+          language: uploadLanguage,
+          imageSections: uploadImageSections,
+        });
+
+        if (res.success && res.template) {
+          setTemplates((prev) => [res.template!, ...prev]);
+          setSelectedTemplateId(res.template.id);
+          setShowUploadModal(false);
+          showNotification("success", "IMAGE Template package saved successfully!");
+        } else {
+          setUploadError(res.error || "Failed to compile image package");
+        }
       } else {
-        setUploadError(res.error || "Failed to upload template");
+        const formData = new FormData();
+        formData.set("name", uploadName);
+        formData.set("templateType", "HTML");
+        formData.set("language", uploadLanguage);
+        formData.set("subject", uploadSubject);
+
+        if (uploadFile) {
+          formData.set("file", uploadFile);
+        } else if (uploadHtmlText.trim()) {
+          formData.set("rawHtml", uploadHtmlText.trim());
+        } else {
+          setUploadError("Please select an HTML or ZIP file, or paste raw HTML code.");
+          setIsUploading(false);
+          return;
+        }
+
+        const res = await uploadTemplatePackageFileAction(formData);
+
+        if (res.success && res.template) {
+          setTemplates((prev) => [res.template!, ...prev]);
+          setSelectedTemplateId(res.template.id);
+          setShowUploadModal(false);
+          const assetCount = res.importResult?.extractedAssets.length || 0;
+          showNotification(
+            "success",
+            `Template package imported successfully! (${assetCount} image assets hosted safely)`
+          );
+          if (res.warnings && res.warnings.length > 0) {
+            setUploadWarnings(res.warnings);
+          }
+        } else {
+          setUploadError(res.error || "Failed to import package");
+          if (res.warnings) setUploadWarnings(res.warnings);
+        }
       }
     } catch (err: any) {
       setUploadError(err.message);
+    } finally {
+      setIsUploading(false);
     }
   };
 
   // --------------------------------------------------------------------------
-  // ACTIONS: TEST EMAIL & DRY RUN
+  // ACTIONS: DRY RUN & TEST SEND
   // --------------------------------------------------------------------------
   const handleExecuteDryRun = async () => {
     if (!editingCampaign) return;
@@ -387,9 +558,9 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
 
       if (res.success && res.report) {
         setDryRunReport(res.report);
-        showNotification("success", "Dry run evaluation completed! 0 external emails sent.");
+        showNotification("success", "Dry Run simulation finished. Zero external emails sent.");
       } else {
-        showNotification("error", res.error || "Dry run failed");
+        showNotification("error", res.error || "Dry Run failed");
       }
     } catch (err: any) {
       showNotification("error", err.message);
@@ -400,19 +571,14 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
 
   const handleSendTestEmail = async () => {
     if (!editingCampaign || !activeTemplate) return;
-    if (!testEmailAddress.trim()) {
-      alert("Please enter a valid allowlisted test email address.");
-      return;
-    }
-
     setIsSendingTest(true);
     setTestSendResult(null);
 
     try {
       const res = await sendTestCampaignEmailAction(
         editingCampaign.id,
-        testEmailAddress.trim(),
-        activeTemplate.subject,
+        testEmailAddress,
+        currentEffectiveSubject || activeTemplate.subject,
         activeTemplate.htmlContent,
         activeTemplate.plainText
       );
@@ -420,19 +586,17 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       if (res.success) {
         setTestSendResult({
           success: true,
-          message: `Test email successfully accepted by provider! Message ID: ${res.messageId || "simulated-ok"}`,
+          message: `Test email sent successfully to ${testEmailAddress} with central marketing footer and working unsubscribe link.`,
         });
-        showNotification("success", "Test email sent to allowlisted address.");
+        showNotification("success", "Test email dispatched to allowlisted recipient.");
       } else {
         setTestSendResult({
           success: false,
           message: res.error || "Test dispatch rejected.",
         });
-        showNotification("error", res.error || "Test email failed");
       }
     } catch (err: any) {
       setTestSendResult({ success: false, message: err.message });
-      showNotification("error", err.message);
     } finally {
       setIsSendingTest(false);
     }
@@ -440,33 +604,11 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
 
   const handleApproveCampaign = async () => {
     if (!editingCampaign) return;
-    if (!dryRunReport) {
-      alert("A completed Dry Run is required before approval.");
-      return;
-    }
-
     try {
-      // Ensure campaign is persisted to server before approving
-      const saveRes = await saveMarketingCampaignAction({
-        ...editingCampaign,
-        templateId: selectedTemplateId,
-        filterCriteria: {
-          grades: selectedGrades as any,
-          companyTypes: selectedCompanyTypes,
-          requireConsentedOnly,
-          companyIds: selectedCompanyIds,
-        },
-      });
-
-      if (!saveRes.success || !saveRes.campaign) {
-        showNotification("error", saveRes.error || "Failed to persist campaign before approval");
-        return;
-      }
-
       const res = await approveMarketingCampaignAction(editingCampaign.id);
       if (res.success && res.campaign) {
         setEditingCampaign(res.campaign);
-        showNotification("success", "Campaign approved and release snapshot locked!");
+        showNotification("success", "Campaign approved and immutable release snapshot locked!");
         refreshCampaignsAndTemplates();
       } else {
         showNotification("error", res.error || "Approval failed");
@@ -477,236 +619,77 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   };
 
   // --------------------------------------------------------------------------
-  // RENDER: NOTIFICATION BANNER
+  // RENDER: TOP-LEVEL SUB-TAB BAR
   // --------------------------------------------------------------------------
-  const renderNotification = () => {
-    if (!notification) return null;
+  const renderSubTabBar = () => {
     return (
-      <div
-        className={`p-3 rounded-lg text-xs font-medium flex items-center justify-between shadow-sm animate-fade-in ${
-          notification.type === "success"
-            ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800"
-            : "bg-red-50 dark:bg-red-950/60 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800"
-        }`}
-      >
-        <span>{notification.text}</span>
-        <button
-          type="button"
-          onClick={() => setNotification(null)}
-          className="ml-2 font-bold cursor-pointer"
-        >
-          ✕
-        </button>
-      </div>
-    );
-  };
-
-  // --------------------------------------------------------------------------
-  // RENDER: CAMPAIGN LIST VIEW (STATE 1)
-  // --------------------------------------------------------------------------
-  const renderCampaignList = () => {
-    const filtered = campaigns.filter((c) => {
-      if (filterStatus !== "ALL" && c.status !== filterStatus) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        return (
-          c.name.toLowerCase().includes(q) ||
-          c.purpose.toLowerCase().includes(q) ||
-          (c.description || "").toLowerCase().includes(q)
-        );
-      }
-      return true;
-    });
-
-    return (
-      <div className="space-y-6">
-        {/* Global Safety Header */}
-        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200">
-          <div className="flex items-center gap-2.5">
-            <span className="text-base font-bold">🔒</span>
-            <div>
-              <span className="font-bold block">
-                PHASE 2 SAFETY GUARD: LIVE_MODE LOCKED (DISABLED)
-              </span>
-              <p className="text-[11px] text-amber-800 dark:text-amber-300/90 mt-0.5">
-                V1 authorizes campaign design, template packages, dry runs, and allowlisted test sends. External commercial sending is disabled.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowUploadModal(true)}
-              className="px-3 py-1.5 rounded bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 hover:bg-amber-100 font-semibold cursor-pointer"
-            >
-              Template Library ({templates.length})
-            </button>
-            <button
-              type="button"
-              onClick={handleCreateNewCampaign}
-              className="px-3.5 py-1.5 rounded bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 font-bold hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer shadow-xs"
-            >
-              + Create Campaign
-            </button>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setMainTab("campaigns");
+              setViewMode("list");
+            }}
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition cursor-pointer ${
+              mainTab === "campaigns"
+                ? "bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950"
+                : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            }`}
+          >
+            Campaigns (캠페인 목록)
+          </button>
+          <button
+            type="button"
+            onClick={() => setMainTab("library")}
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition cursor-pointer ${
+              mainTab === "library"
+                ? "bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950"
+                : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            }`}
+          >
+            Template Library (템플릿 관리)
+          </button>
+          <button
+            type="button"
+            onClick={() => setMainTab("footer")}
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition cursor-pointer flex items-center gap-1.5 ${
+              mainTab === "footer"
+                ? "bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950"
+                : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <span>⚖️</span>
+            Marketing Footer Settings (중앙 푸터 설정)
+          </button>
         </div>
 
-        {/* Filter & Search Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white dark:bg-zinc-900 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-xs">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              placeholder="Search campaigns by name, purpose, or description..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-3 pr-8 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-1 focus:ring-zinc-950"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-2 text-xs text-zinc-400 hover:text-zinc-600"
-              >
-                ✕
-              </button>
-            )}
-          </div>
+        {mainTab === "campaigns" && viewMode === "list" && (
+          <button
+            type="button"
+            onClick={handleCreateNewCampaign}
+            className="px-3.5 py-1.5 rounded-md text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white cursor-pointer shadow-xs"
+          >
+            + Create Campaign
+          </button>
+        )}
 
+        {mainTab === "library" && (
           <div className="flex items-center gap-2">
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-            >
-              <option value="ALL">All Statuses ({campaigns.length})</option>
-              <option value="DRAFT">DRAFT</option>
-              <option value="TESTING">TESTING</option>
-              <option value="READY_FOR_APPROVAL">READY_FOR_APPROVAL</option>
-              <option value="APPROVED">APPROVED</option>
-              <option value="SCHEDULED">SCHEDULED</option>
-              <option value="CANCELLED">CANCELLED</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Campaign Cards List */}
-        {isLoadingList ? (
-          <div className="p-12 text-center text-zinc-400 text-xs">
-            Loading campaigns...
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="p-12 text-center bg-white dark:bg-zinc-900 rounded-lg border border-dashed border-zinc-300 dark:border-zinc-800 space-y-3">
-            <div className="text-2xl text-zinc-400">✉️</div>
-            <p className="text-xs text-zinc-500 font-medium">
-              No email campaigns found. Start by creating a new outreach campaign.
-            </p>
             <button
               type="button"
-              onClick={handleCreateNewCampaign}
-              className="px-4 py-2 rounded text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 hover:bg-zinc-800 cursor-pointer"
+              onClick={() => setShowGuideModal(true)}
+              className="px-3 py-1.5 rounded-md text-xs font-semibold border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 cursor-pointer"
             >
-              + Create First Campaign
+              📖 Designer Guide &amp; AI Prompt
             </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filtered.map((c) => {
-              const tpl = templates.find((t) => t.id === c.templateId);
-              return (
-                <div
-                  key={c.id}
-                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-5 shadow-xs flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <span className="inline-block px-2 py-0.5 text-[10px] font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 mb-1">
-                          {c.purpose}
-                        </span>
-                        <h3 className="font-bold text-sm text-zinc-900 dark:text-zinc-100 line-clamp-1">
-                          {c.name}
-                        </h3>
-                      </div>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          c.status === "APPROVED"
-                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300"
-                            : c.status === "READY_FOR_APPROVAL"
-                            ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-                            : c.status === "TESTING"
-                            ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
-                            : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                        }`}
-                      >
-                        {c.status}
-                      </span>
-                    </div>
-
-                    {c.description && (
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">
-                        {c.description}
-                      </p>
-                    )}
-
-                    <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-zinc-500 space-y-1">
-                      <div className="flex justify-between">
-                        <span>Template:</span>
-                        <strong className="text-zinc-700 dark:text-zinc-300 truncate max-w-[180px]">
-                          {tpl?.name || "Default Template"}
-                        </strong>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Language:</span>
-                        <span className="font-mono text-zinc-700 dark:text-zinc-300 uppercase">
-                          {c.language}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Approval:</span>
-                        <span
-                          className={`font-semibold ${
-                            c.approvalStatus === "APPROVED"
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-zinc-400"
-                          }`}
-                        >
-                          {c.approvalStatus === "APPROVED" ? "✓ Approved" : "Pending"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-100 dark:border-zinc-800 mt-4">
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleEditCampaign(c)}
-                        className="px-3 py-1.5 text-xs font-bold rounded bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer"
-                      >
-                        Open Editor
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDuplicateCampaign(c.id)}
-                        className="px-2.5 py-1.5 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 cursor-pointer"
-                        title="Duplicate campaign"
-                      >
-                        Duplicate
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleArchiveCampaign(c.id)}
-                      className="text-xs text-red-500 hover:text-red-700 p-1 cursor-pointer"
-                      title="Archive campaign"
-                    >
-                      Archive
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+            <button
+              type="button"
+              onClick={handleOpenUploadModal}
+              className="px-3.5 py-1.5 rounded-md text-xs font-bold bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 cursor-pointer shadow-xs"
+            >
+              + Upload HTML / ZIP Package
+            </button>
           </div>
         )}
       </div>
@@ -714,54 +697,326 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   };
 
   // --------------------------------------------------------------------------
-  // RENDER: CAMPAIGN EDITOR (STEP-BY-STEP FLOW)
+  // RENDER: CAMPAIGN LIST VIEW
+  // --------------------------------------------------------------------------
+  const renderCampaignList = () => {
+    return (
+      <div className="space-y-4">
+        {/* Filter Toolbar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
+          <input
+            type="text"
+            placeholder="Search campaigns..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 max-w-sm"
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500">Status:</span>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-2 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="DRAFT">DRAFT</option>
+              <option value="TESTING">TESTING</option>
+              <option value="READY_FOR_APPROVAL">READY_FOR_APPROVAL</option>
+              <option value="APPROVED">APPROVED</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Campaign Table */}
+        <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto bg-white dark:bg-zinc-900 shadow-xs">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-zinc-50 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
+              <tr>
+                <th className="p-3">Campaign Name &amp; Purpose</th>
+                <th className="p-3">Email Subject Override</th>
+                <th className="p-3">Status</th>
+                <th className="p-3">Approval</th>
+                <th className="p-3">Recipients</th>
+                <th className="p-3">Created</th>
+                <th className="p-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              {campaigns.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-zinc-500">
+                    No marketing campaigns found. Click &quot;+ Create Campaign&quot; to begin.
+                  </td>
+                </tr>
+              ) : (
+                campaigns
+                  .filter((c) => {
+                    if (filterStatus !== "ALL" && c.status !== filterStatus) return false;
+                    if (searchQuery.trim() && !c.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+                    return true;
+                  })
+                  .map((c) => (
+                    <tr key={c.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
+                      <td className="p-3">
+                        <div className="font-bold text-zinc-900 dark:text-zinc-100">{c.name}</div>
+                        <div className="text-[11px] text-zinc-400">{c.purpose}</div>
+                      </td>
+                      <td className="p-3 text-zinc-700 dark:text-zinc-300 max-w-xs truncate">
+                        {c.subjectOverride || <span className="text-zinc-400 italic">Template Default</span>}
+                      </td>
+                      <td className="p-3">
+                        <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200">
+                          {c.status}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                            c.approvalStatus === "APPROVED"
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                          }`}
+                        >
+                          {c.approvalStatus}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono">{c.stats?.totalRecipients || 0}</td>
+                      <td className="p-3 text-zinc-400 text-[11px]">
+                        {new Date(c.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="p-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleEditCampaign(c)}
+                          className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-800 dark:text-zinc-200 cursor-pointer"
+                        >
+                          Edit / Open →
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  // --------------------------------------------------------------------------
+  // RENDER: TEMPLATE LIBRARY STANDALONE VIEW (Section 3)
+  // --------------------------------------------------------------------------
+  const renderTemplateLibraryStandaloneView = () => {
+    return (
+      <div className="space-y-6">
+        {/* Filter & Search Bar */}
+        <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 shadow-xs space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+            <div className="md:col-span-2">
+              <input
+                type="text"
+                placeholder="Search templates by name or subject..."
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                className="w-full px-3 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+              />
+            </div>
+            <div>
+              <select
+                value={templateFormatFilter}
+                onChange={(e) => setTemplateFormatFilter(e.target.value as any)}
+                className="w-full px-2 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+              >
+                <option value="ALL">All Formats</option>
+                <option value="HTML">📄 HTML Packages</option>
+                <option value="IMAGE">🖼️ IMAGE Slices</option>
+              </select>
+            </div>
+            <div>
+              <select
+                value={templateLangFilter}
+                onChange={(e) => setTemplateLangFilter(e.target.value as any)}
+                className="w-full px-2 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+              >
+                <option value="ALL">All Languages</option>
+                <option value="ko">한국어 (KO)</option>
+                <option value="en">English (EN)</option>
+              </select>
+            </div>
+            <div>
+              <select
+                value={templateStatusFilter}
+                onChange={(e) => setTemplateStatusFilter(e.target.value as any)}
+                className="w-full px-2 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="ACTIVE">Active Only</option>
+                <option value="ARCHIVED">Archived Only</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Templates Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredTemplates.length === 0 ? (
+            <div className="col-span-full p-12 text-center text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-900/40 rounded-lg border border-dashed border-zinc-300 dark:border-zinc-800">
+              No matching template packages found. Click &quot;+ Upload HTML / ZIP Package&quot; to add one.
+            </div>
+          ) : (
+            filteredTemplates.map((tpl) => {
+              const isImage = tpl.templateType === "IMAGE";
+              const isArchived = tpl.status === "ARCHIVED";
+
+              return (
+                <div
+                  key={tpl.id}
+                  className={`rounded-lg border p-4 shadow-xs flex flex-col justify-between transition-all ${
+                    isArchived
+                      ? "border-zinc-300 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 opacity-75"
+                      : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-400"
+                  }`}
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                          isImage
+                            ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                            : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                        }`}
+                      >
+                        {isImage ? "🖼️ IMAGE" : "📄 HTML"}
+                      </span>
+
+                      <div className="flex items-center gap-1">
+                        {tpl.isDefault && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                            Default
+                          </span>
+                        )}
+                        {isArchived && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                            Archived
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1">
+                      {tpl.name}
+                    </h4>
+
+                    <p className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 leading-relaxed">
+                      {tpl.subject || "No default subject specified"}
+                    </p>
+
+                    <div className="text-[11px] text-zinc-400 flex items-center gap-3 pt-1">
+                      <span>언어: <strong>{tpl.language === "ko" ? "한국어" : "English"}</strong></span>
+                      <span>변수: <strong>{tpl.variables?.length || 4}개</strong></span>
+                      {tpl.importedAssets && tpl.importedAssets.length > 0 && (
+                        <span>호스팅 이미지: <strong>{tpl.importedAssets.length}개</strong></span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card Actions */}
+                  <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 mt-4 flex items-center justify-between gap-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewModalTemplate(tpl)}
+                      className="px-2.5 py-1 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 font-medium cursor-pointer"
+                    >
+                      🔍 Preview
+                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenDuplicateModal(tpl, e)}
+                        className="px-2 py-1 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer"
+                        title="Duplicate Template"
+                      >
+                        📋 복제
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleArchiveTemplate(tpl, e)}
+                        className="px-2 py-1 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer"
+                        title={isArchived ? "Restore Template" : "Archive Template"}
+                      >
+                        {isArchived ? "↺ 복원" : "📦 보관"}
+                      </button>
+                      {!tpl.isDefault && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteTemplate(tpl, e)}
+                          className="px-2 py-1 text-red-500 hover:text-red-700 cursor-pointer"
+                          title="Delete Template"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // --------------------------------------------------------------------------
+  // RENDER: CAMPAIGN EDITOR (Step 1 to 6)
   // --------------------------------------------------------------------------
   const renderCampaignEditor = () => {
     if (!editingCampaign) return null;
 
     const steps = [
-      { num: 1, label: "1. Info & Settings" },
-      { num: 2, label: "2. Template Package" },
-      { num: 3, label: "3. Recipient Selection" },
-      { num: 4, label: "4. Personalization & Samples" },
-      { num: 5, label: "5. Test Send & Dry Run" },
-      { num: 6, label: "6. Approval & Activity" },
+      { num: 1, label: "Campaign Info & Settings" },
+      { num: 2, label: "Template Package" },
+      { num: 3, label: "Filter Recipients" },
+      { num: 4, label: "Sample Review" },
+      { num: 5, label: "Test Send & Dry Run" },
+      { num: 6, label: "Approval & Activity" },
     ];
 
     return (
       <div className="space-y-6">
-        {/* Editor Top Bar */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white dark:bg-zinc-900 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-xs">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setViewMode("list");
-                refreshCampaignsAndTemplates();
-              }}
-              className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer"
-            >
-              ← Back to Campaigns
-            </button>
-            <span className="text-zinc-300 dark:text-zinc-700">|</span>
-            <div>
-              <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+        {/* Editor Header Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 shadow-xs">
+          <div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 cursor-pointer"
+              >
+                ← Back to List
+              </button>
+              <span className="text-zinc-300">/</span>
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                 {editingCampaign.name}
               </h2>
-              <span className="text-[11px] text-zinc-400">
-                Status: <strong>{editingCampaign.status}</strong> · Approval:{" "}
-                <strong>{editingCampaign.approvalStatus}</strong>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                {editingCampaign.status}
               </span>
             </div>
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              {editingCampaign.approvalStatus === "APPROVED"
+                ? "Locked release approval snapshot active."
+                : "Draft in progress. Subject, preview text, and template modifications will trigger approval invalidation."}
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleSaveDraft}
-              className="px-3.5 py-1.5 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 cursor-pointer"
+              onClick={handleSaveCampaignDraft}
+              className="px-3 py-1.5 text-xs font-semibold rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 cursor-pointer shadow-xs"
             >
-              Save Draft
+              Save Draft 💾
             </button>
             <button
               type="button"
@@ -769,37 +1024,43 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 setViewMode("list");
                 refreshCampaignsAndTemplates();
               }}
-              className="px-3.5 py-1.5 text-xs font-bold rounded bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 cursor-pointer"
+              className="px-3 py-1.5 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 cursor-pointer"
             >
-              Done & Exit
+              Close
             </button>
           </div>
         </div>
 
-        {/* Step Stepper Tabs */}
-        <div className="flex items-center overflow-x-auto border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-lg p-2 gap-1 shadow-xs">
-          {steps.map((st) => (
+        {/* 6-Step Stepper Navigation */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+          {steps.map((s) => (
             <button
-              key={st.num}
+              key={s.num}
               type="button"
-              onClick={() => setCurrentStep(st.num)}
-              className={`px-3 py-2 text-xs font-semibold rounded-md whitespace-nowrap transition-colors cursor-pointer ${
-                currentStep === st.num
-                  ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 shadow-xs"
-                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              onClick={() => setCurrentStep(s.num)}
+              className={`p-2.5 rounded-lg border text-left text-xs cursor-pointer transition-all ${
+                currentStep === s.num
+                  ? "border-blue-600 bg-blue-50/60 dark:bg-blue-950/40 text-blue-950 dark:text-blue-200 font-bold ring-2 ring-blue-500/20"
+                  : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50"
               }`}
             >
-              {st.label}
+              <div className="text-[10px] font-mono text-zinc-400">Step {s.num}</div>
+              <div className="truncate">{s.label}</div>
             </button>
           ))}
         </div>
 
-        {/* STEP 1: BASIC INFO & SETTINGS */}
+        {/* STEP 1: CAMPAIGN INFO & SETTINGS (Authoritative) */}
         {currentStep === 1 && (
-          <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 max-w-4xl shadow-xs">
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-              1. Campaign Information & Global Personalization
-            </h3>
+          <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
+            <div className="border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                1. Campaign Information &amp; Authoritative Settings
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                캠페인의 발송 목적, 실제 발송될 이메일 제목, 메일함 사전보기 요약 문구(Preview Text), 랜딩 페이지 URL을 일원화하여 설정합니다.
+              </p>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
@@ -809,10 +1070,8 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 <input
                   type="text"
                   value={editingCampaign.name}
-                  onChange={(e) =>
-                    setEditingCampaign({ ...editingCampaign, name: e.target.value })
-                  }
-                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                  onChange={(e) => setEditingCampaign({ ...editingCampaign, name: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-medium"
                 />
               </div>
 
@@ -822,15 +1081,12 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 </label>
                 <select
                   value={editingCampaign.purpose}
-                  onChange={(e) =>
-                    setEditingCampaign({ ...editingCampaign, purpose: e.target.value })
-                  }
+                  onChange={(e) => setEditingCampaign({ ...editingCampaign, purpose: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                 >
                   <option value="Brand Outreach">Brand Outreach (바이어 큐레이션 입점 제안)</option>
-                  <option value="Partnership Inquiry">Partnership Inquiry (유통/무역 파트너십)</option>
-                  <option value="OEM/ODM Sourcing">OEM/ODM Sourcing (제조 협력사 발굴)</option>
-                  <option value="Custom Campaign">Custom Campaign (맞춤형 커뮤니케이션)</option>
+                  <option value="Catalog Announcement">Catalog Announcement (신규 바이어 카탈로그)</option>
+                  <option value="Partnership Follow-up">Partnership Follow-up (파트너십 후속 미팅)</option>
                 </select>
               </div>
 
@@ -840,9 +1096,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 </label>
                 <select
                   value={editingCampaign.language}
-                  onChange={(e) =>
-                    setEditingCampaign({ ...editingCampaign, language: e.target.value as any })
-                  }
+                  onChange={(e) => setEditingCampaign({ ...editingCampaign, language: e.target.value as any })}
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                 >
                   <option value="ko">한국어 (Korean)</option>
@@ -856,18 +1110,13 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 </label>
                 <input
                   type="datetime-local"
-                  value={editingCampaign.scheduledAt ? editingCampaign.scheduledAt.slice(0, 16) : ""}
-                  onChange={(e) =>
-                    setEditingCampaign({
-                      ...editingCampaign,
-                      scheduledAt: e.target.value ? new Date(e.target.value).toISOString() : null,
-                    })
-                  }
+                  value={editingCampaign.scheduledAt || ""}
+                  onChange={(e) => setEditingCampaign({ ...editingCampaign, scheduledAt: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                 />
               </div>
 
-              {/* Campaign Email Subject with Variable Insertion & Live Sample Preview */}
+              {/* Authoritative Campaign Email Subject */}
               <div className="sm:col-span-2 p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-zinc-900 dark:text-zinc-100">
@@ -881,7 +1130,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                         const cur = editingCampaign.subjectOverride ?? activeTemplate?.subject ?? "";
                         setEditingCampaign({ ...editingCampaign, subjectOverride: cur + " {{company_name}}" });
                       }}
-                      className="px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded text-zinc-700 dark:text-zinc-300 font-mono text-[10px] cursor-pointer"
+                      className="px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 rounded text-zinc-700 dark:text-zinc-300 font-mono text-[10px] cursor-pointer"
                     >
                       + {"{{company_name}}"}
                     </button>
@@ -891,7 +1140,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                         const cur = editingCampaign.subjectOverride ?? activeTemplate?.subject ?? "";
                         setEditingCampaign({ ...editingCampaign, subjectOverride: cur + " {{contact_name}}" });
                       }}
-                      className="px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded text-zinc-700 dark:text-zinc-300 font-mono text-[10px] cursor-pointer"
+                      className="px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 rounded text-zinc-700 dark:text-zinc-300 font-mono text-[10px] cursor-pointer"
                     >
                       + {"{{contact_name}}"}
                     </button>
@@ -901,7 +1150,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                         const cur = editingCampaign.subjectOverride ?? activeTemplate?.subject ?? "";
                         setEditingCampaign({ ...editingCampaign, subjectOverride: cur + " {{brand_name}}" });
                       }}
-                      className="px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded text-zinc-700 dark:text-zinc-300 font-mono text-[10px] cursor-pointer"
+                      className="px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 rounded text-zinc-700 dark:text-zinc-300 font-mono text-[10px] cursor-pointer"
                     >
                       + {"{{brand_name}}"}
                     </button>
@@ -935,6 +1184,34 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 </div>
               </div>
 
+              {/* Authoritative Preview Text */}
+              <div>
+                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Preview Text (메일함 한 줄 사전보기 문구)
+                </label>
+                <input
+                  type="text"
+                  placeholder="메일 목록에서 제목 옆에 노출되는 요약 문구"
+                  value={editingCampaign.previewText || ""}
+                  onChange={(e) => setEditingCampaign({ ...editingCampaign, previewText: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+
+              {/* Authoritative Landing Page URL */}
+              <div>
+                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Campaign Landing Page URL (기본 CTA 목적지 링크)
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://www.kselectnetwork.com"
+                  value={editingCampaign.landingPageUrl || ""}
+                  onChange={(e) => setEditingCampaign({ ...editingCampaign, landingPageUrl: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+
               <div className="sm:col-span-2">
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                   Description / Internal Notes
@@ -943,9 +1220,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   type="text"
                   placeholder="내부 검토용 캠페인 메모 또는 타겟팅 목적"
                   value={editingCampaign.description || ""}
-                  onChange={(e) =>
-                    setEditingCampaign({ ...editingCampaign, description: e.target.value })
-                  }
+                  onChange={(e) => setEditingCampaign({ ...editingCampaign, description: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                 />
               </div>
@@ -955,12 +1230,10 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   Global Custom Message (&#123;&#123;custom_message&#125;&#125; 변수에 삽입될 공통 본문)
                 </label>
                 <textarea
-                  rows={4}
-                  placeholder="예: 귀사의 대표 라인업인 클렌징 및 스킨케어 제품군의 뛰어난 성분 처방과 시장 반응을 확인하였으며, 당사의 150+ 북미 리테일러 입점 큐레이션 프로그램에 모시고자 합니다."
+                  rows={3}
+                  placeholder="귀사의 우수한 뷰티 라인업에 깊은 인상을 받아 파트너십을 제안드립니다."
                   value={editingCampaign.customMessage || ""}
-                  onChange={(e) =>
-                    setEditingCampaign({ ...editingCampaign, customMessage: e.target.value })
-                  }
+                  onChange={(e) => setEditingCampaign({ ...editingCampaign, customMessage: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 leading-relaxed"
                 />
               </div>
@@ -978,14 +1251,14 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
           </div>
         )}
 
-        {/* STEP 2: TEMPLATE PACKAGE & RESPONSIVE PREVIEW */}
+        {/* STEP 2: TEMPLATE PACKAGE SELECTION & LIBRARY */}
         {currentStep === 2 && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
                 <div>
                   <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                    2. External Designer Template Package Library
+                    2. Select Template Package
                   </h3>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                     디자이너가 작성한 외부 완성형 이메일 패키지를 선택하거나 신규 업로드합니다.
@@ -995,16 +1268,16 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   <button
                     type="button"
                     onClick={() => setShowGuideModal(true)}
-                    className="px-3 py-1.5 rounded text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 cursor-pointer flex items-center gap-1.5"
+                    className="px-3 py-1.5 rounded text-xs font-semibold border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 cursor-pointer"
                   >
                     📖 Designer Guide &amp; AI Prompt
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowUploadModal(true)}
+                    onClick={handleOpenUploadModal}
                     className="px-3 py-1.5 rounded text-xs font-bold bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 cursor-pointer"
                   >
-                    + Upload Designer Package
+                    + Upload HTML / ZIP Package
                   </button>
                 </div>
               </div>
@@ -1013,44 +1286,61 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {templates.map((tpl) => {
                   const isSelected = tpl.id === selectedTemplateId;
+                  const isImage = tpl.templateType === "IMAGE";
+                  const isArchived = tpl.status === "ARCHIVED";
+
                   return (
                     <div
                       key={tpl.id}
                       onClick={() => setSelectedTemplateId(tpl.id)}
-                      className={`p-3.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                      className={`p-3.5 rounded-lg border text-xs cursor-pointer transition-all flex flex-col justify-between ${
                         isSelected
                           ? "border-zinc-950 dark:border-white bg-zinc-50 dark:bg-zinc-800/80 shadow-xs ring-1 ring-zinc-950 dark:ring-white"
-                          : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:bg-zinc-50 dark:hover:bg-zinc-850"
-                      }`}
+                          : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:bg-zinc-50"
+                      } ${isArchived ? "opacity-60" : ""}`}
                     >
-                      <div className="flex items-center justify-between mb-1.5 gap-2">
-                        <span className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                          {tpl.name}
-                        </span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
-                            tpl.templateType === "IMAGE"
-                              ? "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
-                              : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                          }`}>
-                            {tpl.templateType === "IMAGE" ? "🖼️ IMAGE" : "📄 HTML"}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                              isImage
+                                ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                                : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                            }`}
+                          >
+                            {isImage ? "🖼️ IMAGE" : "📄 HTML"}
                           </span>
                           {tpl.isDefault && (
-                            <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded font-bold">
+                            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
                               Default
                             </span>
                           )}
                         </div>
+                        <div className="font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1">{tpl.name}</div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2">
+                          {tpl.subject}
+                        </p>
                       </div>
-                      <p className="text-[11px] text-zinc-500 line-clamp-1 mb-2">
-                        제목: {tpl.subject}
-                      </p>
-                      <div className="flex items-center gap-2 text-[10px] text-zinc-400">
-                        <span>v{tpl.version}</span>
-                        <span>·</span>
-                        <span className="uppercase">{tpl.language}</span>
-                        <span>·</span>
-                        <span>{tpl.variables?.length || 4} variables</span>
+
+                      <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/60 mt-3 flex items-center justify-between text-[10px] text-zinc-400">
+                        <span>v{tpl.version} · {tpl.language.toUpperCase()}</span>
+                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewModalTemplate(tpl)}
+                            className="hover:text-zinc-800 underline"
+                          >
+                            Preview
+                          </button>
+                          <span>·</span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenDuplicateModal(tpl, e)}
+                            className="hover:text-zinc-800"
+                          >
+                            복제
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -1058,117 +1348,86 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
               </div>
             </div>
 
-            {/* Live Visual Preview Card (Desktop vs Mobile Toggle) */}
+            {/* LIVE VISUAL PREVIEW HEADER WITH CAMPAIGN EMAIL SUBJECT BAR */}
             {activeTemplate && (
               <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-                <div className="flex flex-col gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                          Live Visual Template Preview: {activeTemplate.name}
-                        </h4>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                          activeTemplate.templateType === "IMAGE"
-                            ? "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300"
-                            : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300"
-                        }`}>
-                          {activeTemplate.templateType === "IMAGE" ? "🖼️ Image Template" : "📄 HTML Template"}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-zinc-500">
-                        Template Default: {activeTemplate.subject}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowGuideModal(true)}
-                        className="px-2.5 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 font-medium flex items-center gap-1 cursor-pointer"
-                      >
-                        📖 Guide
-                      </button>
-                      <div className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-md text-xs">
-                        <button
-                          type="button"
-                          onClick={() => setPreviewViewport("desktop")}
-                          className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${
-                            previewViewport === "desktop"
-                              ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
-                              : "text-zinc-500 hover:text-zinc-900"
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                      Live Send-Ready Visual Preview: {activeTemplate.name}
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                        activeTemplate.templateType === "IMAGE"
+                          ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                          : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                       }`}
-                        >
-                          🖥️ Desktop (600px)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPreviewViewport("mobile")}
-                          className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${
-                            previewViewport === "mobile"
-                              ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
-                              : "text-zinc-500 hover:text-zinc-900"
-                      }`}
-                        >
-                          📱 Mobile (375px)
-                        </button>
-                      </div>
-                    </div>
+                    >
+                      {activeTemplate.templateType === "IMAGE" ? "🖼️ Image Template" : "📄 HTML Template"}
+                    </span>
                   </div>
 
-                  {/* Interactive Campaign Email Subject Bar in Live Preview (Owner Red-Circle Requirement) */}
-                  <div className="p-3 bg-amber-50/70 dark:bg-amber-950/20 rounded-md border border-amber-200 dark:border-amber-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="font-bold text-amber-900 dark:text-amber-300 shrink-0">
-                          Campaign Email Subject:
-                        </span>
-                        <input
-                          type="text"
-                          value={editingCampaign?.subjectOverride ?? activeTemplate.subject}
-                          onChange={(e) => {
-                            if (editingCampaign) {
-                              setEditingCampaign({ ...editingCampaign, subjectOverride: e.target.value });
-                            }
-                          }}
-                          placeholder={activeTemplate.subject}
-                          className="flex-1 px-2.5 py-1 text-xs font-medium rounded border border-amber-300 dark:border-amber-800/80 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-inner"
-                        />
-                      </div>
-                      <div className="text-[11px] text-amber-800/80 dark:text-amber-400/80 mt-1 truncate">
-                        Preview (Amorepacific): &quot;{sampleResolvedSubject}&quot;
-                      </div>
-                    </div>
-                    {editingCampaign?.subjectOverride && editingCampaign.subjectOverride !== activeTemplate.subject && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (editingCampaign) {
-                            setEditingCampaign({ ...editingCampaign, subjectOverride: activeTemplate.subject });
-                          }
-                        }}
-                        className="text-[10px] text-amber-700 dark:text-amber-400 hover:underline shrink-0 self-end sm:self-center cursor-pointer"
-                      >
-                        ↺ Reset Subject
-                      </button>
-                    )}
+                  <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-950">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewViewport("desktop")}
+                      className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
+                        previewViewport === "desktop"
+                          ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                          : "text-zinc-500 hover:text-zinc-800"
+                      }`}
+                    >
+                      Desktop (600px)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewViewport("mobile")}
+                      className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
+                        previewViewport === "mobile"
+                          ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                          : "text-zinc-500 hover:text-zinc-800"
+                      }`}
+                    >
+                      Mobile (375px)
+                    </button>
                   </div>
                 </div>
 
-                {/* Sandboxed Iframe Preview */}
-                <div className="p-4 bg-zinc-100 dark:bg-zinc-950 rounded-lg flex justify-center overflow-x-auto min-h-[500px]">
+                {/* Campaign Email Subject Bar */}
+                <div className="p-3 bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-500/80 rounded-lg space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                      <strong className="text-amber-950 dark:text-amber-200 font-bold">
+                        Campaign Email Subject (실제 발송 제목):
+                      </strong>
+                    </div>
+                  </div>
+                  <div className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs pl-4 font-mono">
+                    &quot;{sampleResolvedSubject}&quot;
+                  </div>
+                  {editingCampaign.previewText && (
+                    <div className="text-[11px] text-zinc-500 pl-4">
+                      Preview Text: <span className="italic">&quot;{editingCampaign.previewText}&quot;</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Live Preview Container (Assembled with Central Marketing Footer) */}
+                <div className="bg-zinc-100 dark:bg-zinc-950 p-4 rounded-lg flex justify-center overflow-x-auto min-h-[460px]">
                   <div
                     style={{
-                      width: previewViewport === "desktop" ? "620px" : "375px",
+                      width: previewViewport === "desktop" ? "600px" : "375px",
+                      maxWidth: "100%",
                       transition: "width 0.2s ease-in-out",
                     }}
-                    className="bg-white rounded-lg shadow-md border border-zinc-200 overflow-hidden"
+                    className="bg-white rounded shadow-sm border border-zinc-200 overflow-hidden"
                   >
                     <iframe
-                      srcDoc={activeTemplate.htmlContent}
-                      title="Email Preview"
+                      title="Send-Ready Email Preview"
+                      srcDoc={assembledPreviewHtml}
+                      className="w-full h-[540px] border-0"
                       sandbox="allow-same-origin"
-                      className="w-full h-[650px] border-none"
                     />
                   </div>
                 </div>
@@ -1194,136 +1453,47 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
           </div>
         )}
 
-        {/* STEP 3: RECIPIENT SELECTION & FILTERING */}
+        {/* STEP 3: RECIPIENT SELECTION */}
         {currentStep === 3 && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-              <div className="border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  3. Candidate Sourcing Recipient Selection
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Brand Marketing 후보 기업 중 타겟팅 기준에 맞는 수신 대상 기업 및 담당자를 필터링합니다.
-                </p>
-              </div>
-
-              {/* Filter Controls */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-zinc-50 dark:bg-zinc-850/60 rounded-lg text-xs">
-                {/* Grade Filter */}
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
                 <div>
-                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Grade Filter (후보 등급)
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {["A", "B", "C", "UNRATED"].map((g) => {
-                      const checked = selectedGrades.includes(g);
-                      return (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => {
-                            setSelectedGrades((prev) =>
-                              checked ? prev.filter((x) => x !== g) : [...prev, g]
-                            );
-                          }}
-                          className={`px-2.5 py-1 text-xs font-bold rounded border cursor-pointer ${
-                            checked
-                              ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 border-zinc-950"
-                              : "bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-200"
-                          }`}
-                        >
-                          {g}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                    3. Recipient Selection &amp; Commercial Consent Filter
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    타겟 등급, 사업자 유형 및 마케팅 동의 상태를 바탕으로 발송 대상 후보 기업을 필터링합니다.
+                  </p>
                 </div>
-
-                {/* Company Type Filter */}
-                <div>
-                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Company Type (회사 유형)
-                  </label>
-                  <div className="flex flex-wrap gap-1">
-                    {[
-                      { val: "BRAND_OWNER", label: "브랜드" },
-                      { val: "MANUFACTURER", label: "제조사" },
-                      { val: "OEM_ODM", label: "OEM/ODM" },
-                      { val: "DISTRIBUTOR", label: "유통사" },
-                    ].map((bt) => {
-                      const checked = selectedCompanyTypes.includes(bt.val);
-                      return (
-                        <button
-                          key={bt.val}
-                          type="button"
-                          onClick={() => {
-                            setSelectedCompanyTypes((prev) =>
-                              checked ? prev.filter((x) => x !== bt.val) : [...prev, bt.val]
-                            );
-                          }}
-                          className={`px-2 py-0.5 text-[11px] font-semibold rounded border cursor-pointer ${
-                            checked
-                              ? "bg-blue-600 text-white border-blue-600"
-                              : "bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-200"
-                          }`}
-                        >
-                          {bt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Consent Guard Policy */}
-                <div>
-                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Commercial Email Consent Guard
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer mt-1">
-                    <input
-                      type="checkbox"
-                      checked={requireConsentedOnly}
-                      onChange={(e) => setRequireConsentedOnly(e.target.checked)}
-                      className="rounded text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-zinc-700 dark:text-zinc-300 text-[11px]">
-                      엄격 동의 확인 대상만 발송 (Exclude unconfirmed consent)
-                    </span>
-                  </label>
+                <div className="text-right">
+                  <span className="text-xs text-zinc-500">선택된 수신 대상: </span>
+                  <strong className="text-sm font-mono text-zinc-900 dark:text-zinc-100">
+                    {selectedCompanyIds.length} / {filteredCandidates.length}
+                  </strong>
                 </div>
               </div>
 
-              {/* Selection Summary Pill */}
-              <div className="flex items-center justify-between text-xs text-zinc-500 px-1">
-                <span>
-                  Matching Candidates: <strong>{filteredCandidates.length}</strong> (Selected:{" "}
-                  <strong>{selectedCompanyIds.length}</strong>)
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectedCompanyIds.length === filteredCandidates.length) {
-                      setSelectedCompanyIds([]);
-                    } else {
-                      setSelectedCompanyIds(filteredCandidates.map((c) => c.id));
-                    }
-                  }}
-                  className="text-xs text-blue-600 dark:text-blue-400 font-bold underline cursor-pointer"
-                >
-                  {selectedCompanyIds.length === filteredCandidates.length
-                    ? "Deselect All"
-                    : "Select All Matching"}
-                </button>
-              </div>
-
-              {/* Table of Candidates */}
-              <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto max-h-[380px]">
+              {/* Candidates Table */}
+              <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto max-h-[360px]">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 sticky top-0">
+                  <thead className="bg-zinc-50 dark:bg-zinc-800/60 sticky top-0">
                     <tr>
-                      <th className="p-2.5 w-10">Select</th>
-                      <th className="p-2.5">Company</th>
-                      <th className="p-2.5">Brand</th>
+                      <th className="p-2.5 w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedCompanyIds.length === filteredCandidates.length && filteredCandidates.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCompanyIds(filteredCandidates.map((c) => c.id));
+                            } else {
+                              setSelectedCompanyIds([]);
+                            }
+                          }}
+                        />
+                      </th>
+                      <th className="p-2.5">Company Name</th>
+                      <th className="p-2.5">Primary Brand</th>
                       <th className="p-2.5">Grade</th>
                       <th className="p-2.5">Contact Email</th>
                       <th className="p-2.5">Consent Status</th>
@@ -1332,23 +1502,12 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                     {filteredCandidates.map((c) => {
                       const isChecked = selectedCompanyIds.includes(c.id);
-                      const contact = c.sourcing_contacts?.[0];
                       const brand = c.sourcing_brands?.[0]?.brand_name_kr || c.company_name_kr;
+                      const contact = c.sourcing_contacts?.[0];
+
                       return (
-                        <tr
-                          key={c.id}
-                          onClick={() => {
-                            setSelectedCompanyIds((prev) =>
-                              isChecked ? prev.filter((id) => id !== c.id) : [...prev, c.id]
-                            );
-                          }}
-                          className={`cursor-pointer transition-colors ${
-                            isChecked
-                              ? "bg-blue-50/50 dark:bg-blue-950/30"
-                              : "hover:bg-zinc-50 dark:hover:bg-zinc-850"
-                          }`}
-                        >
-                          <td className="p-2.5" onClick={(e) => e.stopPropagation()}>
+                        <tr key={c.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
+                          <td className="p-2.5">
                             <input
                               type="checkbox"
                               checked={isChecked}
@@ -1357,27 +1516,16 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                                   isChecked ? prev.filter((id) => id !== c.id) : [...prev, c.id]
                                 );
                               }}
-                              className="rounded text-blue-600"
                             />
                           </td>
-                          <td className="p-2.5 font-bold text-zinc-900 dark:text-zinc-100">
-                            {c.company_name_kr}
-                          </td>
+                          <td className="p-2.5 font-bold text-zinc-900 dark:text-zinc-100">{c.company_name_kr}</td>
                           <td className="p-2.5 text-zinc-700 dark:text-zinc-300">{brand}</td>
-                          <td className="p-2.5">
-                            <span className="font-mono font-bold text-[11px]">{c.grade}</span>
-                          </td>
-                          <td className="p-2.5 font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
+                          <td className="p-2.5 font-mono">{c.grade}</td>
+                          <td className="p-2.5 font-mono text-zinc-600 dark:text-zinc-400">
                             {contact?.email || <span className="text-red-400">No email</span>}
                           </td>
                           <td className="p-2.5">
-                            <span
-                              className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                                c.marketing_consent_status === "CONSENTED"
-                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                  : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-                              }`}
-                            >
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
                               {c.marketing_consent_status || "UNCONFIRMED"}
                             </span>
                           </td>
@@ -1408,119 +1556,59 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
           </div>
         )}
 
-        {/* STEP 4: PERSONALIZATION & SAMPLE RECIPIENT REVIEWS (MANDATORY REQUIREMENT 6.C) */}
+        {/* STEP 4: SAMPLE PERSONALIZATION REVIEW */}
         {currentStep === 4 && (
-          <div className="space-y-6">
-            <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-              <div className="border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  4. Sample Recipient Review (Mandatory Pre-send Verification)
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  선택된 후보 기업 중 3-5개의 실제 데이터를 바탕으로 치환된 개인화 변수 및 렌더링 결과를 사전 검증합니다. 외부 발송은 발생하지 않습니다.
-                </p>
+          <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
+            <div className="border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                4. Sample Recipient Review (Mandatory Pre-send Verification)
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                선택된 후보 기업 중 실제 데이터를 바탕으로 치환된 개인화 변수, 이미지 렌더링 및 중앙 푸터 결합 결과를 사전 검증합니다. 외부 발송은 발생하지 않습니다.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex justify-center">
+              <div className="w-full max-w-[600px] bg-white rounded shadow-sm border border-zinc-200 overflow-hidden">
+                <iframe
+                  title="Sample Personalized Preview"
+                  srcDoc={assembledPreviewHtml}
+                  className="w-full h-[520px] border-0"
+                  sandbox="allow-same-origin"
+                />
               </div>
+            </div>
 
-              {/* Sample Previews Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {candidates
-                  .filter((c) => selectedCompanyIds.includes(c.id))
-                  .slice(0, 4)
-                  .map((c, sIdx) => {
-                    const primaryBrand =
-                      c.sourcing_brands?.[0]?.brand_name_kr || c.company_name_kr;
-                    const contact = c.sourcing_contacts?.[0];
-                    const rendered = activeTemplate
-                      ? personalizeEmail(
-                          (currentEffectiveSubject || activeTemplate.subject),
-                          activeTemplate.htmlContent,
-                          activeTemplate.plainText,
-                          {
-                            companyName: c.company_name_kr,
-                            contactName: contact?.name,
-                            brandName: primaryBrand,
-                            customMessage: editingCampaign.customMessage,
-                            language: editingCampaign.language,
-                          }
-                        )
-                      : null;
-
-                    return (
-                      <div
-                        key={c.id || sIdx}
-                        className="p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/60 space-y-3 text-xs"
-                      >
-                        <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                          <span className="font-bold text-zinc-900 dark:text-zinc-100">
-                            Sample #{sIdx + 1}: {c.company_name_kr}
-                          </span>
-                          <span className="font-mono text-[10px] text-zinc-500">
-                            {contact?.email || "No email"}
-                          </span>
-                        </div>
-
-                        <div className="space-y-1 text-[11px] text-zinc-600 dark:text-zinc-400">
-                          <div>
-                            Resolved Subject:{" "}
-                            <strong className="text-zinc-800 dark:text-zinc-200">
-                              {rendered?.subject}
-                            </strong>
-                          </div>
-                          <div>
-                            Variable Values:{" "}
-                            <span className="bg-white dark:bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-[10px]">
-                              company={c.company_name_kr} | contact={contact?.name || "담당자님"} | brand={primaryBrand}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Mini Iframe for Sample */}
-                        {rendered && (
-                          <div className="border border-zinc-200 dark:border-zinc-700 rounded bg-white overflow-hidden h-[240px]">
-                            <iframe
-                              srcDoc={rendered.html}
-                              title={`Sample ${sIdx}`}
-                              sandbox="allow-same-origin"
-                              className="w-full h-full border-none"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-
-              <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(3)}
-                  className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-900 cursor-pointer"
-                >
-                  ← Back
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(5)}
-                  className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer"
-                >
-                  Next: Test Send & Dry Run →
-                </button>
-              </div>
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(3)}
+                className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-900 cursor-pointer"
+              >
+                ← Back
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(5)}
+                className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer"
+              >
+                Next: Test Send &amp; Dry Run →
+              </button>
             </div>
           </div>
         )}
 
-        {/* STEP 5: TEST EMAIL & DRY RUN (MANDATORY REQUIREMENT 6.B & 6.D) */}
+        {/* STEP 5: TEST SEND & DRY RUN SIMULATION */}
         {currentStep === 5 && (
           <div className="space-y-6">
-            {/* Action 1: Test Email to Allowlisted Internal Address */}
+            {/* 5.A Test Email Dispatch */}
             <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
               <div className="border-b border-zinc-100 dark:border-zinc-800 pb-3">
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                   5.A Test Email Dispatch (Controlled Allowlist Only)
                 </h3>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  안전한 검증을 위해 오직 인가된 내부 테스트 도메인(@letusto.com, @kselectnetwork.com)으로만 실제 전송이 허용됩니다. 외부 후보사 주소로는 발송되지 않습니다.
+                  안전한 검증을 위해 오직 인가된 내부 테스트 도메인(@letusto.com, @kselectnetwork.com)으로만 실제 전송이 허용됩니다.
                 </p>
               </div>
 
@@ -1529,14 +1617,14 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   type="email"
                   value={testEmailAddress}
                   onChange={(e) => setTestEmailAddress(e.target.value)}
-                  placeholder="allowlisted-admin@letusto.com"
-                  className="flex-1 px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                  placeholder="qa-admin-test@letusto.com"
+                  className="flex-1 px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono"
                 />
                 <button
                   type="button"
                   disabled={isSendingTest}
                   onClick={handleSendTestEmail}
-                  className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded cursor-pointer disabled:opacity-50"
                 >
                   {isSendingTest ? "Sending..." : "Send Test Email ✉️"}
                 </button>
@@ -1555,7 +1643,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
               )}
             </div>
 
-            {/* Action 2: Campaign Dry Run (Zero External Sends) */}
+            {/* 5.B Campaign Dry Run */}
             <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
                 <div>
@@ -1576,51 +1664,25 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 </button>
               </div>
 
-              {/* Dry Run Report Results Card */}
               {dryRunReport && (
                 <div className="space-y-4 p-4 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100">
-                      Dry Run Validation Summary
-                    </span>
-                    <span className="text-[11px] text-zinc-400">
-                      Generated at: {new Date(dryRunReport.timestamp).toLocaleTimeString()}
-                    </span>
-                  </div>
-
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                     <div className="p-3 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
                       <span className="text-zinc-400 block text-[10px]">Total Candidates</span>
-                      <strong className="text-base text-zinc-900 dark:text-zinc-100">
-                        {dryRunReport.totalCandidatesEvaluated}
-                      </strong>
+                      <strong className="text-base text-zinc-900 dark:text-zinc-100">{dryRunReport.totalCandidatesEvaluated}</strong>
                     </div>
-
                     <div className="p-3 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200">
                       <span className="block text-[10px]">Sendable Recipients</span>
-                      <strong className="text-base font-bold">
-                        {dryRunReport.sendableCount}
-                      </strong>
+                      <strong className="text-base font-bold">{dryRunReport.sendableCount}</strong>
                     </div>
-
                     <div className="p-3 rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
                       <span className="block text-[10px]">Excluded / Filtered</span>
-                      <strong className="text-base font-bold">
-                        {dryRunReport.excludedCount}
-                      </strong>
+                      <strong className="text-base font-bold">{dryRunReport.excludedCount}</strong>
                     </div>
-
                     <div className="p-3 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
-                      <span className="text-zinc-400 block text-[10px]">Duplicates Deduplicated</span>
-                      <strong className="text-base text-zinc-900 dark:text-zinc-100">
-                        {dryRunReport.duplicateEmailsFiltered}
-                      </strong>
+                      <span className="text-zinc-400 block text-[10px]">Suppressed / Opted Out</span>
+                      <strong className="text-base text-zinc-900 dark:text-zinc-100">{dryRunReport.suppressedFiltered}</strong>
                     </div>
-                  </div>
-
-                  <div className="p-3 rounded bg-zinc-100 dark:bg-zinc-900 text-[11px] text-zinc-600 dark:text-zinc-400 space-y-1">
-                    <div>Sender Identity: <strong>{dryRunReport.senderIdentity}</strong></div>
-                    <div>Compliance Check: <strong className="text-emerald-600">PASS (Zero external dispatch)</strong></div>
                   </div>
                 </div>
               )}
@@ -1638,7 +1700,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   onClick={() => setCurrentStep(6)}
                   className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer"
                 >
-                  Next: Final Approval & Activity →
+                  Next: Final Approval &amp; Activity →
                 </button>
               </div>
             </div>
@@ -1651,19 +1713,46 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
             <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
               <div className="border-b border-zinc-100 dark:border-zinc-800 pb-3">
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  6. Final Approval Workflow & Release Snapshot
+                  6. Final Approval Workflow &amp; Release Snapshot
                 </h3>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  캠페인을 승인 상태로 고정(Lock)합니다. 승인 후 템플릿, 수신자 또는 본문 수정 시 무결성을 위해 승인이 자동 무효화(INVALIDATED)됩니다.
+                  캠페인을 승인 상태로 고정(Lock)합니다. 승인 전 법적 푸터 및 템플릿 무결성 체크리스트가 모두 통과되어야 승인이 가능합니다.
                 </p>
+              </div>
+
+              {/* Pre-Approval Validation Checklist (Section 7) */}
+              <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 space-y-2">
+                <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                  Pre-Approval Integrity Checklist
+                </div>
+                {isValidatingApproval ? (
+                  <div className="text-xs text-zinc-400 py-2">승인 전 체크리스트 검증 중...</div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs">
+                    {preApprovalChecks.map((chk, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-2.5 rounded border flex items-start gap-2 ${
+                          chk.status === "PASS"
+                            ? "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200"
+                            : "bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-800 text-red-950 dark:text-red-200"
+                        }`}
+                      >
+                        <span className="font-bold">{chk.status === "PASS" ? "✓" : "✗"}</span>
+                        <div>
+                          <div className="font-bold">{chk.name}</div>
+                          <div className="text-[11px] opacity-80">{chk.detail}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Approval Status Card */}
               <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 space-y-3 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                    Approval State:
-                  </span>
+                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">Approval State:</span>
                   <span
                     className={`font-bold px-2 py-0.5 rounded ${
                       editingCampaign.approvalStatus === "APPROVED"
@@ -1689,7 +1778,8 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                     <button
                       type="button"
                       onClick={handleApproveCampaign}
-                      className="w-full py-2.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                      disabled={preApprovalChecks.some((c) => c.status === "FAIL")}
+                      className="w-full py-2.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50"
                     >
                       Approve Campaign (Lock Snapshot) ✓
                     </button>
@@ -1699,16 +1789,6 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* Sending Engine Simulator (LIVE_MODE DISABLED) */}
-              <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs space-y-2">
-                <span className="font-bold text-amber-900 dark:text-amber-200">
-                  Sending Engine Status: TEST_MODE ONLY
-                </span>
-                <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
-                  본 개발 단계(ADM-BSRC-006)에서는 실제 외부 대량 발송(LIVE_MODE)이 비활성화되어 있습니다. 승인된 캠페인은 시뮬레이션 및 내부 모니터링 로그로 안전하게 관리됩니다.
-                </p>
               </div>
 
               {/* Activity Audit Logs */}
@@ -1731,12 +1811,8 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                       <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                         {campaignLogs.map((l, lIdx) => (
                           <tr key={l.id || lIdx}>
-                            <td className="p-2 font-bold text-zinc-800 dark:text-zinc-200">
-                              {l.eventType}
-                            </td>
-                            <td className="p-2 font-mono text-[10px]">
-                              {l.isTestMode ? "TEST_MODE" : "LIVE_MODE"}
-                            </td>
+                            <td className="p-2 font-bold text-zinc-800 dark:text-zinc-200">{l.eventType}</td>
+                            <td className="p-2 font-mono text-[10px]">{l.isTestMode ? "TEST_MODE" : "LIVE_MODE"}</td>
                             <td className="p-2 text-zinc-400 font-mono text-[10px]">
                               {new Date(l.createdAt).toLocaleTimeString()}
                             </td>
@@ -1764,7 +1840,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   }}
                   className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer"
                 >
-                  Save & Return to Campaign List
+                  Save &amp; Return to Campaign List
                 </button>
               </div>
             </div>
@@ -1775,20 +1851,21 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   };
 
   // --------------------------------------------------------------------------
-  // RENDER: DUAL TEMPLATE FORMAT UPLOAD MODAL (IMAGE & HTML)
+  // RENDER: UPLOAD HTML / ZIP MODAL (Section 1 & 2)
   // --------------------------------------------------------------------------
   const renderUploadModal = () => {
     if (!showUploadModal) return null;
+
     return (
       <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-3xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
           <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
             <div>
               <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                Register External Designer Template Package
+                Upload Designer Email Package (HTML / ZIP)
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                디자이너가 작업한 이미지 슬라이스 패키지 또는 HTML 마크업을 등록합니다.
+                HTML 파일 또는 이미지가 포함된 ZIP 패키지를 업로드하여 자동 호스팅 및 이미지 URL 변환을 수행합니다.
               </p>
             </div>
             <button
@@ -1800,56 +1877,51 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
             </button>
           </div>
 
-          <form onSubmit={handleUploadTemplate} className="space-y-4 text-xs">
+          <form onSubmit={handleUploadSubmit} className="space-y-4 text-xs">
             {uploadError && (
               <div className="p-3 rounded bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-200 border border-red-200">
                 {uploadError}
               </div>
             )}
 
-            {/* Template Format Selector */}
-            <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2">
-              <label className="block text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                Template Format (템플릿 포맷 선택) <span className="text-red-500">*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setUploadTemplateType("IMAGE")}
-                  className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
-                    uploadTemplateType === "IMAGE"
-                      ? "border-purple-600 bg-purple-50/50 dark:bg-purple-950/30 text-purple-950 dark:text-purple-200 ring-2 ring-purple-500/20"
-                      : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 hover:bg-zinc-50"
-                  }`}
-                >
-                  <div className="font-bold flex items-center gap-1.5 text-xs">
-                    <span>🖼️</span> IMAGE TEMPLATE (이미지 슬라이스)
-                  </div>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                    디자이너가 제작한 600px 세로 분할 이미지와 링크 URL을 조합하여 이메일 호환 마크업을 자동 생성합니다.
-                  </p>
-                </button>
+            {/* Format Selector */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setUploadTemplateType("HTML")}
+                className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
+                  uploadTemplateType === "HTML"
+                    ? "border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-950 dark:text-emerald-200 ring-2 ring-emerald-500/20"
+                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 hover:bg-zinc-50"
+                }`}
+              >
+                <div className="font-bold flex items-center gap-1.5 text-xs">
+                  <span>📄</span> HTML / ZIP 패키지 업로드
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                  디자이너가 작성한 HTML 또는 이미지 폴더가 포함된 ZIP을 업로드합니다.
+                </p>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => setUploadTemplateType("HTML")}
-                  className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
-                    uploadTemplateType === "HTML"
-                      ? "border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-950 dark:text-emerald-200 ring-2 ring-emerald-500/20"
-                      : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 hover:bg-zinc-50"
-                  }`}
-                >
-                  <div className="font-bold flex items-center gap-1.5 text-xs">
-                    <span>📄</span> HTML TEMPLATE (완성형 마크업)
-                  </div>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                    이메일 전문 디자이너/퍼블리셔가 직접 코딩한 테이블 기반 HTML 소스 코드를 살균(Sanitize)하여 등록합니다.
-                  </p>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setUploadTemplateType("IMAGE")}
+                className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
+                  uploadTemplateType === "IMAGE"
+                    ? "border-purple-600 bg-purple-50/50 dark:bg-purple-950/30 text-purple-950 dark:text-purple-200 ring-2 ring-purple-500/20"
+                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 hover:bg-zinc-50"
+                }`}
+              >
+                <div className="font-bold flex items-center gap-1.5 text-xs">
+                  <span>🖼️</span> IMAGE 슬라이스 빌더
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                  600px 세로 분할 이미지와 CTA 버튼을 직접 조립합니다.
+                </p>
+              </button>
             </div>
 
-            {/* Shared Metadata Fields */}
+            {/* Common Metadata Fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
@@ -1857,7 +1929,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 </label>
                 <input
                   type="text"
-                  placeholder="예: 2026 Fall Buyer Outreach - Image Package"
+                  placeholder="예: 2026 Fall Buyer Outreach - Package 01"
                   value={uploadName}
                   onChange={(e) => setUploadName(e.target.value)}
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
@@ -1890,60 +1962,79 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                 />
               </div>
-
-              <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Preview Text (사전보기 요약)
-                </label>
-                <input
-                  type="text"
-                  placeholder="메일 목록에서 제목 옆에 노출되는 한 줄 요약 문구"
-                  value={uploadPreviewText}
-                  onChange={(e) => setUploadPreviewText(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Landing Page URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://www.kselectnetwork.com"
-                  value={uploadLandingUrl}
-                  onChange={(e) => setUploadLandingUrl(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                />
-              </div>
             </div>
 
-            {/* Format Specific Editor */}
+            {/* Mode-Specific Content */}
             {uploadTemplateType === "IMAGE" ? (
               <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
                 <ImageTemplateComposer
                   sections={uploadImageSections}
                   onChange={setUploadImageSections}
-                  defaultLandingUrl={uploadLandingUrl}
+                  defaultLandingUrl="https://www.kselectnetwork.com"
                 />
               </div>
             ) : (
-              <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="font-semibold text-zinc-700 dark:text-zinc-300">
-                    Designer Email HTML *
+              <div className="space-y-3 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                {/* File Dropzone */}
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Upload HTML or ZIP File (권장)
                   </label>
-                  <span className="text-[10px] text-zinc-400">
-                    Supports &#123;&#123;company_name&#125;&#125;, &#123;&#123;contact_name&#125;&#125;, &#123;&#123;brand_name&#125;&#125;, &#123;&#123;custom_message&#125;&#125;
-                  </span>
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-blue-500 rounded-lg p-6 text-center cursor-pointer transition bg-zinc-50 dark:bg-zinc-950/40"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".html,.htm,.zip"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setUploadFile(file);
+                          if (!uploadName.trim()) {
+                            setUploadName(file.name.replace(/\.[^/.]+$/, ""));
+                          }
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    {uploadFile ? (
+                      <div className="space-y-1">
+                        <span className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                          📦 {uploadFile.name}
+                        </span>
+                        <div className="text-[11px] text-zinc-400">
+                          {(uploadFile.size / 1024).toFixed(1)} KB · 클릭하여 다른 파일 선택
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="text-2xl">📂</div>
+                        <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                          HTML 또는 ZIP 파일을 여기에 드래그하거나 클릭하여 업로드
+                        </div>
+                        <p className="text-[11px] text-zinc-400">
+                          ZIP 내부에 포함된 이미지(images/...)는 관리형 HTTPS 스토리지로 자동 추출 및 호스팅됩니다.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <textarea
-                  rows={8}
-                  placeholder="<!DOCTYPE html><html><body>...</body></html>"
-                  value={uploadHtml}
-                  onChange={(e) => setUploadHtml(e.target.value)}
-                  className="w-full px-3 py-2 font-mono text-[11px] rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 leading-relaxed"
-                />
+
+                {/* Direct HTML Paste Fallback */}
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Or Paste Raw HTML Directly (선택적 직접 입력)
+                  </label>
+                  <textarea
+                    rows={4}
+                    placeholder="<!DOCTYPE html><html><body>...</body></html>"
+                    value={uploadHtmlText}
+                    onChange={(e) => setUploadHtmlText(e.target.value)}
+                    className="w-full px-3 py-2 font-mono text-[11px] rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 leading-relaxed"
+                  />
+                </div>
               </div>
             )}
 
@@ -1957,9 +2048,10 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded cursor-pointer"
+                disabled={isUploading}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded cursor-pointer disabled:opacity-50"
               >
-                {uploadTemplateType === "IMAGE" ? "Compile & Save Image Package" : "Sanitize & Save HTML Package"}
+                {isUploading ? "Importing & Hosting Assets..." : "Import & Save Package"}
               </button>
             </div>
           </form>
@@ -1968,11 +2060,176 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     );
   };
 
+  // --------------------------------------------------------------------------
+  // RENDER: DUPLICATE / SAVE AS MODAL (Section 3)
+  // --------------------------------------------------------------------------
+  const renderDuplicateModal = () => {
+    if (!duplicateModalTemplate) return null;
+
+    return (
+      <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-md w-full p-5 shadow-2xl space-y-4">
+          <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+            Duplicate Template Package (Save As)
+          </h3>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            &quot;{duplicateModalTemplate.name}&quot; 템플릿의 소스 코드와 디자인 에셋을 보존하면서 새로운 독립 템플릿 레코드를 생성합니다.
+          </p>
+
+          <div>
+            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+              New Template Name *
+            </label>
+            <input
+              type="text"
+              value={duplicateNewName}
+              onChange={(e) => setDuplicateNewName(e.target.value)}
+              className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-medium"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setDuplicateModalTemplate(null)}
+              className="px-3 py-1.5 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-700 dark:text-zinc-300 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleExecuteDuplicate}
+              className="px-4 py-1.5 text-xs font-bold rounded bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 cursor-pointer"
+            >
+              Confirm Duplicate
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // --------------------------------------------------------------------------
+  // RENDER: TEMPLATE PREVIEW MODAL
+  // --------------------------------------------------------------------------
+  const renderTemplatePreviewModal = () => {
+    if (!previewModalTemplate) return null;
+
+    const modalAssembledHtml = assembleEmailWithMarketingFooter(previewModalTemplate.htmlContent, {
+      footerSettings,
+      language: previewModalTemplate.language,
+      unsubscribeUrl: "https://admin.kselectnetwork.com/unsubscribe?token=sample-preview-token",
+    });
+
+    return (
+      <div className="fixed inset-0 z-[85] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-4xl w-full p-5 shadow-2xl space-y-4 max-h-[92vh] flex flex-col">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                {previewModalTemplate.name}
+              </h3>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                {previewModalTemplate.subject}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPreviewModalTemplate(null)}
+              className="text-zinc-400 hover:text-zinc-600 text-sm font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="bg-zinc-100 dark:bg-zinc-950 p-4 rounded-lg flex justify-center overflow-x-auto flex-1 min-h-[420px]">
+            <div className="w-[600px] max-w-full bg-white rounded shadow-sm border border-zinc-200 overflow-hidden">
+              <iframe
+                title="Template Preview"
+                srcDoc={modalAssembledHtml}
+                className="w-full h-[500px] border-0"
+                sandbox="allow-same-origin"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // --------------------------------------------------------------------------
+  // RENDER: DELETE CONFIRMATION MODAL
+  // --------------------------------------------------------------------------
+  const renderDeleteConfirmModal = () => {
+    if (!deleteConfirmTemplate) return null;
+
+    return (
+      <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-md w-full p-5 shadow-2xl space-y-4">
+          <h3 className="text-sm font-bold text-red-600 dark:text-red-400">
+            Confirm Delete Template
+          </h3>
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+            정말 <strong>&quot;{deleteConfirmTemplate.name}&quot;</strong> 템플릿을 삭제하시겠습니까?
+            <br />
+            * 이미 마케팅 캠페인에서 사용 중인 템플릿은 무결성을 위해 삭제가 제한되며 [보관(Archive)] 처리해야 합니다.
+          </p>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmTemplate(null)}
+              className="px-3 py-1.5 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-700 dark:text-zinc-300 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleExecuteDelete}
+              className="px-4 py-1.5 text-xs font-bold rounded bg-red-600 text-white hover:bg-red-700 cursor-pointer"
+            >
+              Delete Permanently
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      {renderNotification()}
-      {viewMode === "list" ? renderCampaignList() : renderCampaignEditor()}
+      {/* Toast Notification */}
+      {notification && (
+        <div
+          className={`p-3 rounded-lg text-xs font-semibold shadow-xs ${
+            notification.type === "success"
+              ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 border border-emerald-200"
+              : "bg-red-50 dark:bg-red-950/60 text-red-800 dark:text-red-200 border border-red-200"
+          }`}
+        >
+          {notification.text}
+        </div>
+      )}
+
+      {/* Main Sub-tab Bar */}
+      {renderSubTabBar()}
+
+      {/* View Switcher based on mainTab & viewMode */}
+      {mainTab === "footer" ? (
+        <MarketingFooterSettingsView />
+      ) : mainTab === "library" ? (
+        renderTemplateLibraryStandaloneView()
+      ) : viewMode === "list" ? (
+        renderCampaignList()
+      ) : (
+        renderCampaignEditor()
+      )}
+
+      {/* Modals */}
       {renderUploadModal()}
+      {renderDuplicateModal()}
+      {renderTemplatePreviewModal()}
+      {renderDeleteConfirmModal()}
       <DesignerGuideModal isOpen={showGuideModal} onClose={() => setShowGuideModal(false)} />
     </div>
   );
