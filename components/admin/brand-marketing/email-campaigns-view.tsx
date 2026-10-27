@@ -380,6 +380,23 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     }
 
     try {
+      // Ensure campaign is persisted to server before approving
+      const saveRes = await saveMarketingCampaignAction({
+        ...editingCampaign,
+        templateId: selectedTemplateId,
+        filterCriteria: {
+          grades: selectedGrades as any,
+          companyTypes: selectedCompanyTypes,
+          requireConsentedOnly,
+          companyIds: selectedCompanyIds,
+        },
+      });
+
+      if (!saveRes.success || !saveRes.campaign) {
+        showNotification("error", saveRes.error || "Failed to persist campaign before approval");
+        return;
+      }
+
       const res = await approveMarketingCampaignAction(editingCampaign.id);
       if (res.success && res.campaign) {
         setEditingCampaign(res.campaign);
