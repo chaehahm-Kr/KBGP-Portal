@@ -9,7 +9,7 @@
 -- External Designer Template Packages (HTML, subject, preview text, variables, landing page)
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.marketing_templates (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   name TEXT NOT NULL,
   version TEXT NOT NULL DEFAULT '1.0.0',
   language VARCHAR(8) NOT NULL DEFAULT 'ko' CHECK (language IN ('ko', 'en')),
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS public.marketing_templates (
   status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'ARCHIVED')),
   is_default BOOLEAN NOT NULL DEFAULT false,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by TEXT,
+  updated_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -33,12 +33,12 @@ CREATE TABLE IF NOT EXISTS public.marketing_templates (
 -- Master record for Brand Outreach Email Campaigns V1
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.marketing_campaigns (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   name TEXT NOT NULL,
   purpose VARCHAR(64) NOT NULL DEFAULT 'Brand Outreach',
   description TEXT,
   language VARCHAR(8) NOT NULL DEFAULT 'ko' CHECK (language IN ('ko', 'en')),
-  template_id UUID REFERENCES public.marketing_templates(id) ON DELETE SET NULL,
+  template_id TEXT REFERENCES public.marketing_templates(id) ON DELETE SET NULL,
   template_version TEXT,
   
   -- Campaign Lifecycle States
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS public.marketing_campaigns (
   approval_status VARCHAR(32) NOT NULL DEFAULT 'PENDING' CHECK (
     approval_status IN ('PENDING', 'APPROVED', 'REJECTED', 'INVALIDATED')
   ),
-  approved_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  approved_by TEXT,
   approved_at TIMESTAMPTZ,
   approval_snapshot JSONB,
 
@@ -81,8 +81,8 @@ CREATE TABLE IF NOT EXISTS public.marketing_campaigns (
     "failed_count": 0
   }'::jsonb,
 
-  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by TEXT,
+  updated_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -92,8 +92,8 @@ CREATE TABLE IF NOT EXISTS public.marketing_campaigns (
 -- Frozen recipient snapshots per campaign with personalized values and delivery state
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.marketing_campaign_recipients (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  campaign_id UUID NOT NULL REFERENCES public.marketing_campaigns(id) ON DELETE CASCADE,
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  campaign_id TEXT NOT NULL REFERENCES public.marketing_campaigns(id) ON DELETE CASCADE,
   company_id UUID NOT NULL REFERENCES public.sourcing_companies(id) ON DELETE CASCADE,
   contact_id UUID REFERENCES public.sourcing_contacts(id) ON DELETE SET NULL,
   
@@ -137,13 +137,13 @@ CREATE TABLE IF NOT EXISTS public.marketing_campaign_recipients (
 -- Immutable audit log for campaign actions, test dispatches, and dry-run evaluations
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.marketing_campaign_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  campaign_id UUID NOT NULL REFERENCES public.marketing_campaigns(id) ON DELETE CASCADE,
-  recipient_id UUID REFERENCES public.marketing_campaign_recipients(id) ON DELETE SET NULL,
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  campaign_id TEXT NOT NULL REFERENCES public.marketing_campaigns(id) ON DELETE CASCADE,
+  recipient_id TEXT REFERENCES public.marketing_campaign_recipients(id) ON DELETE SET NULL,
   event_type VARCHAR(64) NOT NULL,
   is_test_mode BOOLEAN NOT NULL DEFAULT true,
   details JSONB NOT NULL DEFAULT '{}'::jsonb,
-  performed_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  performed_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -152,14 +152,14 @@ CREATE TABLE IF NOT EXISTS public.marketing_campaign_logs (
 -- Commercial email opt-out and bounce suppression registry
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.marketing_suppression_list (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   email TEXT NOT NULL UNIQUE,
   reason VARCHAR(32) NOT NULL DEFAULT 'UNSUBSCRIBED' CHECK (
     reason IN ('UNSUBSCRIBED', 'BOUNCED', 'COMPLAINT', 'MANUAL_ADMIN')
   ),
   notes TEXT,
   suppressed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
+  created_by TEXT
 );
 
 -- ------------------------------------------------------------------------------
