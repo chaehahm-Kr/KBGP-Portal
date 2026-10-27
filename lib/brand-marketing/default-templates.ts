@@ -14,6 +14,7 @@ export const DEFAULT_MARKETING_TEMPLATES: MarketingTemplatePackage[] = [
   {
     id: KO_TEMPLATE_UUID,
     name: "K SELECT NETWORK — 브랜드 미국 진출 파트너십 제안서 (국문)",
+    templateType: "HTML",
     version: "1.0.0",
     language: "ko",
     subject: "[K SELECT] {{company_name}}의 미국 뷰티 리테일 네트워크 진출을 제안드립니다",
@@ -113,6 +114,7 @@ K SELECT NETWORK는 북미 온·오프라인 뷰티 리테일러와 한국의 �
   {
     id: EN_TEMPLATE_UUID,
     name: "K SELECT NETWORK — Global Brand Partnership Proposal (English)",
+    templateType: "HTML",
     version: "1.0.0",
     language: "en",
     subject: "[K SELECT] Partnership Inquiry: North American Distribution for {{company_name}}",

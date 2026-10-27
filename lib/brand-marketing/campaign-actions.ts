@@ -18,6 +18,8 @@ import {
   approveMarketingCampaign,
 } from "./campaign-data-access";
 import { validateAndSanitizeTemplate } from "./template-parser";
+import { compileImageTemplateToHtml } from "./image-template-compiler";
+import { ImageTemplateSection, DesignerPromptSettings, TemplateType } from "./campaign-types";
 
 /**
  * Asserts admin session before accessing marketing campaign tools.
@@ -50,12 +52,15 @@ export async function listMarketingTemplatesAction(): Promise<{
  */
 export async function uploadMarketingTemplateAction(payload: {
   name: string;
+  templateType?: TemplateType;
   version?: string;
   language?: "ko" | "en";
   subject: string;
   previewText?: string;
-  htmlContent: string;
+  htmlContent?: string;
   landingPageUrl?: string;
+  imageSections?: ImageTemplateSection[];
+  designerPromptSettings?: DesignerPromptSettings;
 }): Promise<{
   success: boolean;
   template?: MarketingTemplatePackage;
@@ -64,33 +69,67 @@ export async function uploadMarketingTemplateAction(payload: {
 }> {
   try {
     const admin = await requireCampaignAdmin();
+    const templateType: TemplateType = payload.templateType || "HTML";
+    let finalHtml = "";
+    let finalPlainText = "";
+    let detectedVars: string[] = ["company_name", "contact_name", "brand_name", "custom_message"];
+    const warnings: string[] = [];
 
-    // Sanitize and validate HTML
-    const validation = validateAndSanitizeTemplate(
-      payload.htmlContent,
-      payload.subject,
-      payload.landingPageUrl
-    );
+    if (templateType === "IMAGE") {
+      const compileRes = compileImageTemplateToHtml({
+        sections: payload.imageSections || [],
+        language: payload.language || "ko",
+        subject: payload.subject,
+        previewText: payload.previewText,
+        defaultLandingUrl: payload.landingPageUrl || "https://www.kselectnetwork.com",
+      });
 
-    if (!validation.isValid) {
-      return {
-        success: false,
-        error: `Template validation failed: ${validation.errors.join("; ")}`,
-      };
+      if (!compileRes.isValid) {
+        return {
+          success: false,
+          error: `Image template compilation failed: ${compileRes.errors.join("; ")}`,
+        };
+      }
+
+      finalHtml = compileRes.html;
+      finalPlainText = compileRes.plainText;
+      warnings.push(...compileRes.warnings);
+    } else {
+      // HTML template path
+      const validation = validateAndSanitizeTemplate(
+        payload.htmlContent || "",
+        payload.subject,
+        payload.landingPageUrl
+      );
+
+      if (!validation.isValid) {
+        return {
+          success: false,
+          error: `Template validation failed: ${validation.errors.join("; ")}`,
+        };
+      }
+
+      finalHtml = validation.sanitizedHtml;
+      finalPlainText = validation.plainText;
+      detectedVars = validation.detectedVariables;
+      warnings.push(...validation.warnings);
     }
 
     const saved = await saveMarketingTemplate(
       {
         name: payload.name.trim(),
+        templateType,
         version: payload.version || "1.0.0",
         language: payload.language || "ko",
         subject: payload.subject.trim(),
         previewText: payload.previewText?.trim() || "",
-        htmlContent: validation.sanitizedHtml,
-        plainText: validation.plainText,
-        variables: validation.detectedVariables,
+        htmlContent: finalHtml,
+        plainText: finalPlainText,
+        variables: detectedVars,
         landingPageUrl: payload.landingPageUrl?.trim() || "https://www.kselectnetwork.com",
         status: "ACTIVE",
+        imageSections: payload.imageSections || [],
+        designerPromptSettings: payload.designerPromptSettings,
       },
       admin.userId
     );
@@ -100,7 +139,7 @@ export async function uploadMarketingTemplateAction(payload: {
     return {
       success: true,
       template: saved,
-      warnings: validation.warnings,
+      warnings,
     };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to upload template" };

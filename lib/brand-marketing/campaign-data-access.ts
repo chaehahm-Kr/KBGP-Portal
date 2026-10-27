@@ -11,6 +11,7 @@ import {
   SampleRecipientPreview,
 } from "./campaign-types";
 import { DEFAULT_MARKETING_TEMPLATES, resolveTemplateId } from "./default-templates";
+import { compileImageTemplateToHtml } from "./image-template-compiler";
 import { personalizeEmail } from "./personalization-engine";
 import { sendEmail, maskEmailAddress, isRecipientAllowlisted } from "@/lib/notifications/email";
 
@@ -81,28 +82,54 @@ export async function saveMarketingTemplate(
     : (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "00000000-0000-4000-b000-" + Date.now().toString(16).padStart(12, "0"));
   const now = new Date().toISOString();
 
+  const templateType = template.templateType || "HTML";
+  let htmlContent = template.htmlContent;
+  let plainText = template.plainText || "";
+  
+  if (templateType === "IMAGE" && template.imageSections && template.imageSections.length > 0) {
+    const compiled = compileImageTemplateToHtml({
+      sections: template.imageSections,
+      language: template.language || "ko",
+      subject: template.subject,
+      previewText: template.previewText || "",
+      defaultLandingUrl: template.landingPageUrl || "https://www.kselectnetwork.com",
+    });
+    htmlContent = compiled.html;
+    if (!plainText) plainText = compiled.plainText;
+  }
+
   const fullRecord: MarketingTemplatePackage = {
     id: tplId,
     name: template.name,
+    templateType,
     version: template.version || "1.0.0",
     language: template.language || "ko",
     subject: template.subject,
     previewText: template.previewText || "",
-    htmlContent: template.htmlContent,
-    plainText: template.plainText || "",
+    htmlContent,
+    plainText,
     variables: template.variables || ["company_name", "contact_name", "brand_name", "custom_message"],
     landingPageUrl: template.landingPageUrl || "https://www.kselectnetwork.com",
     status: template.status || "ACTIVE",
     isDefault: template.isDefault || false,
+    imageSections: template.imageSections || [],
+    designerPromptSettings: template.designerPromptSettings,
+    metadata: {
+      ...(template.metadata || {}),
+      template_type: templateType,
+      image_sections: template.imageSections || [],
+      designer_prompt_settings: template.designerPromptSettings,
+    },
     createdAt: template.createdAt || now,
     updatedAt: now,
   };
 
   try {
     const supabase = await getClient(customClient);
-    const row = {
+    const row: any = {
       id: fullRecord.id,
       name: fullRecord.name,
+      template_type: fullRecord.templateType,
       version: fullRecord.version,
       language: fullRecord.language,
       subject: fullRecord.subject,
@@ -113,6 +140,7 @@ export async function saveMarketingTemplate(
       landing_page_url: fullRecord.landingPageUrl,
       status: fullRecord.status,
       is_default: fullRecord.isDefault,
+      metadata: fullRecord.metadata,
       updated_by: userId || null,
       updated_at: now,
     };
@@ -153,6 +181,7 @@ export async function listMarketingCampaigns(
         language: d.language,
         templateId: d.template_id,
         templateVersion: d.template_version,
+        subjectOverride: d.subject_override || d.approval_snapshot?.subjectOverride || null,
         status: d.status,
         approvalStatus: d.approval_status,
         approvedBy: d.approved_by,
@@ -211,6 +240,7 @@ export async function getMarketingCampaignById(
         language: cData.language,
         templateId: cData.template_id,
         templateVersion: cData.template_version,
+        subjectOverride: cData.subject_override || cData.approval_snapshot?.subjectOverride || null,
         status: cData.status,
         approvalStatus: cData.approval_status,
         approvedBy: cData.approved_by,
@@ -309,6 +339,7 @@ export async function saveMarketingCampaign(
     const contentChanged =
       existing.name !== campaign.name ||
       existing.templateId !== resolvedTemplateId ||
+      (campaign.subjectOverride !== undefined && existing.subjectOverride !== campaign.subjectOverride) ||
       existing.customMessage !== campaign.customMessage ||
       JSON.stringify(existing.filterCriteria) !== JSON.stringify(campaign.filterCriteria);
 
@@ -327,6 +358,7 @@ export async function saveMarketingCampaign(
     language: campaign.language || "ko",
     templateId: resolvedTemplateId || null,
     templateVersion: campaign.templateVersion || "1.0.0",
+    subjectOverride: campaign.subjectOverride !== undefined ? campaign.subjectOverride : (existing?.subjectOverride || null),
     status,
     approvalStatus,
     approvedBy: approvalStatus === "APPROVED" ? (campaign.approvedBy || existing?.approvedBy || null) : null,
@@ -359,6 +391,7 @@ export async function saveMarketingCampaign(
       language: record.language,
       template_id: record.templateId,
       template_version: record.templateVersion,
+      subject_override: record.subjectOverride,
       status: record.status,
       approval_status: record.approvalStatus,
       approved_by: record.approvedBy,
@@ -688,6 +721,8 @@ export async function approveMarketingCampaign(
     approvedBy: approvingAdminEmail,
     templateVersion: existing.campaign.templateVersion || "1.0.0",
     templateSubject: existing.campaign.name,
+    subjectOverride: existing.campaign.subjectOverride || null,
+    resolvedSubject: existing.campaign.subjectOverride || existing.campaign.name,
     frozenRecipientsCount: recipients.length,
     sendableCount: sendable.length,
     senderAddress: process.env.EMAIL_FROM_ADDRESS || "support@kselectnetwork.com",

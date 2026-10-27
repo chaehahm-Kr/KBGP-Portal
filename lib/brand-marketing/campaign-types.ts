@@ -38,9 +38,29 @@ export type RecipientDeliveryStatus =
   | "FAILED"
   | "BOUNCED";
 
+export type TemplateType = "IMAGE" | "HTML";
+
+export interface ImageTemplateSection {
+  id: string;
+  imageUrl: string;
+  altText?: string;
+  linkUrl?: string;
+  hasCtaButton?: boolean;
+  ctaButtonLabel?: string;
+  ctaButtonUrl?: string;
+  ctaButtonAlign?: "center" | "left" | "right";
+}
+
+export interface DesignerPromptSettings {
+  imagePrompt?: string;
+  htmlPrompt?: string;
+  lastUpdated?: string;
+}
+
 export interface MarketingTemplatePackage {
   id: string;
   name: string;
+  templateType?: TemplateType;
   version: string;
   language: CampaignLanguage;
   subject: string;
@@ -51,6 +71,8 @@ export interface MarketingTemplatePackage {
   landingPageUrl?: string;
   status: TemplateStatus;
   isDefault?: boolean;
+  imageSections?: ImageTemplateSection[];
+  designerPromptSettings?: DesignerPromptSettings;
   metadata?: Record<string, any>;
   createdAt?: string;
   updatedAt?: string;
@@ -101,6 +123,8 @@ export interface CampaignApprovalSnapshot {
   approvedBy: string;
   templateVersion: string;
   templateSubject: string;
+  subjectOverride?: string | null;
+  resolvedSubject?: string;
   frozenRecipientsCount: number;
   sendableCount: number;
   dryRunReportId?: string;
@@ -116,6 +140,7 @@ export interface MarketingCampaign {
   language: CampaignLanguage;
   templateId?: string | null;
   templateVersion?: string | null;
+  subjectOverride?: string | null;
   status: CampaignStatus;
   approvalStatus: CampaignApprovalStatus;
   approvedBy?: string | null;

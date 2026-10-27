@@ -21,6 +21,9 @@ import {
   approveMarketingCampaignAction,
 } from "@/lib/brand-marketing/campaign-actions";
 import { personalizeEmail } from "@/lib/brand-marketing/personalization-engine";
+import { ImageTemplateComposer } from "./image-template-composer";
+import { DesignerGuideModal } from "./designer-guide-modal";
+import { ImageTemplateSection, TemplateType } from "@/lib/brand-marketing/campaign-types";
 
 interface EmailCampaignsViewProps {
   candidates?: any[];
@@ -46,6 +49,35 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [previewViewport, setPreviewViewport] = useState<"desktop" | "mobile">("desktop");
+
+  // Designer Guide Modal State
+  const [showGuideModal, setShowGuideModal] = useState(false);
+
+  // Template Type & Image Sections Form State
+  const [uploadTemplateType, setUploadTemplateType] = useState<TemplateType>("IMAGE");
+  const [uploadVersion, setUploadVersion] = useState("1.0.0");
+  const [uploadImageSections, setUploadImageSections] = useState<ImageTemplateSection[]>([
+    {
+      id: "slice-1",
+      imageUrl: "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=800&auto=format&fit=crop&q=80",
+      altText: "K SELECT NETWORK — 브랜드 미국 진출 파트너십 제안",
+      linkUrl: "https://www.kselectnetwork.com",
+      hasCtaButton: false,
+      ctaButtonLabel: "파트너십 안내서 확인 →",
+      ctaButtonUrl: "https://www.kselectnetwork.com",
+      ctaButtonAlign: "center",
+    },
+    {
+      id: "slice-2",
+      imageUrl: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=800&auto=format&fit=crop&q=80",
+      altText: "K SELECT NETWORK 바이어 큐레이션 프로그램 안내",
+      linkUrl: "https://www.kselectnetwork.com/distribution",
+      hasCtaButton: true,
+      ctaButtonLabel: "북미 유통 프로그램 신청하기 →",
+      ctaButtonUrl: "https://www.kselectnetwork.com/distribution",
+      ctaButtonAlign: "center",
+    },
+  ]);
 
   // New Template Upload Form
   const [uploadName, setUploadName] = useState("");

@@ -49,6 +49,7 @@ async function runTestSuite() {
   } = await import("../lib/brand-marketing/personalization-engine");
   const {
     listMarketingTemplates,
+    saveMarketingTemplate,
     saveMarketingCampaign,
     getMarketingCampaignById,
     runCampaignDryRun,
@@ -292,6 +293,141 @@ async function runTestSuite() {
   console.log("\n--- TEST 8: Live Sending Block Verification ---");
   const retrievedCampaign = await getMarketingCampaignById(saved.id, adminClient);
   assert(retrievedCampaign.campaign?.isLiveModeEnabled === false, "Live mode is strictly false on persisted record");
+
+    // --------------------------------------------------------------------------
+  // TEST 9: Image Template Compiler (ADM-BSRC-006-R1-ADD1)
+  // --------------------------------------------------------------------------
+  console.log("\n--- TEST 9: Image Template Compiler & Sliced Anchor Links ---");
+  const { compileImageTemplateToHtml } = await import("../lib/brand-marketing/image-template-compiler");
+  const imageSections = [
+    {
+      id: "slice-hero",
+      imageUrl: "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=800",
+      altText: "K SELECT Brand Outreach Hero Banner",
+      linkUrl: "https://www.kselectnetwork.com/hero",
+      hasCtaButton: false,
+    },
+    {
+      id: "slice-cta",
+      imageUrl: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=800",
+      altText: "K SELECT Wholesale Application Section",
+      linkUrl: "https://www.kselectnetwork.com/apply",
+      hasCtaButton: true,
+      ctaButtonLabel: "Apply for Wholesale Program →",
+      ctaButtonUrl: "https://www.kselectnetwork.com/apply",
+      ctaButtonAlign: "center" as const,
+    },
+  ];
+
+  const compiledResult = compileImageTemplateToHtml({
+    sections: imageSections,
+    language: "ko",
+    subject: "[K SELECT] {{company_name}} 미국 진출 제안서",
+    previewText: "북미 유통 프로그램 사전보기",
+    defaultLandingUrl: "https://www.kselectnetwork.com",
+  });
+
+  assert(compiledResult.isValid, "Image template compiled successfully");
+  assert(compiledResult.html.includes('width="600"') || compiledResult.html.includes('max-width: 600px'), "Canvas width respects 600px standard");
+  assert(compiledResult.html.includes('href="https://www.kselectnetwork.com/hero"'), "Slice 1 anchor link rendered");
+  assert(compiledResult.html.includes('href="https://www.kselectnetwork.com/apply"'), "Slice 2 CTA link rendered");
+  assert(compiledResult.html.includes("Apply for Wholesale Program →"), "CTA button label rendered");
+  assert(!compiledResult.html.includes("<map") && !compiledResult.html.includes("<area"), "Zero client-incompatible HTML image maps used");
+  assert(!compiledResult.html.includes("position: absolute"), "Zero client-incompatible CSS absolute positioning used");
+  assert(compiledResult.plainText.includes("Apply for Wholesale Program →"), "Plain text fallback contains CTA text");
+  assert(compiledResult.plainText.includes("https://www.kselectnetwork.com/apply"), "Plain text fallback contains URLs");
+
+  // --------------------------------------------------------------------------
+  // TEST 10: Dual Template Formats Registration (IMAGE vs HTML)
+  // --------------------------------------------------------------------------
+  console.log("\n--- TEST 10: Dual Template Formats Registration & Persistence ---");
+  const testImageTplId = crypto.randomUUID();
+  const savedImageTpl = await saveMarketingTemplate(
+    {
+      id: testImageTplId,
+      name: "QA Visual Image Template 2026",
+      templateType: "IMAGE",
+      subject: "[K SELECT] Visual Outreach for {{company_name}}",
+      previewText: "Visual email package",
+      htmlContent: compiledResult.html,
+      plainText: compiledResult.plainText,
+      imageSections,
+      status: "ACTIVE",
+    },
+    "qa_admin",
+    adminClient
+  );
+
+  assert(savedImageTpl.templateType === "IMAGE", "Saved template correctly tagged as IMAGE type");
+  assert(savedImageTpl.imageSections?.length === 2, "Image sections preserved in template metadata");
+
+  const templateList = await listMarketingTemplates(adminClient);
+  const foundImageTpl = templateList.find((t) => t.id === testImageTplId);
+  assert(foundImageTpl?.templateType === "IMAGE", "Retrieved template retains IMAGE format type");
+
+  // --------------------------------------------------------------------------
+  // TEST 11: Campaign Subject Override Save & Persistence
+  // --------------------------------------------------------------------------
+  console.log("\n--- TEST 11: Campaign Subject Override Save & Persistence ---");
+  const customSubjectCampaignId = crypto.randomUUID();
+  const customSubjectText = "[K SELECT SPECIAL] Exclusive North America Deal for {{company_name}} & {{brand_name}}";
+
+  const customCampaign = await saveMarketingCampaign(
+    {
+      id: customSubjectCampaignId,
+      name: "QA Campaign with Custom Subject",
+      templateId: koTemplate!.id,
+      subjectOverride: customSubjectText,
+      status: "DRAFT",
+    },
+    "qa_admin",
+    adminClient
+  );
+
+  assert(customCampaign.subjectOverride === customSubjectText, "Campaign draft saved custom subject override");
+
+  const retrievedCustomCamp = await getMarketingCampaignById(customSubjectCampaignId, adminClient);
+  assert(
+    retrievedCustomCamp.campaign?.subjectOverride === customSubjectText,
+    "Reloaded campaign preserves subjectOverride exactly without reverting to template subject"
+  );
+
+  // --------------------------------------------------------------------------
+  // TEST 12: Invalidate Approval on Subject Change
+  // --------------------------------------------------------------------------
+  console.log("\n--- TEST 12: Approval Invalidation on Subject Change ---");
+  const approvedCustom = await approveMarketingCampaign(
+    customSubjectCampaignId,
+    "admin@kselectnetwork.com",
+    adminClient
+  );
+  assert(approvedCustom.status === "APPROVED", "Campaign successfully approved");
+  assert(approvedCustom.approvalSnapshot?.subjectOverride === customSubjectText, "Approval snapshot recorded subject override");
+
+  // Now modify the subject override -> MUST invalidate approval
+  const editedSubjectCampaign = {
+    ...approvedCustom,
+    subjectOverride: "[K SELECT UPDATED] Brand Deal for {{company_name}}",
+  };
+  const reSavedAfterSubjectEdit = await saveMarketingCampaign(editedSubjectCampaign, "qa_admin", adminClient);
+  assert(reSavedAfterSubjectEdit.status === "DRAFT", "Editing subject on approved campaign resets status to DRAFT");
+  assert(reSavedAfterSubjectEdit.approvalStatus === "INVALIDATED", "Editing subject on approved campaign resets approvalStatus to INVALIDATED");
+
+  // --------------------------------------------------------------------------
+  // TEST 13: Designer Guide & AI Prompts Constants
+  // --------------------------------------------------------------------------
+  console.log("\n--- TEST 13: Designer Guide & AI Prompts Constants ---");
+  const {
+    DEFAULT_IMAGE_DESIGN_PROMPT,
+    DEFAULT_HTML_DESIGN_PROMPT,
+    DESIGNER_GUIDE_SECTIONS,
+  } = await import("../lib/brand-marketing/designer-guide-constants");
+
+  assert(DEFAULT_IMAGE_DESIGN_PROMPT.includes("600px email width"), "Image design prompt contains 600px width instruction");
+  assert(DEFAULT_IMAGE_DESIGN_PROMPT.includes("K SELECT branding"), "Image design prompt contains K SELECT branding requirement");
+  assert(DEFAULT_IMAGE_DESIGN_PROMPT.includes("Do not invent business claims or metrics"), "Image design prompt enforces no fabricated claims");
+  assert(DEFAULT_HTML_DESIGN_PROMPT.includes("{{company_name}}"), "HTML design prompt contains company_name placeholder");
+  assert(DESIGNER_GUIDE_SECTIONS.length === 4, "Designer guide has 4 structured guidance sections");
 
   console.log("\n==================================================");
   console.log("🎉 ALL ADM-BSRC-006 QA INTEGRATION TESTS PASSED!");
