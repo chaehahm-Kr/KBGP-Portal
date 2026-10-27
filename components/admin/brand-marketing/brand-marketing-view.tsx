@@ -1735,7 +1735,7 @@ export default function BrandMarketingView({
       {/* DUPLICATE WARNING MODAL DIALOG                                     */}
       {/* ------------------------------------------------------------------ */}
       {showDuplicateModal && duplicateCheck && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-md w-full p-6 shadow-xl space-y-4">
             <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
               Potential Duplicate Candidate Warning
@@ -1803,7 +1803,7 @@ export default function BrandMarketingView({
       {/* DELETE CANDIDATE CONFIRMATION MODAL                                */}
       {/* ------------------------------------------------------------------ */}
       {candidateToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-md w-full p-6 shadow-xl space-y-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0 text-lg font-bold">
