@@ -5,6 +5,9 @@ import {
   SourcingProvider,
   BusinessType,
   BusinessTypeEvidence,
+  ClassificationStatus,
+  SourcingDocumentItem,
+  SourcingDocumentType,
   SourcingBrand,
   SourcingContact,
   SourcingWebsite,
@@ -204,7 +207,67 @@ export class IntercharmAdapter implements SourceAdapter {
       clearTimeout(timeoutTimer);
     }
 
-    return this.mapToNormalizedDraft(rawOrg, rawUrl, orgId, rawPayloadSnapshot, options);
+    // Fetch official exhibitor documents if available (Public Reed Exhibitions REST API)
+    let companyDocuments: SourcingDocumentItem[] = [];
+    try {
+      const docEndpoint = `https://api.reedexpo.com/v1/documents/public?organisationGuid=${orgId}&eventEditionId=${DEFAULT_EVENT_EDITION_ID}`;
+      const docRes = await fetchImpl(docEndpoint, {
+        headers: {
+          "x-clientid": DEFAULT_CLIENT_ID,
+          Referer: "https://www.intercharmkorea.com/",
+          Accept: "application/json",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+      });
+      if (docRes.ok) {
+        const docJson = await docRes.json();
+        if (Array.isArray(docJson)) {
+          for (const d of docJson) {
+            if (d.url && d.displayName) {
+              let fType: SourcingDocumentType = "OTHER";
+              const lower = d.displayName.toLowerCase();
+              if (lower.includes("catalog") || lower.includes("카탈로그") || lower.includes("카달로그")) {
+                fType = "CATALOG";
+              } else if (
+                lower.includes("brochure") ||
+                lower.includes("브로슈어") ||
+                lower.includes("리플렛") ||
+                lower.includes("leaflet")
+              ) {
+                fType = "BROCHURE";
+              } else if (lower.includes("cert") || lower.includes("인증")) {
+                fType = "CERTIFICATE";
+              } else if (lower.includes("profile") || lower.includes("소개서")) {
+                fType = "COMPANY_PROFILE";
+              }
+              companyDocuments.push({
+                id: String(d.id || crypto.randomUUID()),
+                title: sanitizeText(d.displayName) || "Exhibitor Document",
+                fileUrl: d.url,
+                fileType: fType,
+                fileSize: typeof d.size === "number" ? d.size : null,
+                thumbnailUrl: d.thumbnailUrl || null,
+                source: "SOURCE_EXHIBITION",
+                sourceUrl: rawUrl,
+                uploadedAt: d.createdAt || new Date().toISOString(),
+              });
+            }
+          }
+        }
+      }
+    } catch (docErr) {
+      console.warn("Failed to fetch InterCHARM documents (non-blocking):", docErr);
+    }
+
+    return this.mapToNormalizedDraft(
+      rawOrg,
+      rawUrl,
+      orgId,
+      rawPayloadSnapshot,
+      companyDocuments,
+      options
+    );
   }
 
   private async mapToNormalizedDraft(
@@ -212,6 +275,7 @@ export class IntercharmAdapter implements SourceAdapter {
     sourceUrl: string,
     orgId: string,
     rawPayloadSnapshot: unknown,
+    companyDocuments: SourcingDocumentItem[],
     options?: ExtractionOptions
   ): Promise<NormalizedCompanyDraft> {
     const multi = rawOrg.multilingual || [];
@@ -237,9 +301,10 @@ export class IntercharmAdapter implements SourceAdapter {
 
     // 4. Business Type & Evidence Extraction
     const { businessTypes, evidence } = this.classifyBusinessTypes(
+      rawOrg,
       descriptionKr,
       descriptionEn,
-      rawOrg.filterCategories
+      sourceUrl
     );
 
     // 5. Contacts (Strictly ignore organizer footer emails)
@@ -357,6 +422,7 @@ export class IntercharmAdapter implements SourceAdapter {
       socialMedia,
       categories,
       companyProducts,
+      companyDocuments,
       source: {
         provider: this.provider,
         sourceUrl,
@@ -480,89 +546,256 @@ export class IntercharmAdapter implements SourceAdapter {
     };
   }
 
+  private extractSupportingSentence(text: string | null | undefined, keywords: string[]): string | null {
+    if (!text) return null;
+    const normalized = text.replace(/\r\n/g, "\n");
+    const sentences = normalized.split(/(?<=[.!?\n])\s+/);
+    for (const s of sentences) {
+      const sLower = s.toLowerCase();
+      for (const kw of keywords) {
+        if (sLower.includes(kw.toLowerCase())) {
+          const clean = s.trim().replace(/\s+/g, " ");
+          if (clean.length >= 6) return clean;
+        }
+      }
+    }
+    return null;
+  }
+
   private classifyBusinessTypes(
+    rawOrg: RawExhibitingOrg,
     descKr: string | null,
     descEn: string | null,
-    filterCategories: any
+    sourceUrl: string
   ): { businessTypes: BusinessType[]; evidence: BusinessTypeEvidence[] } {
-    const text = `${descKr || ""} ${descEn || ""}`.toLowerCase();
     const types = new Set<BusinessType>();
     const evidence: BusinessTypeEvidence[] = [];
 
-    // 1. Brand Owner:
-    if (
-      text.includes("자사 브랜드") ||
-      text.includes("브랜드 ‘") ||
-      text.includes("브랜드 '") ||
-      text.includes("operates the skincare brand") ||
-      text.includes("exporting its cosmetic brands") ||
-      text.includes("brand owner") ||
-      text.includes("화장품 브랜드")
-    ) {
+    // 1. Gather all text blocks (descriptions & showObjectives across all locales)
+    const textBlocks: string[] = [];
+    if (descKr) textBlocks.push(descKr);
+    if (descEn) textBlocks.push(descEn);
+    if (rawOrg.multilingual) {
+      for (const m of rawOrg.multilingual) {
+        if (m.description) textBlocks.push(m.description);
+        if (m.showObjective) textBlocks.push(m.showObjective);
+      }
+    }
+    const combinedText = textBlocks.join("\n\n");
+
+    // 2. Gather all categories
+    const allCategories: string[] = [];
+    if (rawOrg.filterCategories) {
+      for (const fc of rawOrg.filterCategories) {
+        if (fc.responses) {
+          for (const resp of fc.responses) {
+            if (resp.multilingual) {
+              for (const m of resp.multilingual) {
+                if (m.name && !allCategories.includes(m.name)) {
+                  allCategories.push(m.name);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Gather registered represented brands
+    const representedBrandNames: string[] = [];
+    if (rawOrg.multilingual) {
+      for (const m of rawOrg.multilingual) {
+        if (m.representedBrands) {
+          for (const rb of m.representedBrands) {
+            if (rb.name && !representedBrandNames.includes(rb.name.trim())) {
+              representedBrandNames.push(rb.name.trim());
+            }
+          }
+        }
+      }
+    }
+
+    // A. BRAND_OWNER
+    if (representedBrandNames.length > 0) {
       types.add("BRAND_OWNER");
       evidence.push({
         type: "BRAND_OWNER",
-        text: "Exhibition description explicitly references brand ownership and brand operations.",
+        text: `자사 브랜드 등록 확인: ${representedBrandNames.join(", ")}`,
+        sourceUrl,
+        sourceMethod: "INTERCHARM_REPRESENTED_BRANDS",
         source: "SOURCE_EXHIBITION",
+        status: "VERIFIED",
       });
+    } else {
+      const brandCat = allCategories.find((c) =>
+        c.toLowerCase().includes("brand")
+      );
+      if (brandCat) {
+        types.add("BRAND_OWNER");
+        evidence.push({
+          type: "BRAND_OWNER",
+          text: `전시회 카테고리 등록: ${brandCat}`,
+          sourceUrl,
+          sourceMethod: "INTERCHARM_CATEGORY",
+          source: "SOURCE_EXHIBITION",
+          status: "VERIFIED",
+        });
+      } else {
+        const brandSentence = this.extractSupportingSentence(combinedText, [
+          "자사 브랜드",
+          "브랜드 ‘",
+          "브랜드 '",
+          "화장품 브랜드",
+          "스킨케어 브랜드",
+          "brand owner",
+          "operates the skincare brand",
+        ]);
+        if (brandSentence) {
+          types.add("BRAND_OWNER");
+          evidence.push({
+            type: "BRAND_OWNER",
+            text: brandSentence,
+            sourceUrl,
+            sourceMethod: "INTERCHARM_DESCRIPTION",
+            source: "SOURCE_EXHIBITION",
+            status: "VERIFIED",
+          });
+        }
+      }
     }
 
-    // 2. Manufacturer:
-    if (
-      text.includes("자체 제조") ||
-      text.includes("자체 생산") ||
-      text.includes("제조기업") ||
-      text.includes("제조에 전념") ||
-      text.includes("manufacturer") ||
-      text.includes("manufacturing") ||
-      text.includes("공장")
-    ) {
-      types.add("MANUFACTURER");
-      evidence.push({
-        type: "MANUFACTURER",
-        text: "Exhibition description explicitly references manufacturing facilities and production operations.",
-        source: "SOURCE_EXHIBITION",
-      });
-    }
-
-    // 3. OEM / ODM:
-    if (
-      text.includes("oem") ||
-      text.includes("odm") ||
-      text.includes("주문자상표부착") ||
-      text.includes("위탁제조")
-    ) {
+    // B. OEM / ODM
+    const oemCat = allCategories.find(
+      (c) =>
+        c.toLowerCase().includes("oem") ||
+        c.toLowerCase().includes("odm") ||
+        c.toLowerCase().includes("contract manufacturing")
+    );
+    if (oemCat) {
       types.add("OEM_ODM");
       evidence.push({
         type: "OEM_ODM",
-        text: "Exhibition description explicitly references OEM/ODM production services.",
+        text: `전시회 공식 카테고리: ${oemCat}`,
+        sourceUrl,
+        sourceMethod: "INTERCHARM_CATEGORY",
         source: "SOURCE_EXHIBITION",
+        status: "VERIFIED",
+      });
+    }
+    const oemSentence = this.extractSupportingSentence(combinedText, [
+      "oem",
+      "odm",
+      "주문자상표부착",
+      "위탁제조",
+      "위탁생산",
+    ]);
+    if (oemSentence && !types.has("OEM_ODM")) {
+      types.add("OEM_ODM");
+      evidence.push({
+        type: "OEM_ODM",
+        text: oemSentence,
+        sourceUrl,
+        sourceMethod: "INTERCHARM_DESCRIPTION",
+        source: "SOURCE_EXHIBITION",
+        status: "VERIFIED",
       });
     }
 
-    // 4. Distributor:
-    if (
-      text.includes("유통사") ||
-      text.includes("총판") ||
-      text.includes("도매업") ||
-      text.includes("distributor") ||
-      text.includes("wholesaler")
-    ) {
+    // C. MANUFACTURER
+    const mfgSentence = this.extractSupportingSentence(combinedText, [
+      "자체 제조",
+      "자체 생산",
+      "제조기업",
+      "제조에 전념",
+      "개발·생산",
+      "개발-생산",
+      "개발 생산",
+      "공장",
+      "manufacturer",
+      "manufacturing",
+    ]);
+    if (mfgSentence) {
+      types.add("MANUFACTURER");
+      evidence.push({
+        type: "MANUFACTURER",
+        text: mfgSentence,
+        sourceUrl,
+        sourceMethod: "INTERCHARM_DESCRIPTION",
+        source: "SOURCE_EXHIBITION",
+        status: "VERIFIED",
+      });
+    } else {
+      const mfgCat = allCategories.find((c) =>
+        c.toLowerCase().includes("manufacturer")
+      );
+      if (mfgCat) {
+        types.add("MANUFACTURER");
+        evidence.push({
+          type: "MANUFACTURER",
+          text: `전시회 공식 카테고리: ${mfgCat}`,
+          sourceUrl,
+          sourceMethod: "INTERCHARM_CATEGORY",
+          source: "SOURCE_EXHIBITION",
+          status: "VERIFIED",
+        });
+      }
+    }
+
+    // D. DISTRIBUTOR
+    const distSentence = this.extractSupportingSentence(combinedText, [
+      "유통사",
+      "유통망",
+      "총판",
+      "도매업",
+      "도소매",
+      "distributor",
+      "distribution network",
+      "distribution diversification",
+      "wholesaler",
+    ]);
+    if (distSentence) {
       types.add("DISTRIBUTOR");
       evidence.push({
         type: "DISTRIBUTOR",
-        text: "Exhibition description explicitly references distribution/wholesale operations.",
+        text: distSentence,
+        sourceUrl,
+        sourceMethod: "INTERCHARM_DESCRIPTION",
         source: "SOURCE_EXHIBITION",
+        status: "VERIFIED",
       });
     }
 
-    // Default to BRAND_OWNER if exhibitor is showcasing beauty products but no specific manufacturer phrase
+    // E. IMPORTER_EXPORTER
+    const impExpSentence = this.extractSupportingSentence(combinedText, [
+      "수출입",
+      "무역",
+      "import/export",
+      "importer",
+      "exporter",
+      "수출입업체",
+    ]);
+    if (impExpSentence) {
+      types.add("IMPORTER_EXPORTER");
+      evidence.push({
+        type: "IMPORTER_EXPORTER",
+        text: impExpSentence,
+        sourceUrl,
+        sourceMethod: "INTERCHARM_DESCRIPTION",
+        source: "SOURCE_EXHIBITION",
+        status: "VERIFIED",
+      });
+    }
+
+    // F. DEFAULT / PROVISIONAL FALLBACK (If NO evidence matches any role)
     if (types.size === 0) {
       types.add("BRAND_OWNER");
       evidence.push({
         type: "BRAND_OWNER",
-        text: "Exhibiting cosmetics under dedicated brand display; inferred as brand owner.",
+        text: "전시 참가사 기본 제안 (No direct evidence in exhibition profile — provisional default)",
+        sourceUrl,
+        sourceMethod: "DEFAULT_FALLBACK",
         source: "INFERRED",
+        status: "DEFAULT_UNVERIFIED",
       });
     }
 

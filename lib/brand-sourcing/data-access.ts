@@ -213,7 +213,7 @@ export async function saveSourcingDraft(
       description_kr: draft.company.descriptionKr,
       description_en: draft.company.descriptionEn,
       business_types: evaluation?.businessTypes || draft.company.businessTypes || [],
-      business_type_evidence: draft.company.businessTypeEvidence,
+      business_type_evidence: evaluation?.businessTypeEvidence || draft.company.businessTypeEvidence || [],
       representative_name: draft.company.representativeName,
       business_registration_number: draft.company.businessRegistrationNumber,
       address_line1: draft.company.address.line1,
@@ -234,6 +234,7 @@ export async function saveSourcingDraft(
         ...(draft.source.rawPayloadSnapshot || {}),
         categories: draft.categories || [],
         companyProducts: draft.companyProducts || [],
+        documents: evaluation?.documents || draft.companyDocuments || [],
         companyTypeOtherExplanation: evaluation?.companyTypeOtherExplanation || null,
       },
       audit_summary: draft.audit,
@@ -355,11 +356,15 @@ export async function getSourcingCompanyById(id: string, customClient?: Supabase
     ? rawSnapshot.companyProducts
     : company.sourcing_brands?.flatMap((b: any) => (Array.isArray(b.key_products) ? b.key_products : [])) || [];
 
+  const companyDocuments: any[] = Array.isArray(rawSnapshot.documents) ? rawSnapshot.documents : [];
+
   return {
     ...company,
     categories: companyCategories,
     companyCategories,
     companyProducts,
+    companyDocuments,
+    documents: companyDocuments,
     companyTypeOtherExplanation: rawSnapshot.companyTypeOtherExplanation || null,
   };
 }
@@ -382,7 +387,7 @@ export async function updateSourcingCandidateComplete(
     description_kr: draft.company.descriptionKr,
     description_en: draft.company.descriptionEn,
     business_types: evaluation?.businessTypes || draft.company.businessTypes || [],
-    business_type_evidence: draft.company.businessTypeEvidence,
+    business_type_evidence: evaluation?.businessTypeEvidence || draft.company.businessTypeEvidence,
     representative_name: draft.company.representativeName,
     business_registration_number: draft.company.businessRegistrationNumber,
     address_line1: draft.company.address.line1,
@@ -398,6 +403,7 @@ export async function updateSourcingCandidateComplete(
       ...(draft.source.rawPayloadSnapshot || {}),
       categories: draft.categories || [],
       companyProducts: draft.companyProducts || [],
+      documents: evaluation?.documents || draft.companyDocuments || [],
       companyTypeOtherExplanation: evaluation?.companyTypeOtherExplanation || null,
     },
     audit_summary: draft.audit,
@@ -502,6 +508,7 @@ export async function listSourcingCompanies(
       description_kr,
       description_en,
       business_types,
+      business_type_evidence,
       representative_name,
       business_registration_number,
       address_formatted_kr,
@@ -622,11 +629,16 @@ export async function updateSourcingEvaluation(
   if (evaluation.assignedTo !== undefined) updates.assigned_to = evaluation.assignedTo;
   if (evaluation.internalNotes !== undefined) updates.internal_notes = evaluation.internalNotes;
   if (evaluation.businessTypes !== undefined) updates.business_types = evaluation.businessTypes;
+  if (evaluation.businessTypeEvidence !== undefined) updates.business_type_evidence = evaluation.businessTypeEvidence;
   if (evaluation.marketingConsentStatus !== undefined) {
     updates.marketing_consent_status = evaluation.marketingConsentStatus;
   }
 
-  if (evaluation.categories !== undefined || evaluation.companyTypeOtherExplanation !== undefined) {
+  if (
+    evaluation.categories !== undefined ||
+    evaluation.companyTypeOtherExplanation !== undefined ||
+    evaluation.documents !== undefined
+  ) {
     const { data: curr } = await supabase
       .from("sourcing_companies")
       .select("raw_payload_snapshot")
@@ -637,6 +649,7 @@ export async function updateSourcingEvaluation(
       ...currSnapshot,
       ...(evaluation.categories !== undefined ? { categories: evaluation.categories } : {}),
       ...(evaluation.companyTypeOtherExplanation !== undefined ? { companyTypeOtherExplanation: evaluation.companyTypeOtherExplanation } : {}),
+      ...(evaluation.documents !== undefined ? { documents: evaluation.documents } : {}),
     };
   }
 

@@ -10,6 +10,10 @@ import type {
   SourcingWebsite,
   FieldOrigin,
   BusinessType,
+  BusinessTypeEvidence,
+  ClassificationStatus,
+  SourcingDocumentItem,
+  SourcingDocumentType,
 } from "@/lib/brand-sourcing/types";
 import { COMPANY_TYPE_OPTIONS } from "@/lib/brand-sourcing/types";
 import {
@@ -19,6 +23,8 @@ import {
   getSourcingCandidateDetailAction,
   updateSourcingCandidateAction,
   updateSourcingEvaluationAction,
+  updateSourcingCandidateGradeAction,
+  updateSourcingCandidateDocumentsAction,
   deleteSourcingCandidateAction,
 } from "@/lib/brand-sourcing/actions";
 
@@ -35,11 +41,22 @@ interface BrandMarketingViewProps {
   initialTab?: "import" | "list";
 }
 
+function formatFileSize(bytes?: number | null): string {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 // InterCHARM Korea Verified Sample URLs for Operator QA
 const QUICK_TEST_URLS = [
   {
     name: "3일애 (Three Days Love)",
     url: "https://www.intercharmkorea.com/ko-kr/exhibitor_directory/Exhibitor_detail.3%EC%9D%BC%EC%95%A0.org-b4fa5886-d5fd-490e-92bf-0c0b65d0a79e.html",
+  },
+  {
+    name: "MIJIN COSMETICS (미진화장품)",
+    url: "https://www.intercharmkorea.com/ko-kr/exhibitor_directory/Exhibitor_detail.%EC%A3%BC%EB%AF%B8%EC%A7%84%ED%99%94%EC%9E%A5%ED%92%88.org-1121b56a-b02c-4552-bbee-db642b958546.html#/",
   },
   {
     name: "JCOMO (제이코모)",
@@ -84,7 +101,23 @@ export default function BrandMarketingView({
   const [status, setStatus] = useState<"DRAFT" | "REVIEWED" | "SAVED" | "ARCHIVED">("REVIEWED");
   const [internalNotes, setInternalNotes] = useState<string>("");
   const [selectedBusinessTypes, setSelectedBusinessTypes] = useState<BusinessType[]>([]);
+  const [businessTypeEvidence, setBusinessTypeEvidence] = useState<BusinessTypeEvidence[]>([]);
+  const [expandedEvidenceType, setExpandedEvidenceType] = useState<BusinessType | null>(null);
+  const [drawerExpandedEvidenceType, setDrawerExpandedEvidenceType] = useState<BusinessType | null>(null);
   const [companyTypeOtherExplanation, setCompanyTypeOtherExplanation] = useState<string>("");
+
+  // Company Documents state
+  const [companyDocuments, setCompanyDocuments] = useState<SourcingDocumentItem[]>([]);
+
+  // Add Document Modal state
+  const [showAddDocModal, setShowAddDocModal] = useState(false);
+  const [addDocTarget, setAddDocTarget] = useState<"import" | "drawer">("import");
+  const [newDocTitle, setNewDocTitle] = useState("");
+  const [newDocUrl, setNewDocUrl] = useState("");
+  const [newDocType, setNewDocType] = useState<SourcingDocumentType>("CATALOG");
+
+  // Inline Grade editing state
+  const [savingGradeCompanyId, setSavingGradeCompanyId] = useState<string | null>(null);
 
   // Company-level category input for Import & Review
   const [newCompanyCategoryInput, setNewCompanyCategoryInput] = useState<string>("");
@@ -178,6 +211,31 @@ export default function BrandMarketingView({
     return Array.from(map.values());
   }, [selectedCandidateDetail]);
 
+  // Drawer company documents
+  const drawerDocuments: SourcingDocumentItem[] = useMemo(() => {
+    if (!selectedCandidateDetail) return [];
+    if (Array.isArray(selectedCandidateDetail.documents)) {
+      return selectedCandidateDetail.documents;
+    }
+    if (Array.isArray(selectedCandidateDetail.companyDocuments)) {
+      return selectedCandidateDetail.companyDocuments;
+    }
+    const rawSnap = (selectedCandidateDetail.raw_payload_snapshot as any) || {};
+    if (Array.isArray(rawSnap.documents)) {
+      return rawSnap.documents;
+    }
+    return [];
+  }, [selectedCandidateDetail]);
+
+  // Drawer business type evidence
+  const drawerBusinessTypeEvidence: BusinessTypeEvidence[] = useMemo(() => {
+    if (!selectedCandidateDetail) return [];
+    if (Array.isArray(selectedCandidateDetail.business_type_evidence)) {
+      return selectedCandidateDetail.business_type_evidence;
+    }
+    return [];
+  }, [selectedCandidateDetail]);
+
   // --------------------------------------------------------------------------
   // EXTRACTION HANDLER
   // --------------------------------------------------------------------------
@@ -211,6 +269,8 @@ export default function BrandMarketingView({
       setStatus("REVIEWED");
       setInternalNotes("");
       setSelectedBusinessTypes(res.draft.company.businessTypes || []);
+      setBusinessTypeEvidence(res.draft.company.businessTypeEvidence || []);
+      setCompanyDocuments(res.draft.companyDocuments || []);
       setCompanyTypeOtherExplanation("");
     } catch (err: any) {
       setExtractError(err.message || "An unexpected error occurred during extraction.");
@@ -251,15 +311,22 @@ export default function BrandMarketingView({
         status,
         assignedTo: null,
         businessTypes: selectedBusinessTypes,
+        businessTypeEvidence,
         companyTypeOtherExplanation: selectedBusinessTypes.includes("OTHER") ? companyTypeOtherExplanation : null,
         categories: reviewedDraft.categories || [],
+        documents: companyDocuments,
         internalNotes: overrideReason
           ? `[DUPLICATE OVERRIDE]: ${overrideReason}\n\n${internalNotes}`
           : internalNotes,
         marketingConsentStatus: "UNCONFIRMED", // Strict invariant
       };
 
-      const res = await saveSourcingCandidateAction(reviewedDraft, evaluation);
+      const draftToSave: NormalizedCompanyDraft = {
+        ...reviewedDraft,
+        companyDocuments,
+      };
+
+      const res = await saveSourcingCandidateAction(draftToSave, evaluation);
 
       if (!res.success) {
         alert(`Failed to save: ${res.error}`);
@@ -381,6 +448,7 @@ export default function BrandMarketingView({
         socialMedia: [],
         categories: currentCats,
         companyProducts: drawerProducts,
+        companyDocuments: drawerDocuments,
         source: {
           provider: selectedCandidateDetail.sourcing_sources?.[0]?.provider || "INTERCHARM",
           sourceUrl: selectedCandidateDetail.sourcing_sources?.[0]?.source_url || "",
@@ -400,8 +468,10 @@ export default function BrandMarketingView({
         internalNotes: selectedCandidateDetail.internal_notes || null,
         marketingConsentStatus: selectedCandidateDetail.marketing_consent_status || "UNCONFIRMED",
         businessTypes: selectedCandidateDetail.business_types || [],
+        businessTypeEvidence: selectedCandidateDetail.business_type_evidence || [],
         companyTypeOtherExplanation: selectedCandidateDetail.companyTypeOtherExplanation || null,
         categories: currentCats,
+        documents: drawerDocuments,
       };
 
       const res = await updateSourcingCandidateAction(selectedCandidateDetail.id, draft, evalData);
@@ -415,6 +485,77 @@ export default function BrandMarketingView({
       alert(`Error updating: ${err.message}`);
     } finally {
       setIsUpdatingCandidate(false);
+    }
+  };
+
+  const handleRemoveDocument = (index: number) => {
+    setCompanyDocuments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRemoveDrawerDocument = (index: number) => {
+    if (!selectedCandidateDetail) return;
+    const currentDocs = drawerDocuments;
+    const updated = currentDocs.filter((_, i) => i !== index);
+    setSelectedCandidateDetail({
+      ...selectedCandidateDetail,
+      documents: updated,
+      companyDocuments: updated,
+    });
+  };
+
+  const handleAddDocumentSubmit = () => {
+    if (!newDocTitle.trim() || !newDocUrl.trim()) {
+      alert("Please enter a document title and a valid URL.");
+      return;
+    }
+    const newDoc: SourcingDocumentItem = {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+      title: newDocTitle.trim(),
+      fileUrl: newDocUrl.trim(),
+      fileType: newDocType,
+      source: "MANUAL",
+      uploadedAt: new Date().toISOString(),
+    };
+
+    if (addDocTarget === "import") {
+      setCompanyDocuments((prev) => [...prev, newDoc]);
+    } else if (selectedCandidateDetail) {
+      const updated = [...drawerDocuments, newDoc];
+      setSelectedCandidateDetail({
+        ...selectedCandidateDetail,
+        documents: updated,
+        companyDocuments: updated,
+      });
+    }
+
+    setNewDocTitle("");
+    setNewDocUrl("");
+    setNewDocType("CATALOG");
+    setShowAddDocModal(false);
+  };
+
+  const handleInlineGradeChange = async (companyId: string, newGrade: "A" | "B" | "C" | "UNRATED") => {
+    const previousGrade = candidates.find((c) => c.id === companyId)?.grade;
+    setCandidates((prev) =>
+      prev.map((c) => (c.id === companyId ? { ...c, grade: newGrade } : c))
+    );
+    setSavingGradeCompanyId(companyId);
+
+    try {
+      const res = await updateSourcingCandidateGradeAction(companyId, newGrade);
+      if (!res.success) {
+        setCandidates((prev) =>
+          prev.map((c) => (c.id === companyId ? { ...c, grade: previousGrade } : c))
+        );
+        alert(`Failed to update grade: ${res.error}`);
+      }
+    } catch (err: any) {
+      setCandidates((prev) =>
+        prev.map((c) => (c.id === companyId ? { ...c, grade: previousGrade } : c))
+      );
+      alert(`Error updating grade: ${err.message}`);
+    } finally {
+      setSavingGradeCompanyId(null);
     }
   };
 
@@ -478,9 +619,23 @@ export default function BrandMarketingView({
 
   // Company Type Toggle for Import & Review
   const toggleBusinessType = (type: BusinessType) => {
-    setSelectedBusinessTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-    );
+    if (selectedBusinessTypes.includes(type)) {
+      setSelectedBusinessTypes(selectedBusinessTypes.filter((t) => t !== type));
+    } else {
+      setSelectedBusinessTypes([...selectedBusinessTypes, type]);
+      if (!businessTypeEvidence.some((e) => e.type === type)) {
+        setBusinessTypeEvidence([
+          ...businessTypeEvidence,
+          {
+            type,
+            text: "관리자가 수동으로 지정함 (Manually selected by administrator)",
+            source: "MANUAL",
+            sourceMethod: "ADMIN_MANUAL",
+            status: "ADMIN_EDIT",
+          },
+        ]);
+      }
+    }
   };
 
   // Company Category Handlers for Import & Review
@@ -511,12 +666,28 @@ export default function BrandMarketingView({
   const handleToggleDrawerBusinessType = (type: BusinessType) => {
     if (!selectedCandidateDetail) return;
     const currentTypes: BusinessType[] = selectedCandidateDetail.business_types || [];
-    const updated = currentTypes.includes(type)
-      ? currentTypes.filter((t) => t !== type)
-      : [...currentTypes, type];
+    const currentEvidence: BusinessTypeEvidence[] = selectedCandidateDetail.business_type_evidence || [];
+    let updatedTypes: BusinessType[];
+    let updatedEvidence = [...currentEvidence];
+
+    if (currentTypes.includes(type)) {
+      updatedTypes = currentTypes.filter((t) => t !== type);
+    } else {
+      updatedTypes = [...currentTypes, type];
+      if (!updatedEvidence.some((e) => e.type === type)) {
+        updatedEvidence.push({
+          type,
+          text: "관리자가 수동으로 지정함 (Manually selected by administrator)",
+          source: "MANUAL",
+          sourceMethod: "ADMIN_MANUAL",
+          status: "ADMIN_EDIT",
+        });
+      }
+    }
     setSelectedCandidateDetail({
       ...selectedCandidateDetail,
-      business_types: updated,
+      business_types: updatedTypes,
+      business_type_evidence: updatedEvidence,
     });
   };
 
@@ -1361,11 +1532,87 @@ export default function BrandMarketingView({
                   </div>
                 </div>
 
-                {/* 4. Corporate Description & Overview Card (Moved to bottom - Requirement 1) */}
+                {/* 4. Company Documents & Attachments Card */}
+                <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                        4. Company Documents / 첨부 자료 ({companyDocuments.length})
+                      </h3>
+                      <span className="text-xs text-zinc-400">
+                        카탈로그, 브로슈어, 소개서 등
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddDocTarget("import");
+                        setShowAddDocModal(true);
+                      }}
+                      className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer flex items-center gap-1"
+                    >
+                      + Add Document
+                    </button>
+                  </div>
+
+                  {companyDocuments.length > 0 ? (
+                    <div className="divide-y divide-zinc-100 dark:divide-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+                      {companyDocuments.map((doc, dIdx) => (
+                        <div
+                          key={doc.id || dIdx}
+                          className="p-3 bg-zinc-50/50 dark:bg-zinc-950/40 flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center font-bold text-xs shrink-0">
+                              PDF
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                                {doc.title}
+                              </p>
+                              <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-0.5">
+                                <span className="px-1.5 py-0.2 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded font-semibold">
+                                  {doc.fileType}
+                                </span>
+                                {doc.fileSize && <span>{formatFileSize(doc.fileSize)}</span>}
+                                <span>출처: {doc.source === "SOURCE_EXHIBITION" ? "전시회 공식 문서" : "수동 첨부"}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a
+                              href={doc.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 text-xs font-semibold rounded bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 flex items-center gap-1"
+                            >
+                              View / Download ↗
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDocument(dIdx)}
+                              className="px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors cursor-pointer"
+                              title="Remove document"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-dashed border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-400 italic space-y-1">
+                      <p>전시회 또는 수집 소스에서 발견된 공식 문서가 없습니다.</p>
+                      <p className="text-[11px] text-zinc-500">필요 시 &apos;+ Add Document&apos; 버튼으로 카탈로그나 PDF 링크를 등록할 수 있습니다.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. Corporate Description & Overview Card */}
                 <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
                   <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                      4. Corporate Description & Overview (회사 소개 및 기업 개요)
+                      5. Corporate Description & Overview (회사 소개 및 기업 개요)
                     </h3>
                     <span className="text-[11px] text-zinc-400">
                       Source Overview & Narrative
@@ -1528,29 +1775,118 @@ export default function BrandMarketingView({
                     <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50">
                       {COMPANY_TYPE_OPTIONS.map((opt) => {
                         const isChecked = selectedBusinessTypes.includes(opt.value);
+                        const ev = businessTypeEvidence.find((e) => e.type === opt.value);
+                        const isExpanded = expandedEvidenceType === opt.value;
                         return (
-                          <label
+                          <div
                             key={opt.value}
-                            className={`flex items-start gap-2 p-1.5 rounded text-xs cursor-pointer transition-colors ${
+                            className={`p-1.5 rounded text-xs transition-colors ${
                               isChecked
                                 ? "bg-blue-50/80 dark:bg-blue-950/50 text-blue-900 dark:text-blue-200 font-semibold"
                                 : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900"
                             }`}
                           >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => toggleBusinessType(opt.value)}
-                              className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
-                            />
-                            <div className="min-w-0">
-                              <span className="block leading-tight">{opt.labelKr}</span>
-                              <span className="text-[10px] text-zinc-400 font-normal leading-tight">{opt.labelEn}</span>
-                            </div>
-                          </label>
+                            <label className="flex items-start gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleBusinessType(opt.value)}
+                                className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="block leading-tight">{opt.labelKr}</span>
+                                </div>
+                                <span className="text-[10px] text-zinc-400 font-normal leading-tight block">
+                                  {opt.labelEn}
+                                </span>
+                              </div>
+                            </label>
+                            {isChecked && ev && (
+                              <div className="mt-1 pl-5">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setExpandedEvidenceType(isExpanded ? null : opt.value);
+                                  }}
+                                  className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                                    ev.status === "VERIFIED"
+                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                                      : ev.status === "DEFAULT_UNVERIFIED"
+                                      ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+                                      : "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800"
+                                  }`}
+                                >
+                                  {ev.status === "VERIFIED"
+                                    ? "✓ 근거 확인"
+                                    : ev.status === "DEFAULT_UNVERIFIED"
+                                    ? "⚠️ 미확인 기본값"
+                                    : "✏️ 관리자 수정"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
+
+                    {/* Expandable Evidence Details Card */}
+                    {expandedEvidenceType && (() => {
+                      const ev = businessTypeEvidence.find((e) => e.type === expandedEvidenceType);
+                      const opt = COMPANY_TYPE_OPTIONS.find((o) => o.value === expandedEvidenceType);
+                      if (!ev || !opt) return null;
+                      return (
+                        <div className="p-3 rounded-lg bg-zinc-100 dark:bg-zinc-850 border border-zinc-300 dark:border-zinc-700 text-xs space-y-2 mt-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                                {opt.labelKr} 증빙 근거
+                              </span>
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                                  ev.status === "VERIFIED"
+                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                    : ev.status === "DEFAULT_UNVERIFIED"
+                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                    : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                                }`}
+                              >
+                                {ev.status || "VERIFIED"}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedEvidenceType(null)}
+                              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs font-bold cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          <div className="p-2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-750 text-[11px] text-zinc-700 dark:text-zinc-300 italic leading-relaxed">
+                            &ldquo;{ev.text}&rdquo;
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] text-zinc-500 dark:text-zinc-400">
+                            <span>
+                              추출 방식: <code className="bg-zinc-200 dark:bg-zinc-750 px-1 py-0.5 rounded">{ev.sourceMethod || "INTERCHARM"}</code>
+                            </span>
+                            {ev.sourceUrl && (
+                              <a
+                                href={ev.sourceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5 font-medium"
+                              >
+                                원문 소스 확인 ↗
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Other Explanation Input */}
                     {selectedBusinessTypes.includes("OTHER") && (
@@ -1811,7 +2147,6 @@ export default function BrandMarketingView({
                     <th className="p-3">Grade</th>
                     <th className="p-3">Primary Contact</th>
                     <th className="p-3">Website</th>
-                    <th className="p-3">Status</th>
                     <th className="p-3">Discovered</th>
                     <th className="p-3 text-right">Actions</th>
                   </tr>
@@ -1819,13 +2154,13 @@ export default function BrandMarketingView({
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {isLoadingList ? (
                     <tr>
-                      <td colSpan={10} className="p-8 text-center text-zinc-400">
+                      <td colSpan={9} className="p-8 text-center text-zinc-400">
                         Loading candidate list...
                       </td>
                     </tr>
                   ) : candidates.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="p-12 text-center space-y-2">
+                      <td colSpan={9} className="p-12 text-center space-y-2">
                         <p className="text-zinc-500 font-medium">No sourcing candidates found.</p>
                         <button
                           type="button"
@@ -1913,7 +2248,38 @@ export default function BrandMarketingView({
                               )}
                             </div>
                           </td>
-                          <td className="p-3">{renderGradeBadge(c.grade)}</td>
+                          {/* Inline Editable Grade Dropdown (Requirement 3) */}
+                          <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                value={c.grade || "UNRATED"}
+                                disabled={savingGradeCompanyId === c.id}
+                                onChange={(e) =>
+                                  handleInlineGradeChange(
+                                    c.id,
+                                    e.target.value as "A" | "B" | "C" | "UNRATED"
+                                  )
+                                }
+                                className={`text-xs font-semibold px-2 py-1 rounded border transition-colors cursor-pointer disabled:opacity-50 ${
+                                  c.grade === "A"
+                                    ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700"
+                                    : c.grade === "B"
+                                    ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700"
+                                    : c.grade === "C"
+                                    ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700"
+                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-750"
+                                }`}
+                              >
+                                <option value="UNRATED">UNRATED</option>
+                                <option value="A">Grade A</option>
+                                <option value="B">Grade B</option>
+                                <option value="C">Grade C</option>
+                              </select>
+                              {savingGradeCompanyId === c.id && (
+                                <span className="animate-spin text-zinc-400 text-xs">⟳</span>
+                              )}
+                            </div>
+                          </td>
                           <td className="p-3 text-zinc-600 dark:text-zinc-400">
                             {primaryContact ? (
                               <div>
@@ -1943,7 +2309,7 @@ export default function BrandMarketingView({
                               "-"
                             )}
                           </td>
-                          <td className="p-3">{renderStatusBadge(c.status)}</td>
+                          {/* Note: Status column removed from Brand List table per Requirement 4 */}
                           <td className="p-3 text-zinc-500 text-[11px]">
                             {new Date(c.created_at).toLocaleDateString()}
                           </td>
@@ -2152,6 +2518,99 @@ export default function BrandMarketingView({
                 className="px-4 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
               >
                 {isDeletingCandidate ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* ADD DOCUMENT MODAL                                                 */}
+      {/* ------------------------------------------------------------------ */}
+      {showAddDocModal && (
+        <div className="fixed inset-0 z-[75] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                  Add Company Document
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  {addDocTarget === "import"
+                    ? "Add document attachment to current import draft"
+                    : "Add document attachment to candidate profile"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddDocModal(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                  Document Title (문서명) *
+                </label>
+                <input
+                  type="text"
+                  placeholder="예: 2024 Product Catalog, Brand Introduction Brochure"
+                  value={newDocTitle}
+                  onChange={(e) => setNewDocTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                  Document / PDF URL (파일 링크) *
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://example.com/catalog.pdf"
+                  value={newDocUrl}
+                  onChange={(e) => setNewDocUrl(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                  Document Type (문서 종류)
+                </label>
+                <select
+                  value={newDocType}
+                  onChange={(e) => setNewDocType(e.target.value as SourcingDocumentType)}
+                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="CATALOG">CATALOG (제품 카탈로그)</option>
+                  <option value="BROCHURE">BROCHURE (브로슈어)</option>
+                  <option value="COMPANY_PROFILE">COMPANY_PROFILE (회사 소개서)</option>
+                  <option value="LOOKBOOK">LOOKBOOK (룩북)</option>
+                  <option value="PRICE_LIST">PRICE_LIST (단가표)</option>
+                  <option value="CERTIFICATION">CERTIFICATION (인증서)</option>
+                  <option value="OTHER">OTHER (기타 문서)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-200 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setShowAddDocModal(false)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAddDocumentSubmit}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded cursor-pointer"
+              >
+                Add Document
               </button>
             </div>
           </div>
@@ -2502,7 +2961,83 @@ export default function BrandMarketingView({
                   )}
                 </div>
 
-                {/* 5) FOURTH SECTION — Corporate Description */}
+                {/* 4) FOURTH SUB-SECTION — Company Documents & Attachments (Independent Section) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
+                        Company Documents / 첨부 자료 ({drawerDocuments.length})
+                      </h4>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">
+                        카탈로그, 브로슈어, 회사 소개서 등
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddDocTarget("drawer");
+                        setShowAddDocModal(true);
+                      }}
+                      className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer flex items-center gap-1"
+                    >
+                      + Add Document
+                    </button>
+                  </div>
+
+                  {drawerDocuments.length > 0 ? (
+                    <div className="divide-y divide-zinc-100 dark:divide-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+                      {drawerDocuments.map((doc, dIdx) => (
+                        <div
+                          key={doc.id || dIdx}
+                          className="p-3 bg-zinc-50/50 dark:bg-zinc-950/40 flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center font-bold text-xs shrink-0">
+                              PDF
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                                {doc.title}
+                              </p>
+                              <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-0.5">
+                                <span className="px-1.5 py-0.2 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded font-semibold">
+                                  {doc.fileType}
+                                </span>
+                                {doc.fileSize && <span>{formatFileSize(doc.fileSize)}</span>}
+                                <span>출처: {doc.source === "SOURCE_EXHIBITION" ? "전시회 공식 문서" : "수동 첨부"}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a
+                              href={doc.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 text-xs font-semibold rounded bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 flex items-center gap-1"
+                            >
+                              View / Download ↗
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDrawerDocument(dIdx)}
+                              className="px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors cursor-pointer"
+                              title="Remove document"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-3.5 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-dashed border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-400 italic space-y-1">
+                      <p>등록된 첨부 문서가 없습니다.</p>
+                      <p className="text-[11px] text-zinc-500">&apos;+ Add Document&apos; 버튼으로 카탈로그나 PDF 링크를 추가할 수 있습니다.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 5) FIFTH SECTION — Corporate Description */}
                 <div className="space-y-3">
                   <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
                     Corporate Description
@@ -2602,29 +3137,114 @@ export default function BrandMarketingView({
                         {COMPANY_TYPE_OPTIONS.map((opt) => {
                           const currentTypes = selectedCandidateDetail.business_types || [];
                           const isChecked = currentTypes.includes(opt.value);
+                          const ev = drawerBusinessTypeEvidence.find((e) => e.type === opt.value);
+                          const isExpanded = drawerExpandedEvidenceType === opt.value;
                           return (
-                            <label
+                            <div
                               key={opt.value}
-                              className={`flex items-start gap-2 p-1.5 rounded text-xs cursor-pointer transition-colors ${
+                              className={`p-1.5 rounded text-xs transition-colors ${
                                 isChecked
                                   ? "bg-blue-50/80 dark:bg-blue-950/50 text-blue-900 dark:text-blue-200 font-semibold"
                                   : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                               }`}
                             >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => handleToggleDrawerBusinessType(opt.value)}
-                                className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
-                              />
-                              <div className="min-w-0">
-                                <span className="block leading-tight">{opt.labelKr}</span>
-                                <span className="text-[10px] text-zinc-400 font-normal leading-tight">{opt.labelEn}</span>
-                              </div>
-                            </label>
+                              <label className="flex items-start gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => handleToggleDrawerBusinessType(opt.value)}
+                                  className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <span className="block leading-tight">{opt.labelKr}</span>
+                                  <span className="text-[10px] text-zinc-400 font-normal leading-tight block">
+                                    {opt.labelEn}
+                                  </span>
+                                </div>
+                              </label>
+                              {isChecked && ev && (
+                                <div className="mt-1 pl-5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setDrawerExpandedEvidenceType(isExpanded ? null : opt.value);
+                                    }}
+                                    className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                                      ev.status === "VERIFIED"
+                                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                                        : ev.status === "DEFAULT_UNVERIFIED"
+                                        ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+                                        : "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800"
+                                    }`}
+                                  >
+                                    {ev.status === "VERIFIED"
+                                      ? "✓ 근거 확인"
+                                      : ev.status === "DEFAULT_UNVERIFIED"
+                                      ? "⚠️ 미확인 기본값"
+                                      : "✏️ 관리자 수정"}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                       </div>
+
+                      {/* Expandable Drawer Evidence Details Card */}
+                      {drawerExpandedEvidenceType && (() => {
+                        const ev = drawerBusinessTypeEvidence.find((e) => e.type === drawerExpandedEvidenceType);
+                        const opt = COMPANY_TYPE_OPTIONS.find((o) => o.value === drawerExpandedEvidenceType);
+                        if (!ev || !opt) return null;
+                        return (
+                          <div className="p-3 rounded-lg bg-zinc-100 dark:bg-zinc-850 border border-zinc-300 dark:border-zinc-700 text-xs space-y-2 mt-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                                  {opt.labelKr} 증빙 근거
+                                </span>
+                                <span
+                                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                                    ev.status === "VERIFIED"
+                                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                      : ev.status === "DEFAULT_UNVERIFIED"
+                                      ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                      : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                                  }`}
+                                >
+                                  {ev.status || "VERIFIED"}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setDrawerExpandedEvidenceType(null)}
+                                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs font-bold"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            <div className="space-y-1 text-zinc-700 dark:text-zinc-300">
+                              <p className="bg-white dark:bg-zinc-900 p-2 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-[11px] leading-relaxed">
+                                &quot;{ev.text}&quot;
+                              </p>
+                              <div className="flex flex-wrap items-center gap-3 text-[10px] text-zinc-500 pt-1">
+                                <span>인식 방식: {ev.sourceMethod || "INTERCHARM_DESCRIPTION"}</span>
+                                {ev.sourceUrl && (
+                                  <a
+                                    href={ev.sourceUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 dark:text-blue-400 underline"
+                                  >
+                                    출처 링크 ↗
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Other explanation input */}
                       {(selectedCandidateDetail.business_types || []).includes("OTHER") && (

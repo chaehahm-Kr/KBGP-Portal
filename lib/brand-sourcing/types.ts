@@ -31,10 +31,36 @@ export const COMPANY_TYPE_OPTIONS: Array<{ value: BusinessType; labelKr: string;
   { value: "OTHER", labelKr: "기타", labelEn: "Other" },
 ];
 
+export type ClassificationStatus = "VERIFIED" | "DEFAULT_UNVERIFIED" | "ADMIN_EDIT";
+
 export interface BusinessTypeEvidence {
   type: BusinessType;
   text: string;
+  sourceUrl?: string | null;
+  sourceMethod?: string;
   source: FieldOrigin;
+  status?: ClassificationStatus;
+}
+
+export type SourcingDocumentType =
+  | "BROCHURE"
+  | "CATALOG"
+  | "CERTIFICATE"
+  | "COMPANY_PROFILE"
+  | "SPEC_SHEET"
+  | "OTHER";
+
+export interface SourcingDocumentItem {
+  id: string;
+  title: string;
+  fileUrl: string;
+  fileType: SourcingDocumentType;
+  fileSize?: number | null;
+  mimeType?: string | null;
+  thumbnailUrl?: string | null;
+  source: FieldOrigin;
+  sourceUrl?: string | null;
+  uploadedAt?: string;
 }
 
 export interface SourcingAddress {
@@ -130,6 +156,7 @@ export interface NormalizedCompanyDraft {
   socialMedia: SourcingSocialMedia[];
   categories: string[]; // Deduplicated list of product categories
   companyProducts?: SourcingProductItem[]; // Extracted company-level products
+  companyDocuments?: SourcingDocumentItem[]; // Extracted exhibitor documents & brochures
   source: SourcingSourceMetadata;
   enrichment: SourcingEnrichmentSummary;
   audit: SourcingAuditSummary;
@@ -145,8 +172,10 @@ export interface SourcingEvaluationInput {
   grade?: "A" | "B" | "C" | "UNRATED";
   status?: "DRAFT" | "REVIEWED" | "SAVED" | "ARCHIVED";
   businessTypes?: BusinessType[];
+  businessTypeEvidence?: BusinessTypeEvidence[];
   companyTypeOtherExplanation?: string | null;
   categories?: string[];
+  documents?: SourcingDocumentItem[];
   assignedTo?: string | null;
   internalNotes?: string | null;
   marketingConsentStatus?: "UNCONFIRMED" | "CONSENTED" | "REFUSED" | "EXCLUDED";

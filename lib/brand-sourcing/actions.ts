@@ -9,6 +9,7 @@ import {
   DuplicateMatchResult,
   SourcingEvaluationInput,
   SourcingListParams,
+  SourcingDocumentItem,
   extractSourcingDraft,
   findDuplicateCandidates,
   saveSourcingDraft,
@@ -307,5 +308,45 @@ export async function getActiveStaffMembersAction(): Promise<{
       success: false,
       error: err.message || "Failed to fetch active staff members",
     };
+  }
+}
+
+/**
+ * Updates a candidate's evaluation grade inline (A, B, C, UNRATED).
+ */
+export async function updateSourcingCandidateGradeAction(
+  companyId: string,
+  grade: "A" | "B" | "C" | "UNRATED"
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireBrandStaffPermission("edit");
+    const allowed = ["A", "B", "C", "UNRATED"];
+    if (!allowed.includes(grade)) {
+      return { success: false, error: `Invalid grade: ${grade}` };
+    }
+    await updateSourcingEvaluation(companyId, { grade });
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+    return { success: true };
+  } catch (err: any) {
+    console.error("[updateSourcingCandidateGradeAction] Failed:", err);
+    return { success: false, error: err.message || "Failed to update grade" };
+  }
+}
+
+/**
+ * Updates candidate company documents (attachments, brochures, catalogs).
+ */
+export async function updateSourcingCandidateDocumentsAction(
+  companyId: string,
+  documents: SourcingDocumentItem[]
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireBrandStaffPermission("edit");
+    await updateSourcingEvaluation(companyId, { documents });
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+    return { success: true };
+  } catch (err: any) {
+    console.error("[updateSourcingCandidateDocumentsAction] Failed:", err);
+    return { success: false, error: err.message || "Failed to update documents" };
   }
 }
