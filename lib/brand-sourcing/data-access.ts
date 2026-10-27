@@ -1,34 +1,13 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { NormalizedCompanyDraft } from "./types";
+import {
+  NormalizedCompanyDraft,
+  SourcingEvaluationInput,
+  DuplicateMatchResult,
+  DuplicateCheckCriteria,
+} from "./types";
 import { resolveQaConfig } from "../../scripts/qa/qa-guard";
 
-export interface SourcingEvaluationInput {
-  grade?: "A" | "B" | "C" | "UNRATED";
-  status?: "DRAFT" | "REVIEWED" | "SAVED" | "ARCHIVED";
-  assignedTo?: string | null;
-  internalNotes?: string | null;
-  marketingConsentStatus?: "UNCONFIRMED" | "CONSENTED" | "REFUSED" | "EXCLUDED";
-}
-
-export interface DuplicateMatchResult {
-  isDuplicate: boolean;
-  isExistingPartner: boolean;
-  matches: Array<{
-    matchType: "SOURCE_IDENTIFIER" | "COMPANY_NAME" | "DOMAIN" | "EMAIL";
-    matchedValue: string;
-    entityType: "SOURCING_CANDIDATE" | "PARTNER_COMPANY";
-    entityId: string;
-    entityName: string;
-  }>;
-}
-
-export interface DuplicateCheckCriteria {
-  sourceIdentifier?: string;
-  companyNameKr?: string;
-  companyNameEn?: string;
-  websiteUrl?: string;
-  emails?: string[];
-}
+export type { SourcingEvaluationInput, DuplicateMatchResult, DuplicateCheckCriteria };
 
 export interface SourcingListParams {
   search?: string;

@@ -129,3 +129,33 @@ export interface ExtractionOptions {
   timeoutMs?: number; // Default 10000ms
   customFetch?: typeof fetch;
 }
+
+export interface SourcingEvaluationInput {
+  grade?: "A" | "B" | "C" | "UNRATED";
+  status?: "DRAFT" | "REVIEWED" | "SAVED" | "ARCHIVED";
+  assignedTo?: string | null;
+  internalNotes?: string | null;
+  marketingConsentStatus?: "UNCONFIRMED" | "CONSENTED" | "REFUSED" | "EXCLUDED";
+}
+
+export interface DuplicateMatchResult {
+  isDuplicate: boolean;
+  isExistingPartner: boolean;
+  matches: Array<{
+    matchType: "SOURCE_IDENTIFIER" | "COMPANY_NAME" | "DOMAIN" | "EMAIL";
+    matchedValue: string;
+    entityType: "SOURCING_CANDIDATE" | "PARTNER_COMPANY";
+    entityId: string;
+    entityName: string;
+  }>;
+}
+
+export interface DuplicateCheckCriteria {
+  sourceIdentifier?: string | null;
+  companyNameKr?: string | null;
+  companyNameEn?: string | null;
+  websiteUrl?: string | null;
+  domains?: string[];
+  emails?: string[];
+}
+

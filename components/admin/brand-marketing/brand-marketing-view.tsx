@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useMemo } from "react";
-import {
+import type {
   NormalizedCompanyDraft,
   DuplicateMatchResult,
   SourcingEvaluationInput,
@@ -9,7 +9,7 @@ import {
   SourcingContact,
   SourcingWebsite,
   FieldOrigin,
-} from "@/lib/brand-sourcing";
+} from "@/lib/brand-sourcing/types";
 import {
   extractSourcingDraftAction,
   saveSourcingCandidateAction,
