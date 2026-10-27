@@ -79,3 +79,6 @@ ON public.product_performance_historical_evaluations
 FOR SELECT
 TO authenticated
 USING (public.auth_is_admin());
+
+-- Reload PostgREST schema cache
+NOTIFY pgrst, 'reload schema';
