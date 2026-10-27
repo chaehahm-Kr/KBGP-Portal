@@ -24,7 +24,8 @@
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
     "xlsx": "^0.18.5",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
