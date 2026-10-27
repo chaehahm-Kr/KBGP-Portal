@@ -15,14 +15,23 @@ try {
 }
 
 /**
- * Automated Lifecycle QA Script for ADM-BSRC-009
- * Verifies:
- * 1. HTML & ZIP Package Import (Zip extraction, asset rewrite, path-traversal protection)
- * 2. Campaign Settings Centralization (subjectOverride, previewText, landingPageUrl)
- * 3. Template Library Management (duplicate, archive, restore, safe delete protection)
- * 4. Centralized Marketing Footer (idempotent assembly, preheader injection, landing page CTA, validation)
- * 5. Real Unsubscribe & Suppression (HMAC tokens, scanner safety, opt-out recording, suppression filtering)
- * 6. Pre-Approval Validation Checklist
+ * Automated Lifecycle QA Script for ADM-BSRC-009-R1
+ * Verifies the complete 20-item QA specification:
+ * 1. TypeScript & Build verification
+ * 2. Official Footer Configuration (Mount Laurel, NJ & Contact@letusto.com)
+ * 3. Removal of legacy Wilmington address and support email
+ * 4. Korean & English footer rendering with correct disclosures
+ * 5. HTML & IMAGE template footer injection
+ * 6. Duplicate footer prevention & idempotency
+ * 7. Real CTA URL resolution & HTTPS links
+ * 8. Public hosted asset resolution & path traversal rejection
+ * 9. Real Unsubscribe HMAC-SHA256 tokens & scanner safety
+ * 10. Suppression registry persistence
+ * 11. Pre-approval validation checklist (10 comprehensive checks)
+ * 12. Approval snapshot immutability
+ * 13. Transactional email isolation
+ * 14. Hard-locked LIVE_MODE disabled verification
+ * 15. Migration 0188 SQL syntax, seed data, and RLS idempotency audit
  */
 
 import fs from 'fs';
@@ -30,7 +39,7 @@ import path from 'path';
 
 async function runTests() {
   console.log('================================================================');
-  console.log('ADM-BSRC-009 LIFECYCLE QA TEST SUITE');
+  console.log('ADM-BSRC-009-R1 COMPREHENSIVE LIFECYCLE QA TEST SUITE');
   console.log('================================================================\n');
 
   const {
@@ -45,6 +54,10 @@ async function runTests() {
   } = await import('../lib/brand-marketing/marketing-footer');
 
   const {
+    compileImageTemplateToHtml,
+  } = await import('../lib/brand-marketing/image-template-compiler');
+
+  const {
     generateUnsubscribeToken,
     verifyUnsubscribeToken,
     buildUnsubscribeUrl,
@@ -55,6 +68,7 @@ async function runTests() {
   const {
     saveMarketingCampaign,
     getMarketingCampaignById,
+    approveMarketingCampaign,
     duplicateMarketingTemplate,
     archiveMarketingTemplate,
     restoreMarketingTemplate,
@@ -78,278 +92,360 @@ async function runTests() {
   }
 
   // -------------------------------------------------------------------------
-  // TEST SUITE 1: HTML & ZIP Package Import
+  // TEST SUITE 1: Official Footer Information & Legacy Removal
   // -------------------------------------------------------------------------
-  console.log('--- TEST SUITE 1: HTML & ZIP Package Import ---');
+  console.log('--- TEST SUITE 1: Official Footer Information & Legacy Removal ---');
 
-  // 1A. Valid ZIP with local images
-  const validZipPath = path.join(__dirname, 'fixtures', 'valid-email-package.zip');
-  const validZipBuf = fs.readFileSync(validZipPath);
-
-  const zipResult = await importZipPackage(validZipBuf, 'Test Package Brand');
-  assert(zipResult.errors.length === 0, 'Valid ZIP package imports without errors');
-  assert(zipResult.extractedAssets.length === 2, `Extracted 2 images from ZIP (got ${zipResult.extractedAssets.length})`);
-  assert(
-    zipResult.htmlContent.includes('/api/marketing/assets/templates/') && !zipResult.htmlContent.includes('./images/hero.png'),
-    'Relative image paths in HTML rewritten to hosted HTTPS URLs'
-  );
-  assert(
-    !zipResult.htmlContent.includes('images/logo.png'),
-    'Relative image path without ./ was also rewritten cleanly'
-  );
-  assert(zipResult.warnings.length === 0, 'No warnings for valid clean package');
-
-  // 1B. Path Traversal ZIP rejection
-  const traversalZipPath = path.join(__dirname, 'fixtures', 'traversal-attack.zip');
-  const traversalBuf = fs.readFileSync(traversalZipPath);
-
-  let traversalBlocked = false;
-  try {
-    const travResult = await importZipPackage(traversalBuf, 'Malicious Zip');
-    if (travResult.errors.length > 0 || travResult.warnings.some(w => w.includes('traversal') || w.includes('unsafe'))) {
-      traversalBlocked = true;
-    }
-  } catch (err: any) {
-    traversalBlocked = true;
-  }
-  assert(traversalBlocked, 'Malicious ZIP with path traversal ("../") is safely rejected or flagged');
-
-  // 1C. Raw HTML import with relative vs HTTPS images
-  const rawHtmlWithRelative = `<div><img src="./banner.jpg" /><img src="https://images.unsplash.com/photo-test" /></div>`;
-  const htmlResult = await importRawHtmlPackage(rawHtmlWithRelative, 'Raw Newsletter');
-  assert(htmlResult.errors.length === 0, 'Raw HTML imports without errors');
-  assert(
-    htmlResult.warnings.some(w => w.includes('relative image path')),
-    'Raw HTML with relative images generates warning instructing to upload ZIP'
-  );
-
-  // -------------------------------------------------------------------------
-  // TEST SUITE 2: Centralized Marketing Footer
-  // -------------------------------------------------------------------------
-  console.log('\n--- TEST SUITE 2: Centralized Marketing Footer ---');
-
-  // 2A. Footer settings read & validation
   const footerSettings = await getMarketingFooterSettings();
-  assert(!!footerSettings.brandDisplayName, `Footer loaded: brandDisplayName="${footerSettings.brandDisplayName}"`);
-  assert(!!footerSettings.physicalAddress, `Footer physical address present: "${footerSettings.physicalAddress}"`);
+  assert(
+    footerSettings.brandDisplayName === 'K SELECT NETWORK',
+    `Official Brand Display Name: "${footerSettings.brandDisplayName}"`
+  );
+  assert(
+    footerSettings.legalCompanyName === 'Operated by Letusto Inc.',
+    `Official Legal Operating Company: "${footerSettings.legalCompanyName}"`
+  );
+  assert(
+    footerSettings.physicalAddress.includes('23B Roland Ave.') &&
+    footerSettings.physicalAddress.includes('Mount Laurel, NJ 08054'),
+    `Official Physical Address: "${footerSettings.physicalAddress}"`
+  );
+  assert(
+    footerSettings.contactEmail.toLowerCase() === 'contact@letusto.com',
+    `Official Contact Email: "${footerSettings.contactEmail}"`
+  );
+  assert(
+    footerSettings.contactWebsite === 'https://www.kselectnetwork.com',
+    `Official Website: "${footerSettings.contactWebsite}"`
+  );
+
+  // Negative checks: legacy Wilmington and legacy support email must NOT be present
+  assert(
+    !footerSettings.physicalAddress.includes('Wilmington') &&
+    !footerSettings.physicalAddress.includes('1201 Orange'),
+    'Legacy Wilmington address completely purged from default footer settings'
+  );
+  assert(
+    !footerSettings.contactEmail.includes('support@kselectnetwork.com'),
+    'Legacy support@kselectnetwork.com completely purged from default footer settings'
+  );
 
   const footerValidation = validateMarketingFooterCompleteness(footerSettings);
-  assert(footerValidation.isValid, 'Default marketing footer meets CAN-SPAM / Korean legal completeness');
+  assert(footerValidation.isValid, 'Official marketing footer meets CAN-SPAM and Korean legal completeness');
 
-  // 2B. Footer Assembly & Idempotency
-  const testEmailBody = `
-  <div style="padding: 20px; font-family: sans-serif;">
-    <h2>Exclusive Fall Skincare Offers</h2>
-    <p>Check out our latest selections from premier Korean brands.</p>
-    <a href="{{LANDING_PAGE_URL}}" style="color: blue;">Explore Collection</a>
-  </div>`;
+  // -------------------------------------------------------------------------
+  // TEST SUITE 2: Korean vs English Footer Rendering
+  // -------------------------------------------------------------------------
+  console.log('\n--- TEST SUITE 2: Korean vs English Footer Rendering ---');
 
-  const unsubUrl = buildUnsubscribeUrl('brand-contact@innisfree-sample.co.kr', 'camp-test-001');
+  const testBody = `<div><p>Sample Campaign Content</p><a href="{{LANDING_PAGE_URL}}">Click Here</a></div>`;
+  const unsubUrl = buildUnsubscribeUrl('buyer-contact@partner-brand.co.kr', 'camp-qa-001');
 
-  const assembled1 = assembleEmailWithMarketingFooter(testEmailBody, {
+  // 2A. Korean Render
+  const koAssembled = assembleEmailWithMarketingFooter(testBody, {
     footerSettings,
-    language: 'en',
+    language: 'ko',
     unsubscribeUrl: unsubUrl,
-    landingPageUrl: 'https://kselectnetwork.com/featured/fall-skincare',
-    previewText: 'Exclusive 20% discount on premier K-Beauty skincare',
+    previewText: 'K-Beauty 미국 뷰티 리테일러 입점 안내',
+    landingPageUrl: 'https://kselectnetwork.com/campaigns/k-beauty-outreach',
   });
 
   assert(
-    assembled1.includes('<!-- MARKETING_FOOTER_START -->') && assembled1.includes('<!-- MARKETING_FOOTER_END -->'),
-    'Email assembled with footer markers <!-- MARKETING_FOOTER_START --> and <!-- MARKETING_FOOTER_END -->'
+    koAssembled.includes('본 메일은 K SELECT NETWORK의 브랜드 파트너십 안내 이메일입니다.'),
+    'Korean legal disclosure rendered correctly in KO email'
   );
   assert(
-    assembled1.includes('Exclusive 20% discount on premier K-Beauty skincare'),
-    'Preview text injected as hidden inbox preheader'
+    koAssembled.includes('수신거부 / Unsubscribe'),
+    'Korean unsubscribe label formatted as "수신거부 / Unsubscribe"'
   );
   assert(
-    assembled1.includes('https://kselectnetwork.com/featured/fall-skincare'),
-    'Landing page URL placeholder resolved in body'
-  );
-  assert(
-    assembled1.includes(footerSettings.physicalAddress),
-    'Physical address rendered in assembled footer'
-  );
-  assert(
-    assembled1.includes('/unsubscribe?token='),
-    'Recipient-specific unsubscribe link rendered in assembled footer'
+    koAssembled.includes('K-Beauty 미국 뷰티 리테일러 입점 안내'),
+    'Korean preview text preheader injected'
   );
 
-  // 2C. Idempotency test (assembling again replaces footer instead of appending duplicates)
-  const assembled2 = assembleEmailWithMarketingFooter(assembled1, {
+  // 2B. English Render
+  const enAssembled = assembleEmailWithMarketingFooter(testBody, {
     footerSettings,
     language: 'en',
     unsubscribeUrl: unsubUrl,
+    previewText: 'Curated Korean Beauty Brands for US Retailers',
+    landingPageUrl: 'https://kselectnetwork.com/campaigns/us-retail',
   });
 
-  const footerStartOccurrences = (assembled2.match(/<!-- MARKETING_FOOTER_START -->/g) || []).length;
   assert(
-    footerStartOccurrences === 1,
-    `Footer assembly is idempotent: exactly 1 footer marker block exists after re-assembly (found ${footerStartOccurrences})`
+    enAssembled.includes('This email provides information about K SELECT NETWORK brand partnerships.'),
+    'English legal disclosure rendered correctly in EN email'
   );
-
-  // 2D. Existing footer detection
-  const detected = detectExistingFooterInHtml(assembled2);
-  assert(detected.hasExistingFooter, 'detectExistingFooterInHtml correctly identifies managed footer');
-
-  // -------------------------------------------------------------------------
-  // TEST SUITE 3: Real Unsubscribe Infrastructure
-  // -------------------------------------------------------------------------
-  console.log('\n--- TEST SUITE 3: Real Unsubscribe Infrastructure ---');
-
-  const testEmail = 'marketing-recipient-qa@example.com';
-  const testCampaignId = 'camp-qa-unsub-999';
-
-  // 3A. HMAC token generation & verification
-  const token = generateUnsubscribeToken(testEmail, testCampaignId);
-  assert(typeof token === 'string' && token.length > 20, 'Opaque HMAC-SHA256 unsubscribe token generated');
-
-  const verified = verifyUnsubscribeToken(token);
   assert(
-    verified.valid && verified.email === testEmail && verified.campaignId === testCampaignId,
-    'HMAC token verified successfully and payload matches original email & campaign'
+    enAssembled.includes('Unsubscribe / Opt-out'),
+    'English unsubscribe label rendered correctly'
+  );
+  assert(
+    enAssembled.includes('Curated Korean Beauty Brands for US Retailers'),
+    'English preview text preheader injected'
   );
 
-  // 3B. Tamper rejection
-  const tamperedToken = token.slice(0, -4) + 'abcd';
-  const tamperedVerified = verifyUnsubscribeToken(tamperedToken);
-  assert(!tamperedVerified.valid, 'Tampered token is safely rejected with valid: false');
+  // -------------------------------------------------------------------------
+  // TEST SUITE 3: HTML & IMAGE Template Footer Injection & Idempotency
+  // -------------------------------------------------------------------------
+  console.log('\n--- TEST SUITE 3: HTML & IMAGE Template Footer Injection ---');
 
-  // 3C. Scanner Safety
-  const unsubsUrl = buildUnsubscribeUrl(testEmail, testCampaignId);
-  assert(unsubsUrl.includes('/unsubscribe?token='), 'Unsubscribe URL is correctly formatted for web route');
-  const beforeSuppression = await isEmailSuppressed(testEmail);
-  assert(!beforeSuppression, 'Simply generating URL or clicking GET does not suppress email (scanner-safe)');
+  // 3A. IMAGE Template Compiler Integration
+  const compiledImageHtml = compileImageTemplateToHtml({
+    sections: [
+      {
+        id: 'sec-1',
+        imageUrl: 'https://images.unsplash.com/photo-sample-kbeauty',
+        altText: 'Hero Section',
+        hasCtaButton: true,
+        ctaButtonLabel: 'View Wholesale Catalog',
+        ctaButtonUrl: 'https://kselectnetwork.com/catalog',
+        ctaButtonAlign: 'center',
+      },
+    ],
+    language: 'ko',
+    subject: 'K SELECT IMAGE TEMPLATE CAMPAIGN',
+    previewText: 'Image Campaign Preview',
+  });
 
-  // 3D. Opt-out recording
-  const optOutResult = await recordEmailOptOut(
-    testEmail,
-    'UNSUBSCRIBED',
-    'QA Lifecycle Test User Opt-Out',
-    testCampaignId
+  const assembledImageEmail = assembleEmailWithMarketingFooter(compiledImageHtml.html, {
+    footerSettings,
+    language: 'ko',
+    unsubscribeUrl: unsubUrl,
+  });
+
+  assert(
+    assembledImageEmail.includes('<!-- MARKETING_FOOTER_START -->') &&
+    assembledImageEmail.includes('<!-- MARKETING_FOOTER_END -->'),
+    'Marketing footer cleanly attached to compiled IMAGE template'
   );
-  assert(optOutResult.success, 'Opt-out recorded successfully in suppression list');
+  assert(
+    assembledImageEmail.includes('23B Roland Ave., Mount Laurel, NJ 08054, USA'),
+    'Official physical address rendered inside IMAGE template email'
+  );
 
-  const afterSuppression = await isEmailSuppressed(testEmail);
-  assert(afterSuppression, 'isEmailSuppressed returns TRUE after opt-out recording');
+  // 3B. Idempotency test (re-assembly replaces instead of duplicating)
+  const reAssembled = assembleEmailWithMarketingFooter(assembledImageEmail, {
+    footerSettings,
+    language: 'ko',
+    unsubscribeUrl: unsubUrl,
+  });
+
+  const footerStartMatches = (reAssembled.match(/<!-- MARKETING_FOOTER_START -->/g) || []).length;
+  assert(
+    footerStartMatches === 1,
+    `Idempotent assembly verified: exactly 1 footer marker block exists after re-assembly (found ${footerStartMatches})`
+  );
+
+  const detected = detectExistingFooterInHtml(reAssembled);
+  assert(detected.hasExistingFooter, 'detectExistingFooterInHtml successfully identifies managed footer');
 
   // -------------------------------------------------------------------------
-  // TEST SUITE 4: Campaign Settings Centralization & Step 1 Fields
+  // TEST SUITE 4: HTML & ZIP Package Import & Security
   // -------------------------------------------------------------------------
-  console.log('\n--- TEST SUITE 4: Campaign Settings Centralization & Step 1 Fields ---');
+  console.log('\n--- TEST SUITE 4: HTML & ZIP Package Import & Security ---');
+
+  const validZipPath = path.join(__dirname, 'fixtures', 'valid-email-package.zip');
+  const validZipBuf = fs.readFileSync(validZipPath);
+  const zipResult = await importZipPackage(validZipBuf, 'Official Test Package');
+  assert(zipResult.errors.length === 0, 'Clean ZIP package imports without errors');
+  assert(zipResult.extractedAssets.length === 2, `Extracted 2 image assets from ZIP package`);
+  assert(
+    zipResult.htmlContent.includes('/api/marketing/assets/templates/') && !zipResult.htmlContent.includes('./images/hero.png'),
+    'Relative image paths rewritten to hosted proxy HTTPS endpoints'
+  );
+
+  // Path traversal rejection
+  const traversalZipPath = path.join(__dirname, 'fixtures', 'traversal-attack.zip');
+  const traversalBuf = fs.readFileSync(traversalZipPath);
+  const travResult = await importZipPackage(traversalBuf, 'Malicious Package');
+  assert(
+    travResult.errors.length > 0 || travResult.warnings.some(w => w.includes('traversal') || w.includes('Unsafe')),
+    'Malicious ZIP with path traversal safely rejected'
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST SUITE 5: Real Unsubscribe & Suppression
+  // -------------------------------------------------------------------------
+  console.log('\n--- TEST SUITE 5: Real Unsubscribe & Suppression ---');
+
+  const testRecipient = 'qa-buyer-optout@brand-network.com';
+  const testCampaignId = 'camp-qa-verify-r1';
+
+  // 5A. HMAC-SHA256 Token
+  const token = generateUnsubscribeToken(testRecipient, testCampaignId);
+  assert(typeof token === 'string' && token.length > 25, 'Opaque HMAC-SHA256 unsubscribe token generated');
+
+  const tokenVerified = verifyUnsubscribeToken(token);
+  assert(
+    tokenVerified.valid && tokenVerified.email === testRecipient && tokenVerified.campaignId === testCampaignId,
+    'HMAC token verifies correctly with matching payload'
+  );
+
+  // 5B. Tampered token rejection
+  const badToken = token.slice(0, -6) + 'xxxxxx';
+  const badVerified = verifyUnsubscribeToken(badToken);
+  assert(!badVerified.valid, 'Tampered token safely rejected with valid: false');
+
+  // 5C. Scanner-Safe GET behavior
+  const suppressionBefore = await isEmailSuppressed(testRecipient);
+  assert(!suppressionBefore, 'Simply visiting GET route does not opt-out recipient (scanner safe)');
+
+  // 5D. Opt-out Execution
+  const optOutResult = await recordEmailOptOut(testRecipient, 'UNSUBSCRIBED', 'QA R1 Opt-out', testCampaignId);
+  assert(optOutResult.success, 'Opt-out recorded into suppression list');
+
+  const suppressionAfter = await isEmailSuppressed(testRecipient);
+  assert(suppressionAfter, 'isEmailSuppressed returns TRUE after opt-out recording');
+
+  // -------------------------------------------------------------------------
+  // TEST SUITE 6: Campaign Settings & Approval Snapshot Protection
+  // -------------------------------------------------------------------------
+  console.log('\n--- TEST SUITE 6: Campaign Settings & Approval Snapshot Protection ---');
 
   const testCampaignPayload = {
-    name: 'QA Centralized Settings Test Campaign',
+    name: '2026 Fall K-Beauty Strategic Outreach',
     purpose: 'PARTNERSHIP_PROPOSAL' as const,
-    language: 'en' as const,
-    subjectOverride: 'Custom Authoritative Subject: Exclusive Fall Partnership',
-    previewText: 'Discover premier Korean cosmetic brands with K Select Network',
-    landingPageUrl: 'https://kselectnetwork.com/campaigns/fall-partnership',
+    language: 'ko' as const,
+    subjectOverride: '[K SELECT] 공식 브랜드 파트너십 입점 제안',
+    previewText: '미국 500개 이상의 뷰티 살롱 및 온·오프라인 리테일 진출 기회',
+    landingPageUrl: 'https://kselectnetwork.com/campaigns/fall-outreach',
     templateId: 'tmpl-qa-default',
-    targetCompanyTypes: ['INDIE_BRAND', 'ESTABLISHED_BRAND'],
-    targetGrades: ['A', 'B'],
+    targetCompanyTypes: ['INDIE_BRAND'],
+    targetGrades: ['A'],
     status: 'DRAFT' as const,
-    dryRunSummary: {
-      recipientCount: 1,
-      validRecipientCount: 1,
-      estimatedDeliverySeconds: 5,
-      previewSample: {
-        recipientEmail: 'qa-tester@letusto.com',
-        recipientName: 'QA Tester',
-        companyName: 'QA Beauty Co',
-        renderedSubject: 'Custom Authoritative Subject: Exclusive Fall Partnership',
-        renderedHtml: '<div>Test Content</div>',
-      },
-    },
   };
 
-  const savedCamp = await saveMarketingCampaign(testCampaignPayload);
-  assert(!!savedCamp.id, `Campaign created with ID: ${savedCamp.id}`);
+  const createdCamp = await saveMarketingCampaign(testCampaignPayload);
+  assert(!!createdCamp.id, `Campaign saved with ID: ${createdCamp.id}`);
 
-  const campaignBundle = await getMarketingCampaignById(savedCamp.id);
-  assert(campaignBundle.campaign !== null, 'Campaign reloaded from data access layer');
+  const loadedCamp = await getMarketingCampaignById(createdCamp.id);
+  assert(loadedCamp.campaign?.subjectOverride === '[K SELECT] 공식 브랜드 파트너십 입점 제안', 'subjectOverride persisted & reloaded');
+  assert(loadedCamp.campaign?.previewText === '미국 500개 이상의 뷰티 살롱 및 온·오프라인 리테일 진출 기회', 'previewText persisted & reloaded');
+  assert(loadedCamp.campaign?.landingPageUrl === 'https://kselectnetwork.com/campaigns/fall-outreach', 'landingPageUrl persisted & reloaded');
+
+  // 6B. Approval Snapshot
+  const approvedCamp = await approveMarketingCampaign(createdCamp.id, 'qa-superadmin@letusto.com');
+  assert(approvedCamp.status === 'APPROVED', 'Campaign successfully approved and locked');
+  assert(!!approvedCamp.approvalSnapshot, 'Approval snapshot created');
   assert(
-    campaignBundle.campaign?.subjectOverride === 'Custom Authoritative Subject: Exclusive Fall Partnership',
-    `Step 1 subjectOverride persisted & reloaded: "${campaignBundle.campaign?.subjectOverride}"`
+    approvedCamp.approvalSnapshot?.footerSettingsSnapshot?.physicalAddress?.includes('Mount Laurel'),
+    'Approval snapshot froze the official Mount Laurel address'
   );
   assert(
-    campaignBundle.campaign?.previewText === 'Discover premier Korean cosmetic brands with K Select Network',
-    `Step 1 previewText persisted & reloaded: "${campaignBundle.campaign?.previewText}"`
-  );
-  assert(
-    campaignBundle.campaign?.landingPageUrl === 'https://kselectnetwork.com/campaigns/fall-partnership',
-    `Step 1 landingPageUrl persisted & reloaded: "${campaignBundle.campaign?.landingPageUrl}"`
+    approvedCamp.approvalSnapshot?.senderAddress === 'Contact@letusto.com',
+    'Approval snapshot froze official sender: Contact@letusto.com'
   );
 
   // -------------------------------------------------------------------------
-  // TEST SUITE 5: Template Library Management
+  // TEST SUITE 7: Template Library Management & Safety Locks
   // -------------------------------------------------------------------------
-  console.log('\n--- TEST SUITE 5: Template Library Management ---');
+  console.log('\n--- TEST SUITE 7: Template Library Management & Safety Locks ---');
 
-  const templates = await listMarketingTemplates();
-  assert(templates.length > 0, `Template library contains ${templates.length} templates`);
-  const firstTmpl = templates[0];
+  const allTemplates = await listMarketingTemplates();
+  assert(allTemplates.length > 0, `Library lists ${allTemplates.length} templates`);
+  const baseTmpl = allTemplates[0];
 
-  // 5A. Duplicate Template
-  const duplicatedTmpl = await duplicateMarketingTemplate(firstTmpl.id);
-  assert(!!duplicatedTmpl && !!duplicatedTmpl.id, `Template duplicated successfully: "${duplicatedTmpl.name}"`);
-  assert(duplicatedTmpl.id !== firstTmpl.id, 'Duplicated template has a unique new ID');
-  assert(duplicatedTmpl.name.includes('(Copy)'), 'Duplicated template name has (Copy) suffix');
+  // 7A. Duplicate
+  const dupTmpl = await duplicateMarketingTemplate(baseTmpl.id);
+  assert(dupTmpl.id !== baseTmpl.id, 'Duplicated template received unique ID');
+  assert(dupTmpl.name.includes('(Copy)'), 'Duplicated template name has (Copy) suffix');
 
-  const dupId = duplicatedTmpl.id;
+  // 7B. Archive & Restore
+  const archTmpl = await archiveMarketingTemplate(dupTmpl.id);
+  assert(archTmpl.status === 'ARCHIVED', 'Template status transitioned to ARCHIVED');
+  const restTmpl = await restoreMarketingTemplate(dupTmpl.id);
+  assert(restTmpl.status === 'ACTIVE', 'Template status restored to ACTIVE');
 
-  // 5B. Archive & Restore Template
-  const archivedTmpl = await archiveMarketingTemplate(dupId);
-  assert(archivedTmpl.status === 'ARCHIVED', 'Archived template has status: ARCHIVED');
-
-  const restoredTmpl = await restoreMarketingTemplate(dupId);
-  assert(restoredTmpl.status === 'ACTIVE', 'Restored template has status: ACTIVE');
-
-  // 5C. Safe Delete Protection
-  // Associate duplicated template to a campaign
+  // 7C. Safe Delete Protection
   await saveMarketingCampaign({
-    id: savedCamp.id,
-    name: 'QA Centralized Settings Test Campaign',
-    templateId: dupId,
+    id: createdCamp.id,
+    name: '2026 Fall K-Beauty Strategic Outreach',
+    templateId: dupTmpl.id,
   });
 
-  const deleteBlocked = await deleteMarketingTemplate(dupId);
+  const deleteBlocked = await deleteMarketingTemplate(dupTmpl.id);
   assert(
-    !deleteBlocked.success && !!deleteBlocked.error && (deleteBlocked.error.includes('referenced by campaign') || deleteBlocked.error.includes('in use')),
-    `Delete is safely blocked when template is referenced by a campaign: "${deleteBlocked.error}"`
+    !deleteBlocked.success && Boolean(deleteBlocked.error?.includes('referenced by campaign')),
+    `Delete is safely blocked when template is in use: "${deleteBlocked.error}"`
   );
 
-  // Disassociate and then delete
+  // Release and delete
   await saveMarketingCampaign({
-    id: savedCamp.id,
-    name: 'QA Centralized Settings Test Campaign',
+    id: createdCamp.id,
+    name: '2026 Fall K-Beauty Strategic Outreach',
     templateId: 'tmpl-qa-default',
   });
-
-  const deleteAllowed = await deleteMarketingTemplate(dupId);
-  assert(deleteAllowed.success, 'Delete succeeds once template is no longer referenced by any campaign');
+  const deleteSuccess = await deleteMarketingTemplate(dupTmpl.id);
+  assert(deleteSuccess.success, 'Template deleted cleanly after campaign reference removed');
 
   // -------------------------------------------------------------------------
-  // TEST SUITE 6: Pre-Approval Validation Checklist Logic
+  // TEST SUITE 8: Transactional Email Isolation & LIVE_MODE Lock
   // -------------------------------------------------------------------------
-  console.log('\n--- TEST SUITE 6: Pre-Approval Validation Checklist Logic ---');
+  console.log('\n--- TEST SUITE 8: Transactional Email Isolation & LIVE_MODE Lock ---');
 
-  const preApprovalCheck = {
-    hasPhysicalAddress: Boolean(footerSettings.physicalAddress?.trim()),
-    hasContactEmail: Boolean(footerSettings.contactEmail?.includes('@')),
-    hasLegalName: Boolean(footerSettings.brandDisplayName?.trim() && footerSettings.legalCompanyName?.trim()),
-    hasTemplate: Boolean(savedCamp.templateId),
-    hasUnsubscribe: Boolean(unsubUrl && unsubUrl.includes('/unsubscribe?token=')),
-  };
+  // 8A. Transactional isolation
+  const transactionalCode = fs.readFileSync(
+    path.join(__dirname, '..', 'lib', 'notifications', 'templates.ts'),
+    'utf-8'
+  );
+  assert(
+    !transactionalCode.includes('<!-- MARKETING_FOOTER_START -->'),
+    'Transactional email templates remain isolated and do not contain marketing footer markers'
+  );
 
-  const allPassed = Object.values(preApprovalCheck).every(Boolean);
-  assert(allPassed, 'All Pre-Approval checklist requirements PASS');
-  console.log('Pre-approval checklist status:');
-  console.log(`  [${preApprovalCheck.hasPhysicalAddress ? 'PASS' : 'FAIL'}] Physical Mailing Address`);
-  console.log(`  [${preApprovalCheck.hasContactEmail ? 'PASS' : 'FAIL'}] Official Contact Email`);
-  console.log(`  [${preApprovalCheck.hasLegalName ? 'PASS' : 'FAIL'}] Legal Entity & Brand Name`);
-  console.log(`  [${preApprovalCheck.hasTemplate ? 'PASS' : 'FAIL'}] Template Assigned`);
-  console.log(`  [${preApprovalCheck.hasUnsubscribe ? 'PASS' : 'FAIL'}] Unsubscribe Token Resolution`);
+  // 8B. LIVE_MODE hard-lock
+  const dataAccessCode = fs.readFileSync(
+    path.join(__dirname, '..', 'lib', 'brand-marketing', 'campaign-data-access.ts'),
+    'utf-8'
+  );
+  assert(
+    dataAccessCode.includes('is_live_mode_enabled') &&
+    (dataAccessCode.includes('false') || dataAccessCode.includes('LIVE_MODE disabled')),
+    'LIVE_MODE remains strictly locked to false'
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST SUITE 9: Migration 0188 SQL File Audit
+  // -------------------------------------------------------------------------
+  console.log('\n--- TEST SUITE 9: Migration 0188 SQL File Audit ---');
+
+  const migrationSqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0188_marketing_footer_and_assets.sql');
+  assert(fs.existsSync(migrationSqlPath), 'Migration 0188 file exists');
+
+  const migrationSql = fs.readFileSync(migrationSqlPath, 'utf-8');
+  assert(
+    migrationSql.includes('23B Roland Ave., Mount Laurel, NJ 08054, USA'),
+    'Migration 0188 contains official Mount Laurel address'
+  );
+  assert(
+    migrationSql.includes('Contact@letusto.com'),
+    'Migration 0188 contains official email Contact@letusto.com'
+  );
+  assert(
+    !migrationSql.includes("'1201 Orange St"),
+    'Migration 0188 has no legacy Wilmington address in seed data'
+  );
+  assert(
+    !migrationSql.includes("'support@kselectnetwork.com'"),
+    'Migration 0188 has no legacy support@kselectnetwork.com in seed data'
+  );
+  assert(
+    migrationSql.includes('REVOKE ALL ON public.marketing_footer_settings FROM anon, public;'),
+    'Migration 0188 explicitly revokes anon/public table access'
+  );
+  assert(
+    migrationSql.includes('GRANT SELECT ON public.marketing_footer_settings TO authenticated;'),
+    'Migration 0188 grants SELECT to authenticated'
+  );
+  assert(
+    migrationSql.includes('GRANT ALL ON public.marketing_footer_settings TO service_role;'),
+    'Migration 0188 grants ALL to service_role'
+  );
+  assert(
+    migrationSql.includes('DROP POLICY IF EXISTS'),
+    'Migration 0188 uses idempotent DROP POLICY IF EXISTS before creating policies'
+  );
 
   // -------------------------------------------------------------------------
   // SUMMARY

@@ -851,7 +851,7 @@ export async function runCampaignDryRun(
     invalidEmailFiltered: invalidEmailCount,
     samplePreviews,
     warnings,
-    senderIdentity: process.env.EMAIL_FROM_ADDRESS || "K SELECT NETWORK <support@kselectnetwork.com>",
+    senderIdentity: process.env.EMAIL_FROM_ADDRESS || "K SELECT NETWORK <Contact@letusto.com>",
     isCompliant: true,
   };
 
@@ -964,7 +964,7 @@ export async function approveMarketingCampaign(
     resolvedSubject: existing.campaign.subjectOverride || existing.campaign.name,
     frozenRecipientsCount: recipients.length,
     sendableCount: sendable.length,
-    senderAddress: process.env.EMAIL_FROM_ADDRESS || "support@kselectnetwork.com",
+    senderAddress: process.env.EMAIL_FROM_ADDRESS || "Contact@letusto.com",
     footerVersion: footerSettings.updatedAt || now,
     footerSettingsSnapshot: footerSettings as any,
     hash: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),

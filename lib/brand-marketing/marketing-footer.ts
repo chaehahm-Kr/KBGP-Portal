@@ -16,8 +16,8 @@ export const DEFAULT_MARKETING_FOOTER: MarketingFooterSettings = {
   id: "central_marketing_footer",
   brandDisplayName: "K SELECT NETWORK",
   legalCompanyName: "Operated by Letusto Inc.",
-  physicalAddress: "1201 Orange St, Suite 600, Wilmington, DE 19801, USA",
-  contactEmail: "support@kselectnetwork.com",
+  physicalAddress: "23B Roland Ave., Mount Laurel, NJ 08054, USA",
+  contactEmail: "Contact@letusto.com",
   contactWebsite: "https://www.kselectnetwork.com",
   disclosureKo: "본 메일은 K SELECT NETWORK의 브랜드 파트너십 안내 이메일입니다.",
   disclosureEn: "This email provides information about K SELECT NETWORK brand partnerships.",
@@ -67,7 +67,7 @@ export function buildMarketingFooterHtml(
 ): string {
   const isKo = options.language === "ko";
   const disclosure = isKo ? settings.disclosureKo : settings.disclosureEn;
-  const unsubLabel = isKo ? "수신거부 (Unsubscribe)" : "Unsubscribe from marketing emails";
+  const unsubLabel = isKo ? "수신거부 / Unsubscribe" : "Unsubscribe / Opt-out";
   const privacyLabel = isKo ? "개인정보 처리방침" : "Privacy Policy";
   const contactWebsite = settings.contactWebsite || "https://www.kselectnetwork.com";
 

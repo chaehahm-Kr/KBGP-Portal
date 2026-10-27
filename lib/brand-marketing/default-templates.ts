@@ -91,7 +91,7 @@ export const DEFAULT_MARKETING_TEMPLATES: MarketingTemplatePackage[] = [
                 본 메일은 공공 전시회(InterCHARM Korea 등) 공식 디렉토리에 등록된 사업자 대표 연락처를 기반으로 발송된 기업 간(B2B) 파트너십 안내 메일입니다.
               </p>
               <p style="margin: 0;">
-                수신을 원치 않으시면 support@kselectnetwork.com으로 회신 주시거나 거부 의사를 남겨주시면 즉시 수신거부 처리됩니다.
+                수신을 원치 않으시면 Contact@letusto.com으로 회신 주시거나 거부 의사를 남겨주시면 즉시 수신거부 처리됩니다.
               </p>
             </td>
           </tr>
@@ -109,7 +109,7 @@ K SELECT NETWORK는 북미 온·오프라인 뷰티 리테일러와 한국의 �
 {{custom_message}}
 
 자세한 파트너십 안내: https://www.kselectnetwork.com
-수신거부: support@kselectnetwork.com`,
+수신거부: Contact@letusto.com`,
   },
   {
     id: EN_TEMPLATE_UUID,
@@ -179,7 +179,7 @@ K SELECT NETWORK는 북미 온·오프라인 뷰티 리테일러와 한국의 �
                 You received this business email because {{company_name}} is registered as an exhibitor in international beauty trade directories.
               </p>
               <p style="margin: 0;">
-                To opt out of future communications, reply to support@kselectnetwork.com.
+                To opt out of future communications, reply to Contact@letusto.com.
               </p>
             </td>
           </tr>
@@ -197,6 +197,6 @@ We would like to introduce wholesale distribution opportunities for {{brand_name
 {{custom_message}}
 
 Learn more: https://www.kselectnetwork.com
-Unsubscribe: reply to support@kselectnetwork.com`,
+Unsubscribe: reply to Contact@letusto.com`,
   },
 ];

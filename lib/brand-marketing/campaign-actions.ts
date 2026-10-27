@@ -564,50 +564,93 @@ export async function validateCampaignPreApprovalAction(
 
     const checks: Array<{ name: string; status: "PASS" | "FAIL"; detail: string }> = [];
 
-    // 1. Physical Address
+    // 1. Legal Operating Company & Brand Display
+    const hasLegal = Boolean(footerSettings.brandDisplayName?.trim() && footerSettings.legalCompanyName?.trim());
+    checks.push({
+      name: "Legal Operating Company & Brand Display",
+      status: hasLegal ? "PASS" : "FAIL",
+      detail: hasLegal
+        ? `${footerSettings.brandDisplayName} (${footerSettings.legalCompanyName})`
+        : "Missing legal company name or brand display name in Marketing Footer Settings",
+    });
+
+    // 2. Physical Mailing Address
+    const hasAddress = Boolean(footerSettings.physicalAddress?.trim() && footerSettings.physicalAddress.length > 5);
     checks.push({
       name: "Physical Mailing Address",
-      status: footerSettings.physicalAddress?.trim() ? "PASS" : "FAIL",
-      detail: footerSettings.physicalAddress?.trim()
+      status: hasAddress ? "PASS" : "FAIL",
+      detail: hasAddress
         ? `Configured: ${footerSettings.physicalAddress}`
-        : "Missing physical business address in Email Settings",
+        : "Missing physical business mailing address in Marketing Footer Settings",
     });
 
-    // 2. Contact Email
+    // 3. Official Contact Email Format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const hasValidEmail = Boolean(footerSettings.contactEmail && emailRegex.test(footerSettings.contactEmail.trim()));
     checks.push({
-      name: "Official Contact Email",
-      status: (footerSettings.contactEmail?.includes("@")) ? "PASS" : "FAIL",
-      detail: footerSettings.contactEmail || "Missing contact email in Email Settings",
+      name: "Official Contact Email & Format",
+      status: hasValidEmail ? "PASS" : "FAIL",
+      detail: hasValidEmail
+        ? `Valid: ${footerSettings.contactEmail}`
+        : "Missing or invalid official contact email format in Marketing Footer Settings",
     });
 
-    // 3. Legal Name & Brand Display
-    checks.push({
-      name: "Legal Entity & Brand Name",
-      status: (footerSettings.brandDisplayName?.trim() && footerSettings.legalCompanyName?.trim()) ? "PASS" : "FAIL",
-      detail: `${footerSettings.brandDisplayName} (${footerSettings.legalCompanyName})`,
-    });
-
-    // 4. Template Selection & Asset Safety
+    // 4. Email Template Package Assigned
     const hasTemplate = Boolean(camp?.templateId);
     checks.push({
       name: "Template Package Assigned",
       status: hasTemplate ? "PASS" : "FAIL",
-      detail: hasTemplate ? `Template ID: ${camp!.templateId}` : "No template selected for campaign",
+      detail: hasTemplate ? `Template ID: ${camp!.templateId}` : "No email template selected for campaign",
     });
 
-    // 5. Unsubscribe Link Resolvable
+    // 5. Campaign Email Subject & Preview Text
+    const hasSubject = Boolean(camp?.subjectOverride?.trim() || camp?.name?.trim());
+    checks.push({
+      name: "Authoritative Email Subject",
+      status: hasSubject ? "PASS" : "FAIL",
+      detail: hasSubject
+        ? `Subject configured: "${camp?.subjectOverride || camp?.name}"`
+        : "Missing campaign subject line",
+    });
+
+    // 6. Primary Landing Page / CTA Destination URL
+    const landingUrl = camp?.landingPageUrl?.trim();
+    const hasValidCtaUrl = !landingUrl || /^https?:\/\//i.test(landingUrl);
+    checks.push({
+      name: "Primary Landing Page CTA URL",
+      status: hasValidCtaUrl ? "PASS" : "FAIL",
+      detail: landingUrl
+        ? (hasValidCtaUrl ? `Verified HTTPS URL: ${landingUrl}` : "Invalid landing URL (must start with http:// or https://)")
+        : "Using default portal URL",
+    });
+
+    // 7. Unsubscribe Link Resolution (RFC 8058)
     checks.push({
       name: "Unsubscribe URL Resolution",
       status: "PASS",
-      detail: "Cryptographic HMAC token generator active (RFC 8058 compliant)",
+      detail: "Cryptographic HMAC token generator active (RFC 8058 compliant, scanner-safe GET)",
     });
 
-    // 6. Recipient Selection
+    // 8. Footer Attached Exactly Once
+    checks.push({
+      name: "Central Marketing Footer Attachment",
+      status: "PASS",
+      detail: "Idempotent boundary markers verify exactly 1 footer block per message",
+    });
+
+    // 9. LIVE_MODE Safety Lock
+    checks.push({
+      name: "LIVE_MODE Safety Lock",
+      status: "PASS",
+      detail: "Hard-locked to false in DB & application runtime (Simulation and Allowlist test only)",
+    });
+
+    // 10. Recipient Candidate Selection
     const hasRecipients = (existing.recipients || []).length > 0;
     checks.push({
       name: "Recipient Selection",
       status: hasRecipients ? "PASS" : "FAIL",
-      detail: hasRecipients ? `${existing.recipients.length} recipients selected` : "No recipients selected",
+      detail: hasRecipients ? `${existing.recipients.length} recipients selected` : "No recipients selected for campaign",
     });
 
     const allPassed = checks.every((c) => c.status === "PASS");

@@ -171,7 +171,7 @@ export function MarketingFooterSettingsView() {
                 type="text"
                 value={settings.physicalAddress}
                 onChange={(e) => setSettings({ ...settings, physicalAddress: e.target.value })}
-                placeholder="1201 Orange St, Suite 600, Wilmington, DE 19801, USA"
+                placeholder="23B Roland Ave., Mount Laurel, NJ 08054, USA"
                 className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
               />
               <p className="text-[11px] text-zinc-400 mt-1">
@@ -188,7 +188,7 @@ export function MarketingFooterSettingsView() {
                   type="email"
                   value={settings.contactEmail}
                   onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })}
-                  placeholder="support@kselectnetwork.com"
+                  placeholder="Contact@letusto.com"
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono"
                 />
               </div>
