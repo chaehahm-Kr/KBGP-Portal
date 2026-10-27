@@ -2346,7 +2346,7 @@ export default function BrandMarketingView({
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-blue-600 dark:text-blue-400 hover:underline"
                                   >
-                                    <span>🌐 {ws.title || ws.website_type || "Website"}</span>
+                                    <span>🌐 {ws.label || "Website"}</span>
                                     <span className="text-zinc-400 text-[10px]">↗</span>
                                   </a>
                                 );

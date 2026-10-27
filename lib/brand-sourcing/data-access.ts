@@ -515,7 +515,7 @@ export async function listSourcingCompanies(
       updated_at,
       sourcing_brands(id, brand_name_kr, brand_name_en, categories, key_products),
       sourcing_contacts(id, name, department, job_title, email, phone, is_primary),
-      sourcing_websites(id, url, website_type, title, is_primary),
+      sourcing_websites(id, url, label, is_primary),
       sourcing_sources(id, provider, source_url, source_identifier)
     `,
       { count: "exact" }
