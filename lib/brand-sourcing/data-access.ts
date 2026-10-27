@@ -5,7 +5,6 @@ import {
   DuplicateMatchResult,
   DuplicateCheckCriteria,
 } from "./types";
-import { resolveQaConfig } from "../../scripts/qa/qa-guard";
 
 export type { SourcingEvaluationInput, DuplicateMatchResult, DuplicateCheckCriteria };
 
@@ -22,24 +21,25 @@ export interface SourcingListParams {
 /**
  * Resolves the Supabase client to use.
  * In production/staging runtime, server actions pass their authorized client.
- * In isolated QA / unit tests, resolves QA service client safely.
+ * In isolated QA / unit tests, resolves QA service client safely via environment variables.
  */
 export function getClient(client?: SupabaseClient): SupabaseClient {
   if (client) return client;
 
   // 1. Check QA configuration if QA is active
-  try {
-    const qaConfig = resolveQaConfig();
-    if (qaConfig.ENABLE_QA_ENVIRONMENT === "true" && qaConfig.QA_SUPABASE_URL) {
-      const qaKey = qaConfig.QA_SUPABASE_SERVICE_ROLE_KEY || qaConfig.QA_SUPABASE_ANON_KEY;
-      if (qaKey) {
-        return createClient(qaConfig.QA_SUPABASE_URL, qaKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-      }
+  if (process.env.ENABLE_QA_ENVIRONMENT === "true" && process.env.QA_SUPABASE_URL) {
+    const qaKey =
+      process.env.QA_SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.QA_SUPABASE_ANON_KEY ||
+      process.env.QA_SUPABASE_SECRET_KEY;
+    if (qaKey) {
+      return createClient(process.env.QA_SUPABASE_URL, qaKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
     }
-  } catch {}
+  }
 
+  // 2. Production / Preview runtime credentials
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
   const key =
     process.env.SUPABASE_SECRET_KEY ||

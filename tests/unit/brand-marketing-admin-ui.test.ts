@@ -37,6 +37,7 @@ import {
 import {
   assertQaEnvironmentOrThrow,
   createQaSupabaseClient,
+  resolveQaConfig,
 } from "../../scripts/qa/qa-guard";
 import { NormalizedCompanyDraft } from "../../lib/brand-sourcing";
 
@@ -163,6 +164,11 @@ describe("ADM-BSRC-004: Brand Marketing Admin UI & Server Actions", () => {
     // 1. Assert isolated QA environment
     const qaInfo = assertQaEnvironmentOrThrow();
     expect(qaInfo.host).toBe("elkgizqgksshukxgcndy.supabase.co");
+
+    const qaConfig = resolveQaConfig();
+    if (qaConfig.QA_SUPABASE_URL) process.env.QA_SUPABASE_URL = qaConfig.QA_SUPABASE_URL;
+    if (qaConfig.QA_SUPABASE_SERVICE_ROLE_KEY) process.env.QA_SUPABASE_SERVICE_ROLE_KEY = qaConfig.QA_SUPABASE_SERVICE_ROLE_KEY;
+    if (qaConfig.QA_SUPABASE_ANON_KEY) process.env.QA_SUPABASE_ANON_KEY = qaConfig.QA_SUPABASE_ANON_KEY;
 
     // Clean up any residual test records
     const supabase = createQaSupabaseClient();

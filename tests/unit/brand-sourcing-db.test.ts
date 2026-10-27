@@ -7,7 +7,7 @@ import {
   updateSourcingEvaluation,
   NormalizedCompanyDraft,
 } from "../../lib/brand-sourcing";
-import { createQaSupabaseClient, assertQaEnvironmentOrThrow } from "../../scripts/qa/qa-guard";
+import { createQaSupabaseClient, assertQaEnvironmentOrThrow, resolveQaConfig } from "../../scripts/qa/qa-guard";
 
 const SYNTHETIC_TEST_ORG_ID = "org-test-99999999-aaaa-bbbb-cccc-dddddddddddd";
 const SYNTHETIC_COMPANY_NAME = "테스트바이오코스메틱 (TEST BIO)";
@@ -137,6 +137,10 @@ describe("Brand Sourcing — Database Schema & Data Access (ADM-BSRC-003)", () =
       const qaInfo = assertQaEnvironmentOrThrow();
       if (!qaInfo.host.includes("shzfrppdobpmrstcjfqu")) {
         qaClient = createQaSupabaseClient();
+        const qaConfig = resolveQaConfig();
+        if (qaConfig.QA_SUPABASE_URL) process.env.QA_SUPABASE_URL = qaConfig.QA_SUPABASE_URL;
+        if (qaConfig.QA_SUPABASE_SERVICE_ROLE_KEY) process.env.QA_SUPABASE_SERVICE_ROLE_KEY = qaConfig.QA_SUPABASE_SERVICE_ROLE_KEY;
+        if (qaConfig.QA_SUPABASE_ANON_KEY) process.env.QA_SUPABASE_ANON_KEY = qaConfig.QA_SUPABASE_ANON_KEY;
       }
     } catch {
       qaClient = null;
