@@ -33,7 +33,7 @@ function assert(condition: boolean, message: string) {
 async function main() {
   await client.connect();
   console.log('================================================================================');
-  console.log('ADM-BSRC-007-R1-ADD1: Real QA DB Persistence & Append-Only / RESTRICT Verification');
+  console.log('ADM-BSRC-007-R1-ADD1: Real QA DB Immutability & Rejection Verification');
   console.log('Target QA DB: elkgizqgksshukxgcndy');
   console.log('================================================================================\n');
 
@@ -75,7 +75,6 @@ async function main() {
       WHERE id = $1;
     `, [testCompanyId]);
 
-    // Independent Query Read
     const check1 = await client.query(`
       SELECT interest_status, updated_at 
       FROM public.sourcing_companies 
@@ -113,7 +112,6 @@ async function main() {
       WHERE id = $1;
     `, [testCompanyId, followupDate, followupNote, contactTimestamp]);
 
-    // Independent Query Read
     const check2 = await client.query(`
       SELECT next_followup_date::text, followup_note, last_contact_date
       FROM public.sourcing_companies 
@@ -189,41 +187,82 @@ async function main() {
     assert(timeline.rows[2].activity_type === 'REPLY_RECORDED', 'Third activity is REPLY_RECORDED');
     console.log('Chronological timeline verified: strictly append-only.');
 
-    // Step 6: Test Append-Only Trigger: Prohibit UPDATE and DELETE by authenticated users
-    console.log('\n--- Step 6: Verify Append-Only Modification Prevention Trigger ---');
-    let updateBlocked = false;
+    // Step 6: Test UPDATE/DELETE Rejection for 'authenticated' Role
+    console.log('\n--- Step 6: Test UPDATE/DELETE Rejection for authenticated Role ---');
+    let authUpdateBlocked = false;
     try {
       await client.query('SET ROLE authenticated;');
-      await client.query(`
-        UPDATE public.sourcing_company_activities
-        SET summary = 'MODIFIED SUMMARY'
-        WHERE id = $1;
-      `, [act1.rows[0].id]);
+      await client.query(`UPDATE public.sourcing_company_activities SET summary = 'TAMPERED' WHERE id = $1;`, [act1.rows[0].id]);
     } catch (e: any) {
-      updateBlocked = true;
-      console.log(`  ✓ Update blocked for authenticated role: ${e.message}`);
+      authUpdateBlocked = true;
+      console.log(`  ✓ authenticated UPDATE rejected: ${e.message}`);
     } finally {
       await client.query('RESET ROLE;').catch(() => {});
     }
-    assert(updateBlocked, 'Trigger / Privileges strictly blocked UPDATE on sourcing_company_activities');
+    assert(authUpdateBlocked, 'authenticated role strictly blocked from UPDATE');
 
-    let deleteBlocked = false;
+    let authDeleteBlocked = false;
     try {
       await client.query('SET ROLE authenticated;');
-      await client.query(`
-        DELETE FROM public.sourcing_company_activities
-        WHERE id = $1;
-      `, [act1.rows[0].id]);
+      await client.query(`DELETE FROM public.sourcing_company_activities WHERE id = $1;`, [act1.rows[0].id]);
     } catch (e: any) {
-      deleteBlocked = true;
-      console.log(`  ✓ Delete blocked for authenticated role: ${e.message}`);
+      authDeleteBlocked = true;
+      console.log(`  ✓ authenticated DELETE rejected: ${e.message}`);
     } finally {
       await client.query('RESET ROLE;').catch(() => {});
     }
-    assert(deleteBlocked, 'Trigger / Privileges strictly blocked DELETE on sourcing_company_activities');
+    assert(authDeleteBlocked, 'authenticated role strictly blocked from DELETE');
 
-    // Step 7: Test ON DELETE RESTRICT foreign key protection on sourcing_companies
-    console.log('\n--- Step 7: Test ON DELETE RESTRICT Preserves History (Blocks Company Deletion) ---');
+    // Step 7: Test UPDATE/DELETE Rejection for 'service_role' Role
+    console.log('\n--- Step 7: Test UPDATE/DELETE Rejection for service_role Role ---');
+    let srvUpdateBlocked = false;
+    try {
+      await client.query('SET ROLE service_role;');
+      await client.query(`UPDATE public.sourcing_company_activities SET summary = 'TAMPERED' WHERE id = $1;`, [act1.rows[0].id]);
+    } catch (e: any) {
+      srvUpdateBlocked = true;
+      console.log(`  ✓ service_role UPDATE rejected: ${e.message}`);
+    } finally {
+      await client.query('RESET ROLE;').catch(() => {});
+    }
+    assert(srvUpdateBlocked, 'service_role strictly blocked from UPDATE');
+
+    let srvDeleteBlocked = false;
+    try {
+      await client.query('SET ROLE service_role;');
+      await client.query(`DELETE FROM public.sourcing_company_activities WHERE id = $1;`, [act1.rows[0].id]);
+    } catch (e: any) {
+      srvDeleteBlocked = true;
+      console.log(`  ✓ service_role DELETE rejected: ${e.message}`);
+    } finally {
+      await client.query('RESET ROLE;').catch(() => {});
+    }
+    assert(srvDeleteBlocked, 'service_role strictly blocked from DELETE');
+
+    // Step 8: Test Trigger Exception for ANY Connection (Direct Trigger Guard)
+    console.log('\n--- Step 8: Test Direct Trigger Guard Rejection Regardless of Role ---');
+    let directUpdateBlocked = false;
+    try {
+      await client.query(`UPDATE public.sourcing_company_activities SET summary = 'TAMPERED' WHERE id = $1;`, [act1.rows[0].id]);
+    } catch (e: any) {
+      directUpdateBlocked = true;
+      console.log(`  ✓ Direct UPDATE rejected by trigger: ${e.message}`);
+      assert(e.message.includes('append-only audit log'), 'Trigger exception message verified');
+    }
+    assert(directUpdateBlocked, 'Trigger blocked UPDATE regardless of application role');
+
+    let directDeleteBlocked = false;
+    try {
+      await client.query(`DELETE FROM public.sourcing_company_activities WHERE id = $1;`, [act1.rows[0].id]);
+    } catch (e: any) {
+      directDeleteBlocked = true;
+      console.log(`  ✓ Direct DELETE rejected by trigger: ${e.message}`);
+      assert(e.message.includes('append-only audit log'), 'Trigger exception message verified');
+    }
+    assert(directDeleteBlocked, 'Trigger blocked DELETE regardless of application role');
+
+    // Step 9: Test ON DELETE RESTRICT foreign key protection on sourcing_companies
+    console.log('\n--- Step 9: Test ON DELETE RESTRICT Preserves History (Blocks Company Deletion) ---');
     let deletionBlockedByFk = false;
     try {
       await client.query(`DELETE FROM public.sourcing_companies WHERE id = $1;`, [testCompanyId]);
@@ -246,8 +285,10 @@ async function main() {
     console.log('🎉 ALL REAL QA DATABASE PERSISTENCE, APPEND-ONLY & RESTRICT TESTS PASSED (100%)');
     console.log('================================================================================\n');
   } finally {
-    // Clean up test data safely in reverse dependency order
+    // Clean up test data safely using superuser trigger control
+    await client.query(`ALTER TABLE public.sourcing_company_activities DISABLE TRIGGER trg_protect_sourcing_company_activities;`).catch(() => {});
     await client.query(`DELETE FROM public.sourcing_company_activities WHERE company_id = $1;`, [testCompanyId]).catch(() => {});
+    await client.query(`ALTER TABLE public.sourcing_company_activities ENABLE TRIGGER trg_protect_sourcing_company_activities;`).catch(() => {});
     await client.query(`DELETE FROM public.sourcing_companies WHERE id = $1;`, [testCompanyId]).catch(() => {});
     await client.end();
   }

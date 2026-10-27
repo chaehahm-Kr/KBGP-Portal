@@ -171,11 +171,10 @@ CREATE INDEX IF NOT EXISTS idx_sourcing_company_activities_created ON public.sou
 
 -- ------------------------------------------------------------------------------
 -- 4. ROW LEVEL SECURITY (RLS) & APPEND-ONLY PRIVILEGES
--- Only allow SELECT and INSERT to authenticated staff. Prohibit UPDATE and DELETE.
+-- Explicitly revoke destructive permissions; only allow SELECT & INSERT
 -- ------------------------------------------------------------------------------
-GRANT SELECT, INSERT ON public.sourcing_company_activities TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.sourcing_company_activities TO service_role;
-REVOKE UPDATE, DELETE ON public.sourcing_company_activities FROM authenticated;
+GRANT SELECT, INSERT ON public.sourcing_company_activities TO authenticated, service_role;
+REVOKE UPDATE, DELETE, TRUNCATE ON public.sourcing_company_activities FROM authenticated, service_role, anon, public;
 REVOKE ALL ON public.sourcing_company_activities FROM anon;
 
 ALTER TABLE public.sourcing_company_activities ENABLE ROW LEVEL SECURITY;
@@ -197,26 +196,29 @@ CREATE POLICY "sourcing_company_activities_admin_insert"
   TO authenticated
   WITH CHECK (public.auth_is_admin());
 
--- Append-only trigger guard: Prevents unauthorized UPDATE or DELETE on activities
-CREATE OR REPLACE FUNCTION public.prevent_sourcing_company_activities_modification()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF (current_user = 'authenticated' OR session_user = 'authenticated') THEN
-    RAISE EXCEPTION 'sourcing_company_activities is append-only. UPDATE and DELETE operations are prohibited.';
-  END IF;
-  IF TG_OP = 'DELETE' THEN
-    RETURN OLD;
-  ELSE
-    RETURN NEW;
-  END IF;
-END;
-$$ LANGUAGE plpgsql;
-
+-- ------------------------------------------------------------------------------
+-- 5. APPEND-ONLY IMMUTABILITY TRIGGER (ALIGNED WITH MIGRATION 0185)
+-- Blocks UPDATE and DELETE unconditionally regardless of application role
+-- ------------------------------------------------------------------------------
 DROP TRIGGER IF EXISTS trg_prevent_sourcing_company_activities_modification ON public.sourcing_company_activities;
-CREATE TRIGGER trg_prevent_sourcing_company_activities_modification
+DROP FUNCTION IF EXISTS public.prevent_sourcing_company_activities_modification();
+
+CREATE OR REPLACE FUNCTION public.trg_fn_protect_sourcing_company_activities()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  RAISE EXCEPTION 'sourcing_company_activities is an append-only audit log. UPDATE and DELETE operations are strictly prohibited.';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_protect_sourcing_company_activities ON public.sourcing_company_activities;
+CREATE TRIGGER trg_protect_sourcing_company_activities
   BEFORE UPDATE OR DELETE ON public.sourcing_company_activities
   FOR EACH ROW
-  EXECUTE FUNCTION public.prevent_sourcing_company_activities_modification();
+  EXECUTE FUNCTION public.trg_fn_protect_sourcing_company_activities();
 
 -- Reload schema cache
 NOTIFY pgrst, 'reload schema';

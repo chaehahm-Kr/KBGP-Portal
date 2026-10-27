@@ -33,7 +33,7 @@ function assert(condition: boolean, message: string) {
 async function main() {
   await client.connect();
   console.log('================================================================================');
-  console.log('ADM-BSRC-007-R1-ADD1: QA Schema Migration 0186 Re-Execution & Verification');
+  console.log('ADM-BSRC-007-R1-ADD1: QA Schema Migration 0186 Final Re-Execution & Alignment');
   console.log('Target QA DB: elkgizqgksshukxgcndy');
   console.log('================================================================================\n');
 
@@ -155,11 +155,33 @@ async function main() {
         'idx_sourcing_company_activities_created'
       );
   `);
-  console.log('Verified indexes:\n ', idx.rows.map((r: any) => r.indexname).join('\n  '));
   assert(idx.rows.length === 5, 'All 5 performance indexes are verified');
 
-  // Step 7: Verify RLS is Enabled & Policy Exists
-  console.log('\n--- Verification 6: RLS and Security Policies ---');
+  // Step 7: Verify Table Grants (No UPDATE/DELETE for authenticated or service_role)
+  console.log('\n--- Verification 6: Table Privileges ---');
+  const grants = await client.query(`
+    SELECT grantee, privilege_type
+    FROM information_schema.role_table_grants
+    WHERE table_schema = 'public'
+      AND table_name = 'sourcing_company_activities'
+      AND grantee IN ('authenticated', 'service_role')
+    ORDER BY grantee, privilege_type;
+  `);
+  console.log('Grants on sourcing_company_activities:', grants.rows);
+
+  const authPrivs = grants.rows.filter((g: any) => g.grantee === 'authenticated').map((g: any) => g.privilege_type);
+  const srvPrivs = grants.rows.filter((g: any) => g.grantee === 'service_role').map((g: any) => g.privilege_type);
+  assert(authPrivs.includes('SELECT'), 'authenticated has SELECT');
+  assert(authPrivs.includes('INSERT'), 'authenticated has INSERT');
+  assert(!authPrivs.includes('UPDATE'), 'authenticated DOES NOT have UPDATE');
+  assert(!authPrivs.includes('DELETE'), 'authenticated DOES NOT have DELETE');
+  assert(srvPrivs.includes('SELECT'), 'service_role has SELECT');
+  assert(srvPrivs.includes('INSERT'), 'service_role has INSERT');
+  assert(!srvPrivs.includes('UPDATE'), 'service_role DOES NOT have UPDATE');
+  assert(!srvPrivs.includes('DELETE'), 'service_role DOES NOT have DELETE');
+
+  // Step 8: Verify RLS is Enabled & Policy Exists
+  console.log('\n--- Verification 7: RLS and Security Policies ---');
   const rls = await client.query(`
     SELECT relname, relrowsecurity, relforcerowsecurity
     FROM pg_class
@@ -175,24 +197,34 @@ async function main() {
     ORDER BY policyname;
   `);
   console.log(`Verified RLS policies:`, pol.rows.map((p: any) => `"${p.policyname}" (${p.cmd})`).join(', '));
-  const selectPol = pol.rows.find((p: any) => p.policyname === 'sourcing_company_activities_admin_select');
-  const insertPol = pol.rows.find((p: any) => p.policyname === 'sourcing_company_activities_admin_insert');
-  assert(!!selectPol, 'sourcing_company_activities_admin_select policy is active');
-  assert(!!insertPol, 'sourcing_company_activities_admin_insert policy is active');
+  assert(pol.rows.some((p: any) => p.policyname === 'sourcing_company_activities_admin_select'), 'sourcing_company_activities_admin_select is active');
+  assert(pol.rows.some((p: any) => p.policyname === 'sourcing_company_activities_admin_insert'), 'sourcing_company_activities_admin_insert is active');
 
-  // Step 8: Verify Append-Only Trigger
-  console.log('\n--- Verification 7: Append-Only Trigger Guard ---');
+  // Step 9: Verify Append-Only Trigger & Function search_path
+  console.log('\n--- Verification 8: Trigger & Function Security ---');
+  const fnCheck = await client.query(`
+    SELECT proname, prosecdef, proconfig
+    FROM pg_proc
+    WHERE proname = 'trg_fn_protect_sourcing_company_activities';
+  `);
+  assert(fnCheck.rows.length === 1, 'Function trg_fn_protect_sourcing_company_activities exists');
+  assert(fnCheck.rows[0].prosecdef === true, 'Function has SECURITY DEFINER');
+  assert(
+    fnCheck.rows[0].proconfig && fnCheck.rows[0].proconfig.some((c: string) => c.includes('search_path')),
+    `Function enforces search_path (${JSON.stringify(fnCheck.rows[0].proconfig)})`
+  );
+
   const trg = await client.query(`
     SELECT trigger_name, event_manipulation, action_statement
     FROM information_schema.triggers
     WHERE event_object_schema = 'public'
       AND event_object_table = 'sourcing_company_activities'
-      AND trigger_name = 'trg_prevent_sourcing_company_activities_modification';
+      AND trigger_name = 'trg_protect_sourcing_company_activities';
   `);
-  assert(trg.rows.length > 0, 'Append-only trigger trg_prevent_sourcing_company_activities_modification is active');
+  assert(trg.rows.length > 0, 'Trigger trg_protect_sourcing_company_activities is active');
 
   console.log('\n================================================================================');
-  console.log('🎉 ALL CORRECTED MIGRATION 0186 QA VERIFICATIONS PASSED (100%)');
+  console.log('🎉 ALL FINAL MIGRATION 0186 QA VERIFICATIONS PASSED (100%)');
   console.log('================================================================================\n');
 
   await client.end();
