@@ -33,14 +33,14 @@ function assert(condition: boolean, message: string) {
 async function main() {
   await client.connect();
   console.log('================================================================================');
-  console.log('ADM-BSRC-007-R1-ADD1: QA Schema Migration 0186 Application & Verification');
+  console.log('ADM-BSRC-007-R1-ADD1: QA Schema Migration 0186 Re-Execution & Verification');
   console.log('Target QA DB: elkgizqgksshukxgcndy');
   console.log('================================================================================\n');
 
-  // Step 1: Read 0186 SQL
+  // Step 1: Read and re-apply corrected 0186 SQL
   const sqlPath = 'supabase/migrations/0186_brand_marketing_results_and_followup.sql';
   const sql = fs.readFileSync(sqlPath, 'utf8');
-  console.log(`Applying migration ${sqlPath}...`);
+  console.log(`Re-executing corrected migration ${sqlPath}...`);
 
   await client.query('BEGIN');
   try {
@@ -54,7 +54,7 @@ async function main() {
     `);
 
     await client.query('COMMIT');
-    console.log('Migration 0186 executed and committed successfully.\n');
+    console.log('Migration 0186 re-executed and committed successfully.\n');
   } catch (err: any) {
     await client.query('ROLLBACK');
     console.error('Migration failed, rolled back transaction:', err.message);
@@ -78,17 +78,19 @@ async function main() {
   assert(colMap.has('followup_note'), 'Column followup_note exists on sourcing_companies');
   assert(colMap.has('followup_completed_at'), 'Column followup_completed_at exists on sourcing_companies');
   assert(colMap.has('last_contact_date'), 'Column last_contact_date exists on sourcing_companies');
+  const lastContactCol = colMap.get('last_contact_date');
+  assert(lastContactCol.data_type === 'timestamp with time zone', 'last_contact_date is TIMESTAMPTZ (timestamp with time zone)');
 
-  // Step 3: Verify constraint chk_sourcing_companies_interest_status
+  // Step 3: Verify constraint chk_sourcing_companies_interest_status exists
   console.log('\n--- Verification 2: Check Constraint chk_sourcing_companies_interest_status ---');
   const constraints = await client.query(`
-    SELECT constraint_name 
-    FROM information_schema.constraint_column_usage
-    WHERE table_schema = 'public' 
-      AND table_name = 'sourcing_companies'
-      AND constraint_name = 'chk_sourcing_companies_interest_status';
+    SELECT conname, pg_get_constraintdef(oid) as def
+    FROM pg_constraint
+    WHERE conrelid = 'public.sourcing_companies'::regclass
+      AND conname = 'chk_sourcing_companies_interest_status';
   `);
   assert(constraints.rows.length > 0, 'Constraint chk_sourcing_companies_interest_status is active');
+  console.log(`  Definition: ${constraints.rows[0].def}`);
 
   // Step 4: Verify table sourcing_company_activities
   console.log('\n--- Verification 3: Table sourcing_company_activities ---');
@@ -127,7 +129,10 @@ async function main() {
     console.log(`  - ${fk.column_name} -> ${fk.foreign_table_name}.${fk.foreign_column_name} (ON DELETE ${fk.delete_rule})`);
   }
   const companyFk = fks.rows.find((f: any) => f.column_name === 'company_id');
-  assert(companyFk && companyFk.delete_rule === 'CASCADE', 'company_id references sourcing_companies(id) ON DELETE CASCADE');
+  assert(
+    companyFk && (companyFk.delete_rule === 'RESTRICT' || companyFk.delete_rule === 'NO ACTION'),
+    `company_id references sourcing_companies(id) ON DELETE RESTRICT (actual rule: ${companyFk?.delete_rule})`
+  );
 
   const campFk = fks.rows.find((f: any) => f.column_name === 'campaign_id');
   assert(campFk && campFk.delete_rule === 'SET NULL', 'campaign_id references marketing_campaigns(id) ON DELETE SET NULL');
@@ -166,13 +171,28 @@ async function main() {
   const pol = await client.query(`
     SELECT policyname, permissive, roles, cmd, qual
     FROM pg_policies
-    WHERE schemaname = 'public' AND tablename = 'sourcing_company_activities';
+    WHERE schemaname = 'public' AND tablename = 'sourcing_company_activities'
+    ORDER BY policyname;
   `);
-  console.log(`Verified RLS policy: "${pol.rows[0]?.policyname}" for command ${pol.rows[0]?.cmd}`);
-  assert(pol.rows[0]?.policyname === 'sourcing_company_activities_admin_all', 'Admin all policy is active');
+  console.log(`Verified RLS policies:`, pol.rows.map((p: any) => `"${p.policyname}" (${p.cmd})`).join(', '));
+  const selectPol = pol.rows.find((p: any) => p.policyname === 'sourcing_company_activities_admin_select');
+  const insertPol = pol.rows.find((p: any) => p.policyname === 'sourcing_company_activities_admin_insert');
+  assert(!!selectPol, 'sourcing_company_activities_admin_select policy is active');
+  assert(!!insertPol, 'sourcing_company_activities_admin_insert policy is active');
+
+  // Step 8: Verify Append-Only Trigger
+  console.log('\n--- Verification 7: Append-Only Trigger Guard ---');
+  const trg = await client.query(`
+    SELECT trigger_name, event_manipulation, action_statement
+    FROM information_schema.triggers
+    WHERE event_object_schema = 'public'
+      AND event_object_table = 'sourcing_company_activities'
+      AND trigger_name = 'trg_prevent_sourcing_company_activities_modification';
+  `);
+  assert(trg.rows.length > 0, 'Append-only trigger trg_prevent_sourcing_company_activities_modification is active');
 
   console.log('\n================================================================================');
-  console.log('🎉 ALL MIGRATION 0186 QA VERIFICATIONS PASSED (100%)');
+  console.log('🎉 ALL CORRECTED MIGRATION 0186 QA VERIFICATIONS PASSED (100%)');
   console.log('================================================================================\n');
 
   await client.end();

@@ -10,14 +10,21 @@
 -- ------------------------------------------------------------------------------
 DO $$
 BEGIN
-  -- Company interest status: UNKNOWN (default), INTERESTED, NOT_INTERESTED
+  -- Ensure interest_status column exists
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'sourcing_companies' AND column_name = 'interest_status'
   ) THEN
     ALTER TABLE public.sourcing_companies
       ADD COLUMN interest_status VARCHAR(32) NOT NULL DEFAULT 'UNKNOWN';
-    
+  END IF;
+
+  -- Ensure CHECK constraint exists even if column already existed
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'chk_sourcing_companies_interest_status'
+      AND conrelid = 'public.sourcing_companies'::regclass
+  ) THEN
     ALTER TABLE public.sourcing_companies
       ADD CONSTRAINT chk_sourcing_companies_interest_status
       CHECK (interest_status IN ('UNKNOWN', 'INTERESTED', 'NOT_INTERESTED'));
@@ -63,11 +70,12 @@ END $$;
 -- ------------------------------------------------------------------------------
 -- 2. TABLE: sourcing_company_activities
 -- Compact chronological activity timeline: email dispatches, delivery results,
--- interest changes, staff notes, and follow-up completions
+-- interest changes, staff notes, and follow-up completions.
+-- Retains activity history by enforcing ON DELETE RESTRICT on company_id.
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.sourcing_company_activities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id UUID NOT NULL REFERENCES public.sourcing_companies(id) ON DELETE CASCADE,
+  company_id UUID NOT NULL REFERENCES public.sourcing_companies(id) ON DELETE RESTRICT,
   campaign_id UUID REFERENCES public.marketing_campaigns(id) ON DELETE SET NULL,
   recipient_id UUID REFERENCES public.marketing_campaign_recipients(id) ON DELETE SET NULL,
   
@@ -96,6 +104,62 @@ CREATE TABLE IF NOT EXISTS public.sourcing_company_activities (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Ensure foreign key constraint on company_id is ON DELETE RESTRICT even if table existed
+DO $$
+DECLARE
+  v_conname TEXT;
+  v_deltype CHAR;
+BEGIN
+  SELECT conname, confdeltype INTO v_conname, v_deltype
+  FROM pg_constraint
+  WHERE conrelid = 'public.sourcing_company_activities'::regclass
+    AND contype = 'f'
+    AND conkey = ARRAY[(
+      SELECT attnum FROM pg_attribute
+      WHERE attrelid = 'public.sourcing_company_activities'::regclass
+        AND attname = 'company_id'
+    )];
+
+  IF v_conname IS NOT NULL AND v_deltype <> 'r' THEN
+    EXECUTE format('ALTER TABLE public.sourcing_company_activities DROP CONSTRAINT %I', v_conname);
+    ALTER TABLE public.sourcing_company_activities
+      ADD CONSTRAINT sourcing_company_activities_company_id_fkey
+      FOREIGN KEY (company_id) REFERENCES public.sourcing_companies(id) ON DELETE RESTRICT;
+  ELSIF v_conname IS NULL THEN
+    ALTER TABLE public.sourcing_company_activities
+      ADD CONSTRAINT sourcing_company_activities_company_id_fkey
+      FOREIGN KEY (company_id) REFERENCES public.sourcing_companies(id) ON DELETE RESTRICT;
+  END IF;
+END $$;
+
+-- Ensure foreign key constraint on campaign_id is ON DELETE SET NULL even if table existed
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.sourcing_company_activities'::regclass
+      AND conname = 'sourcing_company_activities_campaign_id_fkey'
+  ) THEN
+    ALTER TABLE public.sourcing_company_activities
+      ADD CONSTRAINT sourcing_company_activities_campaign_id_fkey
+      FOREIGN KEY (campaign_id) REFERENCES public.marketing_campaigns(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+-- Ensure foreign key constraint on recipient_id is ON DELETE SET NULL even if table existed
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.sourcing_company_activities'::regclass
+      AND conname = 'sourcing_company_activities_recipient_id_fkey'
+  ) THEN
+    ALTER TABLE public.sourcing_company_activities
+      ADD CONSTRAINT sourcing_company_activities_recipient_id_fkey
+      FOREIGN KEY (recipient_id) REFERENCES public.marketing_campaign_recipients(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 -- ------------------------------------------------------------------------------
 -- 3. INDEXES
 -- ------------------------------------------------------------------------------
@@ -106,21 +170,53 @@ CREATE INDEX IF NOT EXISTS idx_sourcing_company_activities_camp ON public.sourci
 CREATE INDEX IF NOT EXISTS idx_sourcing_company_activities_created ON public.sourcing_company_activities(created_at DESC);
 
 -- ------------------------------------------------------------------------------
--- 4. ROW LEVEL SECURITY (RLS) & PRIVILEGES
+-- 4. ROW LEVEL SECURITY (RLS) & APPEND-ONLY PRIVILEGES
+-- Only allow SELECT and INSERT to authenticated staff. Prohibit UPDATE and DELETE.
 -- ------------------------------------------------------------------------------
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.sourcing_company_activities TO authenticated, service_role;
+GRANT SELECT, INSERT ON public.sourcing_company_activities TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.sourcing_company_activities TO service_role;
+REVOKE UPDATE, DELETE ON public.sourcing_company_activities FROM authenticated;
 REVOKE ALL ON public.sourcing_company_activities FROM anon;
 
 ALTER TABLE public.sourcing_company_activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sourcing_company_activities FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "sourcing_company_activities_admin_all" ON public.sourcing_company_activities;
-CREATE POLICY "sourcing_company_activities_admin_all"
+DROP POLICY IF EXISTS "sourcing_company_activities_admin_select" ON public.sourcing_company_activities;
+DROP POLICY IF EXISTS "sourcing_company_activities_admin_insert" ON public.sourcing_company_activities;
+
+CREATE POLICY "sourcing_company_activities_admin_select"
   ON public.sourcing_company_activities
-  FOR ALL
+  FOR SELECT
   TO authenticated
-  USING (public.auth_is_admin())
+  USING (public.auth_is_admin());
+
+CREATE POLICY "sourcing_company_activities_admin_insert"
+  ON public.sourcing_company_activities
+  FOR INSERT
+  TO authenticated
   WITH CHECK (public.auth_is_admin());
+
+-- Append-only trigger guard: Prevents unauthorized UPDATE or DELETE on activities
+CREATE OR REPLACE FUNCTION public.prevent_sourcing_company_activities_modification()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (current_user = 'authenticated' OR session_user = 'authenticated') THEN
+    RAISE EXCEPTION 'sourcing_company_activities is append-only. UPDATE and DELETE operations are prohibited.';
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  ELSE
+    RETURN NEW;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_prevent_sourcing_company_activities_modification ON public.sourcing_company_activities;
+CREATE TRIGGER trg_prevent_sourcing_company_activities_modification
+  BEFORE UPDATE OR DELETE ON public.sourcing_company_activities
+  FOR EACH ROW
+  EXECUTE FUNCTION public.prevent_sourcing_company_activities_modification();
 
 -- Reload schema cache
 NOTIFY pgrst, 'reload schema';

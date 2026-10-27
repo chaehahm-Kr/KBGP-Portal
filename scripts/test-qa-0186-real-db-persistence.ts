@@ -33,11 +33,10 @@ function assert(condition: boolean, message: string) {
 async function main() {
   await client.connect();
   console.log('================================================================================');
-  console.log('ADM-BSRC-007-R1-ADD1: Real QA DB Persistence & Audit Immutability Test');
+  console.log('ADM-BSRC-007-R1-ADD1: Real QA DB Persistence & Append-Only / RESTRICT Verification');
   console.log('Target QA DB: elkgizqgksshukxgcndy');
   console.log('================================================================================\n');
 
-  // Synthetic test company ID (isolated UUID)
   const testCompanyId = 'd0000000-0000-4000-8000-000000000099';
 
   try {
@@ -63,7 +62,8 @@ async function main() {
         interest_status = 'UNKNOWN',
         next_followup_date = NULL,
         followup_note = NULL,
-        followup_completed_at = NULL;
+        followup_completed_at = NULL,
+        last_contact_date = NULL;
     `, [testCompanyId]);
     console.log(`Synthetic company initialized with id: ${testCompanyId}`);
 
@@ -94,32 +94,39 @@ async function main() {
       `, [testCompanyId]);
     } catch (e: any) {
       rejected = true;
-      console.log(`  ✓ DB correctly rejected invalid interest_status: ${e.message.slice(0, 60)}...`);
+      console.log(`  ✓ DB correctly rejected invalid interest_status: ${e.message.slice(0, 70)}...`);
     }
     assert(rejected, 'DB check constraint chk_sourcing_companies_interest_status prevented invalid write');
 
-    // Step 4: Test Follow-up Scheduling Persistence
-    console.log('\n--- Step 4: Persist Follow-up Schedule & Note ---');
+    // Step 4: Test Follow-up Scheduling & last_contact_date TIMESTAMPTZ Persistence
+    console.log('\n--- Step 4: Persist Follow-up Schedule, Note & last_contact_date ---');
     const followupDate = '2026-10-31';
     const followupNote = 'Call director to review distributor tier pricing';
+    const contactTimestamp = '2026-10-27T14:45:00.000Z';
+
     await client.query(`
       UPDATE public.sourcing_companies
       SET next_followup_date = $2,
           followup_note = $3,
+          last_contact_date = $4,
           updated_at = now()
       WHERE id = $1;
-    `, [testCompanyId, followupDate, followupNote]);
+    `, [testCompanyId, followupDate, followupNote, contactTimestamp]);
 
     // Independent Query Read
     const check2 = await client.query(`
-      SELECT next_followup_date::text, followup_note 
+      SELECT next_followup_date::text, followup_note, last_contact_date
       FROM public.sourcing_companies 
       WHERE id = $1;
     `, [testCompanyId]);
     assert(check2.rows[0].next_followup_date === followupDate, `Real DB persisted next_followup_date = ${followupDate}`);
     assert(check2.rows[0].followup_note === followupNote, `Real DB persisted followup_note = "${followupNote}"`);
+    assert(
+      new Date(check2.rows[0].last_contact_date).toISOString() === contactTimestamp,
+      `Real DB persisted last_contact_date as TIMESTAMPTZ = ${contactTimestamp}`
+    );
 
-    // Step 5: Test Append-Only Activity Timeline & Immutability
+    // Step 5: Test Append-Only Activity Timeline Logging
     console.log('\n--- Step 5: Activity Timeline Logging & Audit Immutability ---');
     const act1 = await client.query(`
       INSERT INTO public.sourcing_company_activities (
@@ -169,7 +176,6 @@ async function main() {
       ) RETURNING id, created_at;
     `, [testCompanyId]);
 
-    // Verify chronological list
     const timeline = await client.query(`
       SELECT id, activity_type, summary, staff_email, created_at
       FROM public.sourcing_company_activities
@@ -181,24 +187,67 @@ async function main() {
     assert(timeline.rows[0].activity_type === 'INTEREST_CHANGED', 'First activity is INTEREST_CHANGED');
     assert(timeline.rows[1].activity_type === 'FOLLOWUP_SCHEDULED', 'Second activity is FOLLOWUP_SCHEDULED');
     assert(timeline.rows[2].activity_type === 'REPLY_RECORDED', 'Third activity is REPLY_RECORDED');
-    console.log('Chronological timeline verified: zero overwriting, strictly append-only.');
+    console.log('Chronological timeline verified: strictly append-only.');
 
-    // Step 6: Test Foreign Key Cascade Behavior on Company Deletion
-    console.log('\n--- Step 6: Test Company Deletion & Activity Clean-up ---');
-    await client.query(`DELETE FROM public.sourcing_companies WHERE id = $1;`, [testCompanyId]);
+    // Step 6: Test Append-Only Trigger: Prohibit UPDATE and DELETE by authenticated users
+    console.log('\n--- Step 6: Verify Append-Only Modification Prevention Trigger ---');
+    let updateBlocked = false;
+    try {
+      await client.query('SET ROLE authenticated;');
+      await client.query(`
+        UPDATE public.sourcing_company_activities
+        SET summary = 'MODIFIED SUMMARY'
+        WHERE id = $1;
+      `, [act1.rows[0].id]);
+    } catch (e: any) {
+      updateBlocked = true;
+      console.log(`  ✓ Update blocked for authenticated role: ${e.message}`);
+    } finally {
+      await client.query('RESET ROLE;').catch(() => {});
+    }
+    assert(updateBlocked, 'Trigger / Privileges strictly blocked UPDATE on sourcing_company_activities');
 
-    const orphanedCheck = await client.query(`
+    let deleteBlocked = false;
+    try {
+      await client.query('SET ROLE authenticated;');
+      await client.query(`
+        DELETE FROM public.sourcing_company_activities
+        WHERE id = $1;
+      `, [act1.rows[0].id]);
+    } catch (e: any) {
+      deleteBlocked = true;
+      console.log(`  ✓ Delete blocked for authenticated role: ${e.message}`);
+    } finally {
+      await client.query('RESET ROLE;').catch(() => {});
+    }
+    assert(deleteBlocked, 'Trigger / Privileges strictly blocked DELETE on sourcing_company_activities');
+
+    // Step 7: Test ON DELETE RESTRICT foreign key protection on sourcing_companies
+    console.log('\n--- Step 7: Test ON DELETE RESTRICT Preserves History (Blocks Company Deletion) ---');
+    let deletionBlockedByFk = false;
+    try {
+      await client.query(`DELETE FROM public.sourcing_companies WHERE id = $1;`, [testCompanyId]);
+    } catch (e: any) {
+      deletionBlockedByFk = true;
+      console.log(`  ✓ Deletion blocked by FK RESTRICT: ${e.message.slice(0, 90)}...`);
+      assert(e.code === '23503', 'PostgreSQL error code is 23503 (foreign_key_violation)');
+    }
+    assert(deletionBlockedByFk, 'ON DELETE RESTRICT prevented accidental deletion of company with activity history');
+
+    // Verify timeline records remain 100% intact
+    const intactCheck = await client.query(`
       SELECT count(*) AS cnt 
       FROM public.sourcing_company_activities 
       WHERE company_id = $1;
     `, [testCompanyId]);
-    assert(Number(orphanedCheck.rows[0].cnt) === 0, 'Company hard deletion cleanly cascaded without creating orphan records');
+    assert(Number(intactCheck.rows[0].cnt) === 3, 'All 3 activity history records preserved intact');
 
     console.log('\n================================================================================');
-    console.log('🎉 ALL REAL QA DATABASE PERSISTENCE & INTEGRITY TESTS PASSED (100%)');
+    console.log('🎉 ALL REAL QA DATABASE PERSISTENCE, APPEND-ONLY & RESTRICT TESTS PASSED (100%)');
     console.log('================================================================================\n');
   } finally {
-    // Ensure cleanup of test ID
+    // Clean up test data safely in reverse dependency order
+    await client.query(`DELETE FROM public.sourcing_company_activities WHERE company_id = $1;`, [testCompanyId]).catch(() => {});
     await client.query(`DELETE FROM public.sourcing_companies WHERE id = $1;`, [testCompanyId]).catch(() => {});
     await client.end();
   }
