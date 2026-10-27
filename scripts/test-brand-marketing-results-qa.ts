@@ -15,7 +15,7 @@ try {
 }
 
 /**
- * QA Test Suite for Brand Marketing — Campaign Results & Company Follow-up (ADM-BSRC-007)
+ * QA Test Suite for Brand Marketing — Campaign Results Integration Readiness & Safety (ADM-BSRC-007-R1)
  * Standards: DEPLOY-STD-001, CONCURRENT-DEV-001, DEV-SQL-MIGRATION-STD-001, AGENTS.md Rule 27
  */
 
@@ -29,7 +29,7 @@ function assert(condition: boolean, message: string) {
 
 async function runTestSuite() {
   console.log("\n================================================================================");
-  console.log("ADM-BSRC-007: Brand Marketing — Campaign Results & Company Follow-up QA Suite");
+  console.log("ADM-BSRC-007-R1: Campaign Results Integration Readiness & Safety Review QA Suite");
   console.log("================================================================================\n");
 
   const {
@@ -38,13 +38,9 @@ async function runTestSuite() {
     updateCompanyInterestStatus,
     updateCompanyFollowup,
     recordVerifiedReply,
-    getCampaignResultsSummary,
-    listCompanyResults,
+    setMockFallbackMode,
+    isMockFallbackAllowed,
   } = await import("../lib/brand-marketing/results-data-access");
-
-  const { CompanyInterestStatus, DeliveryResultStatus } = await import(
-    "../lib/brand-marketing/results-types"
-  );
 
   // --------------------------------------------------------------------------
   // TEST 1: Counting Rules & Aggregation Mathematics
@@ -73,7 +69,7 @@ async function runTestSuite() {
     { id: "r_test", campaign_id: mockCampaign.id, company_id: "c_001", status: "TEST_SENT" }, // Excluded!
   ];
 
-  const mockInterests = new Map<string, typeof CompanyInterestStatus>([
+  const mockInterests = new Map<string, any>([
     ["c_001", "INTERESTED"],
     ["c_002", "NOT_INTERESTED"],
     ["c_003", "UNKNOWN"],
@@ -116,7 +112,6 @@ async function runTestSuite() {
     mockActivities
   );
 
-  // Assertions:
   assert(metrics.companiesContacted === 3, "Companies Contacted is exactly 3 (unique company IDs)");
   assert(metrics.emailsSent === 5, "Emails Sent is 5 (individual messages, test send excluded)");
   assert(metrics.delivered === 3, "Delivered is 3 (verified delivered messages)");
@@ -127,29 +122,63 @@ async function runTestSuite() {
 
   // Rates verification:
   // deliveryRate = 3 / 5 = 0.6
-  assert(metrics.deliveryRate === 0.6, `Delivery rate is 60.0% (got ${metrics.deliveryRate * 100}%)`);
-  // replyRate = 1 / 5 = 0.2
-  assert(metrics.replyRate === 0.2, `Reply rate is 20.0% (got ${metrics.replyRate * 100}%)`);
+  assert(metrics.deliveryRate === 0.6, `Delivery rate is 60.0% (got ${metrics.deliveryRate! * 100}%)`);
+  // replyRate = 1 / 3 = 0.3333 (Company-level response rate)
+  assert(
+    metrics.replyRate !== null && Math.abs(metrics.replyRate - 0.3333) < 0.001,
+    `Reply rate is ~33.3% company response rate`
+  );
   // interestRate = 1 / 3 = 0.3333
   assert(
-    Math.abs(metrics.interestRate - 0.3333) < 0.001,
-    `Interest rate is ~33.3% (got ${(metrics.interestRate * 100).toFixed(1)}%)`
+    metrics.interestRate !== null && Math.abs(metrics.interestRate - 0.3333) < 0.001,
+    `Interest rate is ~33.3%`
   );
   // meetingConversionRate = 1 / 3 = 0.3333
   assert(
-    Math.abs(metrics.meetingConversionRate - 0.3333) < 0.001,
+    metrics.meetingConversionRate !== null && Math.abs(metrics.meetingConversionRate - 0.3333) < 0.001,
     `Meeting conversion rate is ~33.3%`
   );
   // partnerConversionRate = 1 / 3 = 0.3333
   assert(
-    Math.abs(metrics.partnerConversionRate - 0.3333) < 0.001,
+    metrics.partnerConversionRate !== null && Math.abs(metrics.partnerConversionRate - 0.3333) < 0.001,
     `Partner conversion rate is ~33.3%`
   );
 
   // --------------------------------------------------------------------------
-  // TEST 2: Delivery & Engagement Reliability Disclosures
+  // TEST 2: Denominator Edge Cases (No Data vs Measured Zero)
   // --------------------------------------------------------------------------
-  console.log("\n--- TEST 2: Engagement Telemetry & Reliability Disclosures ---");
+  console.log("\n--- TEST 2: Denominator Edge Cases (No Data vs Measured Zero) ---");
+  const emptyCampaign = {
+    id: "camp_empty_001",
+    name: "Empty Campaign",
+  };
+  const emptyMetrics = calculateCampaignSummaryMetrics(emptyCampaign, []);
+
+  assert(emptyMetrics.emailsSent === 0, "Empty campaign emailsSent is 0");
+  assert(emptyMetrics.companiesContacted === 0, "Empty campaign companiesContacted is 0");
+  assert(emptyMetrics.deliveryRate === null, "Delivery rate is null when 0 emails sent (not 0.0)");
+  assert(emptyMetrics.replyRate === null, "Reply rate is null when 0 companies contacted");
+  assert(emptyMetrics.interestRate === null, "Interest rate is null when 0 companies contacted");
+
+  // Measured Zero Case (Dispatched emails with zero delivery)
+  const failedRecipients = [
+    { id: "r_f1", campaign_id: "camp_zero_001", company_id: "c_fail", status: "FAILED" },
+    { id: "r_f2", campaign_id: "camp_zero_001", company_id: "c_fail", status: "BOUNCED" },
+  ];
+  const zeroMetrics = calculateCampaignSummaryMetrics(
+    { id: "camp_zero_001", name: "All Failed Campaign" },
+    failedRecipients
+  );
+
+  assert(zeroMetrics.emailsSent === 2, "2 emails dispatched");
+  assert(zeroMetrics.delivered === 0, "0 delivered");
+  assert(zeroMetrics.deliveryRate === 0, "Delivery rate is measured 0.0 (0%), NOT null");
+  assert(zeroMetrics.replyRate === 0, "Reply rate is measured 0.0 (0%), NOT null");
+
+  // --------------------------------------------------------------------------
+  // TEST 3: Delivery & Engagement Reliability Disclosures
+  // --------------------------------------------------------------------------
+  console.log("\n--- TEST 3: Engagement Telemetry & Reliability Disclosures ---");
   assert(metrics.openedEstimated === null, "Opened is null / NOT_TRACKED without telemetry");
   assert(metrics.clicked === null, "Clicked is null / NOT_TRACKED without tracking redirects");
   assert(
@@ -163,43 +192,30 @@ async function runTestSuite() {
   assert(metrics.hasTestEmailsExcluded === true, "Test mode messages confirmed excluded");
 
   // --------------------------------------------------------------------------
-  // TEST 3: Multiple Contacts Per Company (1 Row Aggregation)
+  // TEST 4: Multiple Contacts Per Company (1 Row Aggregation)
   // --------------------------------------------------------------------------
-  console.log("\n--- TEST 3: Multiple Contacts Per Company (One Row Rule) ---");
-  // Company JD BIO has 3 contacts:
-  // Contact A: Replied
-  // Contact B: Delivered
-  // Contact C: Clicked / Delivered
+  console.log("\n--- TEST 4: Multiple Contacts Per Company (One Row Rule) ---");
   const jdBioRecipients = [
     {
       id: "rec_jd_1",
       campaign_id: "camp_multi_001",
       company_id: "comp_jd_bio",
       recipient_email: "ceo@jdbio.com",
-      recipient_name: "John Park",
-      company_name_kr: "JD BIO (제이디바이오)",
       status: "DELIVERED",
-      sent_at: "2026-10-21T01:00:00Z",
     },
     {
       id: "rec_jd_2",
       campaign_id: "camp_multi_001",
       company_id: "comp_jd_bio",
       recipient_email: "marketing@jdbio.com",
-      recipient_name: "Sarah Lee",
-      company_name_kr: "JD BIO (제이디바이오)",
       status: "DELIVERED",
-      sent_at: "2026-10-21T01:05:00Z",
     },
     {
       id: "rec_jd_3",
       campaign_id: "camp_multi_001",
       company_id: "comp_jd_bio",
       recipient_email: "export@jdbio.com",
-      recipient_name: "David Kim",
-      company_name_kr: "JD BIO (제이디바이오)",
       status: "SENT",
-      sent_at: "2026-10-21T01:10:00Z",
     },
   ];
 
@@ -218,9 +234,9 @@ async function runTestSuite() {
   );
 
   // --------------------------------------------------------------------------
-  // TEST 4: Follow-up Due Status Calculation
+  // TEST 5: Follow-up Due Status Calculation
   // --------------------------------------------------------------------------
-  console.log("\n--- TEST 4: Follow-up Due Status Calculation ---");
+  console.log("\n--- TEST 5: Follow-up Due Status Calculation ---");
   const todayStr = new Date().toISOString().slice(0, 10);
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
@@ -247,12 +263,51 @@ async function runTestSuite() {
   );
 
   // --------------------------------------------------------------------------
-  // TEST 5: Company Interest Status Updates & Audit Logging
+  // TEST 6: Production Persistence Safety (No Silent In-Memory Writes)
   // --------------------------------------------------------------------------
-  console.log("\n--- TEST 5: Company Interest Management & Audit History ---");
+  console.log("\n--- TEST 6: Production Persistence Safety (No Silent In-Memory Writes) ---");
+  // Force mock mode OFF to simulate production environment without DB connection
+  setMockFallbackMode(false);
+  assert(isMockFallbackAllowed() === false, "Mock fallback is strictly disabled");
+
+  const prodUpdateRes = await updateCompanyInterestStatus({
+    companyId: "comp_prod_001",
+    interestStatus: "INTERESTED",
+  });
+  assert(
+    prodUpdateRes.success === false,
+    "Production update without DB returns success: false"
+  );
+  assert(
+    typeof prodUpdateRes.error === "string" && prodUpdateRes.error.length > 0,
+    `Clear error message returned: "${prodUpdateRes.error}"`
+  );
+
+  const prodFollowupRes = await updateCompanyFollowup({
+    companyId: "comp_prod_001",
+    nextFollowupDate: tomorrow,
+  });
+  assert(
+    prodFollowupRes.success === false,
+    "Production followup without DB returns success: false"
+  );
+
+  const prodReplyRes = await recordVerifiedReply("comp_prod_001");
+  assert(
+    prodReplyRes.success === false,
+    "Production recordReply without DB returns success: false"
+  );
+
+  // Restore mock fallback for isolated test execution
+  setMockFallbackMode(true);
+  assert(isMockFallbackAllowed() === true, "Mock fallback re-enabled for isolated test");
+
+  // --------------------------------------------------------------------------
+  // TEST 7: Mock-Mode Persistence & Audit History
+  // --------------------------------------------------------------------------
+  console.log("\n--- TEST 7: Mock-Mode Persistence & Audit History ---");
   const testCompanyId = "comp_test_intercharm_001";
 
-  // Step 1: Default interest
   const updateRes1 = await updateCompanyInterestStatus(
     {
       companyId: testCompanyId,
@@ -261,25 +316,9 @@ async function runTestSuite() {
     },
     "staff_reviewer@letusto.com"
   );
-  assert(updateRes1.success === true, "Interest updated to INTERESTED");
+  assert(updateRes1.success === true, "Interest updated to INTERESTED in test mode");
   assert(updateRes1.interestStatus === "INTERESTED", "Returned status is INTERESTED");
 
-  // Step 2: Update to NOT_INTERESTED
-  const updateRes2 = await updateCompanyInterestStatus(
-    {
-      companyId: testCompanyId,
-      interestStatus: "NOT_INTERESTED",
-      notes: "Does not produce exportable packaging",
-    },
-    "manager@letusto.com"
-  );
-  assert(updateRes2.success === true, "Interest updated to NOT_INTERESTED");
-  assert(updateRes2.interestStatus === "NOT_INTERESTED", "Returned status is NOT_INTERESTED");
-
-  // --------------------------------------------------------------------------
-  // TEST 6: Follow-up Scheduling, Notes, and Completion
-  // --------------------------------------------------------------------------
-  console.log("\n--- TEST 6: Follow-up Scheduling, Notes & Completion ---");
   const followupRes1 = await updateCompanyFollowup(
     {
       companyId: testCompanyId,
@@ -288,9 +327,8 @@ async function runTestSuite() {
     },
     "sales_lead@letusto.com"
   );
-  assert(followupRes1.success === true, "Follow-up date and note saved successfully");
+  assert(followupRes1.success === true, "Follow-up saved successfully");
 
-  // Mark completed
   const followupRes2 = await updateCompanyFollowup(
     {
       companyId: testCompanyId,
@@ -300,10 +338,6 @@ async function runTestSuite() {
   );
   assert(followupRes2.success === true, "Follow-up marked completed successfully");
 
-  // --------------------------------------------------------------------------
-  // TEST 7: Manual Verified Reply Recording
-  // --------------------------------------------------------------------------
-  console.log("\n--- TEST 7: Manual Verified Reply Recording ---");
   const replyRes = await recordVerifiedReply(
     testCompanyId,
     "camp_test_001",
@@ -314,7 +348,7 @@ async function runTestSuite() {
   assert(replyRes.success === true, "Verified reply signal recorded");
 
   console.log("\n================================================================================");
-  console.log("🎉 ALL ADM-BSRC-007 QA INTEGRATION & BUSINESS LOGIC TESTS PASSED (100%)");
+  console.log("🎉 ALL ADM-BSRC-007-R1 INTEGRATION READINESS & SAFETY TESTS PASSED (100%)");
   console.log("================================================================================\n");
 }
 

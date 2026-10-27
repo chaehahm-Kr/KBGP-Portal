@@ -25,6 +25,11 @@ interface CampaignResultsTabProps {
   onNavigateToBrandList?: (companyId: string) => void;
 }
 
+function formatRate(val: number | null | undefined): string {
+  if (val === null || val === undefined) return "N/A";
+  return `${(val * 100).toFixed(1)}%`;
+}
+
 export function CampaignResultsTab({
   campaigns,
   onSelectCompany,
@@ -192,9 +197,9 @@ export function CampaignResultsTab({
                 {metrics.delivered}
               </p>
               <span className="text-[10px] text-zinc-400">
-                {metrics.deliveryRate > 0
-                  ? `${(metrics.deliveryRate * 100).toFixed(1)}% rate`
-                  : "Verified"}
+                {metrics.deliveryRate !== null
+                  ? `${formatRate(metrics.deliveryRate)} rate`
+                  : "No emails"}
               </span>
             </div>
 
@@ -236,8 +241,8 @@ export function CampaignResultsTab({
                 {metrics.replied}
               </p>
               <span className="text-[10px] text-zinc-400">
-                {metrics.replyRate > 0
-                  ? `${(metrics.replyRate * 100).toFixed(1)}% rate`
+                {metrics.replyRate !== null
+                  ? `${formatRate(metrics.replyRate)} rate`
                   : "Verified replies"}
               </span>
             </div>
@@ -251,7 +256,7 @@ export function CampaignResultsTab({
                 {metrics.interestedCompanies}
               </p>
               <span className="text-[10px] text-zinc-400">
-                {(metrics.interestRate * 100).toFixed(1)}% rate
+                {formatRate(metrics.interestRate)} rate
               </span>
             </div>
 
@@ -264,7 +269,7 @@ export function CampaignResultsTab({
                 {metrics.meetings}
               </p>
               <span className="text-[10px] text-zinc-400">
-                {(metrics.meetingConversionRate * 100).toFixed(1)}% conv.
+                {formatRate(metrics.meetingConversionRate)} conv.
               </span>
             </div>
 
@@ -277,7 +282,7 @@ export function CampaignResultsTab({
                 {metrics.partners}
               </p>
               <span className="text-[10px] text-zinc-400">
-                {(metrics.partnerConversionRate * 100).toFixed(1)}% conv.
+                {formatRate(metrics.partnerConversionRate)} conv.
               </span>
             </div>
           </div>
@@ -292,7 +297,7 @@ export function CampaignResultsTab({
               <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                 <span className="text-[10px] text-zinc-500 font-semibold block">Delivery Rate</span>
                 <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                  {(metrics.deliveryRate * 100).toFixed(1)}%
+                  {formatRate(metrics.deliveryRate)}
                 </span>
                 <p className="text-[10px] text-zinc-400 mt-0.5">Delivered / Emails Sent</p>
               </div>
@@ -300,33 +305,33 @@ export function CampaignResultsTab({
               <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                 <span className="text-[10px] text-zinc-500 font-semibold block">Reply Rate</span>
                 <span className="text-sm font-bold text-purple-600 dark:text-purple-400">
-                  {(metrics.replyRate * 100).toFixed(1)}%
+                  {formatRate(metrics.replyRate)}
                 </span>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Verified Replies / Emails Sent</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Verified Replies / Companies Contacted</p>
               </div>
 
               <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                 <span className="text-[10px] text-zinc-500 font-semibold block">Interest Rate</span>
                 <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                  {(metrics.interestRate * 100).toFixed(1)}%
+                  {formatRate(metrics.interestRate)}
                 </span>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Interested / Companies</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Interested / Companies Contacted</p>
               </div>
 
               <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                 <span className="text-[10px] text-zinc-500 font-semibold block">Meeting Conv.</span>
                 <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
-                  {(metrics.meetingConversionRate * 100).toFixed(1)}%
+                  {formatRate(metrics.meetingConversionRate)}
                 </span>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Meetings / Companies</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Meetings / Companies Contacted</p>
               </div>
 
               <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                 <span className="text-[10px] text-zinc-500 font-semibold block">Partner Conv.</span>
                 <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
-                  {(metrics.partnerConversionRate * 100).toFixed(1)}%
+                  {formatRate(metrics.partnerConversionRate)}
                 </span>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Partners / Companies</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Partners / Companies Contacted</p>
               </div>
             </div>
 

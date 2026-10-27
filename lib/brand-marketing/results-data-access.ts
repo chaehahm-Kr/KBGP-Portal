@@ -27,6 +27,30 @@ const memoryCompanyFollowups = new Map<
 >();
 const memoryActivities = new Map<string, CompanyActivityItem[]>();
 
+// Explicit mock mode control to prevent silent in-memory writes in production
+let mockFallbackModeOverride: boolean | null = null;
+
+export function setMockFallbackMode(mode: boolean | null) {
+  mockFallbackModeOverride = mode;
+}
+
+export function isMockFallbackAllowed(): boolean {
+  if (mockFallbackModeOverride !== null) {
+    return mockFallbackModeOverride;
+  }
+  // Strictly disallowed in production runtime
+  if (process.env.NODE_ENV === "production") {
+    return false;
+  }
+  // Allowed in explicit test runners or development
+  return (
+    process.env.NODE_ENV === "test" ||
+    process.env.NEXT_PUBLIC_APP_ENV === "test" ||
+    process.env.MOCK_BRAND_RESULTS === "true" ||
+    process.env.NODE_ENV === "development"
+  );
+}
+
 async function getClient(customClient?: SupabaseClient): Promise<SupabaseClient | null> {
   if (customClient) return customClient;
   try {
@@ -135,15 +159,15 @@ export function calculateCampaignSummaryMetrics(
     (a) => a.campaignId === campaign.id && a.activityType === "PARTNER_CONVERTED"
   ).length;
 
-  // Rates
-  const deliveryRate = emailsSent > 0 ? Number((delivered / emailsSent).toFixed(4)) : 0;
-  const replyRate = emailsSent > 0 ? Number((replied / emailsSent).toFixed(4)) : 0;
+  // Rates (Return null when denominator is 0 to distinguish "No Data" from "Measured Zero")
+  const deliveryRate = emailsSent > 0 ? Number((delivered / emailsSent).toFixed(4)) : null;
+  const replyRate = companiesContacted > 0 ? Number((replied / companiesContacted).toFixed(4)) : null;
   const interestRate =
-    companiesContacted > 0 ? Number((interestedCount / companiesContacted).toFixed(4)) : 0;
+    companiesContacted > 0 ? Number((interestedCount / companiesContacted).toFixed(4)) : null;
   const meetingConversionRate =
-    companiesContacted > 0 ? Number((meetings / companiesContacted).toFixed(4)) : 0;
+    companiesContacted > 0 ? Number((meetings / companiesContacted).toFixed(4)) : null;
   const partnerConversionRate =
-    companiesContacted > 0 ? Number((partners / companiesContacted).toFixed(4)) : 0;
+    companiesContacted > 0 ? Number((partners / companiesContacted).toFixed(4)) : null;
 
   return {
     campaignId: campaign.id,
@@ -857,27 +881,40 @@ export async function updateCompanyInterestStatus(
   try {
     const supabase = await getClient(customClient);
 
-    // Save in DB if table columns exist and client is available
+    if (!supabase && !isMockFallbackAllowed()) {
+      return {
+        success: false,
+        error: "Database client unavailable. Cannot persist interest status in production.",
+      };
+    }
+
+    // Save in DB if client is available
     if (supabase) {
-      try {
-        await supabase
-          .from("sourcing_companies")
-          .update({
-            interest_status: input.interestStatus,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", input.companyId);
-      } catch (e) {
-        console.warn("[results:interest] DB update skipped or column missing:", e);
+      const { error: dbError } = await supabase
+        .from("sourcing_companies")
+        .update({
+          interest_status: input.interestStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.companyId);
+
+      if (dbError) {
+        if (!isMockFallbackAllowed()) {
+          return {
+            success: false,
+            error: `Failed to persist interest status in DB: ${dbError.message}`,
+          };
+        }
+        console.warn("[results:interest] DB update skipped or column missing:", dbError.message);
       }
     }
 
-    // Always update memory store for consistency
+    // Update memory store for test/mock consistency
     memoryCompanyInterest.set(input.companyId, input.interestStatus);
 
     // Audit log
     const activity: CompanyActivityItem = {
-      id: "act-" + (crypto.randomUUID ? crypto.randomUUID() : Date.now()),
+      id: "act-" + (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()),
       companyId: input.companyId,
       campaignId: input.campaignId,
       activityType: "INTEREST_CHANGED",
@@ -928,6 +965,14 @@ export async function updateCompanyFollowup(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await getClient(customClient);
+
+    if (!supabase && !isMockFallbackAllowed()) {
+      return {
+        success: false,
+        error: "Database client unavailable. Cannot persist follow-up in production.",
+      };
+    }
+
     const now = new Date().toISOString();
 
     const updatePayload: Record<string, any> = {
@@ -945,13 +990,19 @@ export async function updateCompanyFollowup(
     }
 
     if (supabase) {
-      try {
-        await supabase
-          .from("sourcing_companies")
-          .update(updatePayload)
-          .eq("id", input.companyId);
-      } catch (e) {
-        console.warn("[results:followup] DB update skipped or column missing:", e);
+      const { error: dbError } = await supabase
+        .from("sourcing_companies")
+        .update(updatePayload)
+        .eq("id", input.companyId);
+
+      if (dbError) {
+        if (!isMockFallbackAllowed()) {
+          return {
+            success: false,
+            error: `Failed to persist follow-up in DB: ${dbError.message}`,
+          };
+        }
+        console.warn("[results:followup] DB update skipped or column missing:", dbError.message);
       }
     }
 
@@ -987,7 +1038,7 @@ export async function updateCompanyFollowup(
     }
 
     const activity: CompanyActivityItem = {
-      id: "act-" + (crypto.randomUUID ? crypto.randomUUID() : Date.now()),
+      id: "act-" + (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()),
       companyId: input.companyId,
       campaignId: input.campaignId,
       activityType,
@@ -1042,10 +1093,18 @@ export async function recordVerifiedReply(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await getClient(customClient);
+
+    if (!supabase && !isMockFallbackAllowed()) {
+      return {
+        success: false,
+        error: "Database client unavailable. Cannot record reply in production.",
+      };
+    }
+
     const now = new Date().toISOString();
 
     const activity: CompanyActivityItem = {
-      id: "act-" + (crypto.randomUUID ? crypto.randomUUID() : Date.now()),
+      id: "act-" + (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()),
       companyId,
       campaignId,
       recipientId,
@@ -1058,18 +1117,26 @@ export async function recordVerifiedReply(
 
     let savedToDb = false;
     if (supabase) {
-      try {
-        const { error } = await supabase.from("sourcing_company_activities").insert({
-          company_id: companyId,
-          campaign_id: campaignId,
-          recipient_id: recipientId,
-          activity_type: "REPLY_RECORDED",
-          summary: activity.summary,
-          details: activity.details,
-          staff_email: actorEmail,
-        });
-        if (!error) savedToDb = true;
-      } catch (e) {}
+      const { error: dbError } = await supabase.from("sourcing_company_activities").insert({
+        company_id: companyId,
+        campaign_id: campaignId,
+        recipient_id: recipientId,
+        activity_type: "REPLY_RECORDED",
+        summary: activity.summary,
+        details: activity.details,
+        staff_email: actorEmail,
+      });
+      if (dbError) {
+        if (!isMockFallbackAllowed()) {
+          return {
+            success: false,
+            error: `Failed to record reply in DB: ${dbError.message}`,
+          };
+        }
+        console.warn("[results:reply] DB insert failed, using test mock fallback:", dbError.message);
+      } else {
+        savedToDb = true;
+      }
     }
 
     if (!savedToDb) {

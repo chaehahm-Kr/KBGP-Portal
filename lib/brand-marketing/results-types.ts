@@ -8,6 +8,8 @@ export type CompanyInterestStatus = "UNKNOWN" | "INTERESTED" | "NOT_INTERESTED";
 
 export type DeliveryResultStatus =
   | "PENDING"
+  | "TEST_SENT"
+  | "QUEUED"
   | "SENT"
   | "DELIVERED"
   | "OPENED_ESTIMATED"
@@ -105,12 +107,12 @@ export interface CampaignSummaryMetrics {
   meetings: number; // unique companies with meetings
   partners: number; // unique companies converted to partners
 
-  // Rates (0 to 1)
-  deliveryRate: number; // delivered / emailsSent
-  replyRate: number; // replied / emailsSent
-  interestRate: number; // interestedCompanies / companiesContacted
-  meetingConversionRate: number; // meetings / companiesContacted
-  partnerConversionRate: number; // partners / companiesContacted
+  // Rates (0 to 100%, or null if denominator is 0 to distinguish "No Data" from "Measured Zero")
+  deliveryRate: number | null; // delivered / emailsSent
+  replyRate: number | null; // replied / companiesContacted (Company-level response rate)
+  interestRate: number | null; // interestedCompanies / companiesContacted
+  meetingConversionRate: number | null; // meetings / companiesContacted
+  partnerConversionRate: number | null; // partners / companiesContacted
 
   // Integration & Verification Disclosure
   openTrackingReliability: "ESTIMATED_ONLY" | "NOT_TRACKED";
