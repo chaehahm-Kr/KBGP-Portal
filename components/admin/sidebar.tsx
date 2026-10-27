@@ -27,6 +27,7 @@ import {
   WarehousesIcon,
   CategoriesSubIcon,
   PaymentSettingsIcon,
+  BrandMarketingIcon,
 } from "./icons";
 
 import type { AdminUnreadCounts } from "@/lib/notifications/admin-read-state";
@@ -437,6 +438,11 @@ export default function Sidebar({
       href: "/admin/reports",
     },
     {
+      name: "Brand Marketing",
+      icon: BrandMarketingIcon,
+      href: "/admin/brand-marketing",
+    },
+    {
       name: "Tasks & Communication",
       icon: TasksIcon,
       subItems: [
@@ -489,6 +495,7 @@ export default function Sidebar({
       if (permissions.isSuperAdmin) return true;
 
       if (item.name === "Brand Applications" && permissions.canAccessBrand === false) return false;
+      if (item.name === "Brand Marketing" && permissions.canAccessBrand === false) return false;
       if (item.name === "Retailer Applications" && permissions.canAccessRetail === false) return false;
       if (item.name === "Finance" && permissions.canAccessFinance === false) return false;
       if (item.name === "Invoices & Receivables" && permissions.canAccessFinance === false) return false;
