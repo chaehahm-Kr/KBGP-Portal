@@ -219,3 +219,6 @@ COMMENT ON TABLE public.sourcing_brands IS 'Brands owned or represented by sourc
 COMMENT ON TABLE public.sourcing_contacts IS 'Contact persons and communication channels for sourcing candidates.';
 COMMENT ON TABLE public.sourcing_websites IS 'Corporate, brand, and webshop URLs for sourcing candidates.';
 COMMENT ON TABLE public.sourcing_sources IS 'Exhibition and provenance attribution tracking for sourcing candidates.';
+
+-- Reload PostgREST schema cache
+NOTIFY pgrst, 'reload schema';
