@@ -149,7 +149,25 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   }, [templates, selectedTemplateId]);
 
   // --------------------------------------------------------------------------
-  // FILTERED CANDIDATES FOR RECIPIENT SELECTION
+    // Current effective campaign subject
+  const currentEffectiveSubject = useMemo(() => {
+    if (!editingCampaign) return activeTemplate?.subject || "";
+    return editingCampaign.subjectOverride !== undefined && editingCampaign.subjectOverride !== null
+      ? editingCampaign.subjectOverride
+      : (activeTemplate?.subject || "");
+  }, [editingCampaign, activeTemplate]);
+
+  // Sample resolved subject preview with sample Korean company
+  const sampleResolvedSubject = useMemo(() => {
+    if (!currentEffectiveSubject) return "";
+    return currentEffectiveSubject
+      .replace(/\{\{company_name\}\}/g, "(주)아모레퍼시픽")
+      .replace(/\{\{contact_name\}\}/g, "김대표")
+      .replace(/\{\{brand_name\}\}/g, "라네즈")
+      .replace(/\{\{custom_message\}\}/g, "맞춤 제안 안내");
+  }, [currentEffectiveSubject]);
+
+// FILTERED CANDIDATES FOR RECIPIENT SELECTION
   // --------------------------------------------------------------------------
   const filteredCandidates = useMemo(() => {
     return candidates.filter((c) => {
@@ -191,6 +209,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       language: "ko",
       templateId: defaultTpl?.id || null,
       templateVersion: defaultTpl?.version || "1.0.0",
+      subjectOverride: defaultTpl?.subject || "",
       status: "DRAFT",
       approvalStatus: "PENDING",
       isLiveModeEnabled: false, // STRICTLY FALSE
@@ -242,6 +261,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       const res = await saveMarketingCampaignAction({
         ...editingCampaign,
         templateId: selectedTemplateId,
+        subjectOverride: editingCampaign.subjectOverride,
         filterCriteria: {
           grades: selectedGrades as any,
           companyTypes: selectedCompanyTypes,
@@ -833,6 +853,74 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 />
               </div>
 
+              {/* Campaign Email Subject with Variable Insertion & Live Sample Preview */}
+              <div className="sm:col-span-2 p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                    Campaign Email Subject (실제 발송 이메일 제목) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                    <span>변수 삽입:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = editingCampaign.subjectOverride ?? activeTemplate?.subject ?? "";
+                        setEditingCampaign({ ...editingCampaign, subjectOverride: cur + " {{company_name}}" });
+                      }}
+                      className="px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded text-zinc-700 dark:text-zinc-300 font-mono text-[10px] cursor-pointer"
+                    >
+                      + {"{{company_name}}"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = editingCampaign.subjectOverride ?? activeTemplate?.subject ?? "";
+                        setEditingCampaign({ ...editingCampaign, subjectOverride: cur + " {{contact_name}}" });
+                      }}
+                      className="px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded text-zinc-700 dark:text-zinc-300 font-mono text-[10px] cursor-pointer"
+                    >
+                      + {"{{contact_name}}"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = editingCampaign.subjectOverride ?? activeTemplate?.subject ?? "";
+                        setEditingCampaign({ ...editingCampaign, subjectOverride: cur + " {{brand_name}}" });
+                      }}
+                      className="px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded text-zinc-700 dark:text-zinc-300 font-mono text-[10px] cursor-pointer"
+                    >
+                      + {"{{brand_name}}"}
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  placeholder="예: [K SELECT] {{company_name}}의 미국 뷰티 리테일 네트워크 진출을 제안드립니다"
+                  value={editingCampaign.subjectOverride !== undefined && editingCampaign.subjectOverride !== null ? editingCampaign.subjectOverride : (activeTemplate?.subject || "")}
+                  onChange={(e) =>
+                    setEditingCampaign({ ...editingCampaign, subjectOverride: e.target.value })
+                  }
+                  className="w-full px-3 py-2 text-xs font-medium rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                />
+                <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 pt-1">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">미리보기 (샘플 적용):</span>
+                    <span className="text-zinc-900 dark:text-zinc-100 truncate italic">
+                      &quot;{sampleResolvedSubject}&quot;
+                    </span>
+                  </div>
+                  {activeTemplate && editingCampaign.subjectOverride && editingCampaign.subjectOverride !== activeTemplate.subject && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingCampaign({ ...editingCampaign, subjectOverride: activeTemplate.subject })}
+                      className="text-amber-600 dark:text-amber-400 hover:underline shrink-0 text-[10px] cursor-pointer"
+                    >
+                      ↺ 템플릿 기본 제목으로 초기화
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="sm:col-span-2">
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                   Description / Internal Notes
@@ -889,13 +977,22 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                     디자이너가 작성한 외부 완성형 이메일 패키지를 선택하거나 신규 업로드합니다.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowUploadModal(true)}
-                  className="px-3 py-1.5 rounded text-xs font-bold bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 cursor-pointer"
-                >
-                  + Upload Designer Package
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowGuideModal(true)}
+                    className="px-3 py-1.5 rounded text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 cursor-pointer flex items-center gap-1.5"
+                  >
+                    📖 Designer Guide &amp; AI Prompt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowUploadModal(true)}
+                    className="px-3 py-1.5 rounded text-xs font-bold bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 cursor-pointer"
+                  >
+                    + Upload Designer Package
+                  </button>
+                </div>
               </div>
 
               {/* Template Radio Cards */}
@@ -912,15 +1009,24 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                           : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:bg-zinc-50 dark:hover:bg-zinc-850"
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center justify-between mb-1.5 gap-2">
                         <span className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
                           {tpl.name}
                         </span>
-                        {tpl.isDefault && (
-                          <span className="text-[9px] px-1.5 py-0.2 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded font-bold">
-                            Default
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                            tpl.templateType === "IMAGE"
+                              ? "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                              : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                          }`}>
+                            {tpl.templateType === "IMAGE" ? "🖼️ IMAGE" : "📄 HTML"}
                           </span>
-                        )}
+                          {tpl.isDefault && (
+                            <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded font-bold">
+                              Default
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <p className="text-[11px] text-zinc-500 line-clamp-1 mb-2">
                         제목: {tpl.subject}
@@ -941,38 +1047,97 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
             {/* Live Visual Preview Card (Desktop vs Mobile Toggle) */}
             {activeTemplate && (
               <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                  <div>
-                    <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                      Live Visual Template Preview: {activeTemplate.name}
-                    </h4>
-                    <span className="text-[11px] text-zinc-500">
-                      Subject: <strong>{activeTemplate.subject}</strong>
-                    </span>
+                <div className="flex flex-col gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                          Live Visual Template Preview: {activeTemplate.name}
+                        </h4>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          activeTemplate.templateType === "IMAGE"
+                            ? "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300"
+                            : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300"
+                        }`}>
+                          {activeTemplate.templateType === "IMAGE" ? "🖼️ Image Template" : "📄 HTML Template"}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-zinc-500">
+                        Template Default: {activeTemplate.subject}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowGuideModal(true)}
+                        className="px-2.5 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 font-medium flex items-center gap-1 cursor-pointer"
+                      >
+                        📖 Guide
+                      </button>
+                      <div className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-md text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewViewport("desktop")}
+                          className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${
+                            previewViewport === "desktop"
+                              ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                              : "text-zinc-500 hover:text-zinc-900"
+                      }`}
+                        >
+                          🖥️ Desktop (600px)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewViewport("mobile")}
+                          className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${
+                            previewViewport === "mobile"
+                              ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                              : "text-zinc-500 hover:text-zinc-900"
+                      }`}
+                        >
+                          📱 Mobile (375px)
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-md text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewViewport("desktop")}
-                      className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${
-                        previewViewport === "desktop"
-                          ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
-                          : "text-zinc-500 hover:text-zinc-900"
-                      }`}
-                    >
-                      🖥️ Desktop (600px)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewViewport("mobile")}
-                      className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${
-                        previewViewport === "mobile"
-                          ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
-                          : "text-zinc-500 hover:text-zinc-900"
-                      }`}
-                    >
-                      📱 Mobile (375px)
-                    </button>
+
+                  {/* Interactive Campaign Email Subject Bar in Live Preview (Owner Red-Circle Requirement) */}
+                  <div className="p-3 bg-amber-50/70 dark:bg-amber-950/20 rounded-md border border-amber-200 dark:border-amber-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-bold text-amber-900 dark:text-amber-300 shrink-0">
+                          Campaign Email Subject:
+                        </span>
+                        <input
+                          type="text"
+                          value={editingCampaign?.subjectOverride ?? activeTemplate.subject}
+                          onChange={(e) => {
+                            if (editingCampaign) {
+                              setEditingCampaign({ ...editingCampaign, subjectOverride: e.target.value });
+                            }
+                          }}
+                          placeholder={activeTemplate.subject}
+                          className="flex-1 px-2.5 py-1 text-xs font-medium rounded border border-amber-300 dark:border-amber-800/80 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-inner"
+                        />
+                      </div>
+                      <div className="text-[11px] text-amber-800/80 dark:text-amber-400/80 mt-1 truncate">
+                        Preview (Amorepacific): &quot;{sampleResolvedSubject}&quot;
+                      </div>
+                    </div>
+                    {editingCampaign?.subjectOverride && editingCampaign.subjectOverride !== activeTemplate.subject && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editingCampaign) {
+                            setEditingCampaign({ ...editingCampaign, subjectOverride: activeTemplate.subject });
+                          }
+                        }}
+                        className="text-[10px] text-amber-700 dark:text-amber-400 hover:underline shrink-0 self-end sm:self-center cursor-pointer"
+                      >
+                        ↺ Reset Subject
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1253,7 +1418,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                     const contact = c.sourcing_contacts?.[0];
                     const rendered = activeTemplate
                       ? personalizeEmail(
-                          activeTemplate.subject,
+                          (currentEffectiveSubject || activeTemplate.subject),
                           activeTemplate.htmlContent,
                           activeTemplate.plainText,
                           {
@@ -1596,20 +1761,20 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   };
 
   // --------------------------------------------------------------------------
-  // RENDER: TEMPLATE UPLOAD MODAL
+  // RENDER: DUAL TEMPLATE FORMAT UPLOAD MODAL (IMAGE & HTML)
   // --------------------------------------------------------------------------
   const renderUploadModal = () => {
     if (!showUploadModal) return null;
     return (
       <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-3xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
           <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
             <div>
               <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                Upload External Designer Template Package
+                Register External Designer Template Package
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                외부 디자이너가 작성한 완성형 HTML 이메일 마크업을 업로드합니다.
+                디자이너가 작업한 이미지 슬라이스 패키지 또는 HTML 마크업을 등록합니다.
               </p>
             </div>
             <button
@@ -1621,13 +1786,56 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
             </button>
           </div>
 
-          <form onSubmit={handleUploadTemplate} className="space-y-3 text-xs">
+          <form onSubmit={handleUploadTemplate} className="space-y-4 text-xs">
             {uploadError && (
               <div className="p-3 rounded bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-200 border border-red-200">
                 {uploadError}
               </div>
             )}
 
+            {/* Template Format Selector */}
+            <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2">
+              <label className="block text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                Template Format (템플릿 포맷 선택) <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUploadTemplateType("IMAGE")}
+                  className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
+                    uploadTemplateType === "IMAGE"
+                      ? "border-purple-600 bg-purple-50/50 dark:bg-purple-950/30 text-purple-950 dark:text-purple-200 ring-2 ring-purple-500/20"
+                      : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 hover:bg-zinc-50"
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 text-xs">
+                    <span>🖼️</span> IMAGE TEMPLATE (이미지 슬라이스)
+                  </div>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                    디자이너가 제작한 600px 세로 분할 이미지와 링크 URL을 조합하여 이메일 호환 마크업을 자동 생성합니다.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setUploadTemplateType("HTML")}
+                  className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
+                    uploadTemplateType === "HTML"
+                      ? "border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-950 dark:text-emerald-200 ring-2 ring-emerald-500/20"
+                      : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 hover:bg-zinc-50"
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 text-xs">
+                    <span>📄</span> HTML TEMPLATE (완성형 마크업)
+                  </div>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                    이메일 전문 디자이너/퍼블리셔가 직접 코딩한 테이블 기반 HTML 소스 코드를 살균(Sanitize)하여 등록합니다.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {/* Shared Metadata Fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
@@ -1635,7 +1843,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 </label>
                 <input
                   type="text"
-                  placeholder="예: 2026 Fall Buyer Outreach - Korean"
+                  placeholder="예: 2026 Fall Buyer Outreach - Image Package"
                   value={uploadName}
                   onChange={(e) => setUploadName(e.target.value)}
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
@@ -1658,7 +1866,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
 
               <div className="sm:col-span-2">
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Email Subject * (Supports &#123;&#123;company_name&#125;&#125;, &#123;&#123;brand_name&#125;&#125;)
+                  Default Email Subject * (Supports &#123;&#123;company_name&#125;&#125;, &#123;&#123;brand_name&#125;&#125;)
                 </label>
                 <input
                   type="text"
@@ -1669,9 +1877,9 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 />
               </div>
 
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Preview Text (사전보기 텍스트)
+                  Preview Text (사전보기 요약)
                 </label>
                 <input
                   type="text"
@@ -1682,7 +1890,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 />
               </div>
 
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                   Landing Page URL
                 </label>
@@ -1694,9 +1902,20 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                 />
               </div>
+            </div>
 
-              <div className="sm:col-span-2">
-                <div className="flex items-center justify-between mb-1">
+            {/* Format Specific Editor */}
+            {uploadTemplateType === "IMAGE" ? (
+              <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                <ImageTemplateComposer
+                  sections={uploadImageSections}
+                  onChange={setUploadImageSections}
+                  defaultLandingUrl={uploadLandingUrl}
+                />
+              </div>
+            ) : (
+              <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
                   <label className="font-semibold text-zinc-700 dark:text-zinc-300">
                     Designer Email HTML *
                   </label>
@@ -1712,7 +1931,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   className="w-full px-3 py-2 font-mono text-[11px] rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 leading-relaxed"
                 />
               </div>
-            </div>
+            )}
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-200 dark:border-zinc-800">
               <button
@@ -1726,7 +1945,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 type="submit"
                 className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded cursor-pointer"
               >
-                Sanitize & Save Package
+                {uploadTemplateType === "IMAGE" ? "Compile & Save Image Package" : "Sanitize & Save HTML Package"}
               </button>
             </div>
           </form>
@@ -1740,6 +1959,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       {renderNotification()}
       {viewMode === "list" ? renderCampaignList() : renderCampaignEditor()}
       {renderUploadModal()}
+      <DesignerGuideModal isOpen={showGuideModal} onClose={() => setShowGuideModal(false)} />
     </div>
   );
 }
