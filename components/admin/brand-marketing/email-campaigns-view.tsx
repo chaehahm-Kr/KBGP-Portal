@@ -319,26 +319,40 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     setUploadError(null);
     setUploadWarnings([]);
 
-    if (!uploadName.trim() || !uploadSubject.trim() || !uploadHtml.trim()) {
-      setUploadError("Template Name, Subject, and HTML content are required.");
-      return;
+    if (uploadTemplateType === "IMAGE") {
+      if (!uploadName.trim() || !uploadSubject.trim()) {
+        setUploadError("Template Name and Default Email Subject are required.");
+        return;
+      }
+      if (!uploadImageSections || uploadImageSections.length === 0) {
+        setUploadError("At least one image slice section is required for an Image Template.");
+        return;
+      }
+    } else {
+      if (!uploadName.trim() || !uploadSubject.trim() || !uploadHtml.trim()) {
+        setUploadError("Template Name, Default Email Subject, and HTML content are required.");
+        return;
+      }
     }
 
     try {
       const res = await uploadMarketingTemplateAction({
         name: uploadName,
+        templateType: uploadTemplateType,
         subject: uploadSubject,
         previewText: uploadPreviewText,
-        htmlContent: uploadHtml,
+        htmlContent: uploadTemplateType === "HTML" ? uploadHtml : undefined,
+        imageSections: uploadTemplateType === "IMAGE" ? uploadImageSections : undefined,
         landingPageUrl: uploadLandingUrl,
         language: uploadLanguage,
+        version: uploadVersion,
       });
 
       if (res.success && res.template) {
         setTemplates((prev) => [res.template!, ...prev]);
         setSelectedTemplateId(res.template.id);
         setShowUploadModal(false);
-        showNotification("success", "Template uploaded and sanitized successfully!");
+        showNotification("success", "Template package saved successfully!");
         if (res.warnings && res.warnings.length > 0) {
           setUploadWarnings(res.warnings);
         }
