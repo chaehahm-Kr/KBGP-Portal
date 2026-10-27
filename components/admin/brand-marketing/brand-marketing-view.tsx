@@ -405,11 +405,12 @@ export default function BrandMarketingView({
     const raw = (newBrandCategoryInputs[bIdx] || "").trim();
     if (!raw || !reviewedDraft) return;
     const brand = reviewedDraft.brands[bIdx];
-    if (!brand.categories.includes(raw)) {
+    const currentCats = Array.isArray(brand?.categories) ? brand.categories : [];
+    if (!currentCats.includes(raw)) {
       const copy = [...reviewedDraft.brands];
       copy[bIdx] = {
         ...brand,
-        categories: [...brand.categories, raw],
+        categories: [...currentCats, raw],
       };
       setReviewedDraft({ ...reviewedDraft, brands: copy });
     }
@@ -419,10 +420,11 @@ export default function BrandMarketingView({
   const handleRemoveCategoryFromBrand = (bIdx: number, catIdx: number) => {
     if (!reviewedDraft) return;
     const brand = reviewedDraft.brands[bIdx];
+    const currentCats = Array.isArray(brand?.categories) ? brand.categories : [];
     const copy = [...reviewedDraft.brands];
     copy[bIdx] = {
       ...brand,
-      categories: brand.categories.filter((_, idx) => idx !== catIdx),
+      categories: currentCats.filter((_, idx) => idx !== catIdx),
     };
     setReviewedDraft({ ...reviewedDraft, brands: copy });
   };
@@ -1148,6 +1150,8 @@ export default function BrandMarketingView({
                                   <button
                                     type="button"
                                     onClick={() => handleAddCategoryToBrand(bIdx)}
+                                    title="Add category to brand"
+                                    data-testid="add-cat-btn"
                                     className="px-2 py-0.5 text-xs font-semibold rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 cursor-pointer"
                                   >
                                     Add
@@ -1298,7 +1302,7 @@ export default function BrandMarketingView({
               <div className="space-y-6">
                 <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4 sticky top-6">
                   <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                    4. Admin Evaluation & Curation
+                    5. Admin Evaluation & Curation
                   </h3>
 
                   {/* Grade Selector */}
