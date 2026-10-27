@@ -435,8 +435,20 @@ async function runTests() {
     'Migration 0188 explicitly revokes anon/public table access'
   );
   assert(
-    migrationSql.includes('GRANT SELECT ON public.marketing_footer_settings TO authenticated;'),
-    'Migration 0188 grants SELECT to authenticated'
+    migrationSql.includes('GRANT SELECT, INSERT, UPDATE ON public.marketing_footer_settings TO authenticated'),
+    'Migration 0188 grants SELECT, INSERT, UPDATE on marketing_footer_settings to authenticated'
+  );
+  assert(
+    migrationSql.includes('GRANT SELECT, INSERT, UPDATE, DELETE ON public.marketing_template_assets TO authenticated'),
+    'Migration 0188 grants SELECT, INSERT, UPDATE, DELETE on marketing_template_assets to authenticated'
+  );
+  assert(
+    migrationSql.includes('ON CONFLICT (id) DO NOTHING;'),
+    'Migration 0188 uses non-destructive ON CONFLICT (id) DO NOTHING seed'
+  );
+  assert(
+    !migrationSql.includes('ON CONFLICT (id) DO UPDATE SET'),
+    'Migration 0188 has no destructive DO UPDATE SET overwrite in seed'
   );
   assert(
     migrationSql.includes('GRANT ALL ON public.marketing_footer_settings TO service_role;'),

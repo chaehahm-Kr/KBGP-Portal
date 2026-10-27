@@ -1024,9 +1024,11 @@ export function recordCampaignAuditLog(
  */
 let cachedFooterSettings: MarketingFooterSettings = { ...DEFAULT_MARKETING_FOOTER };
 
-export async function getMarketingFooterSettings(): Promise<MarketingFooterSettings> {
+export async function getMarketingFooterSettings(
+  customClient?: SupabaseClient
+): Promise<MarketingFooterSettings> {
   try {
-    const supabase = await getClient();
+    const supabase = await getClient(customClient);
     const { data, error } = await supabase
       .from("marketing_footer_settings")
       .select("*")
@@ -1057,9 +1059,10 @@ export async function getMarketingFooterSettings(): Promise<MarketingFooterSetti
 
 export async function saveMarketingFooterSettings(
   settings: Partial<MarketingFooterSettings>,
-  userId?: string
+  userId?: string,
+  customClient?: SupabaseClient
 ): Promise<MarketingFooterSettings> {
-  const current = await getMarketingFooterSettings();
+  const current = await getMarketingFooterSettings(customClient);
   const updated: MarketingFooterSettings = {
     ...current,
     ...settings,
@@ -1068,10 +1071,8 @@ export async function saveMarketingFooterSettings(
     updatedBy: userId || current.updatedBy || null,
   };
 
-  cachedFooterSettings = { ...updated };
-
   try {
-    const supabase = await getClient();
+    const supabase = await getClient(customClient);
     const { error } = await supabase.from("marketing_footer_settings").upsert({
       id: "central_marketing_footer",
       brand_display_name: updated.brandDisplayName,
@@ -1087,11 +1088,18 @@ export async function saveMarketingFooterSettings(
     });
 
     if (error) {
-      console.warn("[marketing:footer] DB upsert warning (using memory store):", error.message);
+      console.warn("[marketing:footer] DB upsert error:", error.message);
+      if (error.code !== "42P01" && !error.message?.includes("does not exist")) {
+        throw new Error(error.message);
+      }
     }
   } catch (err: any) {
     console.warn("[marketing:footer] Exception saving footer settings:", err.message);
+    if (!err.message?.includes("42P01") && !err.message?.includes("does not exist")) {
+      throw err;
+    }
   }
 
+  cachedFooterSettings = { ...updated };
   return { ...cachedFooterSettings };
 }

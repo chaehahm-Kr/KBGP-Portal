@@ -46,15 +46,7 @@ INSERT INTO public.marketing_footer_settings (
   'This email provides information about K SELECT NETWORK brand partnerships.',
   'ko'
 )
-ON CONFLICT (id) DO UPDATE SET
-  brand_display_name = EXCLUDED.brand_display_name,
-  legal_company_name = EXCLUDED.legal_company_name,
-  physical_address = EXCLUDED.physical_address,
-  contact_email = EXCLUDED.contact_email,
-  contact_website = EXCLUDED.contact_website,
-  disclosure_ko = EXCLUDED.disclosure_ko,
-  disclosure_en = EXCLUDED.disclosure_en,
-  default_language = EXCLUDED.default_language;
+ON CONFLICT (id) DO NOTHING;
 
 -- 2. TABLE: marketing_template_assets
 -- Registry of hosted image assets extracted from imported HTML / ZIP designer packages.
@@ -80,11 +72,11 @@ ALTER TABLE public.marketing_campaigns
 
 -- 4. PERMISSIONS & PRIVILEGES (Least-Privilege Hardening)
 REVOKE ALL ON public.marketing_footer_settings FROM anon, public;
-GRANT SELECT ON public.marketing_footer_settings TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.marketing_footer_settings TO authenticated, service_role;
 GRANT ALL ON public.marketing_footer_settings TO service_role;
 
 REVOKE ALL ON public.marketing_template_assets FROM anon, public;
-GRANT SELECT ON public.marketing_template_assets TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.marketing_template_assets TO authenticated, service_role;
 GRANT ALL ON public.marketing_template_assets TO service_role;
 
 -- 5. ROW-LEVEL SECURITY (RLS) POLICIES
@@ -95,6 +87,8 @@ ALTER TABLE public.marketing_template_assets ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "marketing_footer_select_all" ON public.marketing_footer_settings;
 DROP POLICY IF EXISTS "marketing_footer_select_authenticated" ON public.marketing_footer_settings;
 DROP POLICY IF EXISTS "marketing_footer_admin_all" ON public.marketing_footer_settings;
+DROP POLICY IF EXISTS "marketing_footer_admin_insert" ON public.marketing_footer_settings;
+DROP POLICY IF EXISTS "marketing_footer_admin_update" ON public.marketing_footer_settings;
 
 CREATE POLICY "marketing_footer_select_authenticated"
   ON public.marketing_footer_settings
@@ -102,9 +96,15 @@ CREATE POLICY "marketing_footer_select_authenticated"
   TO authenticated
   USING (true);
 
-CREATE POLICY "marketing_footer_admin_all"
+CREATE POLICY "marketing_footer_admin_insert"
   ON public.marketing_footer_settings
-  FOR ALL
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (public.auth_is_admin());
+
+CREATE POLICY "marketing_footer_admin_update"
+  ON public.marketing_footer_settings
+  FOR UPDATE
   TO authenticated
   USING (public.auth_is_admin())
   WITH CHECK (public.auth_is_admin());
@@ -113,6 +113,9 @@ CREATE POLICY "marketing_footer_admin_all"
 DROP POLICY IF EXISTS "marketing_template_assets_select" ON public.marketing_template_assets;
 DROP POLICY IF EXISTS "marketing_template_assets_select_authenticated" ON public.marketing_template_assets;
 DROP POLICY IF EXISTS "marketing_template_assets_admin_all" ON public.marketing_template_assets;
+DROP POLICY IF EXISTS "marketing_template_assets_admin_insert" ON public.marketing_template_assets;
+DROP POLICY IF EXISTS "marketing_template_assets_admin_update" ON public.marketing_template_assets;
+DROP POLICY IF EXISTS "marketing_template_assets_admin_delete" ON public.marketing_template_assets;
 
 CREATE POLICY "marketing_template_assets_select_authenticated"
   ON public.marketing_template_assets
@@ -120,9 +123,21 @@ CREATE POLICY "marketing_template_assets_select_authenticated"
   TO authenticated
   USING (true);
 
-CREATE POLICY "marketing_template_assets_admin_all"
+CREATE POLICY "marketing_template_assets_admin_insert"
   ON public.marketing_template_assets
-  FOR ALL
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (public.auth_is_admin());
+
+CREATE POLICY "marketing_template_assets_admin_update"
+  ON public.marketing_template_assets
+  FOR UPDATE
   TO authenticated
   USING (public.auth_is_admin())
   WITH CHECK (public.auth_is_admin());
+
+CREATE POLICY "marketing_template_assets_admin_delete"
+  ON public.marketing_template_assets
+  FOR DELETE
+  TO authenticated
+  USING (public.auth_is_admin());
