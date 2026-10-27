@@ -28,6 +28,7 @@ import {
   deleteSourcingCandidateAction,
 } from "@/lib/brand-sourcing/actions";
 import { EmailCampaignsView } from "./email-campaigns-view";
+import { CampaignResultsView } from "./campaign-results-view";
 
 interface StaffMemberOption {
   id: string;
@@ -39,7 +40,7 @@ interface BrandMarketingViewProps {
   initialStaff: StaffMemberOption[];
   initialCandidates: any[];
   initialTotal: number;
-  initialTab?: "import" | "list" | "campaigns";
+  initialTab?: "import" | "list" | "campaigns" | "results";
 }
 
 function formatFileSize(bytes?: number | null): string {
@@ -83,8 +84,8 @@ export default function BrandMarketingView({
   initialTotal,
   initialTab = "import",
 }: BrandMarketingViewProps) {
-  // Navigation Tabs: import | list | campaigns | results (disabled)
-  const [activeTab, setActiveTab] = useState<"import" | "list" | "campaigns">(initialTab);
+  // Navigation Tabs: import | list | campaigns | results
+  const [activeTab, setActiveTab] = useState<"import" | "list" | "campaigns" | "results">(initialTab);
 
   // --------------------------------------------------------------------------
   // TAB 1: IMPORT & REVIEW STATE
@@ -834,14 +835,19 @@ export default function BrandMarketingView({
             </span>
           </button>
 
+          {/* Phase 2: Results & Follow-up Tab (ADM-BSRC-007) */}
           <button
-            disabled
-            className="px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-60 flex items-center gap-1.5"
-            title="Phase 2 Feature"
+            type="button"
+            onClick={() => setActiveTab("results")}
+            className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "results"
+                ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+            }`}
           >
-            <span>Results</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-850 text-zinc-500 font-medium">
-              Coming Soon
+            <span>Results & Follow-up</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-medium">
+              V1
             </span>
           </button>
         </div>
@@ -2335,6 +2341,17 @@ export default function BrandMarketingView({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  setActiveTab("results");
+                                }}
+                                className="px-2 py-1 text-[11px] font-medium rounded text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer"
+                                title="View Campaign & Outreach Results"
+                              >
+                                Results ↗
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   handleDeleteCandidate(c);
                                 }}
                                 className="px-2 py-1 text-[11px] font-semibold rounded text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/50 cursor-pointer"
@@ -2396,6 +2413,18 @@ export default function BrandMarketingView({
       {/* ------------------------------------------------------------------ */}
       {activeTab === "campaigns" && (
         <EmailCampaignsView candidates={candidates} />
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* TAB 4: CAMPAIGN RESULTS & COMPANY FOLLOW-UP VIEW (ADM-BSRC-007)     */}
+      {/* ------------------------------------------------------------------ */}
+      {activeTab === "results" && (
+        <CampaignResultsView
+          onNavigateToBrandList={(companyId) => {
+            setActiveTab("list");
+            handleOpenDetail(companyId);
+          }}
+        />
       )}
 
       {/* ------------------------------------------------------------------ */}

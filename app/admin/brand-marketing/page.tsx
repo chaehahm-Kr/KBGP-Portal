@@ -33,6 +33,8 @@ export default async function BrandMarketingPage({ searchParams }: BrandMarketin
       ? "list"
       : params.tab === "campaigns"
       ? "campaigns"
+      : params.tab === "results"
+      ? "results"
       : "import";
 
   // 3. Pre-fetch initial staff and initial candidates
