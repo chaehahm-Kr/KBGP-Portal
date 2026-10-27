@@ -119,6 +119,7 @@ export interface NormalizedCompanyDraft {
   websites: SourcingWebsite[];
   socialMedia: SourcingSocialMedia[];
   categories: string[]; // Deduplicated list of product categories
+  companyProducts?: SourcingProductItem[]; // Extracted company-level products
   source: SourcingSourceMetadata;
   enrichment: SourcingEnrichmentSummary;
   audit: SourcingAuditSummary;

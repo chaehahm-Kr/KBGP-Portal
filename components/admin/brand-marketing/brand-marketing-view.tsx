@@ -75,8 +75,7 @@ export default function BrandMarketingView({
 
   // Evaluation Fields
   const [grade, setGrade] = useState<"A" | "B" | "C" | "UNRATED">("UNRATED");
-  const [status, setStatus] = useState<"DRAFT" | "REVIEWED" | "SAVED" | "ARCHIVED">("DRAFT");
-  const [assignedTo, setAssignedTo] = useState<string>("");
+  const [status, setStatus] = useState<"DRAFT" | "REVIEWED" | "SAVED" | "ARCHIVED">("REVIEWED");
   const [internalNotes, setInternalNotes] = useState<string>("");
 
   // Duplicate candidate alert state
@@ -94,7 +93,6 @@ export default function BrandMarketingView({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterGrade, setFilterGrade] = useState("ALL");
   const [filterStatus, setFilterStatus] = useState("ALL");
-  const [filterStaff, setFilterStaff] = useState("ALL");
   const [filterCategory, setFilterCategory] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingList, setIsLoadingList] = useState(false);
@@ -137,11 +135,10 @@ export default function BrandMarketingView({
       setReviewedDraft(res.draft);
       setDuplicateCheck(res.duplicateCheck || null);
 
-      // Reset evaluation fields to clean state
+      // Reset evaluation fields to clean state (Default to REVIEWED)
       setGrade("UNRATED");
-      setStatus("DRAFT");
+      setStatus("REVIEWED");
       setInternalNotes("");
-      setAssignedTo("");
     } catch (err: any) {
       setExtractError(err.message || "An unexpected error occurred during extraction.");
     } finally {
@@ -178,8 +175,8 @@ export default function BrandMarketingView({
     try {
       const evaluation: SourcingEvaluationInput = {
         grade,
-        status: status === "DRAFT" ? "SAVED" : status, // Default to SAVED when saved
-        assignedTo: assignedTo || null,
+        status,
+        assignedTo: null,
         internalNotes: overrideReason
           ? `[DUPLICATE OVERRIDE]: ${overrideReason}\n\n${internalNotes}`
           : internalNotes,
@@ -214,7 +211,6 @@ export default function BrandMarketingView({
         search: searchQuery || undefined,
         grade: filterGrade !== "ALL" ? filterGrade : undefined,
         status: filterStatus !== "ALL" ? filterStatus : undefined,
-        assignedTo: filterStaff !== "ALL" ? filterStaff : undefined,
         category: filterCategory !== "ALL" ? filterCategory : undefined,
         limit: pageSize,
         offset: (page - 1) * pageSize,
@@ -742,173 +738,64 @@ export default function BrandMarketingView({
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                        Corporate Description (Korean)
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={reviewedDraft.company.descriptionKr || ""}
-                        onChange={(e) =>
-                          setReviewedDraft({
-                            ...reviewedDraft,
-                            company: { ...reviewedDraft.company, descriptionKr: e.target.value },
-                          })
-                        }
-                        className="w-full px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                      />
+                    <div className="sm:col-span-2 space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                            Corporate Description (Korean)
+                          </label>
+                          {!reviewedDraft.company.descriptionKr && reviewedDraft.company.descriptionEn && (
+                            <span className="text-[10px] text-zinc-400 italic">
+                              Exhibitor did not register a Korean description
+                            </span>
+                          )}
+                        </div>
+                        <textarea
+                          rows={3}
+                          placeholder="국문 회사 소개 및 기업 개요 (미입력 시 영문 소개가 기본 참조됩니다)"
+                          value={reviewedDraft.company.descriptionKr || ""}
+                          onChange={(e) =>
+                            setReviewedDraft({
+                              ...reviewedDraft,
+                              company: { ...reviewedDraft.company, descriptionKr: e.target.value },
+                            })
+                          }
+                          className="w-full px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 whitespace-pre-wrap font-sans"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                            Corporate Description (English)
+                          </label>
+                          {!reviewedDraft.company.descriptionKr && reviewedDraft.company.descriptionEn && (
+                            <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                              Exhibitor Source: English only
+                            </span>
+                          )}
+                        </div>
+                        <textarea
+                          rows={4}
+                          placeholder="English corporate description from exhibitor registry or official website..."
+                          value={reviewedDraft.company.descriptionEn || ""}
+                          onChange={(e) =>
+                            setReviewedDraft({
+                              ...reviewedDraft,
+                              company: { ...reviewedDraft.company, descriptionEn: e.target.value },
+                            })
+                          }
+                          className="w-full px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 whitespace-pre-wrap font-sans"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* 2. Brands & Product Catalog Card */}
-                <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-                  <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                      2. Brands & Product Catalog ({reviewedDraft.brands.length} Brands)
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newBrand: SourcingBrand = {
-                          nameKr: "신규 브랜드",
-                          nameEn: "",
-                          description: "",
-                          categories: ["Skin Care"],
-                          keyProducts: [],
-                          source: "MANUAL",
-                        };
-                        setReviewedDraft({
-                          ...reviewedDraft,
-                          brands: [...reviewedDraft.brands, newBrand],
-                        });
-                      }}
-                      className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer"
-                    >
-                      + Add Brand
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    {reviewedDraft.brands.map((brand, bIdx) => (
-                      <div
-                        key={bIdx}
-                        className="p-4 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 space-y-3"
-                      >
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                              Brand #{bIdx + 1}
-                            </span>
-                            {renderOriginTag(brand.source)}
-                          </div>
-                          {reviewedDraft.brands.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = reviewedDraft.brands.filter((_, idx) => idx !== bIdx);
-                                setReviewedDraft({ ...reviewedDraft, brands: updated });
-                              }}
-                              className="text-xs text-red-500 hover:text-red-700 cursor-pointer"
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-400 mb-0.5">
-                              Brand Name (Korean)
-                            </label>
-                            <input
-                              type="text"
-                              value={brand.nameKr}
-                              onChange={(e) => {
-                                const copy = [...reviewedDraft.brands];
-                                copy[bIdx].nameKr = e.target.value;
-                                setReviewedDraft({ ...reviewedDraft, brands: copy });
-                              }}
-                              className="w-full px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-400 mb-0.5">
-                              Brand Name (English)
-                            </label>
-                            <input
-                              type="text"
-                              value={brand.nameEn || ""}
-                              onChange={(e) => {
-                                const copy = [...reviewedDraft.brands];
-                                copy[bIdx].nameEn = e.target.value;
-                                setReviewedDraft({ ...reviewedDraft, brands: copy });
-                              }}
-                              className="w-full px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
-                            />
-                          </div>
-
-                          <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-400 mb-0.5">
-                              Categories (comma separated)
-                            </label>
-                            <input
-                              type="text"
-                              value={brand.categories.join(", ")}
-                              onChange={(e) => {
-                                const copy = [...reviewedDraft.brands];
-                                copy[bIdx].categories = e.target.value
-                                  .split(",")
-                                  .map((c) => c.trim())
-                                  .filter(Boolean);
-                                setReviewedDraft({ ...reviewedDraft, brands: copy });
-                              }}
-                              className="w-full px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Key Products Preview */}
-                        {brand.keyProducts.length > 0 && (
-                          <div className="pt-2">
-                            <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 block mb-1.5">
-                              Extracted Products ({brand.keyProducts.length})
-                            </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {brand.keyProducts.map((prod, pIdx) => (
-                                <div
-                                  key={pIdx}
-                                  className="flex items-start gap-2 p-2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs"
-                                >
-                                  {prod.imageUrl && (
-                                    <img
-                                      src={prod.imageUrl}
-                                      alt={prod.titleKr || "Product"}
-                                      className="w-10 h-10 object-cover rounded shrink-0 border border-zinc-200 dark:border-zinc-700"
-                                    />
-                                  )}
-                                  <div className="min-w-0 flex-1">
-                                    <p className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                                      {prod.titleKr || prod.titleEn}
-                                    </p>
-                                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
-                                      {prod.description || "No description"}
-                                    </p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 3. Communication Channels & Official Websites Card */}
+                {/* 2. Communication Channels & Official Websites Card */}
                 <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
                   <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                    3. Contacts & Digital Footprint
+                    2. Contacts & Digital Footprint
                   </h3>
 
                   {/* Contacts Table */}
@@ -926,7 +813,7 @@ export default function BrandMarketingView({
                             jobTitle: null,
                             email: "",
                             phone: null,
-                            isPrimary: false,
+                            isPrimary: reviewedDraft.contacts.length === 0,
                             source: "MANUAL",
                             sourceUrl: null,
                           };
@@ -949,69 +836,94 @@ export default function BrandMarketingView({
                             <th className="p-2">Email</th>
                             <th className="p-2">Phone</th>
                             <th className="p-2">Origin</th>
-                            <th className="p-2 text-right">Primary</th>
+                            <th className="p-2 text-center">Primary</th>
+                            <th className="p-2 text-right">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                          {reviewedDraft.contacts.map((c, cIdx) => (
-                            <tr key={cIdx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
-                              <td className="p-2">
-                                <input
-                                  type="text"
-                                  value={c.name || ""}
-                                  placeholder="담당자명"
-                                  onChange={(e) => {
-                                    const copy = [...reviewedDraft.contacts];
-                                    copy[cIdx].name = e.target.value;
-                                    setReviewedDraft({ ...reviewedDraft, contacts: copy });
-                                  }}
-                                  className="w-full px-2 py-0.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900"
-                                />
-                              </td>
-                              <td className="p-2">
-                                <input
-                                  type="email"
-                                  value={c.email}
-                                  placeholder="email@company.com"
-                                  onChange={(e) => {
-                                    const copy = [...reviewedDraft.contacts];
-                                    copy[cIdx].email = e.target.value;
-                                    setReviewedDraft({ ...reviewedDraft, contacts: copy });
-                                  }}
-                                  className="w-full px-2 py-0.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900"
-                                />
-                              </td>
-                              <td className="p-2">
-                                <input
-                                  type="text"
-                                  value={c.phone || ""}
-                                  placeholder="010-0000-0000"
-                                  onChange={(e) => {
-                                    const copy = [...reviewedDraft.contacts];
-                                    copy[cIdx].phone = e.target.value;
-                                    setReviewedDraft({ ...reviewedDraft, contacts: copy });
-                                  }}
-                                  className="w-full px-2 py-0.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900"
-                                />
-                              </td>
-                              <td className="p-2">{renderOriginTag(c.source)}</td>
-                              <td className="p-2 text-right">
-                                <input
-                                  type="radio"
-                                  name="primaryContact"
-                                  checked={c.isPrimary}
-                                  onChange={() => {
-                                    const copy = reviewedDraft.contacts.map((item, idx) => ({
-                                      ...item,
-                                      isPrimary: idx === cIdx,
-                                    }));
-                                    setReviewedDraft({ ...reviewedDraft, contacts: copy });
-                                  }}
-                                  className="text-zinc-900"
-                                />
+                          {reviewedDraft.contacts.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="p-3 text-center text-zinc-400 italic">
+                                No contacts listed. Click &quot;+ Add Contact&quot; to add one.
                               </td>
                             </tr>
-                          ))}
+                          ) : (
+                            reviewedDraft.contacts.map((c, cIdx) => (
+                              <tr key={cIdx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
+                                <td className="p-2">
+                                  <input
+                                    type="text"
+                                    value={c.name || ""}
+                                    placeholder="담당자명"
+                                    onChange={(e) => {
+                                      const copy = [...reviewedDraft.contacts];
+                                      copy[cIdx].name = e.target.value;
+                                      setReviewedDraft({ ...reviewedDraft, contacts: copy });
+                                    }}
+                                    className="w-full px-2 py-0.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <input
+                                    type="email"
+                                    value={c.email}
+                                    placeholder="email@company.com"
+                                    onChange={(e) => {
+                                      const copy = [...reviewedDraft.contacts];
+                                      copy[cIdx].email = e.target.value;
+                                      setReviewedDraft({ ...reviewedDraft, contacts: copy });
+                                    }}
+                                    className="w-full px-2 py-0.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <input
+                                    type="text"
+                                    value={c.phone || ""}
+                                    placeholder="010-0000-0000"
+                                    onChange={(e) => {
+                                      const copy = [...reviewedDraft.contacts];
+                                      copy[cIdx].phone = e.target.value;
+                                      setReviewedDraft({ ...reviewedDraft, contacts: copy });
+                                    }}
+                                    className="w-full px-2 py-0.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                                  />
+                                </td>
+                                <td className="p-2">{renderOriginTag(c.source)}</td>
+                                <td className="p-2 text-center">
+                                  <input
+                                    type="radio"
+                                    name="primaryContact"
+                                    checked={c.isPrimary}
+                                    onChange={() => {
+                                      const copy = reviewedDraft.contacts.map((item, idx) => ({
+                                        ...item,
+                                        isPrimary: idx === cIdx,
+                                      }));
+                                      setReviewedDraft({ ...reviewedDraft, contacts: copy });
+                                    }}
+                                    className="text-zinc-900"
+                                  />
+                                </td>
+                                <td className="p-2 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const wasPrimary = c.isPrimary;
+                                      const remaining = reviewedDraft.contacts.filter((_, idx) => idx !== cIdx);
+                                      if (wasPrimary && remaining.length > 0) {
+                                        remaining[0].isPrimary = true;
+                                      }
+                                      setReviewedDraft({ ...reviewedDraft, contacts: remaining });
+                                    }}
+                                    className="text-xs text-red-500 hover:text-red-700 font-semibold cursor-pointer"
+                                  >
+                                    Remove
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -1081,6 +993,235 @@ export default function BrandMarketingView({
                           >
                             ↗
                           </a>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = reviewedDraft.websites.filter((_, idx) => idx !== wIdx);
+                              setReviewedDraft({ ...reviewedDraft, websites: updated });
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 cursor-pointer px-1 font-bold"
+                            title="Remove website"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Brands & Product Catalog Card */}
+                <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-5">
+                  <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                      3. Brands & Product Catalog ({reviewedDraft.brands.length} Brands)
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newBrand: SourcingBrand = {
+                          nameKr: "신규 브랜드",
+                          nameEn: "",
+                          description: "",
+                          categories: reviewedDraft.categories?.length > 0 ? [reviewedDraft.categories[0]] : ["Skin Care"],
+                          keyProducts: [],
+                          source: "MANUAL",
+                        };
+                        setReviewedDraft({
+                          ...reviewedDraft,
+                          brands: [...reviewedDraft.brands, newBrand],
+                        });
+                      }}
+                      className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer"
+                    >
+                      + Add Brand
+                    </button>
+                  </div>
+
+                  {/* Shared Company Categories & Extracted Catalog Block */}
+                  {((reviewedDraft.categories && reviewedDraft.categories.length > 0) ||
+                    (reviewedDraft.companyProducts && reviewedDraft.companyProducts.length > 0)) && (
+                    <div className="p-4 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/70 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                          Shared Company Categories & Extracted Catalog
+                        </span>
+                        <span className="text-[11px] text-zinc-400">
+                          Exhibitor-Level Overview
+                        </span>
+                      </div>
+
+                      {/* Company Categories */}
+                      {reviewedDraft.categories && reviewedDraft.categories.length > 0 && (
+                        <div>
+                          <span className="block text-[11px] font-medium text-zinc-500 mb-1.5">
+                            Company Categories ({reviewedDraft.categories.length})
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {reviewedDraft.categories.map((cat, cIdx) => (
+                              <span
+                                key={cIdx}
+                                className="px-2 py-0.5 rounded text-[11px] font-medium bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
+                              >
+                                {cat}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Company Extracted Products */}
+                      {reviewedDraft.companyProducts && reviewedDraft.companyProducts.length > 0 && (
+                        <div>
+                          <span className="block text-[11px] font-medium text-zinc-500 mb-1.5">
+                            Extracted Products ({reviewedDraft.companyProducts.length})
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {reviewedDraft.companyProducts.map((prod, pIdx) => (
+                              <div
+                                key={pIdx}
+                                className="flex items-start gap-2 p-2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs"
+                              >
+                                {prod.imageUrl && (
+                                  <img
+                                    src={prod.imageUrl}
+                                    alt={prod.titleKr || prod.titleEn || "Product"}
+                                    className="w-10 h-10 object-cover rounded shrink-0 border border-zinc-200 dark:border-zinc-700"
+                                  />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                                    {prod.titleKr || prod.titleEn}
+                                  </p>
+                                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
+                                    {prod.description || "No description"}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Represented Brands Section */}
+                  <div className="space-y-3">
+                    <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                      Represented Brands ({reviewedDraft.brands.length})
+                    </div>
+
+                    <div className="space-y-4">
+                      {reviewedDraft.brands.map((brand, bIdx) => (
+                        <div
+                          key={bIdx}
+                          className="p-4 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 space-y-3"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                                Brand #{bIdx + 1}
+                              </span>
+                              {renderOriginTag(brand.source)}
+                            </div>
+                            {reviewedDraft.brands.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = reviewedDraft.brands.filter((_, idx) => idx !== bIdx);
+                                  setReviewedDraft({ ...reviewedDraft, brands: updated });
+                                }}
+                                className="text-xs text-red-500 hover:text-red-700 cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-400 mb-0.5">
+                                Brand Name (Korean)
+                              </label>
+                              <input
+                                type="text"
+                                value={brand.nameKr}
+                                onChange={(e) => {
+                                  const copy = [...reviewedDraft.brands];
+                                  copy[bIdx].nameKr = e.target.value;
+                                  setReviewedDraft({ ...reviewedDraft, brands: copy });
+                                }}
+                                className="w-full px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-400 mb-0.5">
+                                Brand Name (English)
+                              </label>
+                              <input
+                                type="text"
+                                value={brand.nameEn || ""}
+                                onChange={(e) => {
+                                  const copy = [...reviewedDraft.brands];
+                                  copy[bIdx].nameEn = e.target.value;
+                                  setReviewedDraft({ ...reviewedDraft, brands: copy });
+                                }}
+                                className="w-full px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-2">
+                              <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-400 mb-0.5">
+                                Categories (comma separated)
+                              </label>
+                              <input
+                                type="text"
+                                value={brand.categories.join(", ")}
+                                onChange={(e) => {
+                                  const copy = [...reviewedDraft.brands];
+                                  copy[bIdx].categories = e.target.value
+                                    .split(",")
+                                    .map((c) => c.trim())
+                                    .filter(Boolean);
+                                  setReviewedDraft({ ...reviewedDraft, brands: copy });
+                                }}
+                                className="w-full px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Specifically Attributed Products (if any) */}
+                          {brand.keyProducts.length > 0 && (
+                            <div className="pt-2">
+                              <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 block mb-1.5">
+                                Attributed Products ({brand.keyProducts.length})
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {brand.keyProducts.map((prod, pIdx) => (
+                                  <div
+                                    key={pIdx}
+                                    className="flex items-start gap-2 p-2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs"
+                                  >
+                                    {prod.imageUrl && (
+                                      <img
+                                        src={prod.imageUrl}
+                                        alt={prod.titleKr || prod.titleEn || "Product"}
+                                        className="w-10 h-10 object-cover rounded shrink-0 border border-zinc-200 dark:border-zinc-700"
+                                      />
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                                        {prod.titleKr || prod.titleEn}
+                                      </p>
+                                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
+                                        {prod.description || "No description"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1126,7 +1267,7 @@ export default function BrandMarketingView({
               <div className="space-y-6">
                 <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4 sticky top-6">
                   <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                    Admin Evaluation & Curation
+                    4. Admin Evaluation & Curation
                   </h3>
 
                   {/* Grade Selector */}
@@ -1175,25 +1316,6 @@ export default function BrandMarketingView({
                       <option value="REVIEWED">REVIEWED (검토 완료)</option>
                       <option value="SAVED">SAVED (후보 등록 완료)</option>
                       <option value="ARCHIVED">ARCHIVED (보관/제외)</option>
-                    </select>
-                  </div>
-
-                  {/* Staff Assignment */}
-                  <div>
-                    <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                      Assign to Staff (담당자 배정)
-                    </label>
-                    <select
-                      value={assignedTo}
-                      onChange={(e) => setAssignedTo(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="">-- Unassigned (미배정) --</option>
-                      {initialStaff.map((st) => (
-                        <option key={st.id} value={st.id}>
-                          {st.name} ({st.email})
-                        </option>
-                      ))}
                     </select>
                   </div>
 
@@ -1343,25 +1465,6 @@ export default function BrandMarketingView({
               </select>
             </div>
 
-            {/* Staff Filter */}
-            <div className="w-40">
-              <select
-                value={filterStaff}
-                onChange={(e) => {
-                  setFilterStaff(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-              >
-                <option value="ALL">Staff: All</option>
-                {initialStaff.map((st) => (
-                  <option key={st.id} value={st.id}>
-                    {st.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {/* Apply & Refresh Buttons */}
             <button
               type="button"
@@ -1386,7 +1489,6 @@ export default function BrandMarketingView({
                     <th className="p-3">Grade</th>
                     <th className="p-3">Primary Contact</th>
                     <th className="p-3">Website</th>
-                    <th className="p-3">Assignee</th>
                     <th className="p-3">Status</th>
                     <th className="p-3">Discovered</th>
                     <th className="p-3 text-right">Actions</th>
@@ -1395,13 +1497,13 @@ export default function BrandMarketingView({
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {isLoadingList ? (
                     <tr>
-                      <td colSpan={9} className="p-8 text-center text-zinc-400">
+                      <td colSpan={8} className="p-8 text-center text-zinc-400">
                         Loading candidate list...
                       </td>
                     </tr>
                   ) : candidates.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="p-12 text-center space-y-2">
+                      <td colSpan={8} className="p-12 text-center space-y-2">
                         <p className="text-zinc-500 font-medium">No sourcing candidates found.</p>
                         <button
                           type="button"
@@ -1416,7 +1518,6 @@ export default function BrandMarketingView({
                     candidates.map((c) => {
                       const primaryContact = c.sourcing_contacts?.find((ct: any) => ct.is_primary) || c.sourcing_contacts?.[0];
                       const primaryWeb = c.sourcing_websites?.[0]?.url;
-                      const staff = initialStaff.find((s) => s.id === c.assigned_to);
 
                       return (
                         <tr
@@ -1475,9 +1576,6 @@ export default function BrandMarketingView({
                             ) : (
                               "-"
                             )}
-                          </td>
-                          <td className="p-3 text-zinc-600 dark:text-zinc-400">
-                            {staff ? staff.name : <span className="text-zinc-400">Unassigned</span>}
                           </td>
                           <td className="p-3">{renderStatusBadge(c.status)}</td>
                           <td className="p-3 text-zinc-500 text-[11px]">
@@ -1689,27 +1787,6 @@ export default function BrandMarketingView({
                     </div>
 
                     <div className="col-span-2">
-                      <label className="block text-zinc-600 dark:text-zinc-400 mb-1">Assignee</label>
-                      <select
-                        value={selectedCandidateDetail.assigned_to || ""}
-                        onChange={(e) =>
-                          setSelectedCandidateDetail({
-                            ...selectedCandidateDetail,
-                            assigned_to: e.target.value || null,
-                          })
-                        }
-                        className="w-full px-2.5 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
-                      >
-                        <option value="">-- Unassigned --</option>
-                        {initialStaff.map((st) => (
-                          <option key={st.id} value={st.id}>
-                            {st.name} ({st.email})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="col-span-2">
                       <label className="block text-zinc-600 dark:text-zinc-400 mb-1">Internal Notes</label>
                       <textarea
                         rows={2}
@@ -1739,6 +1816,29 @@ export default function BrandMarketingView({
                     <div className="col-span-2">
                       <span className="font-semibold">Address:</span> {selectedCandidateDetail.address_formatted_kr || "-"}
                     </div>
+                    {selectedCandidateDetail.description_kr && (
+                      <div className="col-span-2 pt-1">
+                        <span className="font-semibold block mb-0.5">Corporate Description (Korean):</span>
+                        <p className="text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap font-sans bg-zinc-50 dark:bg-zinc-950 p-2.5 rounded border border-zinc-200 dark:border-zinc-800 text-xs">
+                          {selectedCandidateDetail.description_kr}
+                        </p>
+                      </div>
+                    )}
+                    {selectedCandidateDetail.description_en && (
+                      <div className="col-span-2 pt-1">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-semibold">Corporate Description (English):</span>
+                          {!selectedCandidateDetail.description_kr && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+                              Exhibitor Source: English only
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap font-sans bg-zinc-50 dark:bg-zinc-950 p-2.5 rounded border border-zinc-200 dark:border-zinc-800 text-xs">
+                          {selectedCandidateDetail.description_en}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1748,9 +1848,33 @@ export default function BrandMarketingView({
                     Brands ({selectedCandidateDetail.sourcing_brands?.length || 0})
                   </h4>
                   {selectedCandidateDetail.sourcing_brands?.map((b: any, idx: number) => (
-                    <div key={idx} className="p-3 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 space-y-1">
-                      <p className="font-bold text-zinc-900 dark:text-zinc-100">{b.brand_name_kr}</p>
-                      <p className="text-[11px] text-zinc-500">{b.categories?.join(", ")}</p>
+                    <div key={idx} className="p-3 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <p className="font-bold text-zinc-900 dark:text-zinc-100">
+                          {b.brand_name_kr}
+                          {b.brand_name_en && b.brand_name_en !== b.brand_name_kr && (
+                            <span className="text-zinc-400 font-normal ml-1">({b.brand_name_en})</span>
+                          )}
+                        </p>
+                      </div>
+                      {b.categories && b.categories.length > 0 && (
+                        <p className="text-[11px] text-zinc-500">{b.categories.join(", ")}</p>
+                      )}
+                      {b.key_products && b.key_products.length > 0 && (
+                        <div className="pt-1">
+                          <span className="text-[10px] font-semibold text-zinc-400 block mb-1">
+                            Attributed Products ({b.key_products.length})
+                          </span>
+                          <div className="space-y-1">
+                            {b.key_products.map((kp: any, pIdx: number) => (
+                              <div key={pIdx} className="text-[11px] text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                                <span className="text-zinc-400">•</span>
+                                <span className="font-medium">{kp.titleKr || kp.titleEn}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

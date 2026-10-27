@@ -125,3 +125,17 @@ export function sanitizeText(text: string | null | undefined): string | null {
   const stripped = text.replace(/<[^>]*>?/gm, "").replace(/\s+/g, " ").trim();
   return stripped.length > 0 ? stripped : null;
 }
+
+/**
+ * Strips HTML tags while preserving meaningful multi-line paragraph breaks.
+ */
+export function sanitizeParagraphs(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const stripped = text
+    .replace(/<[^>]*>?/gm, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/(\r\n|\r|\n)\s*(\r\n|\r|\n)+/g, "\n\n")
+    .replace(/(\r\n|\r|\n)/g, "\n")
+    .trim();
+  return stripped.length > 0 ? stripped : null;
+}

@@ -390,8 +390,10 @@ describe("Brand Sourcing — InterCHARM Source Adapter (ADM-BSRC-002)", () => {
       expect(draft.categories).toContain("Cleansing Products");
       expect(draft.categories).toContain("Thread Lifts and Fillers");
 
-      // Products (4)
-      expect(draft.brands[0].keyProducts).toHaveLength(4);
+      // Company-level Products (4) and Brand attribution
+      expect(draft.companyProducts).toHaveLength(4);
+      expect(draft.brands[0].keyProducts).toHaveLength(2); // Attributed RICHESSE products
+      expect(draft.brands).toHaveLength(5);
 
       // Business Type: Manufacturer & Brand Owner
       expect(draft.company.businessTypes).toContain("MANUFACTURER");

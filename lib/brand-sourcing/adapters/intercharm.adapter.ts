@@ -12,7 +12,7 @@ import {
   SourcingAddress,
   SourcingProductItem,
 } from "../types";
-import { validateIntercharmUrl, sanitizeText } from "../security";
+import { validateIntercharmUrl, sanitizeText, sanitizeParagraphs } from "../security";
 import { SourceExtractionError } from "../errors";
 import { enrichFromOfficialWebsite } from "../enrichment/website-enricher";
 
@@ -228,9 +228,9 @@ export class IntercharmAdapter implements SourceAdapter {
     const nameKr = rawCompanyName || koDisplayName || "Unknown Company";
     const nameEn = enDisplayName && enDisplayName !== nameKr ? enDisplayName : null;
 
-    // 2. Descriptions
-    const descriptionKr = sanitizeText(koEntry?.description) || null;
-    const descriptionEn = sanitizeText(enEntry?.description) || null;
+    // 2. Descriptions (Preserve multi-line paragraph structure from exhibitor details)
+    const descriptionKr = sanitizeParagraphs(koEntry?.description) || null;
+    const descriptionEn = sanitizeParagraphs(enEntry?.description) || null;
 
     // 3. Address Mapping
     const address = this.buildAddress(koEntry, enEntry, rawOrg.hideAddress);
@@ -304,13 +304,29 @@ export class IntercharmAdapter implements SourceAdapter {
     }
     const categories = Array.from(categoriesSet);
 
-    // 9. Brands & Key Products
-    const brands = this.buildBrands(rawOrg, koEntry, enEntry, categories);
+    // 9. Company-Level Extracted Products
+    const companyProducts: SourcingProductItem[] = [];
+    if (rawOrg.products) {
+      for (const p of rawOrg.products) {
+        const pKo = p.multilingual?.find((m) => m.locale.startsWith("ko"));
+        const pEn = p.multilingual?.find((m) => m.locale.startsWith("en"));
+        companyProducts.push({
+          id: p.id,
+          titleKr: sanitizeText(pKo?.title || pEn?.title),
+          titleEn: sanitizeText(pEn?.title || pKo?.title),
+          description: sanitizeParagraphs(pKo?.description || pEn?.description),
+          imageUrl: p.imageUrl ? sanitizeText(p.imageUrl) : null,
+        });
+      }
+    }
 
-    // 10. Stands
+    // 10. Brands & Brand-Specific Product Attribution
+    const brands = this.buildBrands(rawOrg, koEntry, enEntry, categories, companyProducts);
+
+    // 11. Stands
     const standLocation = rawOrg.stands && rawOrg.stands.length > 0 ? rawOrg.stands[0].name : null;
 
-    // 11. Initial Audit Notes
+    // 12. Initial Audit Notes
     const missingKeyFields: string[] = [];
     if (!contacts.length) missingKeyFields.push("contactEmail");
     if (!websites.length) missingKeyFields.push("website");
@@ -340,6 +356,7 @@ export class IntercharmAdapter implements SourceAdapter {
       websites,
       socialMedia,
       categories,
+      companyProducts,
       source: {
         provider: this.provider,
         sourceUrl,
@@ -555,29 +572,37 @@ export class IntercharmAdapter implements SourceAdapter {
     };
   }
 
+  private doesProductMatchBrand(
+    prod: SourcingProductItem,
+    brandNameKr: string,
+    brandNameEn: string | null
+  ): boolean {
+    const clean = (s: string) => s.replace(/[™®©]/g, "").trim().toLowerCase();
+    const bKr = clean(brandNameKr);
+    const bEn = brandNameEn ? clean(brandNameEn) : "";
+
+    const tKr = prod.titleKr ? clean(prod.titleKr) : "";
+    const tEn = prod.titleEn ? clean(prod.titleEn) : "";
+
+    const matches = (title: string, brand: string) => {
+      if (!title || !brand || brand.length < 2) return false;
+      return title.includes(brand) || brand.includes(title);
+    };
+
+    return Boolean(
+      (bKr && (matches(tKr, bKr) || matches(tEn, bKr))) ||
+      (bEn && (matches(tKr, bEn) || matches(tEn, bEn)))
+    );
+  }
+
   private buildBrands(
     rawOrg: RawExhibitingOrg,
     koEntry: any,
     enEntry: any,
-    categories: string[]
+    categories: string[],
+    companyProducts: SourcingProductItem[]
   ): SourcingBrand[] {
-    const brandsMap = new Map<string, SourcingBrand>();
-
-    // Format products
-    const keyProducts: SourcingProductItem[] = [];
-    if (rawOrg.products) {
-      for (const p of rawOrg.products) {
-        const pKo = p.multilingual?.find((m) => m.locale.startsWith("ko"));
-        const pEn = p.multilingual?.find((m) => m.locale.startsWith("en"));
-        keyProducts.push({
-          id: p.id,
-          titleKr: sanitizeText(pKo?.title || pEn?.title),
-          titleEn: sanitizeText(pEn?.title || pKo?.title),
-          description: sanitizeText(pKo?.description || pEn?.description),
-          imageUrl: p.imageUrl ? sanitizeText(p.imageUrl) : null,
-        });
-      }
-    }
+    const rawBrandList: Array<{ nameKr: string; nameEn: string | null; key: string }> = [];
 
     const koRep = (koEntry?.representedBrands || []).flatMap((b: any) =>
       b.name.split(/[,/]/).map((s: string) => sanitizeText(s)).filter(Boolean)
@@ -591,48 +616,38 @@ export class IntercharmAdapter implements SourceAdapter {
       for (let i = 0; i < koRep.length; i++) {
         const kName = koRep[i] as string;
         const eName = enRep[i] as string;
-        const key = kName.toLowerCase();
-        brandsMap.set(key, {
+        rawBrandList.push({
           nameKr: kName,
           nameEn: eName !== kName ? eName : null,
-          description: null,
-          categories: [...categories],
-          keyProducts,
-          source: "SOURCE_EXHIBITION",
+          key: kName.toLowerCase(),
         });
       }
     } else {
       // Add all KO brands
       for (const kName of koRep) {
         const clean = kName as string;
-        brandsMap.set(clean.toLowerCase(), {
+        rawBrandList.push({
           nameKr: clean,
           nameEn: null,
-          description: null,
-          categories: [...categories],
-          keyProducts,
-          source: "SOURCE_EXHIBITION",
+          key: clean.toLowerCase(),
         });
       }
       // Add EN brands if not matched
       for (const eName of enRep) {
         const clean = eName as string;
         const key = clean.toLowerCase();
-        if (!brandsMap.has(key)) {
-          brandsMap.set(key, {
+        if (!rawBrandList.some((b) => b.key === key)) {
+          rawBrandList.push({
             nameKr: clean,
             nameEn: clean,
-            description: null,
-            categories: [...categories],
-            keyProducts,
-            source: "SOURCE_EXHIBITION",
+            key,
           });
         }
       }
     }
 
     // If no represented brands explicitly found, use displayName or infer from products/description
-    if (brandsMap.size === 0) {
+    if (rawBrandList.length === 0) {
       const fallbackKr =
         sanitizeText(koEntry?.displayName) ||
         sanitizeText(enEntry?.displayName) ||
@@ -640,17 +655,52 @@ export class IntercharmAdapter implements SourceAdapter {
         "Primary Brand";
       const fallbackEn = sanitizeText(enEntry?.displayName) || null;
 
-      brandsMap.set(fallbackKr.toLowerCase(), {
+      rawBrandList.push({
         nameKr: fallbackKr,
         nameEn: fallbackEn !== fallbackKr ? fallbackEn : null,
-        description: null,
-        categories: [...categories],
-        keyProducts,
-        source: "SOURCE_EXHIBITION",
+        key: fallbackKr.toLowerCase(),
       });
     }
 
-    return Array.from(brandsMap.values());
+    const isSingleBrand = rawBrandList.length === 1;
+
+    // Deduplicate by key and map to SourcingBrand
+    const seen = new Set<string>();
+    const brands: SourcingBrand[] = [];
+
+    for (const b of rawBrandList) {
+      if (seen.has(b.key)) continue;
+      seen.add(b.key);
+
+      if (isSingleBrand) {
+        // Single brand: all company products and categories belong to this brand
+        brands.push({
+          nameKr: b.nameKr,
+          nameEn: b.nameEn,
+          description: null,
+          categories: [...categories],
+          keyProducts: [...companyProducts],
+          source: "SOURCE_EXHIBITION",
+        });
+      } else {
+        // Multi-brand (e.g. JD BIO with 5 brands):
+        // Categories belong to the company level; only attribute products that specifically match this brand
+        const attributedProducts = companyProducts.filter((p) =>
+          this.doesProductMatchBrand(p, b.nameKr, b.nameEn)
+        );
+
+        brands.push({
+          nameKr: b.nameKr,
+          nameEn: b.nameEn,
+          description: null,
+          categories: [],
+          keyProducts: attributedProducts,
+          source: "SOURCE_EXHIBITION",
+        });
+      }
+    }
+
+    return brands;
   }
 
   private isOrganizerContact(email: string): boolean {
