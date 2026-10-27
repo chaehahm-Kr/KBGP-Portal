@@ -16,6 +16,7 @@ import {
   listSourcingCandidatesAction,
   getSourcingCandidateDetailAction,
   updateSourcingCandidateAction,
+  updateSourcingEvaluationAction,
   deleteSourcingCandidateAction,
 } from "@/lib/brand-sourcing/actions";
 
@@ -36,19 +37,19 @@ interface BrandMarketingViewProps {
 const QUICK_TEST_URLS = [
   {
     name: "JCOMO (제이코모)",
-    url: "https://intercharm.co.kr/fairDash.do?hl=KOR&dType=A&hl=ENG&fairSeq=75&hl=KOR#none",
+    url: "https://www.intercharmkorea.com/ko-kr/exhibitor_directory/Exhibitor_detail.주제이코모.org-ec0b85bc-960d-49d4-9dca-146c10ae59cb.html#/",
   },
   {
     name: "JD BIO (제이디바이오)",
-    url: "https://intercharm.co.kr/fairDash.do?hl=KOR&dType=A&hl=ENG&fairSeq=75&hl=KOR#none",
+    url: "https://www.intercharmkorea.com/ko-kr/exhibitor_directory/Exhibitor_detail.제이디바이오.org-a2d35424-a9e1-41c1-b77a-88e839ae0b0f.html#/",
   },
   {
     name: "LEBELAGE (르베라쥬)",
-    url: "https://intercharm.co.kr/fairDash.do?hl=KOR&dType=A&hl=ENG&fairSeq=75&hl=KOR#none",
+    url: "https://www.intercharmkorea.com/ko-kr/exhibitor_directory/Exhibitor_detail.르베라쥬.org-18c803be-34f2-4461-bc72-fa5ec798209b.html#/",
   },
   {
     name: "BEAUGANIC (보가닉)",
-    url: "https://intercharm.co.kr/fairDash.do?hl=KOR&dType=A&hl=ENG&fairSeq=75&hl=KOR#none",
+    url: "https://www.intercharmkorea.com/ko-kr/exhibitor_directory/Exhibitor_detail.뷰가닉.org-d14d1a34-e041-400d-9488-88121361b460.html#/",
   },
 ];
 
@@ -338,8 +339,33 @@ export default function BrandMarketingView({
     }
   };
 
+  const handleArchiveCandidate = async (id: string) => {
+    if (!selectedCandidateDetail) return;
+    try {
+      setIsUpdatingCandidate(true);
+      const res = await updateSourcingEvaluationAction(id, {
+        grade: selectedCandidateDetail.grade,
+        status: "ARCHIVED",
+        assignedTo: selectedCandidateDetail.assigned_to || undefined,
+        internalNotes: selectedCandidateDetail.internal_notes,
+        marketingConsentStatus: selectedCandidateDetail.marketing_consent_status,
+      });
+      if (res.success) {
+        setSelectedCandidateDetail((prev: any) => (prev ? { ...prev, status: "ARCHIVED" } : null));
+        setDetailEditSuccess("Candidate archived successfully.");
+        refreshBrandList();
+      } else {
+        alert(`Archive failed: ${res.error}`);
+      }
+    } catch (err: any) {
+      alert(`Archive error: ${err.message}`);
+    } finally {
+      setIsUpdatingCandidate(false);
+    }
+  };
+
   const handleDeleteCandidate = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this candidate? This will remove all associated brands, contacts, and websites.")) {
+    if (!confirm("⚠️ PERMANENT CASCADE DELETE WARNING:\n\nAre you sure you want to permanently delete this candidate?\nThis will completely delete this company and all its associated brands, contacts, websites, and exhibition sources.\n\nTip: You can use 'Archive' instead to preserve records safely.")) {
       return;
     }
 
@@ -1761,7 +1787,7 @@ export default function BrandMarketingView({
                 )}
 
                 {/* Drawer Action Buttons */}
-                <div className="flex gap-2 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                <div className="flex items-center gap-2 pt-4 border-t border-zinc-200 dark:border-zinc-800">
                   <button
                     type="button"
                     disabled={isUpdatingCandidate}
@@ -1771,10 +1797,23 @@ export default function BrandMarketingView({
                     {isUpdatingCandidate ? "Saving..." : "Save Changes"}
                   </button>
 
+                  {selectedCandidateDetail.status !== "ARCHIVED" && (
+                    <button
+                      type="button"
+                      disabled={isUpdatingCandidate}
+                      onClick={() => handleArchiveCandidate(selectedCandidateDetail.id)}
+                      className="px-3 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
+                      title="Soft-archive this candidate without deleting associated records"
+                    >
+                      Archive
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => handleDeleteCandidate(selectedCandidateDetail.id)}
-                    className="px-4 py-2 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/80 rounded hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer"
+                    className="px-3 py-2 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/80 rounded hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer"
+                    title="Permanently remove candidate and cascade-delete child brands, contacts and websites"
                   >
                     Delete
                   </button>
