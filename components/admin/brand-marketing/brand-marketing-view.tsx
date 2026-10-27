@@ -85,6 +85,14 @@ export default function BrandMarketingView({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
+  // Delete Candidate Confirmation Modal state
+  const [candidateToDelete, setCandidateToDelete] = useState<any | null>(null);
+  const [isDeletingCandidate, setIsDeletingCandidate] = useState(false);
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
+
+  // Per-Brand inline category input for Import & Review
+  const [newBrandCategoryInputs, setNewBrandCategoryInputs] = useState<Record<number, string>>({});
+
   // --------------------------------------------------------------------------
   // TAB 2: BRAND LIST STATE
   // --------------------------------------------------------------------------
@@ -360,23 +368,63 @@ export default function BrandMarketingView({
     }
   };
 
-  const handleDeleteCandidate = async (id: string) => {
-    if (!confirm("⚠️ PERMANENT CASCADE DELETE WARNING:\n\nAre you sure you want to permanently delete this candidate?\nThis will completely delete this company and all its associated brands, contacts, websites, and exhibition sources.\n\nTip: You can use 'Archive' instead to preserve records safely.")) {
-      return;
+  const handleDeleteCandidate = (candidateOrId: any) => {
+    if (typeof candidateOrId === "string") {
+      const found = candidates.find((c) => c.id === candidateOrId) || selectedCandidateDetail;
+      setCandidateToDelete(found || { id: candidateOrId, company_name_kr: "Candidate" });
+    } else {
+      setCandidateToDelete(candidateOrId);
     }
+  };
 
+  const handleConfirmDeleteCandidate = async () => {
+    if (!candidateToDelete) return;
+    setIsDeletingCandidate(true);
     try {
-      const res = await deleteSourcingCandidateAction(id);
+      const res = await deleteSourcingCandidateAction(candidateToDelete.id);
       if (res.success) {
-        setSelectedCandidateId(null);
-        setSelectedCandidateDetail(null);
+        setDeleteSuccessMessage(`Candidate "${candidateToDelete.company_name_kr}" was deleted successfully.`);
+        if (selectedCandidateId === candidateToDelete.id) {
+          setSelectedCandidateId(null);
+          setSelectedCandidateDetail(null);
+        }
+        setCandidateToDelete(null);
         refreshBrandList();
+        setTimeout(() => setDeleteSuccessMessage(null), 5000);
       } else {
         alert(`Delete failed: ${res.error}`);
       }
     } catch (err: any) {
       alert(`Delete error: ${err.message}`);
+    } finally {
+      setIsDeletingCandidate(false);
     }
+  };
+
+  const handleAddCategoryToBrand = (bIdx: number) => {
+    const raw = (newBrandCategoryInputs[bIdx] || "").trim();
+    if (!raw || !reviewedDraft) return;
+    const brand = reviewedDraft.brands[bIdx];
+    if (!brand.categories.includes(raw)) {
+      const copy = [...reviewedDraft.brands];
+      copy[bIdx] = {
+        ...brand,
+        categories: [...brand.categories, raw],
+      };
+      setReviewedDraft({ ...reviewedDraft, brands: copy });
+    }
+    setNewBrandCategoryInputs((prev) => ({ ...prev, [bIdx]: "" }));
+  };
+
+  const handleRemoveCategoryFromBrand = (bIdx: number, catIdx: number) => {
+    if (!reviewedDraft) return;
+    const brand = reviewedDraft.brands[bIdx];
+    const copy = [...reviewedDraft.brands];
+    copy[bIdx] = {
+      ...brand,
+      categories: brand.categories.filter((_, idx) => idx !== catIdx),
+    };
+    setReviewedDraft({ ...reviewedDraft, brands: copy });
   };
 
   // Grade badge styling helper
@@ -737,58 +785,6 @@ export default function BrandMarketingView({
                         className="w-full px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                       />
                     </div>
-
-                    <div className="sm:col-span-2 space-y-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                            Corporate Description (Korean)
-                          </label>
-                          {!reviewedDraft.company.descriptionKr && reviewedDraft.company.descriptionEn && (
-                            <span className="text-[10px] text-zinc-400 italic">
-                              Exhibitor did not register a Korean description
-                            </span>
-                          )}
-                        </div>
-                        <textarea
-                          rows={3}
-                          placeholder="국문 회사 소개 및 기업 개요 (미입력 시 영문 소개가 기본 참조됩니다)"
-                          value={reviewedDraft.company.descriptionKr || ""}
-                          onChange={(e) =>
-                            setReviewedDraft({
-                              ...reviewedDraft,
-                              company: { ...reviewedDraft.company, descriptionKr: e.target.value },
-                            })
-                          }
-                          className="w-full px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 whitespace-pre-wrap font-sans"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                            Corporate Description (English)
-                          </label>
-                          {!reviewedDraft.company.descriptionKr && reviewedDraft.company.descriptionEn && (
-                            <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
-                              Exhibitor Source: English only
-                            </span>
-                          )}
-                        </div>
-                        <textarea
-                          rows={4}
-                          placeholder="English corporate description from exhibitor registry or official website..."
-                          value={reviewedDraft.company.descriptionEn || ""}
-                          onChange={(e) =>
-                            setReviewedDraft({
-                              ...reviewedDraft,
-                              company: { ...reviewedDraft.company, descriptionEn: e.target.value },
-                            })
-                          }
-                          className="w-full px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 whitespace-pre-wrap font-sans"
-                        />
-                      </div>
-                    </div>
                   </div>
                 </div>
 
@@ -1038,73 +1034,6 @@ export default function BrandMarketingView({
                     </button>
                   </div>
 
-                  {/* Shared Company Categories & Extracted Catalog Block */}
-                  {((reviewedDraft.categories && reviewedDraft.categories.length > 0) ||
-                    (reviewedDraft.companyProducts && reviewedDraft.companyProducts.length > 0)) && (
-                    <div className="p-4 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/70 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                          Shared Company Categories & Extracted Catalog
-                        </span>
-                        <span className="text-[11px] text-zinc-400">
-                          Exhibitor-Level Overview
-                        </span>
-                      </div>
-
-                      {/* Company Categories */}
-                      {reviewedDraft.categories && reviewedDraft.categories.length > 0 && (
-                        <div>
-                          <span className="block text-[11px] font-medium text-zinc-500 mb-1.5">
-                            Company Categories ({reviewedDraft.categories.length})
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {reviewedDraft.categories.map((cat, cIdx) => (
-                              <span
-                                key={cIdx}
-                                className="px-2 py-0.5 rounded text-[11px] font-medium bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
-                              >
-                                {cat}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Company Extracted Products */}
-                      {reviewedDraft.companyProducts && reviewedDraft.companyProducts.length > 0 && (
-                        <div>
-                          <span className="block text-[11px] font-medium text-zinc-500 mb-1.5">
-                            Extracted Products ({reviewedDraft.companyProducts.length})
-                          </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {reviewedDraft.companyProducts.map((prod, pIdx) => (
-                              <div
-                                key={pIdx}
-                                className="flex items-start gap-2 p-2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs"
-                              >
-                                {prod.imageUrl && (
-                                  <img
-                                    src={prod.imageUrl}
-                                    alt={prod.titleKr || prod.titleEn || "Product"}
-                                    className="w-10 h-10 object-cover rounded shrink-0 border border-zinc-200 dark:border-zinc-700"
-                                  />
-                                )}
-                                <div className="min-w-0 flex-1">
-                                  <p className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                                    {prod.titleKr || prod.titleEn}
-                                  </p>
-                                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
-                                    {prod.description || "No description"}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   {/* Represented Brands Section */}
                   <div className="space-y-3">
                     <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
@@ -1170,23 +1099,61 @@ export default function BrandMarketingView({
                               />
                             </div>
 
-                            <div className="sm:col-span-2">
-                              <label className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-400 mb-0.5">
-                                Categories (comma separated)
+                            {/* Rendered as Visual Chips/Tiles (Requirement 2) */}
+                            <div className="sm:col-span-2 space-y-1.5">
+                              <label className="block text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
+                                Categories
                               </label>
-                              <input
-                                type="text"
-                                value={brand.categories.join(", ")}
-                                onChange={(e) => {
-                                  const copy = [...reviewedDraft.brands];
-                                  copy[bIdx].categories = e.target.value
-                                    .split(",")
-                                    .map((c) => c.trim())
-                                    .filter(Boolean);
-                                  setReviewedDraft({ ...reviewedDraft, brands: copy });
-                                }}
-                                className="w-full px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
-                              />
+                              <div className="flex flex-wrap items-center gap-1.5 p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 min-h-[38px]">
+                                {brand.categories && brand.categories.length > 0 ? (
+                                  brand.categories.map((cat, catIdx) => (
+                                    <span
+                                      key={catIdx}
+                                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                                    >
+                                      {cat}
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveCategoryFromBrand(bIdx, catIdx)}
+                                        className="hover:text-blue-900 dark:hover:text-blue-100 cursor-pointer ml-0.5 font-bold"
+                                        title="Remove category"
+                                      >
+                                        ✕
+                                      </button>
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[11px] text-zinc-400 italic">No categories assigned</span>
+                                )}
+
+                                <div className="inline-flex items-center gap-1 ml-auto">
+                                  <input
+                                    type="text"
+                                    placeholder="+ Add category"
+                                    value={newBrandCategoryInputs[bIdx] || ""}
+                                    onChange={(e) =>
+                                      setNewBrandCategoryInputs({
+                                        ...newBrandCategoryInputs,
+                                        [bIdx]: e.target.value,
+                                      })
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleAddCategoryToBrand(bIdx);
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 w-28 focus:w-40 transition-all"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddCategoryToBrand(bIdx)}
+                                    className="px-2 py-0.5 text-xs font-semibold rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 cursor-pointer"
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           </div>
 
@@ -1224,6 +1191,70 @@ export default function BrandMarketingView({
                           )}
                         </div>
                       ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Corporate Description & Overview Card (Moved to bottom - Requirement 1) */}
+                <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                      4. Corporate Description & Overview (회사 소개 및 기업 개요)
+                    </h3>
+                    <span className="text-[11px] text-zinc-400">
+                      Source Overview & Narrative
+                    </span>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                          Corporate Description (Korean)
+                        </label>
+                        {!reviewedDraft.company.descriptionKr && reviewedDraft.company.descriptionEn && (
+                          <span className="text-[10px] text-zinc-400 italic">
+                            Exhibitor did not register a Korean description
+                          </span>
+                        )}
+                      </div>
+                      <textarea
+                        rows={3}
+                        placeholder="국문 회사 소개 및 기업 개요 (미입력 시 영문 소개가 기본 참조됩니다)"
+                        value={reviewedDraft.company.descriptionKr || ""}
+                        onChange={(e) =>
+                          setReviewedDraft({
+                            ...reviewedDraft,
+                            company: { ...reviewedDraft.company, descriptionKr: e.target.value },
+                          })
+                        }
+                        className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 whitespace-pre-wrap font-sans leading-relaxed"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                          Corporate Description (English)
+                        </label>
+                        {!reviewedDraft.company.descriptionKr && reviewedDraft.company.descriptionEn && (
+                          <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                            Exhibitor Source: English only
+                          </span>
+                        )}
+                      </div>
+                      <textarea
+                        rows={4}
+                        placeholder="English corporate description from exhibitor registry or official website..."
+                        value={reviewedDraft.company.descriptionEn || ""}
+                        onChange={(e) =>
+                          setReviewedDraft({
+                            ...reviewedDraft,
+                            company: { ...reviewedDraft.company, descriptionEn: e.target.value },
+                          })
+                        }
+                        className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 whitespace-pre-wrap font-sans leading-relaxed"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1478,6 +1509,20 @@ export default function BrandMarketingView({
             </button>
           </div>
 
+          {/* Delete Success Alert */}
+          {deleteSuccessMessage && (
+            <div className="p-3.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+              <span>{deleteSuccessMessage}</span>
+              <button
+                type="button"
+                onClick={() => setDeleteSuccessMessage(null)}
+                className="text-emerald-600 hover:text-emerald-800 dark:hover:text-emerald-100 cursor-pointer font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Sourcing Candidates Table */}
           <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
@@ -1485,7 +1530,8 @@ export default function BrandMarketingView({
                 <thead className="bg-zinc-50 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 font-semibold border-b border-zinc-200 dark:border-zinc-800">
                   <tr>
                     <th className="p-3">Company (법인명)</th>
-                    <th className="p-3">Brands & Categories</th>
+                    <th className="p-3">Brands</th>
+                    <th className="p-3">Categories</th>
                     <th className="p-3">Grade</th>
                     <th className="p-3">Primary Contact</th>
                     <th className="p-3">Website</th>
@@ -1497,13 +1543,13 @@ export default function BrandMarketingView({
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {isLoadingList ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-zinc-400">
+                      <td colSpan={9} className="p-8 text-center text-zinc-400">
                         Loading candidate list...
                       </td>
                     </tr>
                   ) : candidates.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-12 text-center space-y-2">
+                      <td colSpan={9} className="p-12 text-center space-y-2">
                         <p className="text-zinc-500 font-medium">No sourcing candidates found.</p>
                         <button
                           type="button"
@@ -1518,6 +1564,11 @@ export default function BrandMarketingView({
                     candidates.map((c) => {
                       const primaryContact = c.sourcing_contacts?.find((ct: any) => ct.is_primary) || c.sourcing_contacts?.[0];
                       const primaryWeb = c.sourcing_websites?.[0]?.url;
+
+                      // Extract unique categories across all brands for this candidate
+                      const allCategories = Array.from(
+                        new Set(c.sourcing_brands?.flatMap((b: any) => b.categories || []) || [])
+                      ) as string[];
 
                       return (
                         <tr
@@ -1535,16 +1586,38 @@ export default function BrandMarketingView({
                               </p>
                             )}
                           </td>
+                          {/* Distinct Brands Column (Requirement 3) */}
                           <td className="p-3">
-                            <div className="space-y-0.5">
-                              {c.sourcing_brands?.map((b: any, idx: number) => (
-                                <span
-                                  key={idx}
-                                  className="inline-block px-1.5 py-0.5 rounded text-[11px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 mr-1"
-                                >
-                                  {b.brand_name_kr}
-                                </span>
-                              ))}
+                            <div className="flex flex-wrap gap-1 max-w-[200px]">
+                              {c.sourcing_brands && c.sourcing_brands.length > 0 ? (
+                                c.sourcing_brands.map((b: any, idx: number) => (
+                                  <span
+                                    key={idx}
+                                    className="inline-block px-1.5 py-0.5 rounded text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700"
+                                  >
+                                    {b.brand_name_kr || b.brand_name_en}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-zinc-400 text-[11px]">-</span>
+                              )}
+                            </div>
+                          </td>
+                          {/* Distinct Categories Column (Requirement 3) */}
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-1 max-w-[220px]">
+                              {allCategories.length > 0 ? (
+                                allCategories.map((cat: string, catIdx: number) => (
+                                  <span
+                                    key={catIdx}
+                                    className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60"
+                                  >
+                                    {cat}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-zinc-400 text-[11px]">-</span>
+                              )}
                             </div>
                           </td>
                           <td className="p-3">{renderGradeBadge(c.grade)}</td>
@@ -1581,17 +1654,31 @@ export default function BrandMarketingView({
                           <td className="p-3 text-zinc-500 text-[11px]">
                             {new Date(c.created_at).toLocaleDateString()}
                           </td>
+                          {/* Actions: View/Edit + Delete Button */}
                           <td className="p-3 text-right">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenDetail(c.id);
-                              }}
-                              className="px-2 py-1 text-[11px] font-semibold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 cursor-pointer"
-                            >
-                              View / Edit
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenDetail(c.id);
+                                }}
+                                className="px-2.5 py-1 text-[11px] font-semibold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 cursor-pointer"
+                              >
+                                View / Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCandidate(c);
+                                }}
+                                className="px-2 py-1 text-[11px] font-semibold rounded text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/50 cursor-pointer"
+                                title="Delete candidate"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1709,6 +1796,76 @@ export default function BrandMarketingView({
       )}
 
       {/* ------------------------------------------------------------------ */}
+      {/* DELETE CANDIDATE CONFIRMATION MODAL                                */}
+      {/* ------------------------------------------------------------------ */}
+      {candidateToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0 text-lg font-bold">
+                ⚠️
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                  Delete Sourcing Candidate
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Permanent removal of sourcing entity
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-md bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 text-xs">
+              <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+                {candidateToDelete.company_name_kr}
+                {candidateToDelete.company_name_en && (
+                  <span className="text-zinc-500 font-normal ml-1">
+                    ({candidateToDelete.company_name_en})
+                  </span>
+                )}
+              </p>
+              {candidateToDelete.sourcing_brands && candidateToDelete.sourcing_brands.length > 0 && (
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+                  Associated Brands ({candidateToDelete.sourcing_brands.length}):{" "}
+                  {candidateToDelete.sourcing_brands
+                    .map((b: any) => b.brand_name_kr || b.brand_name_en)
+                    .join(", ")}
+                </p>
+              )}
+            </div>
+
+            <div className="text-xs text-zinc-600 dark:text-zinc-300 space-y-2">
+              <p className="font-medium text-red-600 dark:text-red-400">
+                This will permanently delete this company and all its associated brands, contacts, websites, and exhibition sources.
+              </p>
+              <div className="p-2.5 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-[11px] text-amber-800 dark:text-amber-200">
+                <strong>Tip — Archive vs. Delete:</strong> If you want to preserve records for historical audit or avoid re-importing duplicates, consider changing the status to <strong>Archive</strong> instead of permanent deletion.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+              <button
+                type="button"
+                disabled={isDeletingCandidate}
+                onClick={() => setCandidateToDelete(null)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingCandidate}
+                onClick={handleConfirmDeleteCandidate}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDeletingCandidate ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
       {/* CANDIDATE DETAIL SLIDEOVER DRAWER                                  */}
       {/* ------------------------------------------------------------------ */}
       {selectedCandidateId && (
@@ -1744,12 +1901,258 @@ export default function BrandMarketingView({
                   </div>
                 )}
 
-                {/* Evaluation Controls */}
+                {/* 1) TOP CARD — Company Overview (Requirement 4) */}
+                <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850/60 border border-zinc-200 dark:border-zinc-800 space-y-3.5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                        Company Overview
+                      </span>
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 mt-0.5">
+                        {selectedCandidateDetail.company_name_kr}
+                      </h3>
+                      {selectedCandidateDetail.company_name_en && (
+                        <p className="text-xs text-zinc-500 font-medium">
+                          {selectedCandidateDetail.company_name_en}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {renderGradeBadge(selectedCandidateDetail.grade)}
+                      {renderStatusBadge(selectedCandidateDetail.status)}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-zinc-200/80 dark:border-zinc-800 text-xs">
+                    {/* Address */}
+                    <div className="md:col-span-2">
+                      <span className="text-zinc-400 font-semibold block text-[11px]">Address (주소)</span>
+                      <span className="text-zinc-800 dark:text-zinc-200 font-medium">
+                        {selectedCandidateDetail.address_formatted_kr || selectedCandidateDetail.address_street_kr || "-"}
+                      </span>
+                    </div>
+
+                    {/* Representative & Business Number */}
+                    <div>
+                      <span className="text-zinc-400 font-semibold block text-[11px]">Representative (대표자)</span>
+                      <span className="text-zinc-800 dark:text-zinc-200 font-medium">
+                        {selectedCandidateDetail.representative_name || "-"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400 font-semibold block text-[11px]">Business Registration # (사업자등록번호)</span>
+                      <span className="text-zinc-800 dark:text-zinc-200 font-medium">
+                        {selectedCandidateDetail.business_number || "-"}
+                      </span>
+                    </div>
+
+                    {/* Primary Contact Person, Email & Phone */}
+                    {(() => {
+                      const primaryContact =
+                        selectedCandidateDetail.sourcing_contacts?.find((ct: any) => ct.is_primary) ||
+                        selectedCandidateDetail.sourcing_contacts?.[0];
+                      return (
+                        <>
+                          <div>
+                            <span className="text-zinc-400 font-semibold block text-[11px]">Primary Contact (담당자)</span>
+                            <span className="text-zinc-800 dark:text-zinc-200 font-medium">
+                              {primaryContact?.name || "-"}
+                              {primaryContact?.role && (
+                                <span className="text-zinc-400 font-normal ml-1">({primaryContact.role})</span>
+                              )}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-400 font-semibold block text-[11px]">Contact Email & Phone</span>
+                            <div className="space-y-0.5">
+                              {primaryContact?.email ? (
+                                <div>
+                                  <a
+                                    href={`mailto:${primaryContact.email}`}
+                                    className="text-blue-600 dark:text-blue-400 underline font-medium"
+                                  >
+                                    {primaryContact.email}
+                                  </a>
+                                </div>
+                              ) : (
+                                <span className="text-zinc-400">-</span>
+                              )}
+                              {(primaryContact?.phone || primaryContact?.mobile) && (
+                                <div className="text-zinc-600 dark:text-zinc-400 text-[11px]">
+                                  {primaryContact.phone || primaryContact.mobile}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+
+                    {/* Website(s) with clickable external links */}
+                    <div className="md:col-span-2">
+                      <span className="text-zinc-400 font-semibold block text-[11px]">Websites (웹사이트)</span>
+                      {selectedCandidateDetail.sourcing_websites && selectedCandidateDetail.sourcing_websites.length > 0 ? (
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {selectedCandidateDetail.sourcing_websites.map((ws: any, wsIdx: number) => {
+                            const rawUrl = ws.url?.trim() || "";
+                            const displayUrl = rawUrl.startsWith("http://") || rawUrl.startsWith("https://") ? rawUrl : `https://${rawUrl}`;
+                            return (
+                              <a
+                                key={wsIdx}
+                                href={displayUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-blue-600 dark:text-blue-400 hover:underline"
+                              >
+                                <span>🌐 {ws.title || ws.website_type || "Website"}</span>
+                                <span className="text-zinc-400 text-[10px]">↗</span>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-400">-</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2) SECOND SECTION — Represented Brands & Categories (Requirement 4) */}
+                <div className="space-y-3">
+                  <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
+                    Represented Brands & Categories ({selectedCandidateDetail.sourcing_brands?.length || 0})
+                  </h4>
+
+                  {selectedCandidateDetail.sourcing_brands && selectedCandidateDetail.sourcing_brands.length > 0 ? (
+                    selectedCandidateDetail.sourcing_brands.map((b: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className="p-3.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 space-y-2.5"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+                              {b.brand_name_kr}
+                            </span>
+                            {b.brand_name_en && b.brand_name_en !== b.brand_name_kr && (
+                              <span className="text-zinc-500 font-normal ml-1.5 text-xs">
+                                ({b.brand_name_en})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Categories as chips/tags */}
+                        <div>
+                          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide block mb-1">
+                            Categories
+                          </span>
+                          {b.categories && b.categories.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {b.categories.map((cat: string, catIdx: number) => (
+                                <span
+                                  key={catIdx}
+                                  className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60"
+                                >
+                                  {cat}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-zinc-400 text-[11px] italic">No categories assigned</span>
+                          )}
+                        </div>
+
+                        {/* Attributed Products */}
+                        {b.key_products && b.key_products.length > 0 && (
+                          <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-800/80">
+                            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide block mb-1.5">
+                              Attributed Products ({b.key_products.length})
+                            </span>
+                            <div className="space-y-1.5">
+                              {b.key_products.map((kp: any, pIdx: number) => (
+                                <div
+                                  key={pIdx}
+                                  className="text-xs text-zinc-700 dark:text-zinc-300 flex items-start gap-2 bg-white dark:bg-zinc-900 p-2 rounded border border-zinc-200/80 dark:border-zinc-800"
+                                >
+                                  <span className="text-zinc-400 mt-0.5">•</span>
+                                  <div className="flex-1">
+                                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                                      {kp.titleKr || kp.titleEn}
+                                    </span>
+                                    {kp.titleEn && kp.titleEn !== kp.titleKr && (
+                                      <span className="text-zinc-400 text-[11px] ml-1.5">
+                                        ({kp.titleEn})
+                                      </span>
+                                    )}
+                                    {kp.descriptionKr && (
+                                      <p className="text-[11px] text-zinc-500 mt-0.5 line-clamp-2">
+                                        {kp.descriptionKr}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-zinc-400 text-xs italic">No brands associated with this company.</p>
+                  )}
+                </div>
+
+                {/* 3) THIRD SECTION — Corporate Description (Requirement 4) */}
+                <div className="space-y-3">
+                  <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
+                    Corporate Description
+                  </h4>
+                  {selectedCandidateDetail.description_kr || selectedCandidateDetail.description_en ? (
+                    <div className="space-y-2.5">
+                      {selectedCandidateDetail.description_kr && (
+                        <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 space-y-1">
+                          <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 block">
+                            Korean Description
+                          </span>
+                          <p className="text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap font-sans text-xs leading-relaxed">
+                            {selectedCandidateDetail.description_kr}
+                          </p>
+                        </div>
+                      )}
+                      {selectedCandidateDetail.description_en && (
+                        <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
+                              English Description
+                            </span>
+                            {!selectedCandidateDetail.description_kr && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+                                Exhibitor Source: English only
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap font-sans text-xs leading-relaxed">
+                            {selectedCandidateDetail.description_en}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-400 text-xs italic">
+                      No corporate description provided.
+                    </div>
+                  )}
+                </div>
+
+                {/* 4) FOURTH SECTION — Evaluation & Workflow Status (Requirement 4) */}
                 <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800 space-y-3">
-                  <h4 className="font-bold text-zinc-900 dark:text-zinc-100">Evaluation & Status</h4>
+                  <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">Evaluation & Workflow Status</h4>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-zinc-600 dark:text-zinc-400 mb-1">Grade</label>
+                      <label className="block text-zinc-600 dark:text-zinc-400 mb-1 font-semibold text-[11px]">
+                        Grade
+                      </label>
                       <select
                         value={selectedCandidateDetail.grade}
                         onChange={(e) =>
@@ -1758,17 +2161,19 @@ export default function BrandMarketingView({
                             grade: e.target.value,
                           })
                         }
-                        className="w-full px-2.5 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                        className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                       >
-                        <option value="A">Grade A</option>
-                        <option value="B">Grade B</option>
-                        <option value="C">Grade C</option>
+                        <option value="A">Grade A (High Priority)</option>
+                        <option value="B">Grade B (Standard)</option>
+                        <option value="C">Grade C (Low Priority)</option>
                         <option value="UNRATED">UNRATED</option>
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-zinc-600 dark:text-zinc-400 mb-1">Status</label>
+                      <label className="block text-zinc-600 dark:text-zinc-400 mb-1 font-semibold text-[11px]">
+                        Status
+                      </label>
                       <select
                         value={selectedCandidateDetail.status}
                         onChange={(e) =>
@@ -1777,7 +2182,7 @@ export default function BrandMarketingView({
                             status: e.target.value,
                           })
                         }
-                        className="w-full px-2.5 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                        className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                       >
                         <option value="DRAFT">DRAFT</option>
                         <option value="REVIEWED">REVIEWED</option>
@@ -1787,9 +2192,11 @@ export default function BrandMarketingView({
                     </div>
 
                     <div className="col-span-2">
-                      <label className="block text-zinc-600 dark:text-zinc-400 mb-1">Internal Notes</label>
+                      <label className="block text-zinc-600 dark:text-zinc-400 mb-1 font-semibold text-[11px]">
+                        Internal Notes
+                      </label>
                       <textarea
-                        rows={2}
+                        rows={3}
                         value={selectedCandidateDetail.internal_notes || ""}
                         onChange={(e) =>
                           setSelectedCandidateDetail({
@@ -1797,126 +2204,43 @@ export default function BrandMarketingView({
                             internal_notes: e.target.value,
                           })
                         }
-                        className="w-full px-2.5 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                        placeholder="Add internal evaluation comments, sourcing history, or follow-up notes..."
+                        className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Company & Brands Overview */}
-                <div className="space-y-2">
-                  <h4 className="font-bold text-zinc-900 dark:text-zinc-100">Company Overview</h4>
-                  <div className="grid grid-cols-2 gap-2 text-zinc-600 dark:text-zinc-400">
-                    <div>
-                      <span className="font-semibold">English Name:</span> {selectedCandidateDetail.company_name_en || "-"}
-                    </div>
-                    <div>
-                      <span className="font-semibold">Representative:</span> {selectedCandidateDetail.representative_name || "-"}
-                    </div>
-                    <div className="col-span-2">
-                      <span className="font-semibold">Address:</span> {selectedCandidateDetail.address_formatted_kr || "-"}
-                    </div>
-                    {selectedCandidateDetail.description_kr && (
-                      <div className="col-span-2 pt-1">
-                        <span className="font-semibold block mb-0.5">Corporate Description (Korean):</span>
-                        <p className="text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap font-sans bg-zinc-50 dark:bg-zinc-950 p-2.5 rounded border border-zinc-200 dark:border-zinc-800 text-xs">
-                          {selectedCandidateDetail.description_kr}
-                        </p>
-                      </div>
-                    )}
-                    {selectedCandidateDetail.description_en && (
-                      <div className="col-span-2 pt-1">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="font-semibold">Corporate Description (English):</span>
-                          {!selectedCandidateDetail.description_kr && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
-                              Exhibitor Source: English only
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap font-sans bg-zinc-50 dark:bg-zinc-950 p-2.5 rounded border border-zinc-200 dark:border-zinc-800 text-xs">
-                          {selectedCandidateDetail.description_en}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Brands List */}
-                <div className="space-y-2">
-                  <h4 className="font-bold text-zinc-900 dark:text-zinc-100">
-                    Brands ({selectedCandidateDetail.sourcing_brands?.length || 0})
-                  </h4>
-                  {selectedCandidateDetail.sourcing_brands?.map((b: any, idx: number) => (
-                    <div key={idx} className="p-3 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <p className="font-bold text-zinc-900 dark:text-zinc-100">
-                          {b.brand_name_kr}
-                          {b.brand_name_en && b.brand_name_en !== b.brand_name_kr && (
-                            <span className="text-zinc-400 font-normal ml-1">({b.brand_name_en})</span>
-                          )}
-                        </p>
-                      </div>
-                      {b.categories && b.categories.length > 0 && (
-                        <p className="text-[11px] text-zinc-500">{b.categories.join(", ")}</p>
-                      )}
-                      {b.key_products && b.key_products.length > 0 && (
-                        <div className="pt-1">
-                          <span className="text-[10px] font-semibold text-zinc-400 block mb-1">
-                            Attributed Products ({b.key_products.length})
-                          </span>
-                          <div className="space-y-1">
-                            {b.key_products.map((kp: any, pIdx: number) => (
-                              <div key={pIdx} className="text-[11px] text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
-                                <span className="text-zinc-400">•</span>
-                                <span className="font-medium">{kp.titleKr || kp.titleEn}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Contacts List */}
-                <div className="space-y-2">
-                  <h4 className="font-bold text-zinc-900 dark:text-zinc-100">
-                    Contacts ({selectedCandidateDetail.sourcing_contacts?.length || 0})
-                  </h4>
-                  {selectedCandidateDetail.sourcing_contacts?.map((ct: any, idx: number) => (
-                    <div key={idx} className="p-2 rounded border border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
-                      <div>
-                        <span className="font-bold">{ct.name || "담당자"}</span> ({ct.email})
-                      </div>
-                      <span className="text-zinc-500">{ct.phone || "-"}</span>
-                    </div>
-                  ))}
-                </div>
-
                 {/* Provenance Link */}
                 {selectedCandidateDetail.sourcing_sources?.[0] && (
-                  <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 text-[11px] text-zinc-500">
-                    Source: {selectedCandidateDetail.sourcing_sources[0].provider} (
-                    <a
-                      href={selectedCandidateDetail.sourcing_sources[0].source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline text-blue-600"
-                    >
-                      Original Exhibition URL
-                    </a>
-                    )
+                  <div className="pt-2 text-[11px] text-zinc-500 flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800">
+                    <span>
+                      Source Provider:{" "}
+                      <strong className="text-zinc-700 dark:text-zinc-300">
+                        {selectedCandidateDetail.sourcing_sources[0].provider}
+                      </strong>
+                      {selectedCandidateDetail.sourcing_sources[0].edition && ` (${selectedCandidateDetail.sourcing_sources[0].edition})`}
+                    </span>
+                    {selectedCandidateDetail.sourcing_sources[0].source_url && (
+                      <a
+                        href={selectedCandidateDetail.sourcing_sources[0].source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline text-blue-600 dark:text-blue-400 flex items-center gap-1"
+                      >
+                        Original Exhibition URL ↗
+                      </a>
+                    )}
                   </div>
                 )}
 
-                {/* Drawer Action Buttons */}
+                {/* 5) BOTTOM ACTIONS (Requirement 4) */}
                 <div className="flex items-center gap-2 pt-4 border-t border-zinc-200 dark:border-zinc-800">
                   <button
                     type="button"
                     disabled={isUpdatingCandidate}
                     onClick={handleUpdateDetailEvaluation}
-                    className="flex-1 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
+                    className="flex-1 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer disabled:opacity-50"
                   >
                     {isUpdatingCandidate ? "Saving..." : "Save Changes"}
                   </button>
@@ -1926,7 +2250,7 @@ export default function BrandMarketingView({
                       type="button"
                       disabled={isUpdatingCandidate}
                       onClick={() => handleArchiveCandidate(selectedCandidateDetail.id)}
-                      className="px-3 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
+                      className="px-3.5 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
                       title="Soft-archive this candidate without deleting associated records"
                     >
                       Archive
@@ -1935,11 +2259,11 @@ export default function BrandMarketingView({
 
                   <button
                     type="button"
-                    onClick={() => handleDeleteCandidate(selectedCandidateDetail.id)}
-                    className="px-3 py-2 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/80 rounded hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer"
+                    onClick={() => handleDeleteCandidate(selectedCandidateDetail)}
+                    className="px-3.5 py-2 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/80 rounded hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer"
                     title="Permanently remove candidate and cascade-delete child brands, contacts and websites"
                   >
-                    Delete
+                    Delete Candidate
                   </button>
                 </div>
               </div>
