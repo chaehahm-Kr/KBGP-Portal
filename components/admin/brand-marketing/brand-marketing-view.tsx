@@ -9,7 +9,9 @@ import type {
   SourcingContact,
   SourcingWebsite,
   FieldOrigin,
+  BusinessType,
 } from "@/lib/brand-sourcing/types";
+import { COMPANY_TYPE_OPTIONS } from "@/lib/brand-sourcing/types";
 import {
   extractSourcingDraftAction,
   saveSourcingCandidateAction,
@@ -35,6 +37,10 @@ interface BrandMarketingViewProps {
 
 // InterCHARM Korea Verified Sample URLs for Operator QA
 const QUICK_TEST_URLS = [
+  {
+    name: "3일애 (Three Days Love)",
+    url: "https://www.intercharmkorea.com/ko-kr/exhibitor_directory/Exhibitor_detail.3%EC%9D%BC%EC%95%A0.org-b4fa5886-d5fd-490e-92bf-0c0b65d0a79e.html",
+  },
   {
     name: "JCOMO (제이코모)",
     url: "https://www.intercharmkorea.com/ko-kr/exhibitor_directory/Exhibitor_detail.주제이코모.org-ec0b85bc-960d-49d4-9dca-146c10ae59cb.html#/",
@@ -73,10 +79,15 @@ export default function BrandMarketingView({
   // The draft being actively reviewed/edited
   const [reviewedDraft, setReviewedDraft] = useState<NormalizedCompanyDraft | null>(null);
 
-  // Evaluation Fields
+  // Evaluation & Curation Fields
   const [grade, setGrade] = useState<"A" | "B" | "C" | "UNRATED">("UNRATED");
   const [status, setStatus] = useState<"DRAFT" | "REVIEWED" | "SAVED" | "ARCHIVED">("REVIEWED");
   const [internalNotes, setInternalNotes] = useState<string>("");
+  const [selectedBusinessTypes, setSelectedBusinessTypes] = useState<BusinessType[]>([]);
+  const [companyTypeOtherExplanation, setCompanyTypeOtherExplanation] = useState<string>("");
+
+  // Company-level category input for Import & Review
+  const [newCompanyCategoryInput, setNewCompanyCategoryInput] = useState<string>("");
 
   // Duplicate candidate alert state
   const [duplicateCheck, setDuplicateCheck] = useState<DuplicateMatchResult | null>(null);
@@ -90,9 +101,6 @@ export default function BrandMarketingView({
   const [isDeletingCandidate, setIsDeletingCandidate] = useState(false);
   const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
 
-  // Per-Brand inline category input for Import & Review
-  const [newBrandCategoryInputs, setNewBrandCategoryInputs] = useState<Record<number, string>>({});
-
   // --------------------------------------------------------------------------
   // TAB 2: BRAND LIST STATE
   // --------------------------------------------------------------------------
@@ -102,6 +110,8 @@ export default function BrandMarketingView({
   const [filterGrade, setFilterGrade] = useState("ALL");
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [filterCategory, setFilterCategory] = useState("ALL");
+  const [filterBusinessTypes, setFilterBusinessTypes] = useState<string[]>([]);
+  const [filterBusinessTypeMatchMode, setFilterBusinessTypeMatchMode] = useState<"ANY" | "ALL">("ANY");
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const pageSize = 20;
@@ -112,8 +122,61 @@ export default function BrandMarketingView({
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isUpdatingCandidate, setIsUpdatingCandidate] = useState(false);
   const [detailEditSuccess, setDetailEditSuccess] = useState<string | null>(null);
+  const [drawerNewCategoryInput, setDrawerNewCategoryInput] = useState<string>("");
 
   const [isPending, startTransition] = useTransition();
+
+  // --------------------------------------------------------------------------
+  // COMPUTED / MEMOIZED VALUES
+  // --------------------------------------------------------------------------
+  // Unique extracted company-level products for Import & Review
+  const importExtractedProducts = useMemo(() => {
+    if (reviewedDraft?.companyProducts && reviewedDraft.companyProducts.length > 0) {
+      return reviewedDraft.companyProducts;
+    }
+    const map = new Map<string, any>();
+    for (const b of reviewedDraft?.brands || []) {
+      for (const p of b.keyProducts || []) {
+        const key = (p.id || p.titleKr || p.titleEn || "").toLowerCase();
+        if (key && !map.has(key)) {
+          map.set(key, p);
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [reviewedDraft]);
+
+  // Drawer company categories
+  const drawerCategories = useMemo(() => {
+    if (!selectedCandidateDetail) return [];
+    if (Array.isArray(selectedCandidateDetail.categories) && selectedCandidateDetail.categories.length > 0) {
+      return selectedCandidateDetail.categories;
+    }
+    if (Array.isArray(selectedCandidateDetail.companyCategories) && selectedCandidateDetail.companyCategories.length > 0) {
+      return selectedCandidateDetail.companyCategories;
+    }
+    return Array.from(
+      new Set(selectedCandidateDetail.sourcing_brands?.flatMap((b: any) => b.categories || []) || [])
+    ) as string[];
+  }, [selectedCandidateDetail]);
+
+  // Drawer extracted products
+  const drawerProducts = useMemo(() => {
+    if (!selectedCandidateDetail) return [];
+    if (Array.isArray(selectedCandidateDetail.companyProducts) && selectedCandidateDetail.companyProducts.length > 0) {
+      return selectedCandidateDetail.companyProducts;
+    }
+    const map = new Map<string, any>();
+    for (const b of selectedCandidateDetail.sourcing_brands || []) {
+      for (const p of b.key_products || []) {
+        const key = (p.id || p.titleKr || p.titleEn || "").toLowerCase();
+        if (key && !map.has(key)) {
+          map.set(key, p);
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [selectedCandidateDetail]);
 
   // --------------------------------------------------------------------------
   // EXTRACTION HANDLER
@@ -147,6 +210,8 @@ export default function BrandMarketingView({
       setGrade("UNRATED");
       setStatus("REVIEWED");
       setInternalNotes("");
+      setSelectedBusinessTypes(res.draft.company.businessTypes || []);
+      setCompanyTypeOtherExplanation("");
     } catch (err: any) {
       setExtractError(err.message || "An unexpected error occurred during extraction.");
     } finally {
@@ -185,6 +250,9 @@ export default function BrandMarketingView({
         grade,
         status,
         assignedTo: null,
+        businessTypes: selectedBusinessTypes,
+        companyTypeOtherExplanation: selectedBusinessTypes.includes("OTHER") ? companyTypeOtherExplanation : null,
+        categories: reviewedDraft.categories || [],
         internalNotes: overrideReason
           ? `[DUPLICATE OVERRIDE]: ${overrideReason}\n\n${internalNotes}`
           : internalNotes,
@@ -220,6 +288,8 @@ export default function BrandMarketingView({
         grade: filterGrade !== "ALL" ? filterGrade : undefined,
         status: filterStatus !== "ALL" ? filterStatus : undefined,
         category: filterCategory !== "ALL" ? filterCategory : undefined,
+        businessTypes: filterBusinessTypes.length > 0 ? filterBusinessTypes : undefined,
+        businessTypeMatchMode: filterBusinessTypeMatchMode,
         limit: pageSize,
         offset: (page - 1) * pageSize,
       });
@@ -262,6 +332,7 @@ export default function BrandMarketingView({
 
     try {
       // Reconstruct draft for full update
+      const currentCats = selectedCandidateDetail.categories || drawerCategories;
       const draft: NormalizedCompanyDraft = {
         company: {
           nameKr: selectedCandidateDetail.company_name_kr,
@@ -288,7 +359,7 @@ export default function BrandMarketingView({
           nameKr: b.brand_name_kr,
           nameEn: b.brand_name_en,
           description: b.description,
-          categories: b.categories || [],
+          categories: currentCats.length > 0 ? currentCats : (b.categories || []),
           keyProducts: b.key_products || [],
           source: b.source,
         })),
@@ -308,7 +379,8 @@ export default function BrandMarketingView({
           source: w.source,
         })),
         socialMedia: [],
-        categories: [],
+        categories: currentCats,
+        companyProducts: drawerProducts,
         source: {
           provider: selectedCandidateDetail.sourcing_sources?.[0]?.provider || "INTERCHARM",
           sourceUrl: selectedCandidateDetail.sourcing_sources?.[0]?.source_url || "",
@@ -327,6 +399,9 @@ export default function BrandMarketingView({
         assignedTo: selectedCandidateDetail.assigned_to || null,
         internalNotes: selectedCandidateDetail.internal_notes || null,
         marketingConsentStatus: selectedCandidateDetail.marketing_consent_status || "UNCONFIRMED",
+        businessTypes: selectedCandidateDetail.business_types || [],
+        companyTypeOtherExplanation: selectedCandidateDetail.companyTypeOtherExplanation || null,
+        categories: currentCats,
       };
 
       const res = await updateSourcingCandidateAction(selectedCandidateDetail.id, draft, evalData);
@@ -401,32 +476,84 @@ export default function BrandMarketingView({
     }
   };
 
-  const handleAddCategoryToBrand = (bIdx: number) => {
-    const raw = (newBrandCategoryInputs[bIdx] || "").trim();
-    if (!raw || !reviewedDraft) return;
-    const brand = reviewedDraft.brands[bIdx];
-    const currentCats = Array.isArray(brand?.categories) ? brand.categories : [];
-    if (!currentCats.includes(raw)) {
-      const copy = [...reviewedDraft.brands];
-      copy[bIdx] = {
-        ...brand,
-        categories: [...currentCats, raw],
-      };
-      setReviewedDraft({ ...reviewedDraft, brands: copy });
-    }
-    setNewBrandCategoryInputs((prev) => ({ ...prev, [bIdx]: "" }));
+  // Company Type Toggle for Import & Review
+  const toggleBusinessType = (type: BusinessType) => {
+    setSelectedBusinessTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
   };
 
-  const handleRemoveCategoryFromBrand = (bIdx: number, catIdx: number) => {
+  // Company Category Handlers for Import & Review
+  const handleAddCompanyCategory = () => {
+    const raw = newCompanyCategoryInput.trim();
+    if (!raw || !reviewedDraft) return;
+    const currentCats = Array.isArray(reviewedDraft.categories) ? reviewedDraft.categories : [];
+    const exists = currentCats.some((c) => c.toLowerCase() === raw.toLowerCase());
+    if (!exists) {
+      setReviewedDraft({
+        ...reviewedDraft,
+        categories: [...currentCats, raw],
+      });
+    }
+    setNewCompanyCategoryInput("");
+  };
+
+  const handleRemoveCompanyCategory = (catIdx: number) => {
     if (!reviewedDraft) return;
-    const brand = reviewedDraft.brands[bIdx];
-    const currentCats = Array.isArray(brand?.categories) ? brand.categories : [];
-    const copy = [...reviewedDraft.brands];
-    copy[bIdx] = {
-      ...brand,
+    const currentCats = Array.isArray(reviewedDraft.categories) ? reviewedDraft.categories : [];
+    setReviewedDraft({
+      ...reviewedDraft,
       categories: currentCats.filter((_, idx) => idx !== catIdx),
-    };
-    setReviewedDraft({ ...reviewedDraft, brands: copy });
+    });
+  };
+
+  // Drawer Company Type & Category Handlers
+  const handleToggleDrawerBusinessType = (type: BusinessType) => {
+    if (!selectedCandidateDetail) return;
+    const currentTypes: BusinessType[] = selectedCandidateDetail.business_types || [];
+    const updated = currentTypes.includes(type)
+      ? currentTypes.filter((t) => t !== type)
+      : [...currentTypes, type];
+    setSelectedCandidateDetail({
+      ...selectedCandidateDetail,
+      business_types: updated,
+    });
+  };
+
+  const handleAddDrawerCategory = () => {
+    const raw = drawerNewCategoryInput.trim();
+    if (!raw || !selectedCandidateDetail) return;
+    const currentCats: string[] = selectedCandidateDetail.categories || drawerCategories;
+    const exists = currentCats.some((c) => c.toLowerCase() === raw.toLowerCase());
+    if (!exists) {
+      setSelectedCandidateDetail({
+        ...selectedCandidateDetail,
+        categories: [...currentCats, raw],
+      });
+    }
+    setDrawerNewCategoryInput("");
+  };
+
+  const handleRemoveDrawerCategory = (idx: number) => {
+    if (!selectedCandidateDetail) return;
+    const currentCats: string[] = selectedCandidateDetail.categories || drawerCategories;
+    setSelectedCandidateDetail({
+      ...selectedCandidateDetail,
+      categories: currentCats.filter((_, i) => i !== idx),
+    });
+  };
+
+  // Company Type badge styling helper
+  const renderCompanyTypeBadge = (bt: string) => {
+    const opt = COMPANY_TYPE_OPTIONS.find((o) => o.value === bt);
+    return (
+      <span
+        key={bt}
+        className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60"
+      >
+        {opt ? opt.labelKr : bt}
+      </span>
+    );
   };
 
   // Grade badge styling helper
@@ -1009,11 +1136,16 @@ export default function BrandMarketingView({
                 </div>
 
                 {/* 3. Brands & Product Catalog Card */}
-                <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-5">
+                <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-6">
                   <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                      3. Brands & Product Catalog ({reviewedDraft.brands.length} Brands)
-                    </h3>
+                    <div>
+                      <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                        3. Brands & Product Catalog ({reviewedDraft.brands.length} Brands)
+                      </h3>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Company brands, category tags, and extracted product catalog.
+                      </p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
@@ -1036,17 +1168,22 @@ export default function BrandMarketingView({
                     </button>
                   </div>
 
-                  {/* Represented Brands Section */}
+                  {/* SUBSECTION A: Represented Brands (Brands Only) */}
                   <div className="space-y-3">
-                    <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                      Represented Brands ({reviewedDraft.brands.length})
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                        Represented Brands ({reviewedDraft.brands.length})
+                      </span>
+                      <span className="text-[11px] text-zinc-400">
+                        Extracted brand identities
+                      </span>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {reviewedDraft.brands.map((brand, bIdx) => (
                         <div
                           key={bIdx}
-                          className="p-4 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 space-y-3"
+                          className="p-3.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 space-y-2.5"
                         >
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
@@ -1100,102 +1237,127 @@ export default function BrandMarketingView({
                                 className="w-full px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                               />
                             </div>
-
-                            {/* Rendered as Visual Chips/Tiles (Requirement 2) */}
-                            <div className="sm:col-span-2 space-y-1.5">
-                              <label className="block text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
-                                Categories
-                              </label>
-                              <div className="flex flex-wrap items-center gap-1.5 p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 min-h-[38px]">
-                                {brand.categories && brand.categories.length > 0 ? (
-                                  brand.categories.map((cat, catIdx) => (
-                                    <span
-                                      key={catIdx}
-                                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-                                    >
-                                      {cat}
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveCategoryFromBrand(bIdx, catIdx)}
-                                        className="hover:text-blue-900 dark:hover:text-blue-100 cursor-pointer ml-0.5 font-bold"
-                                        title="Remove category"
-                                      >
-                                        ✕
-                                      </button>
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span className="text-[11px] text-zinc-400 italic">No categories assigned</span>
-                                )}
-
-                                <div className="inline-flex items-center gap-1 ml-auto">
-                                  <input
-                                    type="text"
-                                    placeholder="+ Add category"
-                                    value={newBrandCategoryInputs[bIdx] || ""}
-                                    onChange={(e) =>
-                                      setNewBrandCategoryInputs({
-                                        ...newBrandCategoryInputs,
-                                        [bIdx]: e.target.value,
-                                      })
-                                    }
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        handleAddCategoryToBrand(bIdx);
-                                      }
-                                    }}
-                                    className="px-2 py-0.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 w-28 focus:w-40 transition-all"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAddCategoryToBrand(bIdx)}
-                                    title="Add category to brand"
-                                    data-testid="add-cat-btn"
-                                    className="px-2 py-0.5 text-xs font-semibold rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 cursor-pointer"
-                                  >
-                                    Add
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
                           </div>
-
-                          {/* Specifically Attributed Products (if any) */}
-                          {brand.keyProducts.length > 0 && (
-                            <div className="pt-2">
-                              <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 block mb-1.5">
-                                Attributed Products ({brand.keyProducts.length})
-                              </span>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {brand.keyProducts.map((prod, pIdx) => (
-                                  <div
-                                    key={pIdx}
-                                    className="flex items-start gap-2 p-2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs"
-                                  >
-                                    {prod.imageUrl && (
-                                      <img
-                                        src={prod.imageUrl}
-                                        alt={prod.titleKr || prod.titleEn || "Product"}
-                                        className="w-10 h-10 object-cover rounded shrink-0 border border-zinc-200 dark:border-zinc-700"
-                                      />
-                                    )}
-                                    <div className="min-w-0 flex-1">
-                                      <p className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                                        {prod.titleKr || prod.titleEn}
-                                      </p>
-                                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
-                                        {prod.description || "No description"}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  {/* SUBSECTION B: Company Categories (Independent Section) */}
+                  <div className="space-y-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                          Company Categories ({reviewedDraft.categories?.length || 0})
+                        </span>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">
+                          InterCHARM 카테고리 검색결과 및 전시 품목 분류 (회사 레벨 관리)
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 min-h-[46px]">
+                      {reviewedDraft.categories && reviewedDraft.categories.length > 0 ? (
+                        reviewedDraft.categories.map((cat, catIdx) => (
+                          <span
+                            key={catIdx}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                          >
+                            {cat}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCompanyCategory(catIdx)}
+                              className="hover:text-blue-900 dark:hover:text-blue-100 cursor-pointer ml-1 font-bold"
+                              title="Remove category"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-zinc-400 italic">No company categories assigned</span>
+                      )}
+
+                      <div className="inline-flex items-center gap-1.5 ml-auto">
+                        <input
+                          type="text"
+                          placeholder="+ Add category"
+                          value={newCompanyCategoryInput}
+                          onChange={(e) => setNewCompanyCategoryInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddCompanyCategory();
+                            }
+                          }}
+                          className="px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 w-32 focus:w-44 transition-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCompanyCategory}
+                          data-testid="add-cat-btn"
+                          className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 cursor-pointer"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SUBSECTION C: Extracted Products (Independent Section) */}
+                  <div className="space-y-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                          Extracted Products ({importExtractedProducts.length})
+                        </span>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">
+                          전시회 등록 출품작 및 주요 제품 정보 (중복 없이 단일 표시)
+                        </p>
+                      </div>
+                    </div>
+
+                    {importExtractedProducts.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {importExtractedProducts.map((prod, pIdx) => (
+                          <div
+                            key={pIdx}
+                            className="flex items-start gap-3 p-3 rounded-lg bg-zinc-50/50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 text-xs"
+                          >
+                            {prod.imageUrl ? (
+                              <img
+                                src={prod.imageUrl}
+                                alt={prod.titleKr || prod.titleEn || "Product"}
+                                className="w-14 h-14 object-cover rounded-md shrink-0 border border-zinc-200 dark:border-zinc-700 bg-white"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 rounded-md shrink-0 bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 text-lg">
+                                📦
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="font-bold text-zinc-900 dark:text-zinc-100 leading-snug">
+                                {prod.titleKr || prod.titleEn}
+                              </p>
+                              {prod.titleEn && prod.titleEn !== prod.titleKr && (
+                                <p className="text-[11px] text-zinc-400">
+                                  {prod.titleEn}
+                                </p>
+                              )}
+                              {prod.description && (
+                                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">
+                                  {prod.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-400 italic">
+                        No extracted products registered by exhibitor.
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1354,6 +1516,56 @@ export default function BrandMarketingView({
                     </select>
                   </div>
 
+                  {/* Company Type Selector (Multi-Select) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                        Company Type (회사 유형)
+                      </label>
+                      <span className="text-[10px] text-zinc-400">복수 선택 가능</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50">
+                      {COMPANY_TYPE_OPTIONS.map((opt) => {
+                        const isChecked = selectedBusinessTypes.includes(opt.value);
+                        return (
+                          <label
+                            key={opt.value}
+                            className={`flex items-start gap-2 p-1.5 rounded text-xs cursor-pointer transition-colors ${
+                              isChecked
+                                ? "bg-blue-50/80 dark:bg-blue-950/50 text-blue-900 dark:text-blue-200 font-semibold"
+                                : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleBusinessType(opt.value)}
+                              className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+                            />
+                            <div className="min-w-0">
+                              <span className="block leading-tight">{opt.labelKr}</span>
+                              <span className="text-[10px] text-zinc-400 font-normal leading-tight">{opt.labelEn}</span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    {/* Other Explanation Input */}
+                    {selectedBusinessTypes.includes("OTHER") && (
+                      <div className="pt-1">
+                        <input
+                          type="text"
+                          placeholder="기타 회사 유형 설명 (예: 원료 공급사, 패키징 전문 등)"
+                          value={companyTypeOtherExplanation}
+                          onChange={(e) => setCompanyTypeOtherExplanation(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                        />
+                      </div>
+                    )}
+                  </div>
+
                   {/* Marketing Consent Status (Read-only Invariant) */}
                   <div className="p-2.5 rounded bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 text-xs">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-0.5">
@@ -1500,6 +1712,65 @@ export default function BrandMarketingView({
               </select>
             </div>
 
+            {/* Company Type Filter */}
+            <div className="flex items-center gap-1.5">
+              <select
+                value={filterBusinessTypes.length === 0 ? "ALL" : filterBusinessTypes[0]}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "ALL") {
+                    setFilterBusinessTypes([]);
+                  } else {
+                    setFilterBusinessTypes([val]);
+                  }
+                  setCurrentPage(1);
+                }}
+                className="w-40 px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+              >
+                <option value="ALL">Company Type: All</option>
+                {COMPANY_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.labelKr} ({opt.labelEn})
+                  </option>
+                ))}
+              </select>
+
+              {filterBusinessTypes.length > 0 && (
+                <div className="inline-flex rounded border border-zinc-300 dark:border-zinc-700 p-0.5 bg-zinc-50 dark:bg-zinc-900 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterBusinessTypeMatchMode("ANY");
+                      setCurrentPage(1);
+                    }}
+                    className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                      filterBusinessTypeMatchMode === "ANY"
+                        ? "bg-zinc-800 text-white font-bold"
+                        : "text-zinc-500 hover:text-zinc-800"
+                    }`}
+                    title="Match any selected type"
+                  >
+                    ANY
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterBusinessTypeMatchMode("ALL");
+                      setCurrentPage(1);
+                    }}
+                    className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                      filterBusinessTypeMatchMode === "ALL"
+                        ? "bg-zinc-800 text-white font-bold"
+                        : "text-zinc-500 hover:text-zinc-800"
+                    }`}
+                    title="Match all selected types"
+                  >
+                    ALL
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Apply & Refresh Buttons */}
             <button
               type="button"
@@ -1536,6 +1807,7 @@ export default function BrandMarketingView({
                     <th className="p-3">Company (법인명)</th>
                     <th className="p-3">Brands</th>
                     <th className="p-3">Categories</th>
+                    <th className="p-3">Company Type</th>
                     <th className="p-3">Grade</th>
                     <th className="p-3">Primary Contact</th>
                     <th className="p-3">Website</th>
@@ -1547,13 +1819,13 @@ export default function BrandMarketingView({
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {isLoadingList ? (
                     <tr>
-                      <td colSpan={9} className="p-8 text-center text-zinc-400">
+                      <td colSpan={10} className="p-8 text-center text-zinc-400">
                         Loading candidate list...
                       </td>
                     </tr>
                   ) : candidates.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="p-12 text-center space-y-2">
+                      <td colSpan={10} className="p-12 text-center space-y-2">
                         <p className="text-zinc-500 font-medium">No sourcing candidates found.</p>
                         <button
                           type="button"
@@ -1569,9 +1841,12 @@ export default function BrandMarketingView({
                       const primaryContact = c.sourcing_contacts?.find((ct: any) => ct.is_primary) || c.sourcing_contacts?.[0];
                       const primaryWeb = c.sourcing_websites?.[0]?.url;
 
-                      // Extract unique categories across all brands for this candidate
+                      // Extract unique categories across company payload and all brands
                       const allCategories = Array.from(
-                        new Set(c.sourcing_brands?.flatMap((b: any) => b.categories || []) || [])
+                        new Set([
+                          ...(Array.isArray(c.raw_payload_snapshot?.categories) ? c.raw_payload_snapshot.categories : []),
+                          ...(c.sourcing_brands?.flatMap((b: any) => b.categories || []) || []),
+                        ])
                       ) as string[];
 
                       return (
@@ -1618,6 +1893,20 @@ export default function BrandMarketingView({
                                   >
                                     {cat}
                                   </span>
+                                ))
+                              ) : (
+                                <span className="text-zinc-400 text-[11px]">-</span>
+                              )}
+                            </div>
+                          </td>
+                          {/* Company Type Column */}
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-1 max-w-[180px]">
+                              {Array.isArray(c.business_types) && c.business_types.length > 0 ? (
+                                c.business_types.map((bt: string, btIdx: number) => (
+                                  <React.Fragment key={btIdx}>
+                                    {renderCompanyTypeBadge(bt)}
+                                  </React.Fragment>
                                 ))
                               ) : (
                                 <span className="text-zinc-400 text-[11px]">-</span>
@@ -1905,209 +2194,315 @@ export default function BrandMarketingView({
                   </div>
                 )}
 
-                {/* 1) TOP CARD — Company Overview (Requirement 4) */}
-                <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850/60 border border-zinc-200 dark:border-zinc-800 space-y-3.5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                        Company Overview
-                      </span>
-                      <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 mt-0.5">
-                        {selectedCandidateDetail.company_name_kr}
-                      </h3>
-                      {selectedCandidateDetail.company_name_en && (
-                        <p className="text-xs text-zinc-500 font-medium">
-                          {selectedCandidateDetail.company_name_en}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {renderGradeBadge(selectedCandidateDetail.grade)}
-                      {renderStatusBadge(selectedCandidateDetail.status)}
-                    </div>
-                  </div>
+                {/* 1) TOP CARD — Company Overview (Requirement 4 & ADD11) */}
+                {(() => {
+                  const primaryContact =
+                    selectedCandidateDetail.sourcing_contacts?.find((ct: any) => ct.is_primary) ||
+                    selectedCandidateDetail.sourcing_contacts?.[0];
+                  const otherContacts = (selectedCandidateDetail.sourcing_contacts || []).filter(
+                    (ct: any) => ct !== primaryContact
+                  );
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-zinc-200/80 dark:border-zinc-800 text-xs">
-                    {/* Address */}
-                    <div className="md:col-span-2">
-                      <span className="text-zinc-400 font-semibold block text-[11px]">Address (주소)</span>
-                      <span className="text-zinc-800 dark:text-zinc-200 font-medium">
-                        {selectedCandidateDetail.address_formatted_kr || selectedCandidateDetail.address_street_kr || "-"}
-                      </span>
-                    </div>
+                  const primaryWebObj =
+                    selectedCandidateDetail.sourcing_websites?.find((ws: any) => ws.is_primary) ||
+                    selectedCandidateDetail.sourcing_websites?.[0];
+                  const primaryWeb = primaryWebObj?.url?.trim() || "";
+                  const otherWebsites = (selectedCandidateDetail.sourcing_websites || []).filter(
+                    (ws: any) => ws !== primaryWebObj
+                  );
 
-                    {/* Representative & Business Number */}
-                    <div>
-                      <span className="text-zinc-400 font-semibold block text-[11px]">Representative (대표자)</span>
-                      <span className="text-zinc-800 dark:text-zinc-200 font-medium">
-                        {selectedCandidateDetail.representative_name || "-"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-zinc-400 font-semibold block text-[11px]">Business Registration # (사업자등록번호)</span>
-                      <span className="text-zinc-800 dark:text-zinc-200 font-medium">
-                        {selectedCandidateDetail.business_number || "-"}
-                      </span>
-                    </div>
-
-                    {/* Primary Contact Person, Email & Phone */}
-                    {(() => {
-                      const primaryContact =
-                        selectedCandidateDetail.sourcing_contacts?.find((ct: any) => ct.is_primary) ||
-                        selectedCandidateDetail.sourcing_contacts?.[0];
-                      return (
-                        <>
-                          <div>
-                            <span className="text-zinc-400 font-semibold block text-[11px]">Primary Contact (담당자)</span>
-                            <span className="text-zinc-800 dark:text-zinc-200 font-medium">
-                              {primaryContact?.name || "-"}
-                              {primaryContact?.role && (
-                                <span className="text-zinc-400 font-normal ml-1">({primaryContact.role})</span>
-                              )}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-zinc-400 font-semibold block text-[11px]">Contact Email & Phone</span>
-                            <div className="space-y-0.5">
-                              {primaryContact?.email ? (
-                                <div>
-                                  <a
-                                    href={`mailto:${primaryContact.email}`}
-                                    className="text-blue-600 dark:text-blue-400 underline font-medium"
-                                  >
-                                    {primaryContact.email}
-                                  </a>
-                                </div>
-                              ) : (
-                                <span className="text-zinc-400">-</span>
-                              )}
-                              {(primaryContact?.phone || primaryContact?.mobile) && (
-                                <div className="text-zinc-600 dark:text-zinc-400 text-[11px]">
-                                  {primaryContact.phone || primaryContact.mobile}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </>
-                      );
-                    })()}
-
-                    {/* Website(s) with clickable external links */}
-                    <div className="md:col-span-2">
-                      <span className="text-zinc-400 font-semibold block text-[11px]">Websites (웹사이트)</span>
-                      {selectedCandidateDetail.sourcing_websites && selectedCandidateDetail.sourcing_websites.length > 0 ? (
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {selectedCandidateDetail.sourcing_websites.map((ws: any, wsIdx: number) => {
-                            const rawUrl = ws.url?.trim() || "";
-                            const displayUrl = rawUrl.startsWith("http://") || rawUrl.startsWith("https://") ? rawUrl : `https://${rawUrl}`;
-                            return (
-                              <a
-                                key={wsIdx}
-                                href={displayUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-blue-600 dark:text-blue-400 hover:underline"
-                              >
-                                <span>🌐 {ws.title || ws.website_type || "Website"}</span>
-                                <span className="text-zinc-400 text-[10px]">↗</span>
-                              </a>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <span className="text-zinc-400">-</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2) SECOND SECTION — Represented Brands & Categories (Requirement 4) */}
-                <div className="space-y-3">
-                  <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
-                    Represented Brands & Categories ({selectedCandidateDetail.sourcing_brands?.length || 0})
-                  </h4>
-
-                  {selectedCandidateDetail.sourcing_brands && selectedCandidateDetail.sourcing_brands.length > 0 ? (
-                    selectedCandidateDetail.sourcing_brands.map((b: any, idx: number) => (
-                      <div
-                        key={idx}
-                        className="p-3.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 space-y-2.5"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
-                              {b.brand_name_kr}
-                            </span>
-                            {b.brand_name_en && b.brand_name_en !== b.brand_name_kr && (
-                              <span className="text-zinc-500 font-normal ml-1.5 text-xs">
-                                ({b.brand_name_en})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Categories as chips/tags */}
+                  return (
+                    <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850/60 border border-zinc-200 dark:border-zinc-800 space-y-4">
+                      {/* Top Row: Company Name & Badges */}
+                      <div className="flex items-start justify-between">
                         <div>
-                          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide block mb-1">
-                            Categories
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                            Company Overview
                           </span>
-                          {b.categories && b.categories.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              {b.categories.map((cat: string, catIdx: number) => (
-                                <span
-                                  key={catIdx}
-                                  className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60"
-                                >
-                                  {cat}
-                                </span>
-                              ))}
-                            </div>
+                          <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 mt-0.5">
+                            {selectedCandidateDetail.company_name_kr}
+                          </h3>
+                          {selectedCandidateDetail.company_name_en && (
+                            <p className="text-xs text-zinc-500 font-medium">
+                              {selectedCandidateDetail.company_name_en}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {renderGradeBadge(selectedCandidateDetail.grade)}
+                          {renderStatusBadge(selectedCandidateDetail.status)}
+                        </div>
+                      </div>
+
+                      {/* Prominent Website Card with Full URL & Open Website Button */}
+                      <div className="p-3 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[10px] uppercase font-bold text-zinc-400 block mb-0.5">
+                            Official Website (공식 웹사이트)
+                          </span>
+                          {primaryWeb ? (
+                            <a
+                              href={primaryWeb.startsWith("http") ? primaryWeb : `https://${primaryWeb}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 dark:text-blue-400 font-mono font-medium underline break-all hover:text-blue-800"
+                            >
+                              {primaryWeb}
+                            </a>
                           ) : (
-                            <span className="text-zinc-400 text-[11px] italic">No categories assigned</span>
+                            <span className="text-zinc-400 text-xs">-</span>
+                          )}
+                        </div>
+                        {primaryWeb && (
+                          <a
+                            href={primaryWeb.startsWith("http") ? primaryWeb : `https://${primaryWeb}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors inline-flex items-center gap-1 shrink-0"
+                          >
+                            <span>Open Website</span>
+                            <span>↗</span>
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Company Info Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-zinc-200/80 dark:border-zinc-800 text-xs">
+                        {/* Address */}
+                        <div className="md:col-span-2">
+                          <span className="text-zinc-400 font-semibold block text-[11px]">Address (주소)</span>
+                          <span className="text-zinc-800 dark:text-zinc-200 font-medium">
+                            {selectedCandidateDetail.address_formatted_kr || selectedCandidateDetail.address_street_kr || "-"}
+                          </span>
+                        </div>
+
+                        {/* Representative & Business Number */}
+                        <div>
+                          <span className="text-zinc-400 font-semibold block text-[11px]">Representative (대표자)</span>
+                          <span className="text-zinc-800 dark:text-zinc-200 font-medium">
+                            {selectedCandidateDetail.representative_name || "-"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-zinc-400 font-semibold block text-[11px]">Business Registration # (사업자등록번호)</span>
+                          <span className="text-zinc-800 dark:text-zinc-200 font-medium">
+                            {selectedCandidateDetail.business_registration_number || selectedCandidateDetail.business_number || "-"}
+                          </span>
+                        </div>
+
+                        {/* Standalone Primary Contact Person, Email & Phone */}
+                        <div>
+                          <span className="text-zinc-400 font-semibold block text-[11px]">Primary Contact (담당자)</span>
+                          <span className="text-zinc-800 dark:text-zinc-200 font-medium">
+                            {primaryContact?.name || "-"}
+                            {primaryContact?.job_title && (
+                              <span className="text-zinc-400 font-normal ml-1">({primaryContact.job_title})</span>
+                            )}
+                            {primaryContact?.department && (
+                              <span className="text-zinc-400 font-normal ml-1">/ {primaryContact.department}</span>
+                            )}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-zinc-400 font-semibold block text-[11px]">Contact Email (이메일)</span>
+                          {primaryContact?.email ? (
+                            <a
+                              href={`mailto:${primaryContact.email}`}
+                              className="text-blue-600 dark:text-blue-400 underline font-medium font-mono text-xs"
+                            >
+                              {primaryContact.email}
+                            </a>
+                          ) : (
+                            <span className="text-zinc-400">-</span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-zinc-400 font-semibold block text-[11px]">Contact Phone (전화번호)</span>
+                          {(primaryContact?.phone || primaryContact?.mobile) ? (
+                            <a
+                              href={`tel:${primaryContact.phone || primaryContact.mobile}`}
+                              className="text-zinc-800 dark:text-zinc-200 font-medium font-mono text-xs hover:underline"
+                            >
+                              {primaryContact.phone || primaryContact.mobile}
+                            </a>
+                          ) : (
+                            <span className="text-zinc-400">-</span>
                           )}
                         </div>
 
-                        {/* Attributed Products */}
-                        {b.key_products && b.key_products.length > 0 && (
-                          <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-800/80">
-                            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide block mb-1.5">
-                              Attributed Products ({b.key_products.length})
-                            </span>
-                            <div className="space-y-1.5">
-                              {b.key_products.map((kp: any, pIdx: number) => (
-                                <div
-                                  key={pIdx}
-                                  className="text-xs text-zinc-700 dark:text-zinc-300 flex items-start gap-2 bg-white dark:bg-zinc-900 p-2 rounded border border-zinc-200/80 dark:border-zinc-800"
-                                >
-                                  <span className="text-zinc-400 mt-0.5">•</span>
-                                  <div className="flex-1">
-                                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                                      {kp.titleKr || kp.titleEn}
-                                    </span>
-                                    {kp.titleEn && kp.titleEn !== kp.titleKr && (
-                                      <span className="text-zinc-400 text-[11px] ml-1.5">
-                                        ({kp.titleEn})
-                                      </span>
-                                    )}
-                                    {kp.descriptionKr && (
-                                      <p className="text-[11px] text-zinc-500 mt-0.5 line-clamp-2">
-                                        {kp.descriptionKr}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
+                        {/* Additional Websites if present */}
+                        {otherWebsites.length > 0 && (
+                          <div className="md:col-span-2 pt-1 border-t border-zinc-200/60 dark:border-zinc-800/80">
+                            <span className="text-zinc-400 font-semibold block text-[11px] mb-1">Additional Websites</span>
+                            <div className="flex flex-wrap gap-2">
+                              {otherWebsites.map((ws: any, wsIdx: number) => {
+                                const rawUrl = ws.url?.trim() || "";
+                                const displayUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
+                                return (
+                                  <a
+                                    key={wsIdx}
+                                    href={displayUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-blue-600 dark:text-blue-400 hover:underline"
+                                  >
+                                    <span>🌐 {ws.title || ws.website_type || "Website"}</span>
+                                    <span className="text-zinc-400 text-[10px]">↗</span>
+                                  </a>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
                       </div>
-                    ))
+                    </div>
+                  );
+                })()}
+
+                {/* 2) FIRST SUB-SECTION — Represented Brands (Brands Only) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
+                      Represented Brands ({selectedCandidateDetail.sourcing_brands?.length || 0})
+                    </h4>
+                    <span className="text-[11px] text-zinc-400">보유 브랜드</span>
+                  </div>
+
+                  {selectedCandidateDetail.sourcing_brands && selectedCandidateDetail.sourcing_brands.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {selectedCandidateDetail.sourcing_brands.map((b: any, idx: number) => (
+                        <div
+                          key={idx}
+                          className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 flex items-center justify-between"
+                        >
+                          <div>
+                            <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100">
+                              {b.brand_name_kr}
+                            </span>
+                            {b.brand_name_en && b.brand_name_en !== b.brand_name_kr && (
+                              <span className="text-zinc-400 text-[11px] block mt-0.5">
+                                {b.brand_name_en}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
+                            Brand
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    <p className="text-zinc-400 text-xs italic">No brands associated with this company.</p>
+                    <p className="text-zinc-400 text-xs italic">No brands registered.</p>
                   )}
                 </div>
 
-                {/* 3) THIRD SECTION — Corporate Description (Requirement 4) */}
+                {/* 3) SECOND SUB-SECTION — Company Categories (Independent Section with Tag Adder) */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
+                      Company Categories ({drawerCategories.length})
+                    </h4>
+                    <span className="text-[10px] text-zinc-400">회사 레벨 카테고리 태그</span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950 min-h-[44px]">
+                    {drawerCategories.length > 0 ? (
+                      drawerCategories.map((cat: string, catIdx: number) => (
+                        <span
+                          key={catIdx}
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                        >
+                          {cat}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDrawerCategory(catIdx)}
+                            className="hover:text-blue-900 dark:hover:text-blue-100 cursor-pointer ml-1 font-bold"
+                            title="Remove category"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-zinc-400 italic">No categories assigned</span>
+                    )}
+
+                    <div className="inline-flex items-center gap-1.5 ml-auto">
+                      <input
+                        type="text"
+                        placeholder="+ Add category"
+                        value={drawerNewCategoryInput}
+                        onChange={(e) => setDrawerNewCategoryInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddDrawerCategory();
+                          }
+                        }}
+                        className="px-2 py-0.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 w-28 focus:w-36 transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddDrawerCategory}
+                        className="px-2 py-0.5 text-xs font-semibold rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 cursor-pointer"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4) THIRD SUB-SECTION — Extracted Products (Independent Section) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
+                      Extracted Products ({drawerProducts.length})
+                    </h4>
+                    <span className="text-[11px] text-zinc-400">전시회 출품 제품</span>
+                  </div>
+
+                  {drawerProducts.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {drawerProducts.map((prod: any, pIdx: number) => (
+                        <div
+                          key={pIdx}
+                          className="flex items-start gap-2.5 p-2.5 rounded-lg bg-zinc-50/50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 text-xs"
+                        >
+                          {prod.imageUrl ? (
+                            <img
+                              src={prod.imageUrl}
+                              alt={prod.titleKr || prod.titleEn || "Product"}
+                              className="w-12 h-12 object-cover rounded shrink-0 border border-zinc-200 dark:border-zinc-700 bg-white"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded shrink-0 bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 text-base">
+                              📦
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <p className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                              {prod.titleKr || prod.titleEn}
+                            </p>
+                            {prod.titleEn && prod.titleEn !== prod.titleKr && (
+                              <p className="text-[11px] text-zinc-400 truncate">
+                                {prod.titleEn}
+                              </p>
+                            )}
+                            {prod.description && (
+                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2">
+                                {prod.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-zinc-400 text-xs italic">No extracted products available.</p>
+                  )}
+                </div>
+
+                {/* 5) FOURTH SECTION — Corporate Description */}
                 <div className="space-y-3">
                   <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
                     Corporate Description
@@ -2149,7 +2544,7 @@ export default function BrandMarketingView({
                   )}
                 </div>
 
-                {/* 4) FOURTH SECTION — Evaluation & Workflow Status (Requirement 4) */}
+                {/* 6) FIFTH SECTION — Evaluation & Workflow Status (with Company Type Multi-Select) */}
                 <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800 space-y-3">
                   <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">Evaluation & Workflow Status</h4>
                   <div className="grid grid-cols-2 gap-3">
@@ -2195,6 +2590,61 @@ export default function BrandMarketingView({
                       </select>
                     </div>
 
+                    {/* Company Type Multi-Select for Drawer */}
+                    <div className="col-span-2 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-zinc-600 dark:text-zinc-400 font-semibold text-[11px]">
+                          Company Type (회사 유형)
+                        </label>
+                        <span className="text-[10px] text-zinc-400">복수 선택 가능</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+                        {COMPANY_TYPE_OPTIONS.map((opt) => {
+                          const currentTypes = selectedCandidateDetail.business_types || [];
+                          const isChecked = currentTypes.includes(opt.value);
+                          return (
+                            <label
+                              key={opt.value}
+                              className={`flex items-start gap-2 p-1.5 rounded text-xs cursor-pointer transition-colors ${
+                                isChecked
+                                  ? "bg-blue-50/80 dark:bg-blue-950/50 text-blue-900 dark:text-blue-200 font-semibold"
+                                  : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleDrawerBusinessType(opt.value)}
+                                className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+                              />
+                              <div className="min-w-0">
+                                <span className="block leading-tight">{opt.labelKr}</span>
+                                <span className="text-[10px] text-zinc-400 font-normal leading-tight">{opt.labelEn}</span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      {/* Other explanation input */}
+                      {(selectedCandidateDetail.business_types || []).includes("OTHER") && (
+                        <div className="pt-1">
+                          <input
+                            type="text"
+                            placeholder="기타 회사 유형 설명 (예: 원료 공급사, 패키징 전문 등)"
+                            value={selectedCandidateDetail.companyTypeOtherExplanation || ""}
+                            onChange={(e) =>
+                              setSelectedCandidateDetail({
+                                ...selectedCandidateDetail,
+                                companyTypeOtherExplanation: e.target.value,
+                              })
+                            }
+                            className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
+                          />
+                        </div>
+                      )}
+                    </div>
+
                     <div className="col-span-2">
                       <label className="block text-zinc-600 dark:text-zinc-400 mb-1 font-semibold text-[11px]">
                         Internal Notes
@@ -2238,7 +2688,7 @@ export default function BrandMarketingView({
                   </div>
                 )}
 
-                {/* 5) BOTTOM ACTIONS (Requirement 4) */}
+                {/* 7) BOTTOM ACTIONS */}
                 <div className="flex items-center gap-2 pt-4 border-t border-zinc-200 dark:border-zinc-800">
                   <button
                     type="button"

@@ -13,6 +13,8 @@ export interface SourcingListParams {
   grade?: string;
   category?: string;
   status?: string;
+  businessTypes?: string[];
+  businessTypeMatchMode?: "ANY" | "ALL";
   assignedTo?: string;
   limit?: number;
   offset?: number;
@@ -210,7 +212,7 @@ export async function saveSourcingDraft(
       company_name_en: draft.company.nameEn,
       description_kr: draft.company.descriptionKr,
       description_en: draft.company.descriptionEn,
-      business_types: draft.company.businessTypes,
+      business_types: evaluation?.businessTypes || draft.company.businessTypes || [],
       business_type_evidence: draft.company.businessTypeEvidence,
       representative_name: draft.company.representativeName,
       business_registration_number: draft.company.businessRegistrationNumber,
@@ -228,7 +230,12 @@ export async function saveSourcingDraft(
       assigned_to: evaluation?.assignedTo || null,
       internal_notes: evaluation?.internalNotes || null,
       marketing_consent_status: evaluation?.marketingConsentStatus || "UNCONFIRMED",
-      raw_payload_snapshot: draft.source.rawPayloadSnapshot || null,
+      raw_payload_snapshot: {
+        ...(draft.source.rawPayloadSnapshot || {}),
+        categories: draft.categories || [],
+        companyProducts: draft.companyProducts || [],
+        companyTypeOtherExplanation: evaluation?.companyTypeOtherExplanation || null,
+      },
       audit_summary: draft.audit,
     })
     .select("id")
@@ -247,8 +254,8 @@ export async function saveSourcingDraft(
       brand_name_kr: b.nameKr,
       brand_name_en: b.nameEn,
       description: b.description,
-      categories: b.categories,
-      key_products: b.keyProducts,
+      categories: b.categories?.length > 0 ? b.categories : (draft.categories || []),
+      key_products: b.keyProducts || [],
       source: b.source,
       display_order: idx,
     }));
@@ -337,7 +344,24 @@ export async function getSourcingCompanyById(id: string, customClient?: Supabase
     throw new Error(`Failed to fetch sourcing company: ${compErr.message}`);
   }
 
-  return company;
+  const rawSnapshot = (company.raw_payload_snapshot as any) || {};
+  const companyCategories: string[] = Array.from(
+    new Set([
+      ...(Array.isArray(rawSnapshot.categories) ? rawSnapshot.categories : []),
+      ...(company.sourcing_brands?.flatMap((b: any) => (Array.isArray(b.categories) ? b.categories : [])) || []),
+    ])
+  );
+  const companyProducts: any[] = Array.isArray(rawSnapshot.companyProducts) && rawSnapshot.companyProducts.length > 0
+    ? rawSnapshot.companyProducts
+    : company.sourcing_brands?.flatMap((b: any) => (Array.isArray(b.key_products) ? b.key_products : [])) || [];
+
+  return {
+    ...company,
+    categories: companyCategories,
+    companyCategories,
+    companyProducts,
+    companyTypeOtherExplanation: rawSnapshot.companyTypeOtherExplanation || null,
+  };
 }
 
 /**
@@ -357,7 +381,7 @@ export async function updateSourcingCandidateComplete(
     company_name_en: draft.company.nameEn,
     description_kr: draft.company.descriptionKr,
     description_en: draft.company.descriptionEn,
-    business_types: draft.company.businessTypes,
+    business_types: evaluation?.businessTypes || draft.company.businessTypes || [],
     business_type_evidence: draft.company.businessTypeEvidence,
     representative_name: draft.company.representativeName,
     business_registration_number: draft.company.businessRegistrationNumber,
@@ -370,6 +394,12 @@ export async function updateSourcingCandidateComplete(
     address_country_code: draft.company.address.countryCode || "KR",
     address_formatted_kr: draft.company.address.formattedKr,
     address_formatted_en: draft.company.address.formattedEn,
+    raw_payload_snapshot: {
+      ...(draft.source.rawPayloadSnapshot || {}),
+      categories: draft.categories || [],
+      companyProducts: draft.companyProducts || [],
+      companyTypeOtherExplanation: evaluation?.companyTypeOtherExplanation || null,
+    },
     audit_summary: draft.audit,
     updated_at: new Date().toISOString(),
   };
@@ -399,7 +429,7 @@ export async function updateSourcingCandidateComplete(
       brand_name_kr: b.nameKr,
       brand_name_en: b.nameEn,
       description: b.description,
-      categories: b.categories,
+      categories: b.categories?.length > 0 ? b.categories : (draft.categories || []),
       key_products: b.keyProducts,
       source: b.source,
       display_order: idx,
@@ -469,14 +499,23 @@ export async function listSourcingCompanies(
       id,
       company_name_kr,
       company_name_en,
+      description_kr,
+      description_en,
+      business_types,
+      representative_name,
+      business_registration_number,
+      address_formatted_kr,
+      address_formatted_en,
       grade,
       status,
       assigned_to,
+      internal_notes,
+      raw_payload_snapshot,
       created_at,
       updated_at,
-      sourcing_brands(id, brand_name_kr, brand_name_en, categories),
-      sourcing_contacts(id, email, phone, is_primary),
-      sourcing_websites(id, url, label, is_primary),
+      sourcing_brands(id, brand_name_kr, brand_name_en, categories, key_products),
+      sourcing_contacts(id, name, department, job_title, email, phone, is_primary),
+      sourcing_websites(id, url, website_type, title, is_primary),
       sourcing_sources(id, provider, source_url, source_identifier)
     `,
       { count: "exact" }
@@ -491,6 +530,15 @@ export async function listSourcingCompanies(
   }
   if (params?.assignedTo && params.assignedTo !== "ALL") {
     query = query.eq("assigned_to", params.assignedTo);
+  }
+
+  // Company Type filter (multi-value)
+  if (params?.businessTypes && params.businessTypes.length > 0) {
+    if (params.businessTypeMatchMode === "ALL") {
+      query = query.contains("business_types", params.businessTypes);
+    } else {
+      query = query.overlaps("business_types", params.businessTypes);
+    }
   }
 
   // Category filter
@@ -573,8 +621,27 @@ export async function updateSourcingEvaluation(
   if (evaluation.status !== undefined) updates.status = evaluation.status;
   if (evaluation.assignedTo !== undefined) updates.assigned_to = evaluation.assignedTo;
   if (evaluation.internalNotes !== undefined) updates.internal_notes = evaluation.internalNotes;
+  if (evaluation.businessTypes !== undefined) updates.business_types = evaluation.businessTypes;
   if (evaluation.marketingConsentStatus !== undefined) {
     updates.marketing_consent_status = evaluation.marketingConsentStatus;
+  }
+
+  if (evaluation.categories !== undefined || evaluation.companyTypeOtherExplanation !== undefined) {
+    const { data: curr } = await supabase
+      .from("sourcing_companies")
+      .select("raw_payload_snapshot")
+      .eq("id", id)
+      .single();
+    const currSnapshot = (curr?.raw_payload_snapshot as any) || {};
+    updates.raw_payload_snapshot = {
+      ...currSnapshot,
+      ...(evaluation.categories !== undefined ? { categories: evaluation.categories } : {}),
+      ...(evaluation.companyTypeOtherExplanation !== undefined ? { companyTypeOtherExplanation: evaluation.companyTypeOtherExplanation } : {}),
+    };
+  }
+
+  if (evaluation.categories !== undefined) {
+    await supabase.from("sourcing_brands").update({ categories: evaluation.categories }).eq("company_id", id);
   }
 
   const { data, error } = await supabase

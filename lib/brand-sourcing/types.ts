@@ -17,9 +17,19 @@ export type FieldOrigin =
 export type BusinessType =
   | "BRAND_OWNER"
   | "MANUFACTURER"
-  | "OEM_ODM"
   | "DISTRIBUTOR"
+  | "IMPORTER_EXPORTER"
+  | "OEM_ODM"
   | "OTHER";
+
+export const COMPANY_TYPE_OPTIONS: Array<{ value: BusinessType; labelKr: string; labelEn: string }> = [
+  { value: "BRAND_OWNER", labelKr: "브랜드 보유사", labelEn: "Brand Owner" },
+  { value: "MANUFACTURER", labelKr: "제조사", labelEn: "Manufacturer" },
+  { value: "DISTRIBUTOR", labelKr: "유통사", labelEn: "Distributor" },
+  { value: "IMPORTER_EXPORTER", labelKr: "수출입업체", labelEn: "Importer / Exporter" },
+  { value: "OEM_ODM", labelKr: "위탁생산 / 개발생산", labelEn: "OEM / ODM" },
+  { value: "OTHER", labelKr: "기타", labelEn: "Other" },
+];
 
 export interface BusinessTypeEvidence {
   type: BusinessType;
@@ -134,6 +144,9 @@ export interface ExtractionOptions {
 export interface SourcingEvaluationInput {
   grade?: "A" | "B" | "C" | "UNRATED";
   status?: "DRAFT" | "REVIEWED" | "SAVED" | "ARCHIVED";
+  businessTypes?: BusinessType[];
+  companyTypeOtherExplanation?: string | null;
+  categories?: string[];
   assignedTo?: string | null;
   internalNotes?: string | null;
   marketingConsentStatus?: "UNCONFIRMED" | "CONSENTED" | "REFUSED" | "EXCLUDED";
