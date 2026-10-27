@@ -27,6 +27,7 @@ import {
   updateSourcingCandidateDocumentsAction,
   deleteSourcingCandidateAction,
 } from "@/lib/brand-sourcing/actions";
+import { EmailCampaignsView } from "./email-campaigns-view";
 
 interface StaffMemberOption {
   id: string;
@@ -38,7 +39,7 @@ interface BrandMarketingViewProps {
   initialStaff: StaffMemberOption[];
   initialCandidates: any[];
   initialTotal: number;
-  initialTab?: "import" | "list";
+  initialTab?: "import" | "list" | "campaigns";
 }
 
 function formatFileSize(bytes?: number | null): string {
@@ -82,8 +83,8 @@ export default function BrandMarketingView({
   initialTotal,
   initialTab = "import",
 }: BrandMarketingViewProps) {
-  // Navigation Tabs: import | list | email (disabled) | results (disabled)
-  const [activeTab, setActiveTab] = useState<"import" | "list">(initialTab);
+  // Navigation Tabs: import | list | campaigns | results (disabled)
+  const [activeTab, setActiveTab] = useState<"import" | "list" | "campaigns">(initialTab);
 
   // --------------------------------------------------------------------------
   // TAB 1: IMPORT & REVIEW STATE
@@ -817,15 +818,19 @@ export default function BrandMarketingView({
             </span>
           </button>
 
-          {/* Phase 2: Disabled Tabs */}
+          {/* Phase 2: Email Campaigns Tab */}
           <button
-            disabled
-            className="px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-60 flex items-center gap-1.5"
-            title="Phase 2 Feature"
+            type="button"
+            onClick={() => setActiveTab("campaigns")}
+            className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "campaigns"
+                ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+            }`}
           >
             <span>Email Campaigns</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-850 text-zinc-500 font-medium">
-              Coming Soon
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-medium">
+              V1
             </span>
           </button>
 
@@ -2384,6 +2389,13 @@ export default function BrandMarketingView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* TAB 3: EMAIL CAMPAIGNS VIEW                                       */}
+      {/* ------------------------------------------------------------------ */}
+      {activeTab === "campaigns" && (
+        <EmailCampaignsView candidates={candidates} />
       )}
 
       {/* ------------------------------------------------------------------ */}

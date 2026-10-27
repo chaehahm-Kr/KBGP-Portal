@@ -28,7 +28,12 @@ export default async function BrandMarketingPage({ searchParams }: BrandMarketin
 
   // 2. Resolve query parameters
   const params = await searchParams;
-  const initialTab = params.tab === "list" ? "list" : "import";
+  const initialTab =
+    params.tab === "list"
+      ? "list"
+      : params.tab === "campaigns"
+      ? "campaigns"
+      : "import";
 
   // 3. Pre-fetch initial staff and initial candidates
   const [staffRes, candidatesRes] = await Promise.all([
