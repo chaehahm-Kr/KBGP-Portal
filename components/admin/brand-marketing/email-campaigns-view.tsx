@@ -152,7 +152,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   const handleCreateNewCampaign = () => {
     const defaultTpl = templates.find((t) => t.isDefault) || templates[0];
     const newCamp: MarketingCampaign = {
-      id: "cmp-" + Date.now(),
+      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "",
       name: "New Brand Outreach Campaign",
       purpose: "Brand Outreach",
       description: "",

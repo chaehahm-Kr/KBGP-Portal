@@ -1,8 +1,18 @@
 import { MarketingTemplatePackage } from "./campaign-types";
 
+export const KO_TEMPLATE_UUID = "e0000000-0000-4000-8000-000000000001";
+export const EN_TEMPLATE_UUID = "e0000000-0000-4000-8000-000000000002";
+
+export function resolveTemplateId(id?: string | null): string | null {
+  if (!id) return null;
+  if (id === "tpl-ksn-intro-ko-v1") return KO_TEMPLATE_UUID;
+  if (id === "tpl-ksn-intro-en-v1") return EN_TEMPLATE_UUID;
+  return id;
+}
+
 export const DEFAULT_MARKETING_TEMPLATES: MarketingTemplatePackage[] = [
   {
-    id: "tpl-ksn-intro-ko-v1",
+    id: KO_TEMPLATE_UUID,
     name: "K SELECT NETWORK — 브랜드 미국 진출 파트너십 제안서 (국문)",
     version: "1.0.0",
     language: "ko",
@@ -101,7 +111,7 @@ K SELECT NETWORK는 북미 온·오프라인 뷰티 리테일러와 한국의 �
 수신거부: support@kselectnetwork.com`,
   },
   {
-    id: "tpl-ksn-intro-en-v1",
+    id: EN_TEMPLATE_UUID,
     name: "K SELECT NETWORK — Global Brand Partnership Proposal (English)",
     version: "1.0.0",
     language: "en",

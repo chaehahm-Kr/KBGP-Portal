@@ -152,7 +152,7 @@ async function runTestSuite() {
   // TEST 4: Campaign CRUD, Duplication & Archive
   // --------------------------------------------------------------------------
   console.log("\n--- TEST 4: Campaign Management (Create / Duplicate / Archive) ---");
-  const testCampaignId = `camp_test_${Date.now()}`;
+  const testCampaignId = crypto.randomUUID();
   const campaignData = {
     id: testCampaignId,
     name: "QA Automated Test Campaign 2026",
@@ -189,7 +189,7 @@ async function runTestSuite() {
   // Duplication test
   const copyData = {
     ...saved,
-    id: `camp_copy_${Date.now()}`,
+    id: crypto.randomUUID(),
     name: `${saved.name} (Copy)`,
     status: "DRAFT" as const,
     approvalStatus: "PENDING" as const,

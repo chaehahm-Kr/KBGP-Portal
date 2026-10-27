@@ -10,7 +10,7 @@ import {
   CampaignApprovalSnapshot,
   SampleRecipientPreview,
 } from "./campaign-types";
-import { DEFAULT_MARKETING_TEMPLATES } from "./default-templates";
+import { DEFAULT_MARKETING_TEMPLATES, resolveTemplateId } from "./default-templates";
 import { personalizeEmail } from "./personalization-engine";
 import { sendEmail, maskEmailAddress, isRecipientAllowlisted } from "@/lib/notifications/email";
 
@@ -73,7 +73,12 @@ export async function saveMarketingTemplate(
   userId?: string,
   customClient?: SupabaseClient
 ): Promise<MarketingTemplatePackage> {
-  const tplId = template.id || "tpl-" + (crypto.randomUUID ? crypto.randomUUID() : Date.now());
+  const resolvedId = resolveTemplateId(template.id);
+  const isUuid = (val?: string | null) =>
+    Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
+  const tplId = isUuid(resolvedId)
+    ? resolvedId!
+    : (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "00000000-0000-4000-b000-" + Date.now().toString(16).padStart(12, "0"));
   const now = new Date().toISOString();
 
   const fullRecord: MarketingTemplatePackage = {
@@ -286,7 +291,12 @@ export async function saveMarketingCampaign(
   userId?: string,
   customClient?: SupabaseClient
 ): Promise<MarketingCampaign> {
-  const campId = campaign.id || "cmp-" + (crypto.randomUUID ? crypto.randomUUID() : Date.now());
+  const isUuid = (val?: string | null) =>
+    Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
+  const campId = isUuid(campaign.id)
+    ? campaign.id!
+    : (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "00000000-0000-4000-a000-" + Date.now().toString(16).padStart(12, "0"));
+  const resolvedTemplateId = resolveTemplateId(campaign.templateId);
   const now = new Date().toISOString();
 
   // If already existing, fetch prior to check for invalidating approval on edit
@@ -298,7 +308,7 @@ export async function saveMarketingCampaign(
   if (existing && existing.approvalStatus === "APPROVED") {
     const contentChanged =
       existing.name !== campaign.name ||
-      existing.templateId !== campaign.templateId ||
+      existing.templateId !== resolvedTemplateId ||
       existing.customMessage !== campaign.customMessage ||
       JSON.stringify(existing.filterCriteria) !== JSON.stringify(campaign.filterCriteria);
 
@@ -315,7 +325,7 @@ export async function saveMarketingCampaign(
     purpose: campaign.purpose || "Brand Outreach",
     description: campaign.description || "",
     language: campaign.language || "ko",
-    templateId: campaign.templateId || null,
+    templateId: resolvedTemplateId || null,
     templateVersion: campaign.templateVersion || "1.0.0",
     status,
     approvalStatus,
