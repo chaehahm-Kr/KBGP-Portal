@@ -14,7 +14,7 @@ import { createClient } from "@supabase/supabase-js";
 const ARTIFACT_DIR = "C:/Users/ChaeHahm/.gemini/antigravity/brain/945ab025-0f8f-4fce-b0bc-56237108874e";
 const ADMIN_DOMAIN = "https://admin.kselectnetwork.com";
 const PORTAL_DOMAIN = "https://portal.kselectnetwork.com";
-const EXPECTED_SHA = "a4edba8e0fce5a3305494e9e2e83c6b9d2acc13b";
+const EXPECTED_SHA = "a4e44b815228aa5878465e7810e25f25e0a68de3";
 
 // Production credentials for read-only validation
 let prodUrl = "";
