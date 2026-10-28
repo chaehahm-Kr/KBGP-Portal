@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyUnsubscribeToken, recordEmailOptOut } from "@/lib/brand-marketing/unsubscribe";
+import {
+  verifyUnsubscribeToken,
+  recordEmailOptOut,
+  maskEmailAddress,
+  maskTokenForLogging,
+} from "@/lib/brand-marketing/unsubscribe";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Handles RFC 8058 One-Click List-Unsubscribe POST requests from mail clients.
- * e.g. List-Unsubscribe: <https://admin.kselectnetwork.com/api/marketing/unsubscribe?token=...>, <mailto:unsubscribe@...>
+ * e.g. List-Unsubscribe: <https://portal.kselectnetwork.com/api/marketing/unsubscribe?token=...>, <mailto:unsubscribe@...>
  * List-Unsubscribe-Post: List-Unsubscribe=One-Click
  */
 export async function POST(req: NextRequest) {
@@ -17,6 +22,7 @@ export async function POST(req: NextRequest) {
 
   const result = verifyUnsubscribeToken(token);
   if (!result.valid || !result.email) {
+    console.warn(`[unsubscribe:rfc8058] Rejected token ${maskTokenForLogging(token)}: ${result.error}`);
     return NextResponse.json({ error: result.error || "Invalid token" }, { status: 400 });
   }
 
@@ -29,14 +35,14 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    email: result.email,
+    maskedEmail: maskEmailAddress(result.email),
     alreadySuppressed: optOutRes.alreadySuppressed || false,
     message: "Recipient unsubscribed successfully",
   });
 }
 
 export async function GET(req: NextRequest) {
-  // Scanner-protection: GET on API redirects to human-facing confirmation page
+  // Scanner-protection: GET on API redirects to human-facing confirmation page without altering state
   const token = req.nextUrl.searchParams.get("token") || "";
   return NextResponse.redirect(new URL(`/unsubscribe?token=${encodeURIComponent(token)}`, req.url));
 }

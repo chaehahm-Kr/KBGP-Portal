@@ -23,8 +23,17 @@ import {
   saveMarketingCampaignAction,
   runCampaignDryRunAction,
   sendTestCampaignEmailAction,
+  sendTestCampaignEmailsAction,
+  getMarketingTestAllowlistAction,
+  addMarketingTestAllowlistEmailAction,
+  removeMarketingTestAllowlistEmailAction,
+  SendTestCampaignEmailsResult,
   approveMarketingCampaignAction,
 } from "@/lib/brand-marketing/campaign-actions";
+import {
+  parseAndValidateTestRecipients,
+  MAX_TEST_RECIPIENTS_PER_BATCH,
+} from "@/lib/brand-marketing/test-allowlist-shared";
 import {
   assembleEmailWithMarketingFooter,
   DEFAULT_MARKETING_FOOTER,
@@ -124,9 +133,19 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   // Dry Run & Test Send State
   const [dryRunReport, setDryRunReport] = useState<DryRunReport | null>(null);
   const [isRunningDryRun, setIsRunningDryRun] = useState(false);
-  const [testEmailAddress, setTestEmailAddress] = useState("qa-admin-test@letusto.com");
+  const [testEmailAddress, setTestEmailAddress] = useState("qa-admin-test@letusto.com, chae@letusto.com");
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testSendResult, setTestSendResult] = useState<{ success?: boolean; message?: string } | null>(null);
+  const [testBatchResult, setTestBatchResult] = useState<SendTestCampaignEmailsResult | null>(null);
+  const [ownerAllowlist, setOwnerAllowlist] = useState<string[]>([]);
+  const [newAllowlistEmail, setNewAllowlistEmail] = useState("");
+  const [isUpdatingAllowlist, setIsUpdatingAllowlist] = useState(false);
+  const [showAllowlistManager, setShowAllowlistManager] = useState(false);
+
+  // Real-time parsed test recipients
+  const parsedTestRecipients = useMemo(() => {
+    return parseAndValidateTestRecipients(testEmailAddress, MAX_TEST_RECIPIENTS_PER_BATCH);
+  }, [testEmailAddress]);
 
   // Pre-Approval Checks State
   const [preApprovalChecks, setPreApprovalChecks] = useState<Array<{ name: string; status: "PASS" | "FAIL"; detail: string }>>([]);
@@ -569,13 +588,61 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     }
   };
 
+  // Load allowlist on mount
+  useEffect(() => {
+    getMarketingTestAllowlistAction().then((res) => {
+      if (res.success && res.allowlist) {
+        setOwnerAllowlist(res.allowlist);
+      }
+    });
+  }, []);
+
+  const handleAddAllowlistEmail = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newAllowlistEmail.trim() || isUpdatingAllowlist) return;
+    setIsUpdatingAllowlist(true);
+    try {
+      const res = await addMarketingTestAllowlistEmailAction(newAllowlistEmail);
+      if (res.success) {
+        setOwnerAllowlist(res.allowlist);
+        setNewAllowlistEmail("");
+        showNotification("success", `외부 테스트 이메일(${newAllowlistEmail})이 허용 목록에 추가되었습니다.`);
+      } else {
+        showNotification("error", res.error || "추가 실패");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message);
+    } finally {
+      setIsUpdatingAllowlist(false);
+    }
+  };
+
+  const handleRemoveAllowlistEmail = async (email: string) => {
+    if (isUpdatingAllowlist) return;
+    setIsUpdatingAllowlist(true);
+    try {
+      const res = await removeMarketingTestAllowlistEmailAction(email);
+      if (res.success) {
+        setOwnerAllowlist(res.allowlist);
+        showNotification("success", `이메일(${email})이 허용 목록에서 삭제되었습니다.`);
+      } else {
+        showNotification("error", res.error || "삭제 실패");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message);
+    } finally {
+      setIsUpdatingAllowlist(false);
+    }
+  };
+
   const handleSendTestEmail = async () => {
     if (!editingCampaign || !activeTemplate) return;
     setIsSendingTest(true);
     setTestSendResult(null);
+    setTestBatchResult(null);
 
     try {
-      const res = await sendTestCampaignEmailAction(
+      const batchRes = await sendTestCampaignEmailsAction(
         editingCampaign.id,
         testEmailAddress,
         currentEffectiveSubject || activeTemplate.subject,
@@ -583,16 +650,18 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
         activeTemplate.plainText
       );
 
-      if (res.success) {
+      setTestBatchResult(batchRes);
+
+      if (batchRes.success) {
         setTestSendResult({
           success: true,
-          message: `Test email sent successfully to ${testEmailAddress} with central marketing footer and working unsubscribe link.`,
+          message: `${batchRes.totalSent}명의 수신자에게 테스트 이메일이 발송되었습니다 (실패/거부: ${batchRes.totalFailed}명).`,
         });
-        showNotification("success", "Test email dispatched to allowlisted recipient.");
+        showNotification("success", `테스트 이메일 ${batchRes.totalSent}건 발송 완료.`);
       } else {
         setTestSendResult({
           success: false,
-          message: res.error || "Test dispatch rejected.",
+          message: batchRes.error || "테스트 발송이 거부되거나 실패했습니다.",
         });
       }
     } catch (err: any) {
@@ -1603,33 +1672,188 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
           <div className="space-y-6">
             {/* 5.A Test Email Dispatch */}
             <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-              <div className="border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  5.A Test Email Dispatch (Controlled Allowlist Only)
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  안전한 검증을 위해 오직 인가된 내부 테스트 도메인(@letusto.com, @kselectnetwork.com)으로만 실제 전송이 허용됩니다.
-                </p>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <input
-                  type="email"
-                  value={testEmailAddress}
-                  onChange={(e) => setTestEmailAddress(e.target.value)}
-                  placeholder="qa-admin-test@letusto.com"
-                  className="flex-1 px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono"
-                />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3 gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                    <span>5.A Test Email Dispatch (Multi-Recipient &amp; Allowlist)</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                      최대 {MAX_TEST_RECIPIENTS_PER_BATCH}명
+                    </span>
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    안전한 검증을 위해 인가된 내부 도메인(@letusto.com, @kselectnetwork.com) 및 오너가 승인한 외부 테스트 이메일로만 발송됩니다.
+                  </p>
+                </div>
                 <button
                   type="button"
-                  disabled={isSendingTest}
-                  onClick={handleSendTestEmail}
-                  className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded cursor-pointer disabled:opacity-50"
+                  onClick={() => setShowAllowlistManager(!showAllowlistManager)}
+                  className="self-start sm:self-auto text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer transition flex items-center gap-1.5"
                 >
-                  {isSendingTest ? "Sending..." : "Send Test Email ✉️"}
+                  <span>⚙️ 외부 테스트 허용 목록</span>
+                  <span className="text-[10px] bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.2 rounded font-mono">
+                    {ownerAllowlist.length}
+                  </span>
                 </button>
               </div>
 
+              {/* Owner Test Allowlist Manager Panel */}
+              {showAllowlistManager && (
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                      외부 테스트 이메일 허용 목록 관리 (Owner Test Allowlist)
+                    </span>
+                    <span className="text-[11px] text-zinc-500">
+                      내부 기본 허용: @letusto.com, @kselectnetwork.com
+                    </span>
+                  </div>
+
+                  <form onSubmit={handleAddAllowlistEmail} className="flex gap-2">
+                    <input
+                      type="email"
+                      value={newAllowlistEmail}
+                      onChange={(e) => setNewAllowlistEmail(e.target.value)}
+                      placeholder="예: owner.test@gmail.com, qa@outlook.com"
+                      className="flex-1 px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newAllowlistEmail.trim() || isUpdatingAllowlist}
+                      className="px-3 py-1.5 text-xs font-bold text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 rounded disabled:opacity-50 cursor-pointer"
+                    >
+                      {isUpdatingAllowlist ? "추가 중..." : "+ 허용 목록 추가"}
+                    </button>
+                  </form>
+
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-medium text-zinc-500">
+                      등록된 외부 테스트 이메일 ({ownerAllowlist.length}개):
+                    </div>
+                    {ownerAllowlist.length === 0 ? (
+                      <div className="text-xs text-zinc-400 italic py-1">
+                        등록된 외부 테스트 주소가 없습니다. 내부 도메인(@letusto.com, @kselectnetwork.com)만 허용됩니다.
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {ownerAllowlist.map((email) => (
+                          <span
+                            key={email}
+                            className="inline-flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 shadow-2xs"
+                          >
+                            <span>{email}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAllowlistEmail(email)}
+                              disabled={isUpdatingAllowlist}
+                              title="허용 목록에서 삭제"
+                              className="text-zinc-400 hover:text-red-600 cursor-pointer font-bold"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Multi-Recipient Input Area */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300">
+                    테스트 수신자 주소 (쉼표, 세미콜론, 줄바꿈으로 구분):
+                  </label>
+                  <span className="text-zinc-400 text-[11px]">
+                    1회 최대 {MAX_TEST_RECIPIENTS_PER_BATCH}명까지 일괄 발송
+                  </span>
+                </div>
+
+                <textarea
+                  rows={3}
+                  value={testEmailAddress}
+                  onChange={(e) => setTestEmailAddress(e.target.value)}
+                  placeholder="chae@letusto.com, cyim@letusto.com; skim@letusto.com&#10;user.test@gmail.com"
+                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono leading-relaxed"
+                />
+
+                {/* Real-time Parsed Badges */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[11px] font-medium text-zinc-500">인식 결과:</span>
+                  <span
+                    className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${
+                      parsedTestRecipients.uniqueRecipients.length > 0 &&
+                      !parsedTestRecipients.exceedsBatchLimit
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300"
+                        : "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+                    }`}
+                  >
+                    유효 수신자 {parsedTestRecipients.uniqueRecipients.length}명
+                  </span>
+
+                  {parsedTestRecipients.duplicateCount > 0 && (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300">
+                      중복 {parsedTestRecipients.duplicateCount}건 자동 제거됨
+                    </span>
+                  )}
+
+                  {parsedTestRecipients.invalidInputs.length > 0 && (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/60 dark:text-red-300">
+                      형식 오류 {parsedTestRecipients.invalidInputs.length}건 제외됨
+                    </span>
+                  )}
+
+                  {parsedTestRecipients.exceedsBatchLimit && (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-800 border border-red-300 dark:bg-red-900 dark:text-red-100">
+                      ⚠️ 1회 발송 한도({MAX_TEST_RECIPIENTS_PER_BATCH}명) 초과
+                    </span>
+                  )}
+                </div>
+
+                {/* Parsed Chips List */}
+                {parsedTestRecipients.uniqueRecipients.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {parsedTestRecipients.uniqueRecipients.map((em) => (
+                      <span
+                        key={em}
+                        className="text-[11px] font-mono px-2 py-0.5 rounded bg-stone-100 dark:bg-zinc-800 text-stone-700 dark:text-zinc-300 border border-stone-200 dark:border-zinc-700"
+                      >
+                        {em}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action Button */}
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-[11px] text-zinc-400">
+                  * 중앙 마케팅 푸터 및 개인화 수신 거부 링크가 자동 동기화되어 포함됩니다.
+                </span>
+                <button
+                  type="button"
+                  disabled={
+                    isSendingTest ||
+                    parsedTestRecipients.uniqueRecipients.length === 0 ||
+                    parsedTestRecipients.exceedsBatchLimit
+                  }
+                  onClick={handleSendTestEmail}
+                  className="px-5 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition shadow-xs flex items-center gap-2"
+                >
+                  {isSendingTest ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      <span>Sending Test Batch...</span>
+                    </>
+                  ) : (
+                    <span>
+                      Send Test Email ({parsedTestRecipients.uniqueRecipients.length}명 발송) ✉️
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* General Summary Banner */}
               {testSendResult && (
                 <div
                   className={`p-3 rounded-md text-xs font-medium ${
@@ -1639,6 +1863,52 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   }`}
                 >
                   {testSendResult.message}
+                </div>
+              )}
+
+              {/* Detailed Per-Recipient Send Results */}
+              {testBatchResult && testBatchResult.results.length > 0 && (
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2">
+                  <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 flex items-center justify-between">
+                    <span>수신자별 전송 결과 상세</span>
+                    <span className="text-[11px] font-normal text-zinc-500">
+                      성공: {testBatchResult.totalSent}건 / 실패·거부: {testBatchResult.totalFailed}건
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {testBatchResult.results.map((r) => (
+                      <div
+                        key={r.email}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs gap-1"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                              r.success
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                            }`}
+                          >
+                            {r.success ? "✓" : "✕"}
+                          </span>
+                          <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">
+                            {r.email}
+                          </span>
+                        </div>
+                        <div className="text-[11px]">
+                          {r.success ? (
+                            <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                              전송 완료 {r.messageId ? `(ID: ${r.messageId.slice(0, 12)}...)` : ""}
+                            </span>
+                          ) : (
+                            <span className="text-red-600 dark:text-red-400">
+                              {r.error || "발송 실패"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
