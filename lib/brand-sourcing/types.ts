@@ -181,24 +181,108 @@ export interface SourcingEvaluationInput {
   marketingConsentStatus?: "UNCONFIRMED" | "CONSENTED" | "REFUSED" | "EXCLUDED";
 }
 
+export type DuplicateMatchType =
+  | "SOURCE_URL"
+  | "SOURCE_IDENTIFIER"
+  | "COMPANY_NAME"
+  | "COMPANY_NAME_KR"
+  | "COMPANY_NAME_EN"
+  | "DOMAIN"
+  | "SIMILAR_NAME"
+  | "EMAIL";
+
+export type DuplicateSeverity = "STRONG" | "POSSIBLE";
+
+export interface DuplicateMatchItem {
+  matchType: DuplicateMatchType;
+  severity: DuplicateSeverity;
+  matchedValue: string;
+  entityType: "SOURCING_CANDIDATE" | "PARTNER_COMPANY";
+  entityId: string;
+  entityName: string;
+  entityNameEn?: string | null;
+  reason: string;
+  sourceUrl?: string | null;
+  status?: string;
+  grade?: string;
+  contactsCount?: number;
+  brandsCount?: number;
+  lastActivityDate?: string | null;
+}
+
 export interface DuplicateMatchResult {
   isDuplicate: boolean;
+  hasStrongDuplicate: boolean;
+  hasPossibleDuplicate: boolean;
   isExistingPartner: boolean;
-  matches: Array<{
-    matchType: "SOURCE_IDENTIFIER" | "COMPANY_NAME" | "DOMAIN" | "EMAIL";
-    matchedValue: string;
-    entityType: "SOURCING_CANDIDATE" | "PARTNER_COMPANY";
-    entityId: string;
-    entityName: string;
-  }>;
+  matches: DuplicateMatchItem[];
 }
 
 export interface DuplicateCheckCriteria {
+  sourceUrl?: string | null;
+  canonicalSourceUrl?: string | null;
   sourceIdentifier?: string | null;
   companyNameKr?: string | null;
   companyNameEn?: string | null;
   websiteUrl?: string | null;
   domains?: string[];
   emails?: string[];
+}
+
+export interface AdminDuplicateExceptionInput {
+  matchedCompanyId: string;
+  matchedRule: "SAME_NAME_KR" | "SAME_NAME_EN" | "SAME_DOMAIN" | "SIMILAR_NAME" | "OTHER";
+  reason: string;
+  evidence: {
+    businessRegistrationNumber?: string | null;
+    address?: string | null;
+    officialWebsite?: string | null;
+    legalEntityDetails?: string | null;
+    otherNotes?: string | null;
+  };
+}
+
+export interface LinkSourceResult {
+  success: boolean;
+  companyId: string;
+  companyNameKr: string;
+  sourcesAdded: number;
+  brandsAdded: number;
+  contactsAdded: number;
+  websitesAdded: number;
+  message: string;
+}
+
+export interface DuplicateAuditReport {
+  generatedAt: string;
+  totalCompanies: number;
+  totalSources: number;
+  totalWebsites: number;
+  confirmedDuplicateUrlGroups: Array<{
+    canonicalUrl: string;
+    companyIds: string[];
+    companyNames: string[];
+  }>;
+  potentialDuplicateCompanyGroups: Array<{
+    normalizedName: string;
+    companies: Array<{
+      id: string;
+      nameKr: string;
+      nameEn?: string | null;
+      status: string;
+      grade: string;
+      createdAt: string;
+      sourcesCount: number;
+      contactsCount: number;
+      brandsCount: number;
+      campaignsCount: number;
+      activitiesCount: number;
+    }>;
+  }>;
+  duplicateDomainGroups: Array<{
+    domain: string;
+    companies: Array<{ id: string; nameKr: string }>;
+  }>;
+  remediationRecommendation: string;
 }
 
