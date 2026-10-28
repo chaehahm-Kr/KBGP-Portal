@@ -97,7 +97,7 @@ export async function findDuplicateCandidates(
   if (canonicalUrl || exhibitorId) {
     let query = supabase
       .from("sourcing_sources")
-      .select("company_id, source_url, canonical_source_url, source_identifier, sourcing_companies(id, company_name_kr, company_name_en, status, grade, updated_at)");
+      .select("company_id, source_url, canonical_source_url, source_identifier, sourcing_companies(id, company_name_kr, company_name_en, status, grade, updated_at, primary_product_categories, primary_categories_confirmed)");
 
     if (canonicalUrl && exhibitorId) {
       query = query.or(`canonical_source_url.eq.${canonicalUrl},source_identifier.eq.${exhibitorId}`);
@@ -131,6 +131,8 @@ export async function findDuplicateCandidates(
           status: comp.status,
           grade: comp.grade,
           lastActivityDate: comp.updated_at,
+          primaryProductCategories: comp.primary_product_categories,
+          primaryCategoriesConfirmed: comp.primary_categories_confirmed,
         });
       }
     }
@@ -140,7 +142,7 @@ export async function findDuplicateCandidates(
   if (normKr) {
     const { data: compMatches } = await supabase
       .from("sourcing_companies")
-      .select("id, company_name_kr, company_name_en, normalized_name_kr, status, grade, updated_at")
+      .select("id, company_name_kr, company_name_en, normalized_name_kr, status, grade, updated_at, primary_product_categories, primary_categories_confirmed")
       .limit(100);
 
     if (compMatches) {
@@ -160,6 +162,8 @@ export async function findDuplicateCandidates(
               status: c.status,
               grade: c.grade,
               lastActivityDate: c.updated_at,
+              primaryProductCategories: c.primary_product_categories,
+              primaryCategoriesConfirmed: c.primary_categories_confirmed,
             });
           }
         }

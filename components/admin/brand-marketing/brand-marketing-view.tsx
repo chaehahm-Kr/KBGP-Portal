@@ -306,14 +306,24 @@ export default function BrandMarketingView({
       setReviewedDraft(res.draft);
       setDuplicateCheck(res.duplicateCheck || null);
 
+      // Preserve confirmed categories if re-parsing an already confirmed candidate (ADM-BSRC-011-R1)
+      const confirmedCandidateMatch = res.duplicateCheck?.matches?.find(
+        (m) => m.entityType === "SOURCING_CANDIDATE" && m.primaryCategoriesConfirmed
+      );
+
       // Reset evaluation fields to clean state (Default to REVIEWED)
       setGrade("UNRATED");
       setStatus("REVIEWED");
       setInternalNotes("");
       setSelectedBusinessTypes(res.draft.company.businessTypes || []);
       setBusinessTypeEvidence(res.draft.company.businessTypeEvidence || []);
-      setSelectedPrimaryCategories(res.draft.company.primaryProductCategories || []);
-      setPrimaryCategoriesConfirmed(false);
+      if (confirmedCandidateMatch && confirmedCandidateMatch.primaryCategoriesConfirmed) {
+        setSelectedPrimaryCategories(confirmedCandidateMatch.primaryProductCategories || []);
+        setPrimaryCategoriesConfirmed(true);
+      } else {
+        setSelectedPrimaryCategories(res.draft.company.primaryProductCategories || []);
+        setPrimaryCategoriesConfirmed(false);
+      }
       setCompanyDocuments(res.draft.companyDocuments || []);
       setCompanyTypeOtherExplanation("");
     } catch (err: any) {

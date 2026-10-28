@@ -251,6 +251,8 @@ export interface DuplicateMatchItem {
   contactsCount?: number;
   brandsCount?: number;
   lastActivityDate?: string | null;
+  primaryProductCategories?: PrimaryProductCategory[];
+  primaryCategoriesConfirmed?: boolean;
 }
 
 export interface DuplicateMatchResult {
