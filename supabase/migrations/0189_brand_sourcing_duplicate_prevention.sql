@@ -1,6 +1,6 @@
 -- Migration: 0189_brand_sourcing_duplicate_prevention.sql
 -- Task ID: ADM-BSRC-010-R1
--- Task Name: Brand Sourcing Duplicate Detection & Prevention (Production Hardening)
+-- Task Name: Brand Sourcing Duplicate Detection & Prevention (Final Production Safety Hardening)
 -- Standards: DEPLOY-STD-001, CONCURRENT-DEV-001, DEV-SQL-MIGRATION-STD-001, AGENTS.md Rule 24, Rule 27
 -- Mode: Safe forward idempotent additive migration. No destructive alters, no table drops.
 
@@ -9,11 +9,44 @@
 -- Implement identical normalization logic in SQL as application code.
 -- ------------------------------------------------------------------------------
 
--- 1a. Canonical Sourcing URL Normalizer
+-- 1a. Helper: Percent-encode non-ASCII UTF-8 characters for deterministic URL equivalence
+CREATE OR REPLACE FUNCTION public.fn_urlencode_non_ascii(p_str text)
+RETURNS text AS $$
+DECLARE
+  v_res text := '';
+  v_char text;
+  v_bytes bytea;
+  v_hex text;
+  i int;
+  j int;
+BEGIN
+  IF p_str IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  FOR i IN 1..length(p_str) LOOP
+    v_char := substr(p_str, i, 1);
+    IF ascii(v_char) > 127 THEN
+      v_bytes := convert_to(v_char, 'UTF8');
+      v_hex := encode(v_bytes, 'hex');
+      FOR j IN 0..(length(v_hex)/2 - 1) LOOP
+        v_res := v_res || '%' || upper(substr(v_hex, j*2 + 1, 2));
+      END LOOP;
+    ELSE
+      v_res := v_res || v_char;
+    END IF;
+  END LOOP;
+
+  RETURN v_res;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- 1b. Canonical Sourcing URL Normalizer
 CREATE OR REPLACE FUNCTION public.fn_normalize_sourcing_url(p_url text)
 RETURNS text AS $$
 DECLARE
   v_url text;
+  v_match text[];
 BEGIN
   IF p_url IS NULL THEN
     RETURN NULL;
@@ -24,22 +57,28 @@ BEGIN
     RETURN NULL;
   END IF;
 
-  -- Strip hash fragment (#... and #/...)
+  -- 1. Strip hash fragment (#... and #/...)
   v_url := regexp_replace(v_url, '#.*$', '');
 
-  -- Strip trailing slashes
+  -- 2. Strip trailing slashes
   v_url := regexp_replace(v_url, '/+$', '');
 
-  -- Strip tracking parameters from query string (utm_*, ref, fbclid, gclid, etc.)
+  -- 3. Strip tracking parameters from query string (utm_*, ref, fbclid, gclid, etc.)
   -- Leading or sole tracking parameter: ?utm_source=...& -> ?
   v_url := regexp_replace(v_url, '(\?)(?:utm_[a-zA-Z0-9_]+|ref|fbclid|gclid|_hsenc|_hsmi|mc_cid|mc_eid|trk)=[^&#]*&?', '\1', 'gi');
   -- Middle or trailing tracking parameter: &utm_source=...
   v_url := regexp_replace(v_url, '&(?:utm_[a-zA-Z0-9_]+|ref|fbclid|gclid|_hsenc|_hsmi|mc_cid|mc_eid|trk)=[^&#]*', '', 'gi');
   -- Clean up trailing ? or &
   v_url := regexp_replace(v_url, '[?&]+$', '');
-
-  -- Final trailing slash strip
   v_url := regexp_replace(v_url, '/+$', '');
+
+  -- 4. Normalize scheme and host casing to lowercase, and encode non-ASCII path characters
+  v_match := regexp_matches(v_url, '^(https?:\/\/)([^\/\?#]+)(.*)$', 'i');
+  IF array_length(v_match, 1) = 3 THEN
+    v_url := lower(v_match[1]) || lower(v_match[2]) || public.fn_urlencode_non_ascii(v_match[3]);
+  ELSE
+    v_url := public.fn_urlencode_non_ascii(v_url);
+  END IF;
 
   IF v_url = '' THEN
     RETURN NULL;
@@ -49,7 +88,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- 1b. Korean Company Legal Name Normalizer
+-- 1c. Korean Company Legal Name Normalizer
 CREATE OR REPLACE FUNCTION public.fn_normalize_company_name_kr(p_name text)
 RETURNS text AS $$
 DECLARE
@@ -84,7 +123,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- 1c. English Company Name Normalizer
+-- 1d. English Company Name Normalizer
 CREATE OR REPLACE FUNCTION public.fn_normalize_company_name_en(p_name text)
 RETURNS text AS $$
 DECLARE
@@ -119,6 +158,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 -- ------------------------------------------------------------------------------
 -- 2. EXTEND TABLE: sourcing_sources
 -- Add canonical_source_url and automatic sync trigger.
+-- Correctly clears canonical_source_url if source_url is cleared or set to NULL.
 -- ------------------------------------------------------------------------------
 DO $$
 BEGIN
@@ -137,13 +177,11 @@ UPDATE public.sourcing_sources
 SET canonical_source_url = public.fn_normalize_sourcing_url(source_url)
 WHERE canonical_source_url IS NULL AND source_url IS NOT NULL;
 
--- Automatic sync trigger for canonical_source_url
+-- Automatic sync trigger for canonical_source_url (handles NULL and clears stale values)
 CREATE OR REPLACE FUNCTION public.fn_sync_sourcing_sources_canonical_url()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.source_url IS NOT NULL THEN
-    NEW.canonical_source_url := public.fn_normalize_sourcing_url(NEW.source_url);
-  END IF;
+  NEW.canonical_source_url := public.fn_normalize_sourcing_url(NEW.source_url);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -168,6 +206,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_sourcing_sources_canonical_url
 -- ------------------------------------------------------------------------------
 -- 3. EXTEND TABLE: sourcing_companies
 -- Add normalized company name columns and automatic sync trigger.
+-- Correctly clears normalized names if company name is cleared or set to NULL.
 -- ------------------------------------------------------------------------------
 DO $$
 BEGIN
@@ -199,16 +238,12 @@ UPDATE public.sourcing_companies
 SET normalized_name_en = public.fn_normalize_company_name_en(company_name_en)
 WHERE normalized_name_en IS NULL AND company_name_en IS NOT NULL;
 
--- Automatic sync trigger for normalized names on company updates
+-- Automatic sync trigger for normalized names on company updates (handles NULL and clears stale values)
 CREATE OR REPLACE FUNCTION public.fn_sync_sourcing_companies_normalized_names()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.company_name_kr IS NOT NULL THEN
-    NEW.normalized_name_kr := public.fn_normalize_company_name_kr(NEW.company_name_kr);
-  END IF;
-  IF NEW.company_name_en IS NOT NULL THEN
-    NEW.normalized_name_en := public.fn_normalize_company_name_en(NEW.company_name_en);
-  END IF;
+  NEW.normalized_name_kr := public.fn_normalize_company_name_kr(NEW.company_name_kr);
+  NEW.normalized_name_en := public.fn_normalize_company_name_en(NEW.company_name_en);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -302,11 +337,32 @@ CREATE INDEX IF NOT EXISTS idx_sourcing_dup_exceptions_created_at
   ON public.sourcing_duplicate_exceptions(created_at DESC);
 
 -- ------------------------------------------------------------------------------
--- 5. PERMISSIONS & ADMIN-ONLY RLS
--- Explicit grants and strict auth_is_admin() RLS policy enforcement.
+-- 5. IMMUTABLE APPEND-ONLY ENFORCEMENT & ADMIN-ONLY RLS
+-- Prevents ordinary admin UPDATE and DELETE on audit records.
+-- Explicit grants: SELECT and INSERT only to authenticated admins.
 -- ------------------------------------------------------------------------------
+
+-- 5a. Append-only trigger: Strictly forbids UPDATE and DELETE on duplicate exception logs
+CREATE OR REPLACE FUNCTION public.fn_prevent_duplicate_exception_modification()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'sourcing_duplicate_exceptions is an append-only audit log. UPDATE and DELETE operations are strictly prohibited.';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_prevent_sourcing_dup_exceptions_mod ON public.sourcing_duplicate_exceptions;
+CREATE TRIGGER trg_prevent_sourcing_dup_exceptions_mod
+  BEFORE UPDATE OR DELETE ON public.sourcing_duplicate_exceptions
+  FOR EACH ROW
+  EXECUTE FUNCTION public.fn_prevent_duplicate_exception_modification();
+
+-- 5b. Permissions & RLS
 REVOKE ALL ON public.sourcing_duplicate_exceptions FROM anon, public;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.sourcing_duplicate_exceptions TO authenticated, service_role;
+REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.sourcing_duplicate_exceptions FROM authenticated;
+
+-- Grant append-only privileges (SELECT, INSERT) to authenticated staff; service_role retains system access
+GRANT SELECT, INSERT ON public.sourcing_duplicate_exceptions TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.sourcing_duplicate_exceptions TO service_role;
 
 ALTER TABLE public.sourcing_duplicate_exceptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sourcing_duplicate_exceptions FORCE ROW LEVEL SECURITY;
@@ -315,11 +371,18 @@ ALTER TABLE public.sourcing_duplicate_exceptions FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow authenticated read sourcing_duplicate_exceptions" ON public.sourcing_duplicate_exceptions;
 DROP POLICY IF EXISTS "Allow authenticated insert sourcing_duplicate_exceptions" ON public.sourcing_duplicate_exceptions;
 DROP POLICY IF EXISTS "sourcing_dup_exceptions_admin_all" ON public.sourcing_duplicate_exceptions;
+DROP POLICY IF EXISTS "sourcing_dup_exceptions_admin_select" ON public.sourcing_duplicate_exceptions;
+DROP POLICY IF EXISTS "sourcing_dup_exceptions_admin_insert" ON public.sourcing_duplicate_exceptions;
 
--- Strict Admin-only policy using verified canonical auth_is_admin()
-CREATE POLICY "sourcing_dup_exceptions_admin_all"
+-- Append-only policies using canonical auth_is_admin()
+CREATE POLICY "sourcing_dup_exceptions_admin_select"
   ON public.sourcing_duplicate_exceptions
-  FOR ALL
+  FOR SELECT
   TO authenticated
-  USING (public.auth_is_admin())
+  USING (public.auth_is_admin());
+
+CREATE POLICY "sourcing_dup_exceptions_admin_insert"
+  ON public.sourcing_duplicate_exceptions
+  FOR INSERT
+  TO authenticated
   WITH CHECK (public.auth_is_admin());

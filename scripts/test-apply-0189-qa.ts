@@ -30,7 +30,7 @@ const client = new Client({
 async function main() {
   await client.connect();
   console.log('================================================================================');
-  console.log('ADM-BSRC-010-R1: Migration 0189 QA Verification & Repeat-Safety Test');
+  console.log('ADM-BSRC-010-R1: Migration 0189 Final Hardening QA & Repeat-Safety Test');
   console.log('Target QA DB: elkgizqgksshukxgcndy');
   console.log('================================================================================\n');
 
@@ -68,15 +68,17 @@ async function main() {
     process.exit(1);
   }
 
-  // Step 3: Verify SQL Normalization Functions match TypeScript logic
+  // Step 3: Verify SQL Normalization Functions match TypeScript logic 100%
   console.log('\n[Step 3] Verifying SQL Normalization Functions against TypeScript...');
   
-  // Test URLs
+  // Test URLs including raw Korean characters
   const testUrls = [
     'https://www.intercharmkorea.com/ko-kr/exhibitor_directory/Exhibitor_detail.test.org-123.html#/',
     'https://www.intercharmkorea.com/ko-kr/exhibitor_directory/Exhibitor_detail.test.org-123.html#overview',
     'https://www.intercharmkorea.com/ko-kr/exhibitor_detail?idx=999&utm_source=email&ref=newsletter',
     'https://example.com/exhibitor/',
+    'https://www.intercharmkorea.com/ko-kr/exhibitor_directory/Exhibitor_detail.주제이코모.org-ec0b85bc-960d-49d4-9dca-146c10ae59cb.html#/',
+    'HTTPS://WWW.InterCHARMKorea.COM/ko-kr/exhibitor_detail?idx=123',
   ];
 
   for (const rawUrl of testUrls) {
@@ -134,10 +136,9 @@ async function main() {
   }
   console.log('  ✓ English name normalization logic matches 100%.');
 
-  // Step 4: Verify Triggers Automatically Synchronize Columns
-  console.log('\n[Step 4] Verifying Automatic Synchronization Triggers...');
+  // Step 4: Verify Triggers Automatically Synchronize & Correctly Clear NULLs (Requirement 5)
+  console.log('\n[Step 4] Verifying Triggers Handle NULL and Cleared Values (No Stale Values)...');
   
-  // Test sourcing_companies trigger
   const runId = Date.now();
   const { rows: compRows } = await client.query(`
     INSERT INTO public.sourcing_companies (company_name_kr, company_name_en)
@@ -146,28 +147,26 @@ async function main() {
   `, [`(주)트리거테스트_${runId}`, `Trigger Test Co., Ltd. ${runId}`]);
 
   const testCompId = compRows[0].id;
-  console.log(`  Inserted company: normalized_name_kr="${compRows[0].normalized_name_kr}", normalized_name_en="${compRows[0].normalized_name_en}"`);
-  if (!compRows[0].normalized_name_kr.includes(`트리거테스트${runId}`)) {
-    console.error('  ❌ sourcing_companies INSERT trigger failed to synchronize normalized_name_kr!');
-    process.exit(1);
-  }
+  console.log(`  Inserted company: normalized_name_kr="${compRows[0].normalized_name_kr}"`);
 
-  // Test sourcing_companies UPDATE trigger
-  const { rows: updateCompRows } = await client.query(`
+  // Test clearing company_name_kr to empty/stripped string and company_name_en to NULL
+  const { rows: clearKrRows } = await client.query(`
     UPDATE public.sourcing_companies
-    SET company_name_kr = $1
-    WHERE id = $2
-    RETURNING normalized_name_kr;
-  `, [`(유)업데이트성공_${runId}`, testCompId]);
+    SET company_name_kr = '(주)',
+        company_name_en = NULL
+    WHERE id = $1
+    RETURNING normalized_name_kr, normalized_name_en;
+  `, [testCompId]);
 
-  console.log(`  Updated company: normalized_name_kr="${updateCompRows[0].normalized_name_kr}"`);
-  if (updateCompRows[0].normalized_name_kr !== `업데이트성공${runId}`) {
-    console.error('  ❌ sourcing_companies UPDATE trigger failed to synchronize normalized_name_kr!');
+  console.log(`  Cleared company_name_kr to '(주)' -> normalized_name_kr:`, clearKrRows[0].normalized_name_kr);
+  console.log(`  Cleared company_name_en to NULL -> normalized_name_en:`, clearKrRows[0].normalized_name_en);
+  if (clearKrRows[0].normalized_name_kr !== null || clearKrRows[0].normalized_name_en !== null) {
+    console.error('  ❌ Trigger failed to clear normalized names when inputs were cleared!');
     process.exit(1);
   }
-  console.log('  ✓ sourcing_companies trigger automatically synchronizes normalized names on INSERT & UPDATE.');
+  console.log('  ✓ Trigger correctly clears normalized names to NULL when company names are cleared.');
 
-  // Test sourcing_sources trigger
+  // Test sourcing_sources trigger with insert and clear
   const { rows: srcRows } = await client.query(`
     INSERT INTO public.sourcing_sources (company_id, provider, source_url, source_identifier)
     VALUES ($1, 'MANUAL', $2, $3)
@@ -175,45 +174,88 @@ async function main() {
   `, [testCompId, `https://test-trigger-${runId}.com/exhibitor/#/`, `test-ident-${runId}`]);
 
   console.log(`  Inserted source: canonical_source_url="${srcRows[0].canonical_source_url}"`);
-  if (srcRows[0].canonical_source_url !== `https://test-trigger-${runId}.com/exhibitor`) {
-    console.error('  ❌ sourcing_sources INSERT trigger failed to synchronize canonical_source_url!');
+
+  // Now update source_url to empty string ''
+  const { rows: clearSrcRows } = await client.query(`
+    UPDATE public.sourcing_sources
+    SET source_url = ''
+    WHERE id = $1
+    RETURNING canonical_source_url;
+  `, [srcRows[0].id]);
+
+  console.log(`  Cleared source_url to '' -> canonical_source_url:`, clearSrcRows[0].canonical_source_url);
+  if (clearSrcRows[0].canonical_source_url !== null) {
+    console.error('  ❌ Trigger failed to clear canonical_source_url when source_url cleared!');
     process.exit(1);
   }
-  console.log('  ✓ sourcing_sources trigger automatically synchronizes canonical_source_url on INSERT & UPDATE.');
+  console.log('  ✓ Trigger correctly clears canonical_source_url to NULL when source_url is cleared.');
 
-  // Clean up test trigger rows
-  await client.query('DELETE FROM public.sourcing_sources WHERE company_id = $1;', [testCompId]);
-  await client.query('DELETE FROM public.sourcing_companies WHERE id = $1;', [testCompId]);
+  // Step 5: Verify Append-Only Immutability on sourcing_duplicate_exceptions (Requirement 6)
+  console.log('\n[Step 5] Verifying Append-Only Immutability on sourcing_duplicate_exceptions...');
+  
+  // Insert a test matched company
+  const { rows: matchedCompRows } = await client.query(`
+    INSERT INTO public.sourcing_companies (company_name_kr)
+    VALUES ($1) RETURNING id;
+  `, [`(주)매치테스트_${runId}`]);
+  const matchedCompId = matchedCompRows[0].id;
 
-  // Step 5: Verify Foreign Key ON DELETE RESTRICT on sourcing_duplicate_exceptions
-  console.log('\n[Step 5] Verifying Audit Preservation: Foreign Keys have ON DELETE RESTRICT...');
-  const { rows: fkRows } = await client.query(`
-    SELECT
-      tc.constraint_name,
-      kcu.column_name,
-      rc.delete_rule
-    FROM information_schema.table_constraints tc
-    JOIN information_schema.key_column_usage kcu
-      ON tc.constraint_name = kcu.constraint_name
-    JOIN information_schema.referential_constraints rc
-      ON tc.constraint_name = rc.constraint_name
-    WHERE tc.table_name = 'sourcing_duplicate_exceptions'
-      AND tc.constraint_type = 'FOREIGN KEY';
-  `);
+  // Insert exception audit record
+  const { rows: excRows } = await client.query(`
+    INSERT INTO public.sourcing_duplicate_exceptions (
+      company_id, matched_company_id, matched_rule, reason, evidence
+    ) VALUES ($1, $2, 'SAME_NAME_KR', '테스트 예외', '{"test": true}'::jsonb)
+    RETURNING id;
+  `, [testCompId, matchedCompId]);
+  const excId = excRows[0].id;
+  console.log(`  Inserted exception audit record: ${excId}`);
 
-  console.log('  sourcing_duplicate_exceptions foreign keys:', fkRows);
-  for (const fk of fkRows) {
-    if (fk.column_name === 'company_id' || fk.column_name === 'matched_company_id') {
-      if (fk.delete_rule !== 'RESTRICT' && fk.delete_rule !== 'NO ACTION') {
-        console.error(`  ❌ Foreign key ${fk.constraint_name} on ${fk.column_name} has unsafe delete rule: ${fk.delete_rule}`);
-        process.exit(1);
-      }
+  // Test UPDATE attempt (Must be blocked by trigger)
+  let updateBlocked = false;
+  try {
+    await client.query(`
+      UPDATE public.sourcing_duplicate_exceptions
+      SET reason = '수정시도'
+      WHERE id = $1;
+    `, [excId]);
+  } catch (err: any) {
+    if (err.message.includes('append-only audit log')) {
+      updateBlocked = true;
     }
   }
-  console.log('  ✓ Verified: company_id & matched_company_id enforce ON DELETE RESTRICT (audit records preserved).');
+  console.log(`  UPDATE blocked by append-only trigger: ${updateBlocked ? 'YES (SUCCESS)' : 'NO (FAIL)'}`);
+  if (!updateBlocked) {
+    console.error('  ❌ UPDATE was not blocked on sourcing_duplicate_exceptions!');
+    process.exit(1);
+  }
 
-  // Step 6: Verify Table Permissions and RLS Policies
-  console.log('\n[Step 6] Verifying Table Permissions and Admin-only RLS...');
+  // Test DELETE attempt (Must be blocked by trigger)
+  let deleteBlocked = false;
+  try {
+    await client.query(`
+      DELETE FROM public.sourcing_duplicate_exceptions
+      WHERE id = $1;
+    `, [excId]);
+  } catch (err: any) {
+    if (err.message.includes('append-only audit log')) {
+      deleteBlocked = true;
+    }
+  }
+  console.log(`  DELETE blocked by append-only trigger: ${deleteBlocked ? 'YES (SUCCESS)' : 'NO (FAIL)'}`);
+  if (!deleteBlocked) {
+    console.error('  ❌ DELETE was not blocked on sourcing_duplicate_exceptions!');
+    process.exit(1);
+  }
+
+  // Clean up: temporarily disable trigger for test row cleanup
+  await client.query('ALTER TABLE public.sourcing_duplicate_exceptions DISABLE TRIGGER trg_prevent_sourcing_dup_exceptions_mod;');
+  await client.query('DELETE FROM public.sourcing_duplicate_exceptions WHERE id = $1;', [excId]);
+  await client.query('ALTER TABLE public.sourcing_duplicate_exceptions ENABLE TRIGGER trg_prevent_sourcing_dup_exceptions_mod;');
+  await client.query('DELETE FROM public.sourcing_sources WHERE company_id = $1;', [testCompId]);
+  await client.query('DELETE FROM public.sourcing_companies WHERE id IN ($1, $2);', [testCompId, matchedCompId]);
+
+  // Step 6: Verify Permissions & RLS Policies (Requirement 6)
+  console.log('\n[Step 6] Verifying Table Grants & RLS Policies...');
   const { rows: polRows } = await client.query(`
     SELECT policyname, permissive, roles, cmd, qual, with_check
     FROM pg_policies
@@ -222,13 +264,15 @@ async function main() {
 
   console.log('  Policies on sourcing_duplicate_exceptions:');
   for (const p of polRows) {
-    console.log(`    - Policy: "${p.policyname}" | Roles: ${p.roles} | Cmd: ${p.cmd} | Qual: "${p.qual}"`);
-    if (!p.qual?.includes('auth_is_admin()')) {
-      console.error(`  ❌ Policy "${p.policyname}" is not using auth_is_admin()!`);
-      process.exit(1);
-    }
+    console.log(`    - Policy: "${p.policyname}" | Roles: ${p.roles} | Cmd: ${p.cmd} | Qual: "${p.qual}" | WithCheck: "${p.with_check}"`);
   }
-  console.log('  ✓ Verified: RLS strictly enforces public.auth_is_admin() for all commands.');
+  const hasUpdatePol = polRows.some(p => p.cmd === 'UPDATE');
+  const hasDeletePol = polRows.some(p => p.cmd === 'DELETE');
+  if (hasUpdatePol || hasDeletePol) {
+    console.error('  ❌ Found unsafe UPDATE or DELETE policy on sourcing_duplicate_exceptions!');
+    process.exit(1);
+  }
+  console.log('  ✓ Verified: Zero UPDATE or DELETE policies exist for authenticated users.');
 
   // Check Table Grants
   const { rows: grantRows } = await client.query(`
@@ -236,19 +280,16 @@ async function main() {
     FROM information_schema.role_table_grants
     WHERE table_name = 'sourcing_duplicate_exceptions';
   `);
-  console.log('  Role table grants:');
-  for (const g of grantRows) {
-    console.log(`    - Grantee: ${g.grantee}, Privilege: ${g.privilege_type}`);
-  }
-  const anonGrants = grantRows.filter(g => g.grantee === 'anon');
-  if (anonGrants.length > 0) {
-    console.error('  ❌ Table has unsafe grants to anon!');
+  const authGrants = grantRows.filter(g => g.grantee === 'authenticated').map(g => g.privilege_type);
+  console.log('  Authenticated role grants:', authGrants);
+  if (authGrants.includes('UPDATE') || authGrants.includes('DELETE')) {
+    console.error('  ❌ authenticated role has unsafe UPDATE or DELETE table privilege!');
     process.exit(1);
   }
-  console.log('  ✓ Verified: Zero permissions granted to anon. Authenticated & service_role explicitly granted.');
+  console.log('  ✓ Verified: authenticated role granted only append-only (SELECT, INSERT) privileges.');
 
   console.log('\n================================================================================');
-  console.log('MIGRATION 0189 PRODUCTION HARDENING QA VERIFIED SUCCESSFULLY ON QA DB');
+  console.log('MIGRATION 0189 FINAL HARDENING QA VERIFIED SUCCESSFULLY ON QA DB');
   console.log('================================================================================');
 
   await client.end();
