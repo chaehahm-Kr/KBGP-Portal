@@ -14,8 +14,13 @@ import type {
   ClassificationStatus,
   SourcingDocumentItem,
   SourcingDocumentType,
+  PrimaryProductCategory,
 } from "@/lib/brand-sourcing/types";
-import { COMPANY_TYPE_OPTIONS } from "@/lib/brand-sourcing/types";
+import {
+  COMPANY_TYPE_OPTIONS,
+  COMPANY_TYPE_SHORT_LABELS,
+  PRIMARY_PRODUCT_CATEGORY_OPTIONS,
+} from "@/lib/brand-sourcing/types";
 import type {
   DuplicateMatchItem,
   AdminDuplicateExceptionInput,
@@ -115,6 +120,8 @@ export default function BrandMarketingView({
   const [expandedEvidenceType, setExpandedEvidenceType] = useState<BusinessType | null>(null);
   const [drawerExpandedEvidenceType, setDrawerExpandedEvidenceType] = useState<BusinessType | null>(null);
   const [companyTypeOtherExplanation, setCompanyTypeOtherExplanation] = useState<string>("");
+  const [selectedPrimaryCategories, setSelectedPrimaryCategories] = useState<PrimaryProductCategory[]>([]);
+  const [primaryCategoriesConfirmed, setPrimaryCategoriesConfirmed] = useState(false);
 
   // Company Documents state
   const [companyDocuments, setCompanyDocuments] = useState<SourcingDocumentItem[]>([]);
@@ -177,6 +184,9 @@ export default function BrandMarketingView({
   const [filterCategory, setFilterCategory] = useState("ALL");
   const [filterBusinessTypes, setFilterBusinessTypes] = useState<string[]>([]);
   const [filterBusinessTypeMatchMode, setFilterBusinessTypeMatchMode] = useState<"ANY" | "ALL">("ANY");
+  const [filterPrimaryCategories, setFilterPrimaryCategories] = useState<string[]>([]);
+  const [showPrimaryCatFilterDropdown, setShowPrimaryCatFilterDropdown] = useState(false);
+  const [activePopover, setActivePopover] = useState<{ rowId: string; col: "brands" | "categories" | "primary" } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const pageSize = 20;
@@ -296,12 +306,24 @@ export default function BrandMarketingView({
       setReviewedDraft(res.draft);
       setDuplicateCheck(res.duplicateCheck || null);
 
+      // Preserve confirmed categories if re-parsing an already confirmed candidate (ADM-BSRC-011-R1)
+      const confirmedCandidateMatch = res.duplicateCheck?.matches?.find(
+        (m) => m.entityType === "SOURCING_CANDIDATE" && m.primaryCategoriesConfirmed
+      );
+
       // Reset evaluation fields to clean state (Default to REVIEWED)
       setGrade("UNRATED");
       setStatus("REVIEWED");
       setInternalNotes("");
       setSelectedBusinessTypes(res.draft.company.businessTypes || []);
       setBusinessTypeEvidence(res.draft.company.businessTypeEvidence || []);
+      if (confirmedCandidateMatch && confirmedCandidateMatch.primaryCategoriesConfirmed) {
+        setSelectedPrimaryCategories(confirmedCandidateMatch.primaryProductCategories || []);
+        setPrimaryCategoriesConfirmed(true);
+      } else {
+        setSelectedPrimaryCategories(res.draft.company.primaryProductCategories || []);
+        setPrimaryCategoriesConfirmed(false);
+      }
       setCompanyDocuments(res.draft.companyDocuments || []);
       setCompanyTypeOtherExplanation("");
     } catch (err: any) {
@@ -352,6 +374,8 @@ export default function BrandMarketingView({
         businessTypes: selectedBusinessTypes,
         businessTypeEvidence,
         companyTypeOtherExplanation: selectedBusinessTypes.includes("OTHER") ? companyTypeOtherExplanation : null,
+        primaryProductCategories: selectedPrimaryCategories,
+        primaryCategoriesConfirmed,
         categories: reviewedDraft.categories || [],
         documents: companyDocuments,
         internalNotes: overrideReason
@@ -466,6 +490,8 @@ export default function BrandMarketingView({
         businessTypes: selectedBusinessTypes,
         businessTypeEvidence,
         companyTypeOtherExplanation: selectedBusinessTypes.includes("OTHER") ? companyTypeOtherExplanation : null,
+        primaryProductCategories: selectedPrimaryCategories,
+        primaryCategoriesConfirmed,
         categories: reviewedDraft.categories || [],
         documents: companyDocuments,
         internalNotes: `[ADMIN EXCEPTION APPROVED]: ${exceptionReason.trim()}\n\n${internalNotes}`,
@@ -527,6 +553,7 @@ export default function BrandMarketingView({
         grade: filterGrade !== "ALL" ? filterGrade : undefined,
         status: filterStatus !== "ALL" ? filterStatus : undefined,
         category: filterCategory !== "ALL" ? filterCategory : undefined,
+        primaryCategories: filterPrimaryCategories.length > 0 ? filterPrimaryCategories : undefined,
         businessTypes: filterBusinessTypes.length > 0 ? filterBusinessTypes : undefined,
         businessTypeMatchMode: filterBusinessTypeMatchMode,
         limit: pageSize,
@@ -642,6 +669,8 @@ export default function BrandMarketingView({
         businessTypes: selectedCandidateDetail.business_types || [],
         businessTypeEvidence: selectedCandidateDetail.business_type_evidence || [],
         companyTypeOtherExplanation: selectedCandidateDetail.companyTypeOtherExplanation || null,
+        primaryProductCategories: selectedCandidateDetail.primary_product_categories || [],
+        primaryCategoriesConfirmed: true,
         categories: currentCats,
         documents: drawerDocuments,
       };
@@ -886,15 +915,51 @@ export default function BrandMarketingView({
     });
   };
 
-  // Company Type badge styling helper
+  // Primary Category toggle helper for Tab 1 (ADM-BSRC-011)
+  const togglePrimaryCategory = (cat: PrimaryProductCategory) => {
+    setSelectedPrimaryCategories((prev) =>
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+    );
+    setPrimaryCategoriesConfirmed(true);
+  };
+
+  // Primary Category toggle helper for Drawer (ADM-BSRC-011)
+  const handleToggleDrawerPrimaryCategory = (cat: PrimaryProductCategory) => {
+    if (!selectedCandidateDetail) return;
+    const current = (selectedCandidateDetail.primary_product_categories || []) as PrimaryProductCategory[];
+    const next = current.includes(cat) ? current.filter((c) => c !== cat) : [...current, cat];
+    setSelectedCandidateDetail({
+      ...selectedCandidateDetail,
+      primary_product_categories: next,
+      primary_categories_confirmed: true,
+    });
+  };
+
+  // Primary Product Category badge helper (ADM-BSRC-011)
+  const renderPrimaryCategoryBadge = (cat: PrimaryProductCategory) => {
+    const opt = PRIMARY_PRODUCT_CATEGORY_OPTIONS.find((o) => o.value === cat);
+    return (
+      <span
+        key={cat}
+        className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60"
+      >
+        {opt ? opt.labelKr : cat}
+      </span>
+    );
+  };
+
+  // Company Type badge styling helper (ADM-BSRC-011: Compact Short Labels with Tooltip)
   const renderCompanyTypeBadge = (bt: string) => {
     const opt = COMPANY_TYPE_OPTIONS.find((o) => o.value === bt);
+    const shortLabel = COMPANY_TYPE_SHORT_LABELS[bt as BusinessType] || (opt ? opt.labelKr : bt);
+    const fullDesc = opt ? `${opt.labelKr} (${opt.labelEn})` : bt;
     return (
       <span
         key={bt}
-        className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60"
+        title={fullDesc}
+        className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/50 cursor-help transition-colors"
       >
-        {opt ? opt.labelKr : bt}
+        {shortLabel}
       </span>
     );
   };
@@ -2218,6 +2283,50 @@ export default function BrandMarketingView({
                     )}
                   </div>
 
+                  {/* Primary Product Category Selector (Multi-Select, ADM-BSRC-011) */}
+                  <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                        Primary Product Category (주력 상품 분야)
+                      </label>
+                      <span className="text-[10px] text-zinc-400">복수 선택 가능</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50">
+                      {PRIMARY_PRODUCT_CATEGORY_OPTIONS.map((opt) => {
+                        const isChecked = selectedPrimaryCategories.includes(opt.value);
+                        return (
+                          <label
+                            key={opt.value}
+                            className={`p-1.5 rounded text-xs transition-colors flex items-start gap-2 cursor-pointer ${
+                              isChecked
+                                ? "bg-emerald-50/80 dark:bg-emerald-950/50 text-emerald-900 dark:text-emerald-200 font-semibold"
+                                : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => togglePrimaryCategory(opt.value)}
+                              className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <span className="block leading-tight">{opt.labelKr}</span>
+                              <span className="text-[10px] text-zinc-400 font-normal leading-tight block">
+                                {opt.labelEn}
+                              </span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {selectedPrimaryCategories.length === 0 && (
+                      <p className="text-[10px] text-zinc-400 italic">
+                        근거가 불충분할 경우 미분류(Unclassified) 상태로 저장됩니다.
+                      </p>
+                    )}
+                  </div>
+
                   {/* Marketing Consent Status (Read-only Invariant) */}
                   <div className="p-2.5 rounded bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 text-xs">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-0.5">
@@ -2439,6 +2548,94 @@ export default function BrandMarketingView({
               )}
             </div>
 
+            {/* Primary Product Category Multi-Select Filter (ADM-BSRC-011) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowPrimaryCatFilterDropdown((prev) => !prev)}
+                className={`px-2.5 py-1.5 text-xs rounded border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                  filterPrimaryCategories.length > 0
+                    ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 font-semibold"
+                    : "bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 border-zinc-300 dark:border-zinc-700"
+                }`}
+              >
+                <span>
+                  {filterPrimaryCategories.length === 0
+                    ? "Primary: All"
+                    : `Primary (${filterPrimaryCategories.length})`}
+                </span>
+                <span className="text-[10px] text-zinc-400">▾</span>
+              </button>
+
+              {showPrimaryCatFilterDropdown && (
+                <div
+                  className="absolute z-50 left-0 top-full mt-1 w-52 p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl space-y-1 text-xs"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between pb-1.5 border-b border-zinc-100 dark:border-zinc-800 text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                    <span>주력 상품 분류 필터</span>
+                    {filterPrimaryCategories.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFilterPrimaryCategories([]);
+                          setCurrentPage(1);
+                        }}
+                        className="text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 underline cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-1 pt-1 max-h-48 overflow-y-auto">
+                    {PRIMARY_PRODUCT_CATEGORY_OPTIONS.map((opt) => {
+                      const isSelected = filterPrimaryCategories.includes(opt.value);
+                      return (
+                        <label
+                          key={opt.value}
+                          className="flex items-center gap-2 p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              const next = isSelected
+                                ? filterPrimaryCategories.filter((c) => c !== opt.value)
+                                : [...filterPrimaryCategories, opt.value];
+                              setFilterPrimaryCategories(next);
+                              setCurrentPage(1);
+                            }}
+                            className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <span className="text-zinc-800 dark:text-zinc-200 text-xs">
+                            {opt.labelKr} ({opt.labelEn})
+                          </span>
+                        </label>
+                      );
+                    })}
+                    <label className="flex items-center gap-2 p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer border-t border-zinc-100 dark:border-zinc-800 pt-1">
+                      <input
+                        type="checkbox"
+                        checked={filterPrimaryCategories.includes("UNCLASSIFIED")}
+                        onChange={() => {
+                          const isSelected = filterPrimaryCategories.includes("UNCLASSIFIED");
+                          const next = isSelected
+                            ? filterPrimaryCategories.filter((c) => c !== "UNCLASSIFIED")
+                            : [...filterPrimaryCategories, "UNCLASSIFIED"];
+                          setFilterPrimaryCategories(next);
+                          setCurrentPage(1);
+                        }}
+                        className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      />
+                      <span className="text-zinc-500 dark:text-zinc-400 text-xs italic">
+                        미분류 (Unclassified)
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Apply & Refresh Buttons */}
             <button
               type="button"
@@ -2485,6 +2682,7 @@ export default function BrandMarketingView({
                     <th className="p-3">Company (법인명)</th>
                     <th className="p-3">Brands</th>
                     <th className="p-3">Categories</th>
+                    <th className="p-3">Primary Product</th>
                     <th className="p-3">Company Type</th>
                     <th className="p-3">Grade</th>
                     <th className="p-3">Primary Contact</th>
@@ -2496,13 +2694,13 @@ export default function BrandMarketingView({
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {isLoadingList ? (
                     <tr>
-                      <td colSpan={9} className="p-8 text-center text-zinc-400">
+                      <td colSpan={10} className="p-8 text-center text-zinc-400">
                         Loading candidate list...
                       </td>
                     </tr>
                   ) : candidates.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="p-12 text-center space-y-2">
+                      <td colSpan={10} className="p-12 text-center space-y-2">
                         <p className="text-zinc-500 font-medium">No sourcing candidates found.</p>
                         <button
                           type="button"
@@ -2526,6 +2724,8 @@ export default function BrandMarketingView({
                         ])
                       ) as string[];
 
+                      const primaryCats = (c.primary_product_categories || []) as PrimaryProductCategory[];
+
                       return (
                         <tr
                           key={c.id}
@@ -2542,39 +2742,161 @@ export default function BrandMarketingView({
                               </p>
                             )}
                           </td>
-                          {/* Distinct Brands Column (Requirement 3) */}
-                          <td className="p-3">
-                            <div className="flex flex-wrap gap-1 max-w-[200px]">
-                              {c.sourcing_brands && c.sourcing_brands.length > 0 ? (
-                                c.sourcing_brands.map((b: any, idx: number) => (
-                                  <span
-                                    key={idx}
-                                    className="inline-block px-1.5 py-0.5 rounded text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700"
-                                  >
-                                    {b.brand_name_kr || b.brand_name_en}
+                          {/* Brands Column: Count only + Popover on Hover/Click (ADM-BSRC-011) */}
+                          <td className="p-3 relative" onClick={(e) => e.stopPropagation()}>
+                            {c.sourcing_brands && c.sourcing_brands.length > 0 ? (
+                              <div
+                                className="relative inline-block"
+                                onMouseEnter={() => setActivePopover({ rowId: c.id, col: "brands" })}
+                                onMouseLeave={() => setActivePopover(null)}
+                              >
+                                <button
+                                  type="button"
+                                  aria-haspopup="dialog"
+                                  aria-expanded={activePopover?.rowId === c.id && activePopover?.col === "brands"}
+                                  onClick={() =>
+                                    setActivePopover((curr) =>
+                                      curr?.rowId === c.id && curr?.col === "brands" ? null : { rowId: c.id, col: "brands" }
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                                >
+                                  <span>{c.sourcing_brands.length}</span>
+                                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-normal">
+                                    {c.sourcing_brands.length === 1 ? "Brand" : "Brands"}
                                   </span>
-                                ))
-                              ) : (
-                                <span className="text-zinc-400 text-[11px]">-</span>
-                              )}
-                            </div>
+                                </button>
+
+                                {activePopover?.rowId === c.id && activePopover?.col === "brands" && (
+                                  <div
+                                    role="dialog"
+                                    className="absolute z-50 left-0 top-full mt-1.5 w-60 max-h-56 overflow-y-auto rounded-lg bg-zinc-900 border border-zinc-700 shadow-2xl p-2.5 text-xs space-y-1.5 text-zinc-100 ring-1 ring-black/40"
+                                  >
+                                    <div className="flex items-center justify-between pb-1 border-b border-zinc-800 text-[11px] font-bold text-zinc-300">
+                                      <span>보유 브랜드 목록</span>
+                                      <span className="text-[10px] text-zinc-500 font-normal">
+                                        총 {c.sourcing_brands.length}개
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1 pt-1">
+                                      {c.sourcing_brands.map((b: any, bIdx: number) => (
+                                        <span
+                                          key={bIdx}
+                                          className="inline-block px-1.5 py-0.5 rounded text-[11px] font-medium bg-zinc-800 text-zinc-200 border border-zinc-700"
+                                        >
+                                          {b.brand_name_kr || b.brand_name_en}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-zinc-400 text-[11px]">—</span>
+                            )}
                           </td>
-                          {/* Distinct Categories Column (Requirement 3) */}
-                          <td className="p-3">
-                            <div className="flex flex-wrap gap-1 max-w-[220px]">
-                              {allCategories.length > 0 ? (
-                                allCategories.map((cat: string, catIdx: number) => (
-                                  <span
-                                    key={catIdx}
-                                    className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60"
-                                  >
-                                    {cat}
+                          {/* Categories Column: Count only + Popover on Hover/Click (ADM-BSRC-011) */}
+                          <td className="p-3 relative" onClick={(e) => e.stopPropagation()}>
+                            {allCategories.length > 0 ? (
+                              <div
+                                className="relative inline-block"
+                                onMouseEnter={() => setActivePopover({ rowId: c.id, col: "categories" })}
+                                onMouseLeave={() => setActivePopover(null)}
+                              >
+                                <button
+                                  type="button"
+                                  aria-haspopup="dialog"
+                                  aria-expanded={activePopover?.rowId === c.id && activePopover?.col === "categories"}
+                                  onClick={() =>
+                                    setActivePopover((curr) =>
+                                      curr?.rowId === c.id && curr?.col === "categories" ? null : { rowId: c.id, col: "categories" }
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 cursor-pointer transition-colors"
+                                >
+                                  <span>{allCategories.length}</span>
+                                  <span className="text-[10px] text-blue-500 dark:text-blue-400 font-normal">
+                                    {allCategories.length === 1 ? "Category" : "Categories"}
                                   </span>
-                                ))
-                              ) : (
-                                <span className="text-zinc-400 text-[11px]">-</span>
-                              )}
-                            </div>
+                                </button>
+
+                                {activePopover?.rowId === c.id && activePopover?.col === "categories" && (
+                                  <div
+                                    role="dialog"
+                                    className="absolute z-50 left-0 top-full mt-1.5 w-64 max-h-56 overflow-y-auto rounded-lg bg-zinc-900 border border-zinc-700 shadow-2xl p-2.5 text-xs space-y-1.5 text-zinc-100 ring-1 ring-black/40"
+                                  >
+                                    <div className="flex items-center justify-between pb-1 border-b border-zinc-800 text-[11px] font-bold text-zinc-300">
+                                      <span>수집 카테고리 전체</span>
+                                      <span className="text-[10px] text-zinc-500 font-normal">
+                                        총 {allCategories.length}개
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1 pt-1">
+                                      {allCategories.map((cat: string, catIdx: number) => (
+                                        <span
+                                          key={catIdx}
+                                          className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-950/60 text-blue-200 border border-blue-800"
+                                        >
+                                          {cat}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-zinc-400 text-[11px]">—</span>
+                            )}
+                          </td>
+                          {/* Primary Product Column: Up to 2 badges + +N with Popover (ADM-BSRC-011) */}
+                          <td className="p-3 relative" onClick={(e) => e.stopPropagation()}>
+                            {primaryCats.length === 0 ? (
+                              <span className="text-zinc-400 dark:text-zinc-500 text-[11px] italic">
+                                Unclassified
+                              </span>
+                            ) : (
+                              <div
+                                className="relative inline-flex items-center gap-1"
+                                onMouseEnter={() => {
+                                  if (primaryCats.length > 2) setActivePopover({ rowId: c.id, col: "primary" });
+                                }}
+                                onMouseLeave={() => setActivePopover(null)}
+                              >
+                                {primaryCats.slice(0, 2).map((cat) => renderPrimaryCategoryBadge(cat))}
+                                {primaryCats.length > 2 && (
+                                  <button
+                                    type="button"
+                                    aria-haspopup="dialog"
+                                    aria-expanded={activePopover?.rowId === c.id && activePopover?.col === "primary"}
+                                    onClick={() =>
+                                      setActivePopover((curr) =>
+                                        curr?.rowId === c.id && curr?.col === "primary" ? null : { rowId: c.id, col: "primary" }
+                                      )
+                                    }
+                                    className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                                  >
+                                    +{primaryCats.length - 2}
+                                  </button>
+                                )}
+
+                                {primaryCats.length > 2 && activePopover?.rowId === c.id && activePopover?.col === "primary" && (
+                                  <div
+                                    role="dialog"
+                                    className="absolute z-50 left-0 top-full mt-1.5 w-56 max-h-56 overflow-y-auto rounded-lg bg-zinc-900 border border-zinc-700 shadow-2xl p-2.5 text-xs space-y-1.5 text-zinc-100 ring-1 ring-black/40"
+                                  >
+                                    <div className="flex items-center justify-between pb-1 border-b border-zinc-800 text-[11px] font-bold text-zinc-300">
+                                      <span>주력 상품 분야 전체</span>
+                                      <span className="text-[10px] text-zinc-500 font-normal">
+                                        총 {primaryCats.length}개
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1 pt-1">
+                                      {primaryCats.map((cat) => renderPrimaryCategoryBadge(cat))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </td>
                           {/* Company Type Column */}
                           <td className="p-3">
@@ -3996,6 +4318,45 @@ export default function BrandMarketingView({
                           />
                         </div>
                       )}
+                    </div>
+
+                    {/* Primary Product Category Selector for Drawer (Multi-Select, ADM-BSRC-011) */}
+                    <div className="col-span-2 space-y-2 pt-2 border-t border-zinc-200 dark:border-zinc-700">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-zinc-600 dark:text-zinc-400 font-semibold text-[11px]">
+                          Primary Product Category (주력 상품 분야)
+                        </label>
+                        <span className="text-[10px] text-zinc-400">복수 선택 가능</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+                        {PRIMARY_PRODUCT_CATEGORY_OPTIONS.map((opt) => {
+                          const currentPrimary = (selectedCandidateDetail.primary_product_categories || []) as PrimaryProductCategory[];
+                          const isChecked = currentPrimary.includes(opt.value);
+                          return (
+                            <label
+                              key={opt.value}
+                              className={`p-1.5 rounded text-xs transition-colors flex items-start gap-2 cursor-pointer ${
+                                isChecked
+                                  ? "bg-emerald-50/80 dark:bg-emerald-950/50 text-emerald-900 dark:text-emerald-200 font-semibold"
+                                  : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleDrawerPrimaryCategory(opt.value)}
+                                className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <span className="block leading-tight">{opt.labelKr}</span>
+                                <span className="text-[10px] text-zinc-400 font-normal leading-tight block">
+                                  {opt.labelEn}
+                                </span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     <div className="col-span-2">

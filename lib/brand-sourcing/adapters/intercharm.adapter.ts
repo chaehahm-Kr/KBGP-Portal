@@ -18,6 +18,7 @@ import {
 import { validateIntercharmUrl, sanitizeText, sanitizeParagraphs } from "../security";
 import { SourceExtractionError } from "../errors";
 import { enrichFromOfficialWebsite } from "../enrichment/website-enricher";
+import { recommendPrimaryProductCategories } from "../category-classifier";
 
 const DEFAULT_EVENT_EDITION_ID = "eve-183fb719-cde8-4b12-b83a-bf0e1c74384c";
 const DEFAULT_CLIENT_ID = "uhQVcmxLwXAjVtVpTvoerERiZSsNz0om";
@@ -489,6 +490,15 @@ export class IntercharmAdapter implements SourceAdapter {
         draft.audit.notes.push(`Website enrichment failed: ${draft.enrichment.error}`);
       }
     }
+
+    // 13. Automatic Primary Product Category Recommendation (ADM-BSRC-011)
+    draft.company.primaryProductCategories = recommendPrimaryProductCategories({
+      categories: draft.categories,
+      products: draft.companyProducts,
+      descriptions: [draft.company.descriptionKr, draft.company.descriptionEn],
+      brandNames: draft.brands.map((b) => b.nameKr),
+    });
+    draft.company.primaryCategoriesConfirmed = false;
 
     return draft;
   }

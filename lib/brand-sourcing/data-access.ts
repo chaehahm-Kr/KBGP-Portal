@@ -32,6 +32,7 @@ export interface SourcingListParams {
   search?: string;
   grade?: string;
   category?: string;
+  primaryCategories?: string[];
   status?: string;
   businessTypes?: string[];
   businessTypeMatchMode?: "ANY" | "ALL";
@@ -96,7 +97,7 @@ export async function findDuplicateCandidates(
   if (canonicalUrl || exhibitorId) {
     let query = supabase
       .from("sourcing_sources")
-      .select("company_id, source_url, canonical_source_url, source_identifier, sourcing_companies(id, company_name_kr, company_name_en, status, grade, updated_at)");
+      .select("company_id, source_url, canonical_source_url, source_identifier, sourcing_companies(id, company_name_kr, company_name_en, status, grade, updated_at, primary_product_categories, primary_categories_confirmed)");
 
     if (canonicalUrl && exhibitorId) {
       query = query.or(`canonical_source_url.eq.${canonicalUrl},source_identifier.eq.${exhibitorId}`);
@@ -130,6 +131,8 @@ export async function findDuplicateCandidates(
           status: comp.status,
           grade: comp.grade,
           lastActivityDate: comp.updated_at,
+          primaryProductCategories: comp.primary_product_categories,
+          primaryCategoriesConfirmed: comp.primary_categories_confirmed,
         });
       }
     }
@@ -139,7 +142,7 @@ export async function findDuplicateCandidates(
   if (normKr) {
     const { data: compMatches } = await supabase
       .from("sourcing_companies")
-      .select("id, company_name_kr, company_name_en, normalized_name_kr, status, grade, updated_at")
+      .select("id, company_name_kr, company_name_en, normalized_name_kr, status, grade, updated_at, primary_product_categories, primary_categories_confirmed")
       .limit(100);
 
     if (compMatches) {
@@ -159,6 +162,8 @@ export async function findDuplicateCandidates(
               status: c.status,
               grade: c.grade,
               lastActivityDate: c.updated_at,
+              primaryProductCategories: c.primary_product_categories,
+              primaryCategoriesConfirmed: c.primary_categories_confirmed,
             });
           }
         }
@@ -414,6 +419,8 @@ export async function saveSourcingDraft(
       description_en: draft.company.descriptionEn,
       business_types: evaluation?.businessTypes || draft.company.businessTypes || [],
       business_type_evidence: evaluation?.businessTypeEvidence || draft.company.businessTypeEvidence || [],
+      primary_product_categories: evaluation?.primaryProductCategories || draft.company.primaryProductCategories || [],
+      primary_categories_confirmed: evaluation?.primaryCategoriesConfirmed ?? draft.company.primaryCategoriesConfirmed ?? false,
       representative_name: draft.company.representativeName,
       business_registration_number: draft.company.businessRegistrationNumber,
       address_line1: draft.company.address.line1,
@@ -934,6 +941,10 @@ export async function updateSourcingCandidateComplete(
   if (evaluation?.status) companyUpdates.status = evaluation.status;
   if (evaluation?.assignedTo !== undefined) companyUpdates.assigned_to = evaluation.assignedTo;
   if (evaluation?.internalNotes !== undefined) companyUpdates.internal_notes = evaluation.internalNotes;
+  if (evaluation?.primaryProductCategories !== undefined) {
+    companyUpdates.primary_product_categories = evaluation.primaryProductCategories;
+    companyUpdates.primary_categories_confirmed = evaluation.primaryCategoriesConfirmed ?? true;
+  }
   if (evaluation?.marketingConsentStatus) {
     companyUpdates.marketing_consent_status = evaluation.marketingConsentStatus;
   }
@@ -1029,6 +1040,8 @@ export async function listSourcingCompanies(
       description_en,
       business_types,
       business_type_evidence,
+      primary_product_categories,
+      primary_categories_confirmed,
       representative_name,
       business_registration_number,
       address_formatted_kr,
@@ -1081,6 +1094,22 @@ export async function listSourcingCompanies(
       query = query.in("id", catCompanyIds);
     } else {
       return { data: [], total: 0 };
+    }
+  }
+
+  // Primary Product Category filter (multi-value, ADM-BSRC-011)
+  if (params?.primaryCategories && params.primaryCategories.length > 0) {
+    const hasUnclassified = params.primaryCategories.includes("UNCLASSIFIED");
+    const realCats = params.primaryCategories.filter((c) => c !== "UNCLASSIFIED");
+
+    if (hasUnclassified && realCats.length > 0) {
+      query = query.or(
+        `primary_product_categories.ov.{${realCats.join(",")}},primary_product_categories.eq.{}`
+      );
+    } else if (hasUnclassified) {
+      query = query.eq("primary_product_categories", "{}");
+    } else {
+      query = query.overlaps("primary_product_categories", realCats);
     }
   }
 
@@ -1150,6 +1179,10 @@ export async function updateSourcingEvaluation(
   if (evaluation.internalNotes !== undefined) updates.internal_notes = evaluation.internalNotes;
   if (evaluation.businessTypes !== undefined) updates.business_types = evaluation.businessTypes;
   if (evaluation.businessTypeEvidence !== undefined) updates.business_type_evidence = evaluation.businessTypeEvidence;
+  if (evaluation.primaryProductCategories !== undefined) {
+    updates.primary_product_categories = evaluation.primaryProductCategories;
+    updates.primary_categories_confirmed = evaluation.primaryCategoriesConfirmed ?? true;
+  }
   if (evaluation.marketingConsentStatus !== undefined) {
     updates.marketing_consent_status = evaluation.marketingConsentStatus;
   }
