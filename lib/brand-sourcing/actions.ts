@@ -74,15 +74,15 @@ export async function extractSourcingDraftAction(
     const draft = await extractSourcingDraft(url, { enrichWebsite });
 
     // 3. Pre-check for duplicate candidate records
-    const primaryWebsite = draft.websites[0]?.url;
     const primaryEmails = draft.contacts.map((c) => c.email).filter(Boolean);
+    const draftBrands = (draft.brands || []).map((b) => ({ nameKr: b.nameKr, nameEn: b.nameEn }));
 
     const duplicateCheck = await findDuplicateCandidates({
       sourceUrl: url,
       sourceIdentifier: draft.source.sourceIdentifier,
       companyNameKr: draft.company.nameKr,
       companyNameEn: draft.company.nameEn || undefined,
-      websiteUrl: primaryWebsite,
+      brands: draftBrands,
       emails: primaryEmails,
     });
 
@@ -127,6 +127,9 @@ export async function saveSourcingCandidateAction(
   draft: NormalizedCompanyDraft,
   evaluation?: SourcingEvaluationInput,
   options?: {
+    allowDuplicateConfirmed?: boolean;
+    matchedCompanyIds?: string[];
+    matchedFields?: string[];
     exception?: AdminDuplicateExceptionInput;
   }
 ): Promise<{
@@ -143,6 +146,9 @@ export async function saveSourcingCandidateAction(
     }
 
     const res = await saveSourcingDraft(draft, evaluation, {
+      allowDuplicateConfirmed: options?.allowDuplicateConfirmed,
+      matchedCompanyIds: options?.matchedCompanyIds,
+      matchedFields: options?.matchedFields,
       exception: options?.exception,
       adminUserId: staff.session.userId || staff.staffId,
     });

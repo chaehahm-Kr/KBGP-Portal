@@ -147,6 +147,23 @@ export function normalizeEnglishCompanyName(rawName: string): string {
 }
 
 /**
+ * Normalizes brand names for strict duplicate matching.
+ * Task: ADM-BSRC-012-R1
+ * - Lowercases and trims
+ * - Strips common brackets and punctuation: ()[]{}.,-_/·ㆍ'"
+ * - Collapses whitespace
+ */
+export function normalizeBrandName(rawName: string): string {
+  if (!rawName || typeof rawName !== "string") return "";
+
+  return rawName
+    .toLowerCase()
+    .replace(/[()[\]{}.,\-_/·ㆍ'"`]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Normalizes an official website URL down to its canonical domain:
  * - Strips protocol, path, query, fragment
  * - Strips leading 'www.' and 'm.'

@@ -8,12 +8,15 @@ import {
   AdminDuplicateExceptionInput,
   LinkSourceResult,
   DuplicateAuditReport,
+  SaveSourcingOptions,
+  SourceConflictInfo,
 } from "./types";
 import {
   normalizeSourceUrl,
   extractExhibitorIdentifier,
   normalizeKoreanCompanyName,
   normalizeEnglishCompanyName,
+  normalizeBrandName,
   normalizeWebsiteDomain,
   areCompanyNamesSimilar,
 } from "./duplicate-detector";
@@ -91,74 +94,31 @@ export async function findDuplicateCandidates(
 
   const normKr = criteria.companyNameKr ? normalizeKoreanCompanyName(criteria.companyNameKr) : "";
   const normEn = criteria.companyNameEn ? normalizeEnglishCompanyName(criteria.companyNameEn) : "";
-  const targetDomain = criteria.websiteUrl ? normalizeWebsiteDomain(criteria.websiteUrl) : "";
 
-  // 1. Check exact canonical source URL or exhibitor identifier (STRONG duplicate)
-  if (canonicalUrl || exhibitorId) {
-    let query = supabase
-      .from("sourcing_sources")
-      .select("company_id, source_url, canonical_source_url, source_identifier, sourcing_companies(id, company_name_kr, company_name_en, status, grade, updated_at, primary_product_categories, primary_categories_confirmed)");
-
-    if (canonicalUrl && exhibitorId) {
-      query = query.or(`canonical_source_url.eq.${canonicalUrl},source_identifier.eq.${exhibitorId}`);
-    } else if (canonicalUrl) {
-      query = query.or(`canonical_source_url.eq.${canonicalUrl},source_url.ilike.%${canonicalUrl.replace(/^https?:\/\//, "")}%`);
-    } else if (exhibitorId) {
-      query = query.eq("source_identifier", exhibitorId);
-    }
-
-    const { data: sourceMatches } = await query.limit(10);
-
-    if (sourceMatches) {
-      for (const sm of sourceMatches) {
-        const comp = sm.sourcing_companies as any;
-        if (!comp) continue;
-        const isExactUrl =
-          sm.canonical_source_url === canonicalUrl ||
-          (canonicalUrl && normalizeSourceUrl(sm.source_url) === canonicalUrl);
-        matches.push({
-          matchType: isExactUrl ? "SOURCE_URL" : "SOURCE_IDENTIFIER",
-          severity: "STRONG",
-          matchedValue: isExactUrl ? (sm.canonical_source_url || sm.source_url) : (sm.source_identifier || ""),
-          entityType: "SOURCING_CANDIDATE",
-          entityId: sm.company_id,
-          entityName: comp.company_name_kr,
-          entityNameEn: comp.company_name_en,
-          reason: isExactUrl
-            ? "동일한 전시회/소스 URL (Canonical URL 일치)"
-            : "동일한 전시회 참가업체 식별자 (Exhibitor ID 일치)",
-          sourceUrl: sm.source_url,
-          status: comp.status,
-          grade: comp.grade,
-          lastActivityDate: comp.updated_at,
-          primaryProductCategories: comp.primary_product_categories,
-          primaryCategoriesConfirmed: comp.primary_categories_confirmed,
-        });
-      }
-    }
-  }
-
-  // 2. Check Korean Company Name (Normalized & Exact) -> STRONG duplicate
+  // -------------------------------------------------------------
+  // CRITERIA 1. COMPANY NAME (Korean OR English Normalized Exact Match)
+  // -------------------------------------------------------------
   if (normKr) {
     const { data: compMatches } = await supabase
       .from("sourcing_companies")
       .select("id, company_name_kr, company_name_en, normalized_name_kr, status, grade, updated_at, primary_product_categories, primary_categories_confirmed")
-      .limit(100);
+      .limit(300);
 
     if (compMatches) {
       for (const c of compMatches) {
         const existingNorm = c.normalized_name_kr || normalizeKoreanCompanyName(c.company_name_kr);
-        if (existingNorm === normKr) {
-          if (!matches.some((m) => m.entityId === c.id && m.severity === "STRONG")) {
+        if (existingNorm && existingNorm === normKr) {
+          if (!matches.some((m) => m.entityId === c.id && m.matchedField === "회사명")) {
             matches.push({
               matchType: "COMPANY_NAME_KR",
-              severity: "STRONG",
+              severity: "POSSIBLE",
+              matchedField: "회사명",
               matchedValue: c.company_name_kr,
               entityType: "SOURCING_CANDIDATE",
               entityId: c.id,
               entityName: c.company_name_kr,
               entityNameEn: c.company_name_en,
-              reason: "동일한 법인명 (정규화된 한국어 법인명 일치)",
+              reason: `기존 등록 회사명 일치 (${c.company_name_kr})`,
               status: c.status,
               grade: c.grade,
               lastActivityDate: c.updated_at,
@@ -170,26 +130,27 @@ export async function findDuplicateCandidates(
       }
     }
 
-    // Also check core companies table for existing registered partners
+    // Check core companies table for existing registered partners
     const { data: partnerNameMatches } = await supabase
       .from("companies")
       .select("id, name")
-      .ilike("name", `%${criteria.companyNameKr?.trim()}%`)
-      .limit(5);
+      .ilike("name", `%${(criteria.companyNameKr || "").trim()}%`)
+      .limit(10);
 
     if (partnerNameMatches) {
       for (const pm of partnerNameMatches) {
         const pNorm = normalizeKoreanCompanyName(pm.name);
         if (pNorm === normKr) {
-          if (!matches.some((m) => m.entityId === pm.id)) {
+          if (!matches.some((m) => m.entityId === pm.id && m.matchedField === "회사명")) {
             matches.push({
               matchType: "COMPANY_NAME_KR",
-              severity: "STRONG",
+              severity: "POSSIBLE",
+              matchedField: "회사명",
               matchedValue: pm.name,
               entityType: "PARTNER_COMPANY",
               entityId: pm.id,
               entityName: pm.name,
-              reason: "기존 파트너사 등록 법인명과 일치",
+              reason: `기존 파트너사 등록 회사명 일치 (${pm.name})`,
             });
           }
         }
@@ -197,29 +158,29 @@ export async function findDuplicateCandidates(
     }
   }
 
-  // 3. Check English Company Name (Normalized) -> STRONG duplicate
   if (normEn) {
     const { data: compEnMatches } = await supabase
       .from("sourcing_companies")
       .select("id, company_name_kr, company_name_en, normalized_name_en, status, grade, updated_at")
       .not("company_name_en", "is", null)
-      .limit(100);
+      .limit(300);
 
     if (compEnMatches) {
       for (const c of compEnMatches) {
         if (!c.company_name_en) continue;
         const existingNormEn = c.normalized_name_en || normalizeEnglishCompanyName(c.company_name_en);
         if (existingNormEn && existingNormEn === normEn) {
-          if (!matches.some((m) => m.entityId === c.id)) {
+          if (!matches.some((m) => m.entityId === c.id && m.matchedField === "회사명")) {
             matches.push({
               matchType: "COMPANY_NAME_EN",
-              severity: "STRONG",
+              severity: "POSSIBLE",
+              matchedField: "회사명",
               matchedValue: c.company_name_en,
               entityType: "SOURCING_CANDIDATE",
               entityId: c.id,
               entityName: c.company_name_kr,
               entityNameEn: c.company_name_en,
-              reason: "동일한 영문 회사명 (정규화된 영문명 일치)",
+              reason: `기존 등록 영문 회사명 일치 (${c.company_name_en})`,
               status: c.status,
               grade: c.grade,
               lastActivityDate: c.updated_at,
@@ -230,63 +191,87 @@ export async function findDuplicateCandidates(
     }
   }
 
-  // 4. Check Official Website Domain -> POSSIBLE duplicate
-  if (targetDomain) {
-    const { data: webMatches } = await supabase
-      .from("sourcing_websites")
-      .select("company_id, url, sourcing_companies(id, company_name_kr, company_name_en, status, grade, updated_at)")
-      .ilike("url", `%${targetDomain}%`)
-      .limit(5);
+  // -------------------------------------------------------------
+  // CRITERIA 2. BRAND NAME (Normalized Brand Name Exact Match)
+  // -------------------------------------------------------------
+  if (criteria.brands && criteria.brands.length > 0) {
+    for (const b of criteria.brands) {
+      const draftBrandKr = b.nameKr ? normalizeBrandName(b.nameKr) : "";
+      const draftBrandEn = b.nameEn ? normalizeBrandName(b.nameEn) : "";
 
-    if (webMatches) {
-      for (const wm of webMatches) {
-        const comp = wm.sourcing_companies as any;
-        if (!comp) continue;
-        const normWmDomain = normalizeWebsiteDomain(wm.url);
-        if (normWmDomain === targetDomain && !matches.some((m) => m.entityId === wm.company_id)) {
-          matches.push({
-            matchType: "DOMAIN",
-            severity: "POSSIBLE",
-            matchedValue: targetDomain,
-            entityType: "SOURCING_CANDIDATE",
-            entityId: wm.company_id,
-            entityName: comp.company_name_kr,
-            entityNameEn: comp.company_name_en,
-            reason: "동일한 공식 웹사이트 도메인 (동일 법인 확인 필요)",
-            sourceUrl: wm.url,
-            status: comp.status,
-            grade: comp.grade,
-            lastActivityDate: comp.updated_at,
-          });
+      if (!draftBrandKr && !draftBrandEn) continue;
+
+      const { data: brandMatches } = await supabase
+        .from("sourcing_brands")
+        .select("company_id, brand_name_kr, brand_name_en, sourcing_companies(id, company_name_kr, company_name_en, status, grade, updated_at)")
+        .limit(300);
+
+      if (brandMatches) {
+        for (const bm of brandMatches) {
+          const comp = bm.sourcing_companies as any;
+          if (!comp) continue;
+
+          const exBrandKr = bm.brand_name_kr ? normalizeBrandName(bm.brand_name_kr) : "";
+          const exBrandEn = bm.brand_name_en ? normalizeBrandName(bm.brand_name_en) : "";
+
+          const isKrMatch = draftBrandKr && exBrandKr && draftBrandKr === exBrandKr;
+          const isEnMatch = draftBrandEn && exBrandEn && draftBrandEn === exBrandEn;
+
+          if (isKrMatch || isEnMatch) {
+            const matchedBrandVal = isKrMatch ? bm.brand_name_kr : bm.brand_name_en;
+            if (!matches.some((m) => m.entityId === bm.company_id && m.matchedField === "브랜드명" && m.matchedValue === matchedBrandVal)) {
+              matches.push({
+                matchType: "BRAND_NAME",
+                severity: "POSSIBLE",
+                matchedField: "브랜드명",
+                matchedValue: matchedBrandVal || "",
+                entityType: "SOURCING_CANDIDATE",
+                entityId: bm.company_id,
+                entityName: comp.company_name_kr,
+                entityNameEn: comp.company_name_en,
+                reason: `기존 등록 브랜드명 일치 (${matchedBrandVal})`,
+                status: comp.status,
+                grade: comp.grade,
+                lastActivityDate: comp.updated_at,
+              });
+            }
+          }
         }
       }
     }
   }
 
-  // 5. Check Email in sourcing_contacts -> POSSIBLE duplicate
+  // -------------------------------------------------------------
+  // CRITERIA 3. CONTACT EMAIL (Case-insensitive trimmed exact match)
+  // Ignore blank, invalid and placeholder emails
+  // -------------------------------------------------------------
   if (criteria.emails && criteria.emails.length > 0) {
-    for (const em of criteria.emails) {
-      const cleanEmail = em.toLowerCase().trim();
+    const validEmails = criteria.emails
+      .map((e) => (typeof e === "string" ? e.trim().toLowerCase() : ""))
+      .filter((e) => e.length > 3 && e.includes("@") && !["none", "n/a", "null", "undefined"].includes(e));
+
+    for (const cleanEmail of validEmails) {
       const { data: contactMatches } = await supabase
         .from("sourcing_contacts")
         .select("company_id, email, sourcing_companies(id, company_name_kr, company_name_en, status, grade, updated_at)")
-        .eq("email", cleanEmail)
-        .limit(5);
+        .ilike("email", cleanEmail)
+        .limit(10);
 
       if (contactMatches) {
         for (const cm of contactMatches) {
           const comp = cm.sourcing_companies as any;
           if (!comp) continue;
-          if (!matches.some((m) => m.entityId === cm.company_id)) {
+          if (!matches.some((m) => m.entityId === cm.company_id && m.matchedField === "담당자 이메일" && m.matchedValue === cleanEmail)) {
             matches.push({
               matchType: "EMAIL",
               severity: "POSSIBLE",
+              matchedField: "담당자 이메일",
               matchedValue: cleanEmail,
               entityType: "SOURCING_CANDIDATE",
               entityId: cm.company_id,
               entityName: comp.company_name_kr,
               entityNameEn: comp.company_name_en,
-              reason: "동일한 담당자 이메일 주소 등록",
+              reason: `기존 등록 담당자 이메일 일치 (${cleanEmail})`,
               status: comp.status,
               grade: comp.grade,
               lastActivityDate: comp.updated_at,
@@ -297,33 +282,36 @@ export async function findDuplicateCandidates(
     }
   }
 
-  // 6. Name Similarity Check -> POSSIBLE duplicate
-  if (criteria.companyNameKr) {
-    const { data: allComps } = await supabase
-      .from("sourcing_companies")
-      .select("id, company_name_kr, company_name_en, status, grade, updated_at")
-      .limit(100);
+  // -------------------------------------------------------------
+  // SOURCE URL COLLISION (Handled independently as data-integrity check)
+  // NOT a company duplicate match!
+  // -------------------------------------------------------------
+  let sourceConflict: SourceConflictInfo | null = null;
+  if (canonicalUrl || exhibitorId) {
+    let query = supabase
+      .from("sourcing_sources")
+      .select("company_id, source_url, canonical_source_url, source_identifier, sourcing_companies(id, company_name_kr, company_name_en)");
 
-    if (allComps) {
-      for (const ac of allComps) {
-        if (matches.some((m) => m.entityId === ac.id)) continue;
-        const sim = areCompanyNamesSimilar(criteria.companyNameKr, ac.company_name_kr);
-        if (sim.isSimilar) {
-          matches.push({
-            matchType: "SIMILAR_NAME",
-            severity: "POSSIBLE",
-            matchedValue: ac.company_name_kr,
-            entityType: "SOURCING_CANDIDATE",
-            entityId: ac.id,
-            entityName: ac.company_name_kr,
-            entityNameEn: ac.company_name_en,
-            reason: `유사한 회사명 감지 (유사도 ${(sim.similarity * 100).toFixed(0)}%, 편집거리 ${sim.distance})`,
-            status: ac.status,
-            grade: ac.grade,
-            lastActivityDate: ac.updated_at,
-          });
-        }
-      }
+    if (canonicalUrl && exhibitorId) {
+      query = query.or(`canonical_source_url.eq.${canonicalUrl},source_identifier.eq.${exhibitorId}`);
+    } else if (canonicalUrl) {
+      query = query.or(`canonical_source_url.eq.${canonicalUrl},source_url.ilike.%${canonicalUrl.replace(/^https?:\/\//, "")}%`);
+    } else if (exhibitorId) {
+      query = query.eq("source_identifier", exhibitorId);
+    }
+
+    const { data: sourceMatches } = await query.limit(1);
+    if (sourceMatches && sourceMatches.length > 0) {
+      const sm = sourceMatches[0];
+      const comp = sm.sourcing_companies as any;
+      sourceConflict = {
+        hasConflict: true,
+        existingCompanyId: sm.company_id,
+        existingCompanyName: comp?.company_name_kr || "기존 등록 회사",
+        sourceUrl: sm.source_url,
+        canonicalSourceUrl: sm.canonical_source_url || canonicalUrl,
+        reason: "동일한 전시회/소스 URL이 이미 기존 회사에 등록되어 있습니다.",
+      };
     }
   }
 
@@ -339,29 +327,25 @@ export async function findDuplicateCandidates(
     }
   }
 
-  const hasStrongDuplicate = matches.some((m) => m.severity === "STRONG");
-  const hasPossibleDuplicate = matches.some((m) => m.severity === "POSSIBLE");
-
   return {
     isDuplicate: matches.length > 0,
-    hasStrongDuplicate,
-    hasPossibleDuplicate,
+    hasStrongDuplicate: false,
+    hasPossibleDuplicate: matches.length > 0,
     isExistingPartner: matches.some((m) => m.entityType === "PARTNER_COMPANY"),
     matches,
+    sourceConflict,
   };
 }
 
 /**
  * Saves a NormalizedCompanyDraft into dedicated sourcing tables with
- * server-side atomic duplicate detection and admin exception auditing.
+ * server-side duplicate detection, non-blocking admin confirmation auditing,
+ * and safe source collision handling without violating unique constraints.
  */
 export async function saveSourcingDraft(
   draft: NormalizedCompanyDraft,
   evaluation?: SourcingEvaluationInput,
-  options?: {
-    exception?: AdminDuplicateExceptionInput;
-    adminUserId?: string | null;
-  },
+  options?: SaveSourcingOptions,
   customClient?: SupabaseClient
 ): Promise<{ success: boolean; companyId: string }> {
   const supabase = getClient(customClient);
@@ -370,44 +354,65 @@ export async function saveSourcingDraft(
   const normalizedNameKr = normalizeKoreanCompanyName(draft.company.nameKr);
   const normalizedNameEn = draft.company.nameEn ? normalizeEnglishCompanyName(draft.company.nameEn) : null;
 
-  // 1. Atomic Pre-Save Guard A: Canonical Source URL Uniqueness
-  // The exact same canonical source URL cannot be registered as a second company.
-  if (canonicalSourceUrl) {
-    const { data: existingUrl } = await supabase
+  // 1. Source URL Collision Check (Data Integrity Check)
+  let hasSourceConflict = false;
+  let conflictingSourceCompanyId: string | null = null;
+  let conflictingSourceCompanyName: string | null = null;
+
+  const sourceIdentifier = draft.source.sourceIdentifier?.trim() || null;
+
+  if (canonicalSourceUrl || sourceIdentifier) {
+    let query = supabase
       .from("sourcing_sources")
-      .select("company_id, source_url, sourcing_companies(id, company_name_kr)")
-      .eq("canonical_source_url", canonicalSourceUrl)
-      .limit(1);
+      .select("company_id, source_url, canonical_source_url, source_identifier, sourcing_companies(id, company_name_kr)");
 
-    if (existingUrl && existingUrl.length > 0) {
-      const matched = existingUrl[0];
-      const compName = (matched.sourcing_companies as any)?.company_name_kr || "기존 회사";
+    if (canonicalSourceUrl && sourceIdentifier) {
+      query = query.or(`canonical_source_url.eq.${canonicalSourceUrl},source_identifier.eq.${sourceIdentifier}`);
+    } else if (canonicalSourceUrl) {
+      query = query.eq("canonical_source_url", canonicalSourceUrl);
+    } else if (sourceIdentifier) {
+      query = query.eq("source_identifier", sourceIdentifier);
+    }
+
+    const { data: existingSources } = await query.limit(1);
+
+    if (existingSources && existingSources.length > 0) {
+      hasSourceConflict = true;
+      conflictingSourceCompanyId = existingSources[0].company_id;
+      conflictingSourceCompanyName = (existingSources[0].sourcing_companies as any)?.company_name_kr || "기존 회사";
+    }
+  }
+
+  // 2. Company Duplicate Pre-Save Guard (Strict 3 criteria: Name, Brand, Email)
+  // If not explicitly confirmed and duplicate exists, block and require confirmation.
+  if (!options?.allowDuplicateConfirmed && !options?.exception) {
+    const dupCheck = await findDuplicateCandidates(
+      {
+        companyNameKr: draft.company.nameKr,
+        companyNameEn: draft.company.nameEn,
+        brands: draft.brands.map((b) => ({ nameKr: b.nameKr, nameEn: b.nameEn })),
+        emails: draft.contacts.map((c) => c.email),
+      },
+      supabase
+    );
+
+    if (dupCheck.isDuplicate) {
+      const matchedNames = Array.from(new Set(dupCheck.matches.map((m) => m.entityName))).join(", ");
+      const matchedFields = Array.from(new Set(dupCheck.matches.map((m) => m.matchedField || "일치 정보"))).join(", ");
       throw new Error(
-        `[DUPLICATE_SOURCE_URL] 이미 등록된 전시회 소스 URL입니다. (회사: "${compName}", ID: ${matched.company_id}). ` +
-        `새 소스 정보를 기존 회사에 연결([Link New Source])해 주세요.`
+        `[DUPLICATE_COMPANY_CONFIRMATION_REQUIRED] 중복 가능성이 있는 회사입니다. (일치 회사: "${matchedNames}", 일치 항목: ${matchedFields}). 신규 회사로 등록하려면 확인을 진행해 주세요.`
       );
     }
   }
 
-  // 2. Atomic Pre-Save Guard B: Normalized Korean Legal Name Uniqueness
-  // If no Admin Exception is provided, exact matching legal names are blocked.
-  if (!options?.exception && normalizedNameKr) {
-    const { data: existingName } = await supabase
-      .from("sourcing_companies")
-      .select("id, company_name_kr")
-      .or(`normalized_name_kr.eq.${normalizedNameKr},company_name_kr.eq.${draft.company.nameKr.trim()}`)
-      .limit(1);
+  // 3. Prepare notes and disputed source metadata if source URL collision occurred
+  const baseNotes = evaluation?.internalNotes || draft.company.descriptionKr || "";
+  const sourceCollisionNote = hasSourceConflict
+    ? `\n\n[SOURCE_URL_COLLISION]: 전시회 소스 URL/식별자(${canonicalSourceUrl || sourceIdentifier})가 기존 회사 "${conflictingSourceCompanyName}"(ID: ${conflictingSourceCompanyId})에 이미 등록되어 있어, 독립된 신규 법인으로 등록하고 소스 원천은 unlinked reference로 안전하게 보존되었습니다.`
+    : "";
+  const combinedInternalNotes = (baseNotes + sourceCollisionNote).trim() || null;
 
-    if (existingName && existingName.length > 0) {
-      const matched = existingName[0];
-      throw new Error(
-        `[DUPLICATE_COMPANY_NAME] 이미 등록된 동일한 법인명("${matched.company_name_kr}", ID: ${matched.id})이 존재합니다. ` +
-        `실제 별개의 법인인 경우 '별도 법인 등록 (Register as Separate Legal Entity)' 예외 승인 사유 및 증빙을 입력해 주세요.`
-      );
-    }
-  }
-
-  // 3. Insert Sourcing Company Master
+  // 4. Insert Sourcing Company Master
   const { data: company, error: companyErr } = await supabase
     .from("sourcing_companies")
     .insert({
@@ -435,7 +440,7 @@ export async function saveSourcingDraft(
       grade: evaluation?.grade || "UNRATED",
       status: evaluation?.status || "DRAFT",
       assigned_to: evaluation?.assignedTo || null,
-      internal_notes: evaluation?.internalNotes || null,
+      internal_notes: combinedInternalNotes,
       marketing_consent_status: evaluation?.marketingConsentStatus || "UNCONFIRMED",
       raw_payload_snapshot: {
         ...(draft.source.rawPayloadSnapshot || {}),
@@ -443,6 +448,19 @@ export async function saveSourcingDraft(
         companyProducts: draft.companyProducts || [],
         documents: evaluation?.documents || draft.companyDocuments || [],
         companyTypeOtherExplanation: evaluation?.companyTypeOtherExplanation || null,
+        disputedSource: hasSourceConflict
+          ? {
+              provider: draft.source.provider,
+              sourceUrl: draft.source.sourceUrl,
+              canonicalSourceUrl: canonicalSourceUrl,
+              sourceIdentifier: draft.source.sourceIdentifier,
+              eventEditionId: draft.source.eventEditionId,
+              standLocation: draft.source.standLocation,
+              conflictingCompanyId: conflictingSourceCompanyId,
+              conflictingCompanyName: conflictingSourceCompanyName,
+              notedAt: new Date().toISOString(),
+            }
+          : null,
       },
       audit_summary: draft.audit,
     })
@@ -455,17 +473,33 @@ export async function saveSourcingDraft(
 
   const companyId = company.id;
 
-  // 4. Record Admin Duplicate Exception Audit if provided
-  if (options?.exception) {
+  // 5. Record Admin Duplicate Exception Audit
+  const matchedCompId = options?.matchedCompanyIds?.[0] || options?.exception?.matchedCompanyId;
+  if ((options?.allowDuplicateConfirmed || options?.exception) && matchedCompId) {
+    let matchedRule: "SAME_NAME_KR" | "SAME_NAME_EN" | "SAME_DOMAIN" | "SIMILAR_NAME" | "OTHER" = "OTHER";
+    if (options?.exception?.matchedRule) {
+      matchedRule = options.exception.matchedRule;
+    } else if (options?.matchedFields?.includes("회사명")) {
+      matchedRule = normalizedNameKr ? "SAME_NAME_KR" : "SAME_NAME_EN";
+    }
+
+    const excReason =
+      options?.exception?.reason ||
+      `Admin confirmed duplicate registration despite matching fields: ${(options?.matchedFields || ["확인 완료"]).join(", ")}`;
+
     const { error: excErr } = await supabase
       .from("sourcing_duplicate_exceptions")
       .insert({
         company_id: companyId,
-        matched_company_id: options.exception.matchedCompanyId,
-        matched_rule: options.exception.matchedRule,
-        reason: options.exception.reason,
-        evidence: options.exception.evidence || {},
-        approved_by: options.adminUserId || null,
+        matched_company_id: matchedCompId,
+        matched_rule: matchedRule,
+        reason: excReason,
+        evidence: {
+          matchedCompanyIds: options?.matchedCompanyIds || [matchedCompId],
+          matchedFields: options?.matchedFields || [],
+          ...(options?.exception?.evidence || {}),
+        },
+        approved_by: options?.adminUserId || null,
       });
 
     if (excErr) {
@@ -474,10 +508,14 @@ export async function saveSourcingDraft(
           .from("sourcing_duplicate_exceptions")
           .insert({
             company_id: companyId,
-            matched_company_id: options.exception.matchedCompanyId,
-            matched_rule: options.exception.matchedRule,
-            reason: options.exception.reason,
-            evidence: options.exception.evidence || {},
+            matched_company_id: matchedCompId,
+            matched_rule: matchedRule,
+            reason: excReason,
+            evidence: {
+              matchedCompanyIds: options?.matchedCompanyIds || [matchedCompId],
+              matchedFields: options?.matchedFields || [],
+              ...(options?.exception?.evidence || {}),
+            },
             approved_by: null,
           });
         if (retryErr) {
@@ -489,7 +527,7 @@ export async function saveSourcingDraft(
     }
   }
 
-  // 5. Insert Brands
+  // 6. Insert Brands
   if (draft.brands.length > 0) {
     const brandRows = draft.brands.map((b, idx) => ({
       company_id: companyId,
@@ -508,7 +546,7 @@ export async function saveSourcingDraft(
     }
   }
 
-  // 6. Insert Contacts
+  // 7. Insert Contacts
   if (draft.contacts.length > 0) {
     const contactRows = draft.contacts.map((c, idx) => ({
       company_id: companyId,
@@ -529,7 +567,7 @@ export async function saveSourcingDraft(
     }
   }
 
-  // 7. Insert Websites
+  // 8. Insert Websites
   if (draft.websites.length > 0) {
     const websiteRows = draft.websites.map((w, idx) => ({
       company_id: companyId,
@@ -545,37 +583,36 @@ export async function saveSourcingDraft(
     }
   }
 
-  // 8. Insert Source Provenance
-  const { error: sourceErr } = await supabase.from("sourcing_sources").insert({
-    company_id: companyId,
-    provider: draft.source.provider,
-    source_url: draft.source.sourceUrl,
-    canonical_source_url: canonicalSourceUrl,
-    source_identifier: draft.source.sourceIdentifier,
-    event_edition_id: draft.source.eventEditionId,
-    stand_location: draft.source.standLocation,
-    raw_payload: draft.source.rawPayloadSnapshot || null,
-    collected_at: draft.source.collectedAt,
-  });
+  // 9. Insert Source Provenance (ONLY if no conflict on canonical source URL)
+  // If source conflict exists, provenance is safely recorded in raw_payload_snapshot.disputedSource
+  // and internal_notes without violating uq_sourcing_sources_canonical_url.
+  if (!hasSourceConflict) {
+    const { error: sourceErr } = await supabase.from("sourcing_sources").insert({
+      company_id: companyId,
+      provider: draft.source.provider,
+      source_url: draft.source.sourceUrl,
+      canonical_source_url: canonicalSourceUrl,
+      source_identifier: draft.source.sourceIdentifier,
+      event_edition_id: draft.source.eventEditionId,
+      stand_location: draft.source.standLocation,
+      raw_payload: draft.source.rawPayloadSnapshot || null,
+      collected_at: draft.source.collectedAt,
+    });
 
-  if (sourceErr) {
-    await supabase.from("sourcing_companies").delete().eq("id", companyId);
-    if (sourceErr.code === "23505" || sourceErr.message.includes("unique")) {
-      throw new Error(
-        `[DUPLICATE_SOURCE_URL] 이미 등록된 동일한 소스 URL 또는 식별자가 존재합니다. (${sourceErr.message})`
-      );
+    if (sourceErr) {
+      await supabase.from("sourcing_companies").delete().eq("id", companyId);
+      if (sourceErr.code === "23505" || sourceErr.message.includes("unique")) {
+        throw new Error(
+          `[DUPLICATE_SOURCE_URL] 이미 등록된 동일한 소스 URL 또는 식별자가 존재합니다. (${sourceErr.message})`
+        );
+      }
+      throw new Error(`Failed to insert sourcing source provenance: ${sourceErr.message}`);
     }
-    throw new Error(`Failed to insert sourcing source provenance: ${sourceErr.message}`);
   }
 
   return { success: true, companyId };
 }
 
-/**
- * Links new sourcing information (exhibitor URL, contacts, websites, brands)
- * to an authoritative existing company record.
- * Preserves all reviewed/verified fields, existing contacts, and marketing consent.
- */
 export async function linkSourcingSource(
   input: {
     targetCompanyId: string;

@@ -225,20 +225,22 @@ export interface SourcingEvaluationInput {
 }
 
 export type DuplicateMatchType =
-  | "SOURCE_URL"
-  | "SOURCE_IDENTIFIER"
   | "COMPANY_NAME"
   | "COMPANY_NAME_KR"
   | "COMPANY_NAME_EN"
+  | "BRAND_NAME"
+  | "EMAIL"
+  | "SOURCE_URL"
+  | "SOURCE_IDENTIFIER"
   | "DOMAIN"
-  | "SIMILAR_NAME"
-  | "EMAIL";
+  | "SIMILAR_NAME";
 
 export type DuplicateSeverity = "STRONG" | "POSSIBLE";
 
 export interface DuplicateMatchItem {
   matchType: DuplicateMatchType;
   severity: DuplicateSeverity;
+  matchedField?: "회사명" | "브랜드명" | "담당자 이메일";
   matchedValue: string;
   entityType: "SOURCING_CANDIDATE" | "PARTNER_COMPANY";
   entityId: string;
@@ -255,12 +257,22 @@ export interface DuplicateMatchItem {
   primaryCategoriesConfirmed?: boolean;
 }
 
+export interface SourceConflictInfo {
+  hasConflict: boolean;
+  existingCompanyId: string;
+  existingCompanyName: string;
+  sourceUrl: string;
+  canonicalSourceUrl?: string;
+  reason: string;
+}
+
 export interface DuplicateMatchResult {
   isDuplicate: boolean;
   hasStrongDuplicate: boolean;
   hasPossibleDuplicate: boolean;
   isExistingPartner: boolean;
   matches: DuplicateMatchItem[];
+  sourceConflict?: SourceConflictInfo | null;
 }
 
 export interface DuplicateCheckCriteria {
@@ -272,6 +284,15 @@ export interface DuplicateCheckCriteria {
   websiteUrl?: string | null;
   domains?: string[];
   emails?: string[];
+  brands?: Array<{ nameKr?: string | null; nameEn?: string | null }>;
+}
+
+export interface SaveSourcingOptions {
+  allowDuplicateConfirmed?: boolean;
+  matchedCompanyIds?: string[];
+  matchedFields?: string[];
+  exception?: AdminDuplicateExceptionInput;
+  adminUserId?: string | null;
 }
 
 export interface AdminDuplicateExceptionInput {
