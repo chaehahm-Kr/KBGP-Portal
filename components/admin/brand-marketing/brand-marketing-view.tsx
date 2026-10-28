@@ -16,9 +16,17 @@ import type {
   SourcingDocumentType,
 } from "@/lib/brand-sourcing/types";
 import { COMPANY_TYPE_OPTIONS } from "@/lib/brand-sourcing/types";
+import type {
+  DuplicateMatchItem,
+  AdminDuplicateExceptionInput,
+  LinkSourceResult,
+  DuplicateAuditReport,
+} from "@/lib/brand-sourcing/types";
 import {
   extractSourcingDraftAction,
   saveSourcingCandidateAction,
+  linkSourcingSourceAction,
+  getSourcingDuplicateAuditReportAction,
   listSourcingCandidatesAction,
   getSourcingCandidateDetailAction,
   updateSourcingCandidateAction,
@@ -130,6 +138,28 @@ export default function BrandMarketingView({
   const [duplicateOverrideReason, setDuplicateOverrideReason] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  const [savedCompanyId, setSavedCompanyId] = useState<string | null>(null);
+
+  // Link Source Modal state
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [targetCompanyToLink, setTargetCompanyToLink] = useState<DuplicateMatchItem | null>(null);
+  const [linkNotes, setLinkNotes] = useState("");
+  const [isLinking, setIsLinking] = useState(false);
+
+  // Admin Exception Modal state
+  const [showExceptionModal, setShowExceptionModal] = useState(false);
+  const [exceptionTargetMatch, setExceptionTargetMatch] = useState<DuplicateMatchItem | null>(null);
+  const [exceptionReason, setExceptionReason] = useState("");
+  const [exceptionEvidenceRegNumber, setExceptionEvidenceRegNumber] = useState("");
+  const [exceptionEvidenceAddress, setExceptionEvidenceAddress] = useState("");
+  const [exceptionEvidenceWebsite, setExceptionEvidenceWebsite] = useState("");
+  const [exceptionEvidenceNotes, setExceptionEvidenceNotes] = useState("");
+  const [isSavingException, setIsSavingException] = useState(false);
+
+  // Duplicate Audit Report Modal state
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [auditReport, setAuditReport] = useState<DuplicateAuditReport | null>(null);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
 
   // Delete Candidate Confirmation Modal state
   const [candidateToDelete, setCandidateToDelete] = useState<any | null>(null);
@@ -292,8 +322,14 @@ export default function BrandMarketingView({
       return;
     }
 
-    // If duplicate detected and user hasn't explicitly overridden, prompt modal
-    if (duplicateCheck && duplicateCheck.isDuplicate) {
+    // 1. Strong Duplicate Detection: Exact canonical URL or exact legal name
+    if (duplicateCheck && duplicateCheck.hasStrongDuplicate) {
+      setShowDuplicateModal(true);
+      return;
+    }
+
+    // 2. Possible Duplicate Detection: Domain or Name similarity
+    if (duplicateCheck && duplicateCheck.hasPossibleDuplicate) {
       setShowDuplicateModal(true);
       return;
     }
@@ -302,10 +338,11 @@ export default function BrandMarketingView({
   };
 
   const executeSave = async (overrideReason?: string) => {
-    if (!reviewedDraft) return;
+    if (!reviewedDraft || isSaving) return;
 
     setIsSaving(true);
     setShowDuplicateModal(false);
+    setSaveSuccessMessage(null);
 
     try {
       const evaluation: SourcingEvaluationInput = {
@@ -331,11 +368,17 @@ export default function BrandMarketingView({
       const res = await saveSourcingCandidateAction(draftToSave, evaluation);
 
       if (!res.success) {
-        alert(`Failed to save: ${res.error}`);
+        if (res.isDuplicate) {
+          alert(`중복 방지 오류: ${res.error}`);
+          setShowDuplicateModal(true);
+        } else {
+          alert(`Failed to save: ${res.error}`);
+        }
         setIsSaving(false);
         return;
       }
 
+      setSavedCompanyId(res.companyId || null);
       setSaveSuccessMessage(`Candidate "${reviewedDraft.company.nameKr}" saved successfully!`);
       // Refresh list in background
       refreshBrandList();
@@ -343,6 +386,133 @@ export default function BrandMarketingView({
       alert(`Save error: ${err.message}`);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Handlers for Link to Existing Company
+  const handleOpenLinkModal = (match?: DuplicateMatchItem) => {
+    const target = match || duplicateCheck?.matches.find((m) => m.entityId) || null;
+    setTargetCompanyToLink(target || null);
+    setLinkNotes("");
+    setShowDuplicateModal(false);
+    setShowLinkModal(true);
+  };
+
+  const handleConfirmLink = async () => {
+    if (!reviewedDraft || !targetCompanyToLink || isLinking) return;
+    setIsLinking(true);
+    try {
+      const res = await linkSourcingSourceAction({
+        targetCompanyId: targetCompanyToLink.entityId,
+        draft: reviewedDraft,
+        overrideReason: linkNotes.trim() || undefined,
+      });
+
+      if (!res.success) {
+        alert(res.error || "Failed to link source to existing company.");
+        setIsLinking(false);
+        return;
+      }
+
+      setShowLinkModal(false);
+      setSavedCompanyId(targetCompanyToLink.entityId);
+      setSaveSuccessMessage(res.result?.message || `소스를 "${targetCompanyToLink.entityName}"에 성공적으로 연결했습니다.`);
+      refreshBrandList();
+    } catch (err: any) {
+      alert(`Error linking source: ${err.message}`);
+    } finally {
+      setIsLinking(false);
+    }
+  };
+
+  // Handlers for Register as Separate Legal Entity (Admin Exception)
+  const handleOpenExceptionModal = (match?: DuplicateMatchItem) => {
+    const target = match || duplicateCheck?.matches[0] || null;
+    setExceptionTargetMatch(target || null);
+    setExceptionReason("");
+    setExceptionEvidenceRegNumber(reviewedDraft?.company.businessRegistrationNumber || "");
+    setExceptionEvidenceAddress(reviewedDraft?.company.address.formattedKr || "");
+    setExceptionEvidenceWebsite(reviewedDraft?.websites[0]?.url || "");
+    setExceptionEvidenceNotes("");
+    setShowDuplicateModal(false);
+    setShowExceptionModal(true);
+  };
+
+  const handleConfirmException = async () => {
+    if (!reviewedDraft || !exceptionTargetMatch || isSavingException) return;
+    if (!exceptionReason.trim()) {
+      alert("별도 법인 등록 사유(Reason for Exception)를 입력해 주세요.");
+      return;
+    }
+
+    setIsSavingException(true);
+    try {
+      const exceptionPayload: AdminDuplicateExceptionInput = {
+        matchedCompanyId: exceptionTargetMatch.entityId,
+        matchedRule: (exceptionTargetMatch.matchType as any) || "OTHER",
+        reason: exceptionReason.trim(),
+        evidence: {
+          businessRegistrationNumber: exceptionEvidenceRegNumber.trim() || null,
+          address: exceptionEvidenceAddress.trim() || null,
+          officialWebsite: exceptionEvidenceWebsite.trim() || null,
+          legalEntityDetails: exceptionEvidenceNotes.trim() || null,
+        },
+      };
+
+      const evaluation: SourcingEvaluationInput = {
+        grade,
+        status,
+        assignedTo: null,
+        businessTypes: selectedBusinessTypes,
+        businessTypeEvidence,
+        companyTypeOtherExplanation: selectedBusinessTypes.includes("OTHER") ? companyTypeOtherExplanation : null,
+        categories: reviewedDraft.categories || [],
+        documents: companyDocuments,
+        internalNotes: `[ADMIN EXCEPTION APPROVED]: ${exceptionReason.trim()}\n\n${internalNotes}`,
+        marketingConsentStatus: "UNCONFIRMED",
+      };
+
+      const draftToSave: NormalizedCompanyDraft = {
+        ...reviewedDraft,
+        companyDocuments,
+      };
+
+      const res = await saveSourcingCandidateAction(draftToSave, evaluation, {
+        exception: exceptionPayload,
+      });
+
+      if (!res.success) {
+        alert(res.error || "Failed to register separate legal entity.");
+        setIsSavingException(false);
+        return;
+      }
+
+      setShowExceptionModal(false);
+      setSavedCompanyId(res.companyId || null);
+      setSaveSuccessMessage(`별도 법인 "${reviewedDraft.company.nameKr}"이(가) 예외 승인 기록과 함께 저장되었습니다.`);
+      refreshBrandList();
+    } catch (err: any) {
+      alert(`Error approving exception: ${err.message}`);
+    } finally {
+      setIsSavingException(false);
+    }
+  };
+
+  // Handlers for Duplicate Audit Report Modal
+  const handleOpenAuditModal = async () => {
+    setShowAuditModal(true);
+    setIsLoadingAudit(true);
+    try {
+      const res = await getSourcingDuplicateAuditReportAction();
+      if (res.success && res.report) {
+        setAuditReport(res.report);
+      } else {
+        alert(res.error || "Failed to load duplicate audit report.");
+      }
+    } catch (err: any) {
+      alert(`Error loading audit: ${err.message}`);
+    } finally {
+      setIsLoadingAudit(false);
     }
   };
 
@@ -937,16 +1107,20 @@ export default function BrandMarketingView({
 
             {/* Success Message Banner */}
             {saveSuccessMessage && (
-              <div className="p-3 text-xs rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 flex justify-between items-center">
-                <span>{saveSuccessMessage}</span>
+              <div className="p-3.5 text-xs rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 flex justify-between items-center flex-wrap gap-2">
+                <span className="font-semibold">{saveSuccessMessage}</span>
                 <button
+                  type="button"
                   onClick={() => {
                     setActiveTab("list");
                     refreshBrandList();
+                    if (savedCompanyId) {
+                      handleOpenDetail(savedCompanyId);
+                    }
                   }}
-                  className="underline font-bold hover:text-emerald-900 dark:hover:text-emerald-100 cursor-pointer"
+                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold cursor-pointer shadow-xs"
                 >
-                  Go to Brand List →
+                  Brand List 상세 보기 →
                 </button>
               </div>
             )}
@@ -967,23 +1141,154 @@ export default function BrandMarketingView({
 
                 {/* Duplicate Detection Alert Banner */}
                 {duplicateCheck && duplicateCheck.isDuplicate && (
-                  <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-md p-4 space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-bold text-red-800 dark:text-red-300">
-                      <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <span>Potential Duplicate Candidate Detected ({duplicateCheck.matches.length} matches)</span>
+                  <div
+                    className={`rounded-lg border p-5 space-y-4 shadow-xs ${
+                      duplicateCheck.hasStrongDuplicate
+                        ? "bg-red-50/90 dark:bg-red-950/40 border-red-300 dark:border-red-800"
+                        : "bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between flex-wrap gap-2 border-b pb-3 border-current/10">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{duplicateCheck.hasStrongDuplicate ? "🚨" : "⚠️"}</span>
+                        <div>
+                          <h4
+                            className={`text-sm font-bold ${
+                              duplicateCheck.hasStrongDuplicate
+                                ? "text-red-900 dark:text-red-200"
+                                : "text-amber-900 dark:text-amber-200"
+                            }`}
+                          >
+                            {duplicateCheck.hasStrongDuplicate
+                              ? "이미 등록된 회사입니다."
+                              : "중복 가능성이 있는 회사가 발견되었습니다."}
+                          </h4>
+                          <p
+                            className={`text-xs ${
+                              duplicateCheck.hasStrongDuplicate
+                                ? "text-red-700 dark:text-red-300"
+                                : "text-amber-700 dark:text-amber-300"
+                            }`}
+                          >
+                            {duplicateCheck.hasStrongDuplicate
+                              ? "동일한 전시회 소스 URL 또는 법인명이 이미 등록되어 있어 신규 중복 저장이 차단됩니다."
+                              : "동일한 웹사이트 도메인 또는 유사한 회사명이 감지되었습니다. 관리자 확인이 필요합니다."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReviewedDraft(null);
+                            setDuplicateCheck(null);
+                          }}
+                          className="px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 cursor-pointer"
+                        >
+                          Cancel (취소)
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-xs text-red-700 dark:text-red-300">
-                      Matching records were found in the database. Auto-merging is strictly disabled. You can review matches below before deciding to save.
-                    </p>
-                    <ul className="text-xs space-y-1 pl-4 list-disc text-red-700 dark:text-red-300 font-mono">
+
+                    {/* Matched Records List */}
+                    <div className="space-y-3">
                       {duplicateCheck.matches.map((m, idx) => (
-                        <li key={idx}>
-                          [{m.matchType}] Matched: &quot;{m.matchedValue}&quot; with {m.entityType} ({m.entityName})
-                        </li>
+                        <div
+                          key={idx}
+                          className="p-3.5 bg-white/90 dark:bg-zinc-900/90 rounded-md border border-zinc-200 dark:border-zinc-800 space-y-2 text-xs"
+                        >
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  m.severity === "STRONG"
+                                    ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                                    : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                }`}
+                              >
+                                {m.severity === "STRONG" ? "강한 중복 (Strong)" : "잠재적 중복 (Possible)"}
+                              </span>
+                              <span className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
+                                {m.entityName}
+                                {m.entityNameEn && (
+                                  <span className="text-zinc-400 font-normal ml-1">({m.entityNameEn})</span>
+                                )}
+                              </span>
+                            </div>
+
+                            <span className="font-mono text-[11px] text-zinc-400">
+                              ID: {m.entityId.slice(0, 8)}...
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-zinc-600 dark:text-zinc-400">
+                            <div>
+                              <strong className="text-zinc-700 dark:text-zinc-300">일치 사유:</strong> {m.reason}
+                            </div>
+                            <div>
+                              <strong className="text-zinc-700 dark:text-zinc-300">상태 / 등급:</strong>{" "}
+                              {m.status || "DRAFT"} ({m.grade || "UNRATED"})
+                            </div>
+                            {m.sourceUrl && (
+                              <div className="sm:col-span-2 truncate">
+                                <strong className="text-zinc-700 dark:text-zinc-300">소스 URL:</strong>{" "}
+                                <a
+                                  href={m.sourceUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-blue-600 hover:underline font-mono"
+                                >
+                                  {m.sourceUrl}
+                                </a>
+                              </div>
+                            )}
+                            <div>
+                              <strong className="text-zinc-700 dark:text-zinc-300">등록 담당자:</strong>{" "}
+                              {m.contactsCount ?? 0}명 / 브랜드 {m.brandsCount ?? 0}개
+                            </div>
+                            {m.lastActivityDate && (
+                              <div>
+                                <strong className="text-zinc-700 dark:text-zinc-300">최근 업데이트:</strong>{" "}
+                                {new Date(m.lastActivityDate).toLocaleDateString()}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Quick Action Buttons for this match */}
+                          <div className="pt-2 flex flex-wrap items-center gap-2 border-t border-zinc-100 dark:border-zinc-800">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveTab("list");
+                                handleOpenDetail(m.entityId);
+                              }}
+                              className="px-3 py-1.5 rounded text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 cursor-pointer flex items-center gap-1"
+                            >
+                              <span>👁️</span> View Existing Company (기존 회사 보기)
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenLinkModal(m)}
+                              className="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white cursor-pointer flex items-center gap-1 shadow-2xs"
+                            >
+                              <span>🔗</span> Link New Source (새 소스 연결)
+                            </button>
+
+                            {m.severity === "POSSIBLE" && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenExceptionModal(m)}
+                                className="px-3 py-1.5 rounded text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white cursor-pointer flex items-center gap-1"
+                              >
+                                <span>⚖️</span> Register as Separate Legal Entity (별도 법인 등록)
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 )}
 
@@ -1946,9 +2251,13 @@ export default function BrandMarketingView({
                   <div className="pt-2 space-y-2">
                     <button
                       type="button"
-                      disabled={isSaving}
+                      disabled={isSaving || duplicateCheck?.hasStrongDuplicate}
                       onClick={handleInitiateSave}
-                      className="w-full py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md transition-colors shadow-xs disabled:opacity-50 cursor-pointer flex justify-center items-center gap-2"
+                      className={`w-full py-2.5 text-xs font-bold rounded-md transition-colors shadow-xs disabled:opacity-50 cursor-pointer flex justify-center items-center gap-2 ${
+                        duplicateCheck?.hasStrongDuplicate
+                          ? "bg-zinc-400 text-white cursor-not-allowed"
+                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      }`}
                     >
                       {isSaving ? (
                         <>
@@ -1958,10 +2267,22 @@ export default function BrandMarketingView({
                           </svg>
                           <span>Saving to QA DB...</span>
                         </>
+                      ) : duplicateCheck?.hasStrongDuplicate ? (
+                        <span>🚫 중복 차단됨 (소스를 기존 회사에 연결하세요)</span>
                       ) : (
                         <span>Save to Brand List (브랜드 목록에 저장)</span>
                       )}
                     </button>
+
+                    {duplicateCheck?.hasStrongDuplicate && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenLinkModal()}
+                        className="w-full py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md cursor-pointer flex justify-center items-center gap-1.5 shadow-xs"
+                      >
+                        <span>🔗</span> 기존 회사에 새 소스 연결 (Link New Source)
+                      </button>
+                    )}
 
                     <button
                       type="button"
@@ -2128,6 +2449,16 @@ export default function BrandMarketingView({
               className="px-4 py-1.5 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 dark:hover:bg-white/90 cursor-pointer"
             >
               Filter
+            </button>
+
+            {/* Duplicate Audit Report Button */}
+            <button
+              type="button"
+              onClick={handleOpenAuditModal}
+              className="px-3 py-1.5 text-xs font-semibold rounded bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/60 cursor-pointer flex items-center gap-1.5 shadow-2xs ml-auto"
+            >
+              <span>🔍</span>
+              중복 감사 보고서 (Duplicate Audit)
             </button>
           </div>
 
@@ -2428,48 +2759,64 @@ export default function BrandMarketingView({
       )}
 
       {/* ------------------------------------------------------------------ */}
-      {/* DUPLICATE WARNING MODAL DIALOG                                     */}
+      {/* 1. DUPLICATE DECISION MODAL DIALOG                                 */}
       {/* ------------------------------------------------------------------ */}
       {showDuplicateModal && duplicateCheck && (
         <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-md w-full p-6 shadow-xl space-y-4">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-              Potential Duplicate Candidate Warning
-            </h3>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400">
-              The company you are trying to save matches existing candidate or partner records:
-            </p>
-
-            <div className="bg-red-50 dark:bg-red-950/40 p-3 rounded-md text-xs font-mono text-red-700 dark:text-red-300 space-y-1">
-              {duplicateCheck.matches.map((m, idx) => (
-                <div key={idx}>
-                  • [{m.matchType}] {m.matchedValue} ({m.entityName})
-                </div>
-              ))}
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">{duplicateCheck.hasStrongDuplicate ? "🚨" : "⚠️"}</span>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                  {duplicateCheck.hasStrongDuplicate
+                    ? "이미 등록된 회사입니다 (Strong Duplicate)"
+                    : "중복 가능성이 있는 회사가 발견되었습니다"}
+                </h3>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                  {duplicateCheck.hasStrongDuplicate
+                    ? "동일한 전시회 소스 URL 또는 법인명이 이미 데이터베이스에 존재합니다. 중복 레코드 생성을 방지하기 위해 신규 저장이 차단됩니다."
+                    : "동일한 공식 웹사이트 도메인 또는 유사한 상호가 발견되었습니다. 기존 회사에 연결하거나 별도 법인 예외 승인을 선택해 주세요."}
+                </p>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                Override Audit Reason (필수 사유 입력):
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. New exhibition edition update, subsidiary brand..."
-                value={duplicateOverrideReason}
-                onChange={(e) => setDuplicateOverrideReason(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-              />
+            {/* Matched Summary Box */}
+            <div className="bg-zinc-50 dark:bg-zinc-950 p-3.5 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2 text-xs">
+              <span className="font-bold text-zinc-700 dark:text-zinc-300">일치 항목 ({duplicateCheck.matches.length}건):</span>
+              <div className="space-y-1.5 font-mono text-[11px]">
+                {duplicateCheck.matches.map((m, idx) => (
+                  <div key={idx} className="p-2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-zinc-900 dark:text-zinc-100">{m.entityName}</span>
+                      <span className={`px-1.5 py-0.2 rounded text-[10px] ${m.severity === "STRONG" ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 font-bold" : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"}`}>
+                        [{m.matchType}] {m.severity}
+                      </span>
+                    </div>
+                    <div className="text-zinc-500 mt-1">{m.reason}</div>
+                  </div>
+                ))}
+              </div>
             </div>
 
+            {/* Action Choices */}
             <div className="flex flex-col gap-2 pt-2">
               <button
                 type="button"
-                disabled={!duplicateOverrideReason.trim()}
-                onClick={() => executeSave(duplicateOverrideReason.trim())}
-                className="w-full py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-md disabled:opacity-50 cursor-pointer"
+                onClick={() => handleOpenLinkModal()}
+                className="w-full py-2.5 px-4 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
               >
-                Save as New Candidate with Audit Log
+                <span>🔗</span> 기존 회사에 새 소스 연결 (Link New Source)
               </button>
+
+              {duplicateCheck.hasPossibleDuplicate && !duplicateCheck.hasStrongDuplicate && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenExceptionModal()}
+                  className="w-full py-2.5 px-4 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <span>⚖️</span> 별도 법인으로 등록 (Register as Separate Legal Entity)
+                </button>
+              )}
 
               <button
                 type="button"
@@ -2478,17 +2825,362 @@ export default function BrandMarketingView({
                   setActiveTab("list");
                   refreshBrandList();
                 }}
-                className="w-full py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 rounded-md hover:bg-zinc-200 cursor-pointer"
+                className="w-full py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:bg-zinc-200 cursor-pointer"
               >
-                Go to Brand List to View Existing
+                Brand List에서 기존 회사 확인 (View in Brand List)
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowDuplicateModal(false)}
-                className="w-full py-1 text-xs text-zinc-500 hover:text-zinc-700 cursor-pointer"
+                className="w-full py-1.5 text-xs text-zinc-500 hover:text-zinc-700 cursor-pointer"
               >
-                Cancel and Return to Review
+                Cancel and Return to Review (취소)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* 2. LINK NEW SOURCE CONFIRMATION MODAL                               */}
+      {/* ------------------------------------------------------------------ */}
+      {showLinkModal && targetCompanyToLink && reviewedDraft && (
+        <div className="fixed inset-0 z-[75] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3 border-zinc-100 dark:border-zinc-800">
+              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <span>🔗</span> 기존 회사에 새 소스 연결 (Link New Source)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowLinkModal(false)}
+                className="text-zinc-400 hover:text-zinc-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg space-y-1.5">
+                <div>
+                  <strong className="text-blue-900 dark:text-blue-200">대상 기존 회사:</strong>{" "}
+                  <span className="font-bold text-zinc-900 dark:text-zinc-100">{targetCompanyToLink.entityName}</span>
+                </div>
+                <div className="text-[11px] font-mono text-zinc-500">ID: {targetCompanyToLink.entityId}</div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="font-semibold text-zinc-700 dark:text-zinc-300">연결될 신규 전시회 소스:</span>
+                <div className="p-2.5 bg-zinc-50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 font-mono text-[11px] truncate">
+                  {reviewedDraft.source.sourceUrl}
+                </div>
+              </div>
+
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 space-y-1 text-zinc-600 dark:text-zinc-400 text-[11px]">
+                <div className="font-bold text-zinc-800 dark:text-zinc-200">데이터 무결성 보호 규칙:</div>
+                <div>• 기존 회사의 검토된 법인 정보, 등급, 상태는 임의로 덮어쓰지 않습니다.</div>
+                <div>• 신규 담당자 이메일({reviewedDraft.contacts.length}명) 중 중복되지 않은 정보만 추가됩니다.</div>
+                <div>• 신규 웹사이트 및 브랜드가 중복 없이 안전하게 보존됩니다.</div>
+                <div>• 마케팅 수신동의 상태는 변경되지 않으며 엄격히 분리 유지됩니다.</div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                  소스 연결 사유 및 관리자 메모 (선택 입력):
+                </label>
+                <input
+                  type="text"
+                  placeholder="예: 2026 InterCHARM 참가 신규 출품 정보 및 담당자 추가 연결"
+                  value={linkNotes}
+                  onChange={(e) => setLinkNotes(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setShowLinkModal(false)}
+                disabled={isLinking}
+                className="px-3.5 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLink}
+                disabled={isLinking}
+                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 cursor-pointer shadow-xs flex items-center gap-1.5"
+              >
+                {isLinking ? "연결 처리 중..." : "소스 연결 확정 (Confirm Link)"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* 3. REGISTER AS SEPARATE LEGAL ENTITY (ADMIN EXCEPTION) MODAL       */}
+      {/* ------------------------------------------------------------------ */}
+      {showExceptionModal && exceptionTargetMatch && reviewedDraft && (
+        <div className="fixed inset-0 z-[75] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3 border-zinc-100 dark:border-zinc-800">
+              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <span>⚖️</span> 별도 법인 등록 예외 승인 (Register as Separate Legal Entity)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowExceptionModal(false)}
+                className="text-zinc-400 hover:text-zinc-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg space-y-1">
+                <div className="font-bold text-amber-900 dark:text-amber-200">
+                  중복 유사성 감지 대상: &quot;{exceptionTargetMatch.entityName}&quot;
+                </div>
+                <div className="text-[11px] text-amber-800 dark:text-amber-300">
+                  상호 또는 도메인이 유사하나 실제 별개의 법인인 경우, 명확한 예외 사유와 구별 증빙을 등록해야 저장할 수 있습니다.
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-zinc-900 dark:text-zinc-100 mb-1">
+                  별도 법인 등록 사유 (Reason for Exception) <span className="text-red-500">*필수</span>:
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="예: 상호가 동일하나 대표자, 사업자등록번호 및 주소지가 상이한 완전 별개의 법인임을 확인 완료함"
+                  value={exceptionReason}
+                  onChange={(e) => setExceptionReason(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+
+              <div className="space-y-2 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                <span className="font-bold text-zinc-800 dark:text-zinc-200">구별 증빙 정보 (Evidence / Distinguishing Info):</span>
+
+                <div>
+                  <label className="block text-[11px] text-zinc-500 mb-0.5">사업자등록번호 (Business Registration Number):</label>
+                  <input
+                    type="text"
+                    placeholder="예: 123-45-67890"
+                    value={exceptionEvidenceRegNumber}
+                    onChange={(e) => setExceptionEvidenceRegNumber(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-zinc-500 mb-0.5">사업장 주소지 (Business Address):</label>
+                  <input
+                    type="text"
+                    placeholder="예: 서울시 강남구 테헤란로..."
+                    value={exceptionEvidenceAddress}
+                    onChange={(e) => setExceptionEvidenceAddress(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-zinc-500 mb-0.5">공식 웹사이트 URL (Official Website):</label>
+                  <input
+                    type="text"
+                    placeholder="예: https://example.co.kr"
+                    value={exceptionEvidenceWebsite}
+                    onChange={(e) => setExceptionEvidenceWebsite(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-zinc-500 mb-0.5">기타 구별 근거 메모 (Additional Notes):</label>
+                  <input
+                    type="text"
+                    placeholder="예: 홈택스 사업자등록 상태 조회 완료"
+                    value={exceptionEvidenceNotes}
+                    onChange={(e) => setExceptionEvidenceNotes(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setShowExceptionModal(false)}
+                disabled={isSavingException}
+                className="px-3.5 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmException}
+                disabled={isSavingException || !exceptionReason.trim()}
+                className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg disabled:opacity-50 cursor-pointer shadow-xs"
+              >
+                {isSavingException ? "예외 승인 저장 중..." : "예외 승인 및 별도 법인 저장 (Approve Exception)"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* 4. DUPLICATE AUDIT REPORT MODAL                                    */}
+      {/* ------------------------------------------------------------------ */}
+      {showAuditModal && (
+        <div className="fixed inset-0 z-[75] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3 border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🔍</span>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                  Brand Sourcing 중복 감사 보고서 (Read-Only Duplicate Audit)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAuditModal(false)}
+                className="text-zinc-400 hover:text-zinc-600 cursor-pointer font-bold text-base"
+              >
+                ✕
+              </button>
+            </div>
+
+            {isLoadingAudit ? (
+              <div className="py-12 text-center space-y-2">
+                <div className="inline-block animate-spin text-2xl">⏳</div>
+                <div className="text-xs text-zinc-500">전체 소싱 데이터베이스 중복 감사 분석 중...</div>
+              </div>
+            ) : auditReport ? (
+              <div className="space-y-4 text-xs">
+                {/* Metric Overview */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800 text-center">
+                    <div className="text-[10px] text-zinc-400 font-bold uppercase">Total Companies</div>
+                    <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{auditReport.totalCompanies}</div>
+                  </div>
+                  <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800 text-center">
+                    <div className="text-[10px] text-zinc-400 font-bold uppercase">Total Sources</div>
+                    <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{auditReport.totalSources}</div>
+                  </div>
+                  <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800 text-center">
+                    <div className="text-[10px] text-zinc-400 font-bold uppercase">Duplicate Groups</div>
+                    <div className={`text-lg font-bold ${auditReport.potentialDuplicateCompanyGroups.length > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                      {auditReport.potentialDuplicateCompanyGroups.length}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Audit A: Confirmed Duplicate Source URLs */}
+                <div className="space-y-1.5">
+                  <h4 className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center justify-between">
+                    <span>A. 동일 전시회 소스 URL 그룹 (Canonical URL Duplicates)</span>
+                    <span className="text-[11px] font-normal text-zinc-500">{auditReport.confirmedDuplicateUrlGroups.length}건 발견</span>
+                  </h4>
+                  {auditReport.confirmedDuplicateUrlGroups.length === 0 ? (
+                    <div className="p-3 rounded bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs">
+                      ✓ 확인된 중복 소스 URL이 없습니다. 모든 전시회 링크가 고유하게 관리되고 있습니다.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {auditReport.confirmedDuplicateUrlGroups.map((g, idx) => (
+                        <div key={idx} className="p-3 rounded bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 space-y-1">
+                          <div className="font-mono text-[11px] text-red-900 dark:text-red-200 truncate">{g.canonicalUrl}</div>
+                          <div className="text-zinc-600 dark:text-zinc-400">연결된 회사: {g.companyNames.join(", ")}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Audit B: Potential Duplicate Company Name Groups */}
+                <div className="space-y-1.5">
+                  <h4 className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center justify-between">
+                    <span>B. 잠재적 중복 법인 그룹 (Potential Duplicate Company Groups)</span>
+                    <span className="text-[11px] font-normal text-zinc-500">{auditReport.potentialDuplicateCompanyGroups.length}개 그룹</span>
+                  </h4>
+                  {auditReport.potentialDuplicateCompanyGroups.length === 0 ? (
+                    <div className="p-3 rounded bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs">
+                      ✓ 중복된 동일 법인명 레코드가 발견되지 않았습니다.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {auditReport.potentialDuplicateCompanyGroups.map((g, idx) => (
+                        <div key={idx} className="p-3 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 space-y-2">
+                          <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center justify-between">
+                            <span>정규화 상호: &quot;{g.normalizedName}&quot;</span>
+                            <span className="text-[11px] font-normal">{g.companies.length}개 회사 레코드</span>
+                          </div>
+                          <div className="space-y-1">
+                            {g.companies.map((c) => (
+                              <div key={c.id} className="p-2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-[11px] flex items-center justify-between flex-wrap gap-2">
+                                <div>
+                                  <span className="font-bold text-zinc-900 dark:text-zinc-100">{c.nameKr}</span>
+                                  {c.nameEn && <span className="text-zinc-400 ml-1">({c.nameEn})</span>}
+                                  <span className="ml-2 font-mono text-[10px] text-zinc-400">ID: {c.id.slice(0, 8)}...</span>
+                                </div>
+                                <div className="text-zinc-500 flex items-center gap-2">
+                                  <span>상태: {c.status}</span>
+                                  <span>소스: {c.sourcesCount}개</span>
+                                  <span>담당자: {c.contactsCount}명</span>
+                                  <span>캠페인: {c.campaignsCount}건</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Audit C: Duplicate Domain Groups */}
+                <div className="space-y-1.5">
+                  <h4 className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center justify-between">
+                    <span>C. 공식 웹사이트 도메인 공유 그룹</span>
+                    <span className="text-[11px] font-normal text-zinc-500">{auditReport.duplicateDomainGroups.length}개 도메인</span>
+                  </h4>
+                  {auditReport.duplicateDomainGroups.length === 0 ? (
+                    <div className="p-3 rounded bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 text-xs">
+                      동일한 웹사이트 도메인을 공유하는 중복 회사가 없습니다.
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {auditReport.duplicateDomainGroups.map((d, idx) => (
+                        <div key={idx} className="p-2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-[11px] flex justify-between">
+                          <span className="font-mono font-bold text-blue-600">{d.domain}</span>
+                          <span className="text-zinc-500">{d.companies.map((c) => c.nameKr).join(", ")}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Remediation Note */}
+                <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 text-[11px] space-y-1 text-blue-900 dark:text-blue-200">
+                  <div className="font-bold">안전 권고 사항 (Safe Remediation):</div>
+                  <p>{auditReport.remediationRecommendation}</p>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex justify-end pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setShowAuditModal(false)}
+                className="px-4 py-2 text-xs font-bold text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 rounded-lg cursor-pointer"
+              >
+                닫기 (Close)
               </button>
             </div>
           </div>

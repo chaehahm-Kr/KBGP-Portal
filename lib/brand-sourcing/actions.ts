@@ -10,9 +10,14 @@ import {
   SourcingEvaluationInput,
   SourcingListParams,
   SourcingDocumentItem,
+  AdminDuplicateExceptionInput,
+  LinkSourceResult,
+  DuplicateAuditReport,
   extractSourcingDraft,
   findDuplicateCandidates,
   saveSourcingDraft,
+  linkSourcingSource,
+  getSourcingDuplicateAuditReport,
   getSourcingCompanyById,
   listSourcingCompanies,
   updateSourcingCandidateComplete,
@@ -73,6 +78,7 @@ export async function extractSourcingDraftAction(
     const primaryEmails = draft.contacts.map((c) => c.email).filter(Boolean);
 
     const duplicateCheck = await findDuplicateCandidates({
+      sourceUrl: url,
       sourceIdentifier: draft.source.sourceIdentifier,
       companyNameKr: draft.company.nameKr,
       companyNameEn: draft.company.nameEn || undefined,
@@ -115,23 +121,31 @@ export async function checkDuplicatesAction(
 
 /**
  * Persists a new sourcing candidate draft and evaluation into the dedicated sourcing tables.
+ * Enforces atomic server-side duplicate protection and records admin exceptions.
  */
 export async function saveSourcingCandidateAction(
   draft: NormalizedCompanyDraft,
-  evaluation?: SourcingEvaluationInput
+  evaluation?: SourcingEvaluationInput,
+  options?: {
+    exception?: AdminDuplicateExceptionInput;
+  }
 ): Promise<{
   success: boolean;
   companyId?: string;
   error?: string;
+  isDuplicate?: boolean;
 }> {
   try {
-    await requireBrandStaffPermission("create");
+    const staff = await requireBrandStaffPermission("create");
 
     if (!draft || !draft.company || !draft.company.nameKr?.trim()) {
       return { success: false, error: "Company Korean Name is required." };
     }
 
-    const res = await saveSourcingDraft(draft, evaluation);
+    const res = await saveSourcingDraft(draft, evaluation, {
+      exception: options?.exception,
+      adminUserId: staff.session.userId || staff.staffId,
+    });
     try { revalidatePath("/admin/brand-marketing"); } catch {}
 
     return {
@@ -140,9 +154,69 @@ export async function saveSourcingCandidateAction(
     };
   } catch (err: any) {
     console.error("[saveSourcingCandidateAction] Save failed:", err);
+    const msg = err.message || "Failed to save sourcing candidate";
+    const isDup = msg.includes("[DUPLICATE_");
     return {
       success: false,
-      error: err.message || "Failed to save sourcing candidate",
+      error: msg,
+      isDuplicate: isDup,
+    };
+  }
+}
+
+/**
+ * Links new sourcing information to an existing company record without
+ * overwriting verified fields or modifying marketing consent.
+ */
+export async function linkSourcingSourceAction(
+  input: {
+    targetCompanyId: string;
+    draft: NormalizedCompanyDraft;
+    overrideReason?: string;
+  }
+): Promise<{
+  success: boolean;
+  result?: LinkSourceResult;
+  error?: string;
+}> {
+  try {
+    const staff = await requireBrandStaffPermission("create");
+
+    const result = await linkSourcingSource({
+      ...input,
+      adminUserId: staff.session.userId || staff.staffId,
+      adminUserEmail: staff.email,
+    });
+
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+
+    return { success: true, result };
+  } catch (err: any) {
+    console.error("[linkSourcingSourceAction] Link failed:", err);
+    return {
+      success: false,
+      error: err.message || "Failed to link source to existing company",
+    };
+  }
+}
+
+/**
+ * Generates a comprehensive read-only audit report of duplicate records in Brand Sourcing.
+ */
+export async function getSourcingDuplicateAuditReportAction(): Promise<{
+  success: boolean;
+  report?: DuplicateAuditReport;
+  error?: string;
+}> {
+  try {
+    await requireBrandStaffPermission("view");
+    const report = await getSourcingDuplicateAuditReport();
+    return { success: true, report };
+  } catch (err: any) {
+    console.error("[getSourcingDuplicateAuditReportAction] Report failed:", err);
+    return {
+      success: false,
+      error: err.message || "Failed to generate duplicate audit report",
     };
   }
 }
