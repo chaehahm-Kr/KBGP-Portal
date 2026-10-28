@@ -25,7 +25,11 @@ import {
 import { DEFAULT_MARKETING_TEMPLATES, resolveTemplateId } from "./default-templates";
 import { compileImageTemplateToHtml } from "./image-template-compiler";
 import { personalizeEmail } from "./personalization-engine";
-import { sendEmail, maskEmailAddress, isRecipientAllowlisted } from "@/lib/notifications/email";
+import { sendEmail, maskEmailAddress } from "@/lib/notifications/email";
+import {
+  getMarketingTestAllowlist,
+  isTestRecipientAllowlisted,
+} from "./test-allowlist";
 
 // In-memory fallback stores for local resilience or when DB migration is pending Owner execution
 const memoryTemplates = new Map<string, MarketingTemplatePackage>(
@@ -877,11 +881,18 @@ export async function sendTestCampaignEmail(
   templateHtml: string,
   templatePlainText?: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  // 1. Strict Allowlist Verification
-  const isAllowlisted = isRecipientAllowlisted(targetEmail);
-  if (!isAllowlisted) {
-    const err = `Security Rejection: '${targetEmail}' is not an authorized internal test recipient. Only verified domains (letusto.com, kselectnetwork.com) or configured test allowlists are permitted.`;
+  // 1. Strict Allowlist Verification (Internal Domains + Owner-Approved Allowlist)
+  const ownerAllowlist = await getMarketingTestAllowlist();
+  const allowCheck = isTestRecipientAllowlisted(targetEmail, ownerAllowlist);
+  if (!allowCheck.isAllowed) {
+    const err =
+      allowCheck.rejectionReason ||
+      `Security Rejection: '${targetEmail}' is not an authorized test recipient. Only verified domains (letusto.com, kselectnetwork.com) or configured test allowlists are permitted.`;
     console.error("[campaigns:test-send]", err);
+    recordCampaignAuditLog(campaignId, "TEST_EMAIL_REJECTED", false, {
+      testRecipient: maskEmailAddress(targetEmail),
+      reason: err,
+    });
     return { success: false, error: err };
   }
 

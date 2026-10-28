@@ -39,6 +39,14 @@ import { TemplateFilterOptions } from "./campaign-types";
 import { validateAndSanitizeTemplate } from "./template-parser";
 import { compileImageTemplateToHtml } from "./image-template-compiler";
 import { ImageTemplateSection, DesignerPromptSettings, TemplateType } from "./campaign-types";
+import {
+  parseAndValidateTestRecipients,
+  getMarketingTestAllowlist,
+  addMarketingTestAllowlistEmail,
+  removeMarketingTestAllowlistEmail,
+  isTestRecipientAllowlisted,
+  MAX_TEST_RECIPIENTS_PER_BATCH,
+} from "./test-allowlist";
 
 /**
  * Asserts admin session before accessing marketing campaign tools.
@@ -313,8 +321,146 @@ export async function runCampaignDryRunAction(
   }
 }
 
+export interface TestEmailRecipientResult {
+  email: string;
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
+
+export interface SendTestCampaignEmailsResult {
+  success: boolean;
+  totalRequested: number;
+  totalSent: number;
+  totalFailed: number;
+  results: TestEmailRecipientResult[];
+  invalidInputs: Array<{ raw: string; reason: string }>;
+  duplicateCount: number;
+  error?: string;
+}
+
+/**
+ * Dispatches a controlled test email batch to multiple recipients
+ * (supporting comma, semicolon, and newline separation).
+ * Strictly validates format, deduplicates, enforces MAX_TEST_RECIPIENTS_PER_BATCH,
+ * and restricts delivery to internal corporate domains or Owner-allowlisted external addresses.
+ */
+export async function sendTestCampaignEmailsAction(
+  campaignId: string,
+  rawRecipients: string,
+  templateSubject: string,
+  templateHtml: string,
+  templatePlainText?: string
+): Promise<SendTestCampaignEmailsResult> {
+  try {
+    await requireCampaignAdmin();
+
+    const parsed = parseAndValidateTestRecipients(rawRecipients, MAX_TEST_RECIPIENTS_PER_BATCH);
+
+    if (parsed.uniqueRecipients.length === 0) {
+      return {
+        success: false,
+        totalRequested: parsed.totalParsed,
+        totalSent: 0,
+        totalFailed: parsed.invalidInputs.length,
+        results: [],
+        invalidInputs: parsed.invalidInputs,
+        duplicateCount: parsed.duplicateCount,
+        error: "전송할 유효한 이메일 주소가 없습니다. 이메일 주소 형식을 확인해 주세요.",
+      };
+    }
+
+    if (parsed.exceedsBatchLimit) {
+      return {
+        success: false,
+        totalRequested: parsed.uniqueRecipients.length,
+        totalSent: 0,
+        totalFailed: 0,
+        results: [],
+        invalidInputs: parsed.invalidInputs,
+        duplicateCount: parsed.duplicateCount,
+        error: `테스트 발송은 1회 최대 ${MAX_TEST_RECIPIENTS_PER_BATCH}명까지만 가능합니다 (입력된 유효 수신자: ${parsed.uniqueRecipients.length}명). 수신자 수를 줄여주세요.`,
+      };
+    }
+
+    const ownerAllowlist = await getMarketingTestAllowlist();
+    const results: TestEmailRecipientResult[] = [];
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const recipient of parsed.uniqueRecipients) {
+      const allowCheck = isTestRecipientAllowlisted(recipient, ownerAllowlist);
+      if (!allowCheck.isAllowed) {
+        failedCount++;
+        results.push({
+          email: recipient,
+          success: false,
+          error: allowCheck.rejectionReason || "외부 테스트 허용 목록(Allowlist)에 등록되지 않은 이메일입니다.",
+        });
+        continue;
+      }
+
+      try {
+        const sendRes = await sendTestCampaignEmail(
+          campaignId,
+          recipient,
+          templateSubject,
+          templateHtml,
+          templatePlainText
+        );
+
+        if (sendRes.success) {
+          sentCount++;
+          results.push({
+            email: recipient,
+            success: true,
+            messageId: sendRes.messageId,
+          });
+        } else {
+          failedCount++;
+          results.push({
+            email: recipient,
+            success: false,
+            error: sendRes.error || "발송 실패",
+          });
+        }
+      } catch (err: any) {
+        failedCount++;
+        results.push({
+          email: recipient,
+          success: false,
+          error: err.message || "발송 예외 발생",
+        });
+      }
+    }
+
+    return {
+      success: sentCount > 0,
+      totalRequested: parsed.uniqueRecipients.length,
+      totalSent: sentCount,
+      totalFailed: failedCount,
+      results,
+      invalidInputs: parsed.invalidInputs,
+      duplicateCount: parsed.duplicateCount,
+      error: sentCount === 0 ? "모든 테스트 수신자에 대한 발송이 실패하거나 거부되었습니다." : undefined,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      totalRequested: 0,
+      totalSent: 0,
+      totalFailed: 0,
+      results: [],
+      invalidInputs: [],
+      duplicateCount: 0,
+      error: err.message || "테스트 발송 작업 중 오류가 발생했습니다.",
+    };
+  }
+}
+
 /**
  * Dispatches a controlled test email STRICTLY to an allowlisted internal test address.
+ * Backward compatible wrapper calling sendTestCampaignEmailsAction.
  */
 export async function sendTestCampaignEmailAction(
   campaignId: string,
@@ -323,18 +469,73 @@ export async function sendTestCampaignEmailAction(
   templateHtml: string,
   templatePlainText?: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const batchRes = await sendTestCampaignEmailsAction(
+    campaignId,
+    targetEmail,
+    templateSubject,
+    templateHtml,
+    templatePlainText
+  );
+
+  if (batchRes.results.length > 0) {
+    const first = batchRes.results[0];
+    return {
+      success: first.success,
+      messageId: first.messageId,
+      error: first.error || batchRes.error,
+    };
+  }
+
+  return {
+    success: batchRes.success,
+    error: batchRes.error || (batchRes.invalidInputs?.[0]?.reason ?? "Test dispatch failed"),
+  };
+}
+
+/**
+ * Fetches the current Owner-managed test allowlist.
+ */
+export async function getMarketingTestAllowlistAction(): Promise<{
+  success: boolean;
+  allowlist: string[];
+  error?: string;
+}> {
   try {
     await requireCampaignAdmin();
-    const res = await sendTestCampaignEmail(
-      campaignId,
-      targetEmail,
-      templateSubject,
-      templateHtml,
-      templatePlainText
-    );
+    const allowlist = await getMarketingTestAllowlist();
+    return { success: true, allowlist };
+  } catch (err: any) {
+    return { success: false, allowlist: [], error: err.message };
+  }
+}
+
+/**
+ * Adds an external email address to the Owner-managed test allowlist.
+ */
+export async function addMarketingTestAllowlistEmailAction(
+  email: string
+): Promise<{ success: boolean; allowlist: string[]; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const res = await addMarketingTestAllowlistEmail(email, admin.email);
     return res;
   } catch (err: any) {
-    return { success: false, error: err.message || "Test dispatch failed" };
+    return { success: false, allowlist: [], error: err.message };
+  }
+}
+
+/**
+ * Removes an email address from the Owner-managed test allowlist.
+ */
+export async function removeMarketingTestAllowlistEmailAction(
+  email: string
+): Promise<{ success: boolean; allowlist: string[]; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const res = await removeMarketingTestAllowlistEmail(email, admin.email);
+    return res;
+  } catch (err: any) {
+    return { success: false, allowlist: [], error: err.message };
   }
 }
 

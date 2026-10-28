@@ -1,9 +1,24 @@
 import crypto from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { maskEmailAddress } from "@/lib/notifications/email";
+import { getCanonicalMarketingBaseUrl } from "./marketing-url";
 
 // Fallback in-memory suppression registry for fast lookup and local testing
 const memorySuppressionList = new Set<string>();
+
+/**
+ * Maximum lifetime for an unsubscribe token: 180 days (in milliseconds).
+ */
+export const MAX_UNSUBSCRIBE_TOKEN_AGE_MS = 180 * 24 * 60 * 60 * 1000;
+
+/**
+ * Masks an unsubscribe token for safe logging without exposing the complete signature.
+ */
+export function maskTokenForLogging(token: string): string {
+  if (!token || typeof token !== "string") return "[empty-token]";
+  if (token.length <= 12) return "tok_***";
+  return `${token.slice(0, 8)}...${token.slice(-4)}`;
+}
 
 /**
  * Secret key used to sign opaque unsubscribe tokens.
@@ -12,7 +27,7 @@ const memorySuppressionList = new Set<string>();
 function getUnsubscribeSecret(): string {
   return (
     process.env.MARKETING_UNSUBSCRIBE_SECRET ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
     process.env.AUTH_SECRET ||
     "ksn-marketing-unsub-secret-key-2026"
   );
@@ -51,26 +66,30 @@ export function verifyUnsubscribeToken(token: string): {
   valid: boolean;
   email?: string;
   campaignId?: string | null;
+  expired?: boolean;
   error?: string;
 } {
   if (!token || typeof token !== "string" || !token.includes(".")) {
-    return { valid: false, error: "Invalid token format." };
+    return { valid: false, error: "유효하지 않은 수신 거부 토큰 형식입니다. (Invalid token format)" };
   }
 
   const parts = token.split(".");
   if (parts.length !== 2) {
-    return { valid: false, error: "Malformed token segments." };
+    return { valid: false, error: "손상된 수신 거부 토큰입니다. (Malformed token segments)" };
   }
 
   const [encodedPayload, signature] = parts;
 
-  // Verify HMAC signature
+  // Verify HMAC signature with timing-safe comparison
   const hmac = crypto.createHmac("sha256", getUnsubscribeSecret());
   hmac.update(encodedPayload);
   const expectedSignature = hmac.digest("base64url");
 
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
-    return { valid: false, error: "Token signature verification failed." };
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expectedSignature);
+
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    return { valid: false, error: "수신 거부 토큰 서명 인증에 실패했습니다. (Signature verification failed)" };
   }
 
   try {
@@ -78,31 +97,39 @@ export function verifyUnsubscribeToken(token: string): {
     const payload: UnsubscribeTokenPayload = JSON.parse(jsonStr);
 
     if (!payload.email || !payload.email.includes("@")) {
-      return { valid: false, error: "Token payload missing valid email." };
+      return { valid: false, error: "토큰에 유효한 이메일 정보가 누락되었습니다. (Missing email)" };
+    }
+
+    // Check expiration (if timestamp is present and exceeds 180 days)
+    if (typeof payload.ts === "number" && payload.ts > 0) {
+      const ageMs = Date.now() - payload.ts;
+      if (ageMs > MAX_UNSUBSCRIBE_TOKEN_AGE_MS) {
+        return {
+          valid: false,
+          expired: true,
+          error: "만료된 수신 거부 링크입니다. (Expired unsubscribe token)",
+        };
+      }
     }
 
     return {
       valid: true,
       email: payload.email.toLowerCase().trim(),
-      campaignId: payload.campaignId,
+      campaignId: payload.campaignId || null,
     };
   } catch (err: any) {
-    return { valid: false, error: "Failed to decode token payload." };
+    return { valid: false, error: "토큰 디코딩에 실패했습니다. (Failed to decode payload)" };
   }
 }
 
 /**
  * Resolves the absolute HTTPS unsubscribe URL for a recipient.
+ * Strictly uses the centralized canonical marketing URL (never exposes internal Vercel domains).
  */
 export function buildUnsubscribeUrl(email: string, campaignId?: string | null): string {
   const token = generateUnsubscribeToken(email, campaignId);
-  const siteUrl = (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_ADMIN_URL ||
-    "https://admin.kselectnetwork.com"
-  ).replace(/\/$/, "");
-
-  return `${siteUrl}/unsubscribe?token=${encodeURIComponent(token)}`;
+  const baseUrl = getCanonicalMarketingBaseUrl();
+  return `${baseUrl}/unsubscribe?token=${encodeURIComponent(token)}`;
 }
 
 /**
@@ -110,13 +137,8 @@ export function buildUnsubscribeUrl(email: string, campaignId?: string | null): 
  */
 export function buildOneClickUnsubscribeEndpoint(email: string, campaignId?: string | null): string {
   const token = generateUnsubscribeToken(email, campaignId);
-  const siteUrl = (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_ADMIN_URL ||
-    "https://admin.kselectnetwork.com"
-  ).replace(/\/$/, "");
-
-  return `${siteUrl}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+  const baseUrl = getCanonicalMarketingBaseUrl();
+  return `${baseUrl}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
 }
 
 /**
@@ -130,7 +152,7 @@ export async function recordEmailOptOut(
 ): Promise<{ success: boolean; alreadySuppressed?: boolean; error?: string }> {
   const normalized = email.toLowerCase().trim();
   if (!normalized || !normalized.includes("@")) {
-    return { success: false, error: "Invalid email address format." };
+    return { success: false, error: "유효하지 않은 이메일 주소 형식입니다." };
   }
 
   // Update in-memory fallback
@@ -154,6 +176,7 @@ export async function recordEmailOptOut(
         return { success: true, alreadySuppressed: true };
       }
       console.warn("[marketing:unsubscribe] DB insert warning:", error.message);
+      return { success: false, error: error.message };
     }
 
     return { success: true, alreadySuppressed: false };
