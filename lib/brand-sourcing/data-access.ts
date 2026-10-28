@@ -559,7 +559,13 @@ export async function saveSourcingDraft(
   });
 
   if (sourceErr) {
-    console.warn("Failed to insert sourcing source provenance:", sourceErr.message);
+    await supabase.from("sourcing_companies").delete().eq("id", companyId);
+    if (sourceErr.code === "23505" || sourceErr.message.includes("unique")) {
+      throw new Error(
+        `[DUPLICATE_SOURCE_URL] 이미 등록된 동일한 소스 URL 또는 식별자가 존재합니다. (${sourceErr.message})`
+      );
+    }
+    throw new Error(`Failed to insert sourcing source provenance: ${sourceErr.message}`);
   }
 
   return { success: true, companyId };
