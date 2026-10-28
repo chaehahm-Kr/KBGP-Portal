@@ -424,6 +424,63 @@ async function runQASuite() {
   assert(excRecord?.matched_rule === "SAME_NAME_KR", "Scenario 16c: Audit records matched rule");
   assert(excRecord?.evidence?.businessRegistrationNumber === distinctEntityDraft.company.businessRegistrationNumber, "Scenario 16d: Audit preserves distinguishing evidence");
 
+  // Step E2: Verify Admin Exception CANNOT bypass strong URL uniqueness (Requirement 10)
+  console.log("\n[Test Suite 8b] Verify Admin Exception Cannot Bypass Strong URL Rules");
+  let urlBypassBlocked = false;
+  try {
+    const invalidBypassDraft: NormalizedCompanyDraft = {
+      ...distinctEntityDraft,
+      source: {
+        ...distinctEntityDraft.source,
+        sourceUrl: testExhibitorUrl, // Existing URL!
+      },
+    };
+    await saveSourcingDraft(
+      invalidBypassDraft,
+      undefined,
+      { exception: exceptionInput, adminUserId: "00000000-0000-4000-c000-000000000001" },
+      qaSupabase
+    );
+  } catch (err: any) {
+    urlBypassBlocked = err.message.includes("[DUPLICATE_SOURCE_URL]");
+  }
+  assert(urlBypassBlocked, "Scenario 10: Admin exception strictly CANNOT bypass strong URL uniqueness");
+
+  // Step E3: Verify Audit Preservation: ON DELETE RESTRICT blocks deletion of matched company (Requirement 7)
+  console.log("\n[Test Suite 8c] Verify Audit Preservation (ON DELETE RESTRICT)");
+  let deleteBlocked = false;
+  try {
+    const { error: delErr } = await qaSupabase
+      .from("sourcing_companies")
+      .delete()
+      .eq("id", companyIdA);
+    if (delErr && (delErr.code === "23503" || delErr.message.includes("violates foreign key"))) {
+      deleteBlocked = true;
+    }
+  } catch {
+    deleteBlocked = true;
+  }
+  assert(deleteBlocked, "Scenario 7: ON DELETE RESTRICT prevents deleting company with active exception audit trail");
+
+  // Step E4: Verify Automatic Trigger Synchronization on UPDATE (Requirement 9)
+  console.log("\n[Test Suite 8d] Verify Database Trigger Auto-Synchronization on UPDATE");
+  const updatedNameKr = `(주)업데이트동기화_${runId}`;
+  await qaSupabase
+    .from("sourcing_companies")
+    .update({ company_name_kr: updatedNameKr })
+    .eq("id", companyIdA);
+
+  const { data: syncedComp } = await qaSupabase
+    .from("sourcing_companies")
+    .select("normalized_name_kr")
+    .eq("id", companyIdA)
+    .single();
+
+  assert(
+    syncedComp?.normalized_name_kr === `업데이트동기화${runId}`,
+    "Scenario 9: Database trigger automatically synchronizes normalized_name_kr on company update"
+  );
+
   // Step F: SCENARIOS 12, 13, 14 — Double-Click & Concurrent Save Protection
   console.log("\n[Test Suite 9] Double-Click & Concurrent Save Protection");
 
@@ -503,7 +560,13 @@ async function runQASuite() {
     resB.status === "fulfilled" ? resB.value.companyId : null,
   ].filter(Boolean);
 
+  // Delete exception audit rows first due to ON DELETE RESTRICT
   for (const tid of testIds) {
+    await qaSupabase.from("sourcing_duplicate_exceptions").delete().or(`company_id.eq.${tid},matched_company_id.eq.${tid}`);
+    await qaSupabase.from("sourcing_sources").delete().eq("company_id", tid);
+    await qaSupabase.from("sourcing_contacts").delete().eq("company_id", tid);
+    await qaSupabase.from("sourcing_websites").delete().eq("company_id", tid);
+    await qaSupabase.from("sourcing_brands").delete().eq("company_id", tid);
     await qaSupabase.from("sourcing_companies").delete().eq("id", tid);
   }
   console.log(`  ✓ Cleaned up ${testIds.length} synthetic test companies from QA DB.`);
