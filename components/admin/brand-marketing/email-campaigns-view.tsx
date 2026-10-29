@@ -1572,7 +1572,8 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                     {filteredCandidates.map((c) => {
                       const isChecked = selectedCompanyIds.includes(c.id);
                       const brand = c.sourcing_brands?.[0]?.brand_name_kr || c.company_name_kr;
-                      const contact = c.sourcing_contacts?.[0];
+                      const contact = c.sourcing_contacts?.find((ct: any) => ct.is_primary) || c.sourcing_contacts?.[0];
+                      const totalContacts = c.sourcing_contacts?.length || 0;
 
                       return (
                         <tr key={c.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
@@ -1590,8 +1591,22 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                           <td className="p-2.5 font-bold text-zinc-900 dark:text-zinc-100">{c.company_name_kr}</td>
                           <td className="p-2.5 text-zinc-700 dark:text-zinc-300">{brand}</td>
                           <td className="p-2.5 font-mono">{c.grade}</td>
-                          <td className="p-2.5 font-mono text-zinc-600 dark:text-zinc-400">
-                            {contact?.email || <span className="text-red-400">No email</span>}
+                          <td className="p-2.5 text-zinc-600 dark:text-zinc-400">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs">
+                                {contact?.email || <span className="text-red-400">No email</span>}
+                              </span>
+                              {totalContacts > 1 && (
+                                <span
+                                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 cursor-help"
+                                  title={c.sourcing_contacts
+                                    .map((ct: any) => (ct.name ? ct.name + ": " : "") + ct.email)
+                                    .join("\n")}
+                                >
+                                  +{totalContacts - 1} more
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="p-2.5">
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">

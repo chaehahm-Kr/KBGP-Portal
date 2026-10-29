@@ -23,6 +23,8 @@ import {
   updateSourcingCandidateComplete,
   updateSourcingEvaluation,
   deleteSourcingCandidate,
+  archiveSourcingCandidate,
+  bulkArchiveSourcingCompanies,
   getClient,
 } from "./index";
 import { validateSafeExternalUrl } from "./security";
@@ -259,7 +261,68 @@ export async function updateSourcingCandidateAction(
 }
 
 /**
- * Deletes a sourcing candidate by ID.
+ * Reversibly archives a sourcing candidate by ID (soft delete).
+ * Preserves all related contacts, brands, activities, and audit history.
+ */
+export async function archiveSourcingCandidateAction(
+  companyId: string
+): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    await requireBrandStaffPermission("delete");
+
+    if (!companyId) {
+      return { success: false, error: "Company ID is required" };
+    }
+
+    await archiveSourcingCandidate(companyId);
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("[archiveSourcingCandidateAction] Archive failed:", err);
+    return {
+      success: false,
+      error: err.message || "Failed to archive sourcing candidate",
+    };
+  }
+}
+
+/**
+ * Reversibly archives multiple sourcing candidates in bulk (soft delete).
+ * Preserves all related contacts, brands, activities, and audit history.
+ */
+export async function bulkArchiveSourcingCandidatesAction(
+  companyIds: string[]
+): Promise<{
+  success: boolean;
+  count?: number;
+  error?: string;
+}> {
+  try {
+    await requireBrandStaffPermission("delete");
+
+    if (!companyIds || companyIds.length === 0) {
+      return { success: false, error: "No company IDs provided for deletion" };
+    }
+
+    const res = await bulkArchiveSourcingCompanies(companyIds);
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+
+    return { success: true, count: res.count };
+  } catch (err: any) {
+    console.error("[bulkArchiveSourcingCandidatesAction] Bulk archive failed:", err);
+    return {
+      success: false,
+      error: err.message || "Failed to archive selected sourcing candidates",
+    };
+  }
+}
+
+/**
+ * Deletes a sourcing candidate by ID (preserved for compatibility; archives if restricted).
  */
 export async function deleteSourcingCandidateAction(
   companyId: string
@@ -274,7 +337,8 @@ export async function deleteSourcingCandidateAction(
       return { success: false, error: "Company ID is required" };
     }
 
-    await deleteSourcingCandidate(companyId);
+    // Attempt archiving first to preserve business records and protect audit history
+    await archiveSourcingCandidate(companyId);
     try { revalidatePath("/admin/brand-marketing"); } catch {}
 
     return { success: true };

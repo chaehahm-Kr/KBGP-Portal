@@ -40,6 +40,7 @@ import {
   updateSourcingCandidateGradeAction,
   updateSourcingCandidateDocumentsAction,
   deleteSourcingCandidateAction,
+  bulkArchiveSourcingCandidatesAction,
 } from "@/lib/brand-sourcing/actions";
 import { EmailCampaignsView } from "./email-campaigns-view";
 import { CampaignResultsView } from "./campaign-results-view";
@@ -182,7 +183,12 @@ export default function BrandMarketingView({
   const [activePopover, setActivePopover] = useState<{ rowId: string; col: "brands" | "categories" | "primary" } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingList, setIsLoadingList] = useState(false);
-  const pageSize = 20;
+  const [pageSize, setPageSize] = useState<number>(20);
+
+  // Bulk selection and deletion state (ADM-BSRC-013)
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   // Detail Drawer / Modal state for viewing an existing saved candidate
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
@@ -191,6 +197,23 @@ export default function BrandMarketingView({
   const [isUpdatingCandidate, setIsUpdatingCandidate] = useState(false);
   const [detailEditSuccess, setDetailEditSuccess] = useState<string | null>(null);
   const [drawerNewCategoryInput, setDrawerNewCategoryInput] = useState<string>("");
+
+  // Drawer Contacts and Brands management state (ADM-BSRC-013)
+  const [drawerContacts, setDrawerContacts] = useState<any[]>([]);
+  const [showAddContactForm, setShowAddContactForm] = useState(false);
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactJobTitle, setNewContactJobTitle] = useState("");
+  const [newContactDepartment, setNewContactDepartment] = useState("");
+  const [newContactEmail, setNewContactEmail] = useState("");
+  const [newContactPhone, setNewContactPhone] = useState("");
+  const [newContactIsPrimary, setNewContactIsPrimary] = useState(false);
+  const [editingContactIdx, setEditingContactIdx] = useState<number | null>(null);
+
+  const [drawerBrands, setDrawerBrands] = useState<any[]>([]);
+  const [newBrandKrInput, setNewBrandKrInput] = useState("");
+  const [newBrandEnInput, setNewBrandEnInput] = useState("");
+  const [editingBrandIdx, setEditingBrandIdx] = useState<number | null>(null);
+  const [brandErrorMessage, setBrandErrorMessage] = useState<string | null>(null);
 
   const [isPending, startTransition] = useTransition();
 
@@ -489,7 +512,7 @@ export default function BrandMarketingView({
   // --------------------------------------------------------------------------
   // LIST REFRESH & PAGINATION HANDLER
   // --------------------------------------------------------------------------
-  const refreshBrandList = async (page = currentPage) => {
+  const refreshBrandList = async (page = currentPage, size = pageSize) => {
     setIsLoadingList(true);
     try {
       const res = await listSourcingCandidatesAction({
@@ -500,8 +523,8 @@ export default function BrandMarketingView({
         primaryCategories: filterPrimaryCategories.length > 0 ? filterPrimaryCategories : undefined,
         businessTypes: filterBusinessTypes.length > 0 ? filterBusinessTypes : undefined,
         businessTypeMatchMode: filterBusinessTypeMatchMode,
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
+        limit: size,
+        offset: (page - 1) * size,
       });
 
       if (res.success && res.candidates) {
@@ -522,11 +545,17 @@ export default function BrandMarketingView({
     setSelectedCandidateId(id);
     setIsDetailLoading(true);
     setDetailEditSuccess(null);
+    setShowAddContactForm(false);
+    setEditingContactIdx(null);
+    setEditingBrandIdx(null);
+    setBrandErrorMessage(null);
 
     try {
       const res = await getSourcingCandidateDetailAction(id);
       if (res.success && res.candidate) {
         setSelectedCandidateDetail(res.candidate);
+        setDrawerContacts(res.candidate.sourcing_contacts || []);
+        setDrawerBrands(res.candidate.sourcing_brands || []);
       }
     } catch (err: any) {
       alert(`Failed to load details: ${err.message}`);
@@ -565,23 +594,25 @@ export default function BrandMarketingView({
           representativeName: selectedCandidateDetail.representative_name,
           businessRegistrationNumber: selectedCandidateDetail.business_registration_number,
         },
-        brands: (selectedCandidateDetail.sourcing_brands || []).map((b: any) => ({
-          nameKr: b.brand_name_kr,
-          nameEn: b.brand_name_en,
-          description: b.description,
+        brands: (drawerBrands.length > 0 ? drawerBrands : (selectedCandidateDetail.sourcing_brands || [])).map((b: any) => ({
+          id: b.id,
+          nameKr: b.nameKr || b.brand_name_kr,
+          nameEn: b.nameEn || b.brand_name_en || null,
+          description: b.description || null,
           categories: currentCats.length > 0 ? currentCats : (b.categories || []),
-          keyProducts: b.key_products || [],
-          source: b.source,
+          keyProducts: b.keyProducts || b.key_products || [],
+          source: b.source || "MANUAL",
         })),
-        contacts: (selectedCandidateDetail.sourcing_contacts || []).map((c: any) => ({
-          name: c.name,
-          department: c.department,
-          jobTitle: c.job_title,
-          email: c.email,
-          phone: c.phone,
-          isPrimary: c.is_primary,
-          source: c.source,
-          sourceUrl: c.source_url,
+        contacts: (drawerContacts.length > 0 ? drawerContacts : (selectedCandidateDetail.sourcing_contacts || [])).map((c: any) => ({
+          id: c.id,
+          name: c.name || null,
+          department: c.department || null,
+          jobTitle: c.jobTitle || c.job_title || null,
+          email: (c.email || "").trim(),
+          phone: c.phone || null,
+          isPrimary: Boolean(c.isPrimary ?? c.is_primary),
+          source: c.source || "MANUAL",
+          sourceUrl: c.sourceUrl || c.source_url || null,
         })),
         websites: (selectedCandidateDetail.sourcing_websites || []).map((w: any) => ({
           url: w.url,
@@ -680,10 +711,13 @@ export default function BrandMarketingView({
   };
 
   const handleInlineGradeChange = async (companyId: string, newGrade: "A" | "B" | "C" | "UNRATED") => {
-    const previousGrade = candidates.find((c) => c.id === companyId)?.grade;
+    const previousGrade = candidates.find((c) => c.id === companyId)?.grade || selectedCandidateDetail?.grade;
     setCandidates((prev) =>
       prev.map((c) => (c.id === companyId ? { ...c, grade: newGrade } : c))
     );
+    if (selectedCandidateDetail && selectedCandidateDetail.id === companyId) {
+      setSelectedCandidateDetail((prev: any) => prev ? { ...prev, grade: newGrade } : null);
+    }
     setSavingGradeCompanyId(companyId);
 
     try {
@@ -692,16 +726,170 @@ export default function BrandMarketingView({
         setCandidates((prev) =>
           prev.map((c) => (c.id === companyId ? { ...c, grade: previousGrade } : c))
         );
+        if (selectedCandidateDetail && selectedCandidateDetail.id === companyId) {
+          setSelectedCandidateDetail((prev: any) => prev ? { ...prev, grade: previousGrade } : null);
+        }
         alert(`Failed to update grade: ${res.error}`);
       }
     } catch (err: any) {
       setCandidates((prev) =>
         prev.map((c) => (c.id === companyId ? { ...c, grade: previousGrade } : c))
       );
+      if (selectedCandidateDetail && selectedCandidateDetail.id === companyId) {
+        setSelectedCandidateDetail((prev: any) => prev ? { ...prev, grade: previousGrade } : null);
+      }
       alert(`Error updating grade: ${err.message}`);
     } finally {
       setSavingGradeCompanyId(null);
     }
+  };
+
+  // --------------------------------------------------------------------------
+  // BULK SELECTION & DELETION HANDLERS (ADM-BSRC-013)
+  // --------------------------------------------------------------------------
+  const handleToggleSelectAllCurrentPage = () => {
+    const currentPageIds = candidates.map((c) => c.id);
+    const allSelected = currentPageIds.length > 0 && currentPageIds.every((id) => selectedCompanyIds.includes(id));
+    if (allSelected) {
+      setSelectedCompanyIds((prev) => prev.filter((id) => !currentPageIds.includes(id)));
+    } else {
+      setSelectedCompanyIds((prev) => Array.from(new Set([...prev, ...currentPageIds])));
+    }
+  };
+
+  const handleToggleSelectRow = (id: string) => {
+    setSelectedCompanyIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedCompanyIds.length === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      const res = await bulkArchiveSourcingCandidatesAction(selectedCompanyIds);
+      if (res.success) {
+        setDeleteSuccessMessage(`선택한 ${res.count || selectedCompanyIds.length}개 회사가 보관/삭제 처리되었습니다.`);
+        setSelectedCompanyIds([]);
+        setShowBulkDeleteModal(false);
+        refreshBrandList(1, pageSize);
+        setTimeout(() => setDeleteSuccessMessage(null), 5000);
+      } else {
+        alert(`삭제 처리 실패: ${res.error}`);
+      }
+    } catch (err: any) {
+      alert(`오류 발생: ${err.message}`);
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // DRAWER CONTACTS MANAGEMENT HANDLERS (ADM-BSRC-013)
+  // --------------------------------------------------------------------------
+  const handleSetPrimaryContact = (contactIdx: number) => {
+    setDrawerContacts((prev) =>
+      prev.map((c, idx) => ({
+        ...c,
+        is_primary: idx === contactIdx,
+        isPrimary: idx === contactIdx,
+      }))
+    );
+  };
+
+  const handleAddDrawerContact = () => {
+    const cleanEmail = newContactEmail.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      alert("올바른 이메일 주소를 입력해 주세요.");
+      return;
+    }
+
+    const isFirstContact = drawerContacts.length === 0;
+    const shouldBePrimary = newContactIsPrimary || isFirstContact;
+
+    const newContact = {
+      name: newContactName.trim() || null,
+      job_title: newContactJobTitle.trim() || null,
+      jobTitle: newContactJobTitle.trim() || null,
+      department: newContactDepartment.trim() || null,
+      email: cleanEmail,
+      phone: newContactPhone.trim() || null,
+      is_primary: shouldBePrimary,
+      isPrimary: shouldBePrimary,
+      source: "MANUAL",
+    };
+
+    setDrawerContacts((prev) => {
+      const updated = shouldBePrimary
+        ? prev.map((c) => ({ ...c, is_primary: false, isPrimary: false }))
+        : [...prev];
+      return [...updated, newContact];
+    });
+
+    setNewContactName("");
+    setNewContactJobTitle("");
+    setNewContactDepartment("");
+    setNewContactEmail("");
+    setNewContactPhone("");
+    setNewContactIsPrimary(false);
+    setShowAddContactForm(false);
+  };
+
+  const handleRemoveDrawerContact = (contactIdx: number) => {
+    setDrawerContacts((prev) => {
+      const removingPrimary = Boolean(prev[contactIdx]?.is_primary ?? prev[contactIdx]?.isPrimary);
+      const remaining = prev.filter((_, idx) => idx !== contactIdx);
+      if (removingPrimary && remaining.length > 0) {
+        remaining[0] = { ...remaining[0], is_primary: true, isPrimary: true };
+      }
+      return remaining;
+    });
+    if (editingContactIdx === contactIdx) setEditingContactIdx(null);
+  };
+
+  // --------------------------------------------------------------------------
+  // DRAWER BRANDS MANAGEMENT HANDLERS (ADM-BSRC-013)
+  // --------------------------------------------------------------------------
+  const handleAddDrawerBrand = () => {
+    const nameKr = newBrandKrInput.trim();
+    const nameEn = newBrandEnInput.trim() || null;
+    if (!nameKr) {
+      setBrandErrorMessage("브랜드명(한국어)을 입력해 주세요.");
+      return;
+    }
+
+    const alreadyExists = drawerBrands.some(
+      (b) =>
+        (b.nameKr || b.brand_name_kr || "").toLowerCase().trim() === nameKr.toLowerCase() ||
+        (nameEn && (b.nameEn || b.brand_name_en || "").toLowerCase().trim() === nameEn.toLowerCase())
+    );
+
+    if (alreadyExists) {
+      setBrandErrorMessage(`이미 등록된 브랜드명입니다 ("${nameKr}").`);
+      return;
+    }
+
+    setBrandErrorMessage(null);
+    const newBrand = {
+      brand_name_kr: nameKr,
+      nameKr: nameKr,
+      brand_name_en: nameEn,
+      nameEn: nameEn,
+      description: null,
+      categories: drawerCategories,
+      key_products: [],
+      keyProducts: [],
+      source: "MANUAL",
+    };
+
+    setDrawerBrands((prev) => [...prev, newBrand]);
+    setNewBrandKrInput("");
+    setNewBrandEnInput("");
+  };
+
+  const handleRemoveDrawerBrand = (brandIdx: number) => {
+    setDrawerBrands((prev) => prev.filter((_, idx) => idx !== brandIdx));
+    if (editingBrandIdx === brandIdx) setEditingBrandIdx(null);
   };
 
   const handleArchiveCandidate = async (id: string) => {
@@ -892,16 +1080,36 @@ export default function BrandMarketingView({
     );
   };
 
-  // Company Type badge styling helper (ADM-BSRC-011: Compact Short Labels with Tooltip)
+  // Company Type badge styling helper with distinct color schemes (ADM-BSRC-013)
+  // BRAND_OWNER (브랜드) -> Green
+  // OEM_ODM (OEM) -> Blue
+  // MANUFACTURER (제조사) -> Amber
+  // DISTRIBUTOR (유통사) -> Purple
+  // IMPORTER_EXPORTER (수출입) -> Teal
+  // OTHER (기타) -> Neutral Gray
   const renderCompanyTypeBadge = (bt: string) => {
     const opt = COMPANY_TYPE_OPTIONS.find((o) => o.value === bt);
     const shortLabel = COMPANY_TYPE_SHORT_LABELS[bt as BusinessType] || (opt ? opt.labelKr : bt);
     const fullDesc = opt ? `${opt.labelKr} (${opt.labelEn})` : bt;
+
+    let colorClasses = "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700";
+    if (bt === "BRAND_OWNER") {
+      colorClasses = "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/50";
+    } else if (bt === "OEM_ODM") {
+      colorClasses = "bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/60 hover:bg-blue-100 dark:hover:bg-blue-900/50";
+    } else if (bt === "MANUFACTURER") {
+      colorClasses = "bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/50";
+    } else if (bt === "DISTRIBUTOR") {
+      colorClasses = "bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/60 hover:bg-purple-100 dark:hover:bg-purple-900/50";
+    } else if (bt === "IMPORTER_EXPORTER") {
+      colorClasses = "bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800/60 hover:bg-teal-100 dark:hover:bg-teal-900/50";
+    }
+
     return (
       <span
         key={bt}
         title={fullDesc}
-        className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/50 cursor-help transition-colors"
+        className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border cursor-help transition-colors ${colorClasses}`}
       >
         {shortLabel}
       </span>
@@ -1368,6 +1576,27 @@ export default function BrandMarketingView({
                         }
                         className="w-full px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                         placeholder="미확인 (Not provided)"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Telephone (대표 전화번호)
+                      </label>
+                      <input
+                        type="text"
+                        value={reviewedDraft.company.telephone || ""}
+                        onChange={(e) =>
+                          setReviewedDraft({
+                            ...reviewedDraft,
+                            company: {
+                              ...reviewedDraft.company,
+                              telephone: e.target.value,
+                            },
+                          })
+                        }
+                        className="w-full px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono"
+                        placeholder="02-000-0000"
                       />
                     </div>
 
@@ -2375,7 +2604,7 @@ export default function BrandMarketingView({
         <div className="space-y-4">
           {/* Search & Filter Bar */}
           <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 shadow-xs flex flex-wrap items-center gap-3">
-            {/* Search Input */}
+            {/* Search Input (Extended Search, ADM-BSRC-013) */}
             <div className="flex-1 min-w-[240px]">
               <input
                 type="text"
@@ -2384,10 +2613,10 @@ export default function BrandMarketingView({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     setCurrentPage(1);
-                    refreshBrandList(1);
+                    refreshBrandList(1, pageSize);
                   }
                 }}
-                placeholder="Search company, brand, email, or domain..."
+                placeholder="Search company, brand, email, phone, domain, notes..."
                 className="w-full px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
               />
             </div>
@@ -2580,22 +2809,24 @@ export default function BrandMarketingView({
               type="button"
               onClick={() => {
                 setCurrentPage(1);
-                refreshBrandList(1);
+                refreshBrandList(1, pageSize);
               }}
               className="px-4 py-1.5 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 dark:hover:bg-white/90 cursor-pointer"
             >
               Filter
             </button>
 
-            {/* Duplicate Audit Report Button */}
-            <button
-              type="button"
-              onClick={handleOpenAuditModal}
-              className="px-3 py-1.5 text-xs font-semibold rounded bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/60 cursor-pointer flex items-center gap-1.5 shadow-2xs ml-auto"
-            >
-              <span>🔍</span>
-              중복 감사 보고서 (Duplicate Audit)
-            </button>
+            {/* Bulk Delete Button (ADM-BSRC-013) */}
+            {selectedCompanyIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(true)}
+                className="px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded cursor-pointer flex items-center gap-1.5 shadow-2xs transition-colors ml-auto"
+              >
+                <span>🗑️</span>
+                <span>Delete Selected ({selectedCompanyIds.length})</span>
+              </button>
+            )}
           </div>
 
           {/* Delete Success Alert */}
@@ -2618,6 +2849,15 @@ export default function BrandMarketingView({
               <table className="w-full text-left text-xs">
                 <thead className="bg-zinc-50 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 font-semibold border-b border-zinc-200 dark:border-zinc-800">
                   <tr>
+                    <th className="p-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all on current page"
+                        checked={candidates.length > 0 && candidates.every((c) => selectedCompanyIds.includes(c.id))}
+                        onChange={handleToggleSelectAllCurrentPage}
+                        className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                    </th>
                     <th className="p-3">Company (법인명)</th>
                     <th className="p-3">Brands</th>
                     <th className="p-3">Categories</th>
@@ -2665,16 +2905,32 @@ export default function BrandMarketingView({
 
                       const primaryCats = (c.primary_product_categories || []) as PrimaryProductCategory[];
 
+                      const isRowSelected = selectedCompanyIds.includes(c.id);
                       return (
                         <tr
                           key={c.id}
-                          onClick={() => handleOpenDetail(c.id)}
-                          className="hover:bg-zinc-50 dark:hover:bg-zinc-850/50 cursor-pointer transition-colors"
+                          className={`hover:bg-zinc-50 dark:hover:bg-zinc-850/50 transition-colors ${isRowSelected ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}`}
                         >
+                          <td className="p-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${c.company_name_kr}`}
+                              checked={isRowSelected}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                handleToggleSelectRow(c.id);
+                              }}
+                              className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+                          </td>
                           <td className="p-3">
-                            <p className="font-bold text-zinc-900 dark:text-zinc-100">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDetail(c.id)}
+                              className="text-left font-bold text-zinc-900 dark:text-zinc-100 hover:text-blue-600 dark:hover:text-blue-400 hover:underline cursor-pointer block"
+                            >
                               {c.company_name_kr}
-                            </p>
+                            </button>
                             {c.company_name_en && (
                               <p className="text-[11px] text-zinc-400 truncate max-w-[180px]">
                                 {c.company_name_en}
@@ -2940,17 +3196,6 @@ export default function BrandMarketingView({
                               >
                                 Results ↗
                               </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteCandidate(c);
-                                }}
-                                className="px-2 py-1 text-[11px] font-semibold rounded text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/50 cursor-pointer"
-                                title="Delete candidate"
-                              >
-                                Delete
-                              </button>
                             </div>
                           </td>
                         </tr>
@@ -2961,11 +3206,31 @@ export default function BrandMarketingView({
               </table>
             </div>
 
-            {/* Pagination footer */}
-            <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-500">
-              <span>
-                Showing {candidates.length} of {totalCandidates} candidates
-              </span>
+            {/* Pagination footer with Page Size selector (ADM-BSRC-013) */}
+            <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+              <div className="flex items-center gap-3">
+                <span>
+                  Showing {totalCandidates > 0 ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, totalCandidates)} of {totalCandidates} candidates
+                </span>
+                <div className="flex items-center gap-1.5 ml-2">
+                  <span className="text-[11px] text-zinc-400">Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      const newSize = Number(e.target.value);
+                      setPageSize(newSize);
+                      setCurrentPage(1);
+                      refreshBrandList(1, newSize);
+                    }}
+                    className="px-2 py-0.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 cursor-pointer"
+                  >
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={200}>200</option>
+                  </select>
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -2973,9 +3238,9 @@ export default function BrandMarketingView({
                   onClick={() => {
                     const p = currentPage - 1;
                     setCurrentPage(p);
-                    refreshBrandList(p);
+                    refreshBrandList(p, pageSize);
                   }}
-                  className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 disabled:opacity-40 cursor-pointer"
+                  className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 disabled:opacity-40 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800"
                 >
                   Previous
                 </button>
@@ -2988,9 +3253,9 @@ export default function BrandMarketingView({
                   onClick={() => {
                     const p = currentPage + 1;
                     setCurrentPage(p);
-                    refreshBrandList(p);
+                    refreshBrandList(p, pageSize);
                   }}
-                  className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 disabled:opacity-40 cursor-pointer"
+                  className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 disabled:opacity-40 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800"
                 >
                   Next
                 </button>
@@ -3017,6 +3282,50 @@ export default function BrandMarketingView({
             handleOpenDetail(companyId);
           }}
         />
+      )}
+
+      {/* Bulk Delete Confirmation Modal (ADM-BSRC-013) */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-xl max-w-md w-full p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                  선택한 회사 삭제 (Delete Selected Companies)
+                </h3>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  선택된 회사 {selectedCompanyIds.length}개
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
+              선택한 <strong className="text-red-600 dark:text-red-400">{selectedCompanyIds.length}개</strong> 회사를 보관/삭제 처리하시겠습니까?
+              <br />
+              이력 보호를 위해 안전하게 보관(ARCHIVED) 처리되며, 브랜드 목록에서 즉시 숨김 처리됩니다.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                disabled={isBulkDeleting}
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="px-4 py-2 text-xs font-semibold rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+              >
+                취소 (Cancel)
+              </button>
+              <button
+                type="button"
+                disabled={isBulkDeleting}
+                onClick={handleConfirmBulkDelete}
+                className="px-4 py-2 text-xs font-bold rounded bg-red-600 hover:bg-red-700 text-white cursor-pointer disabled:opacity-50"
+              >
+                {isBulkDeleting ? "삭제 처리 중..." : `삭제 확인 (Delete ${selectedCompanyIds.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ------------------------------------------------------------------ */}
@@ -3509,7 +3818,7 @@ export default function BrandMarketingView({
       {/* ------------------------------------------------------------------ */}
       {selectedCandidateId && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex justify-end">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-2xl h-full shadow-2xl overflow-y-auto p-6 space-y-6 border-l border-zinc-200 dark:border-zinc-800">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-[800px] h-full shadow-2xl overflow-y-auto p-6 space-y-6 border-l border-zinc-200 dark:border-zinc-800">
             {/* Drawer Header */}
             <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-800 pb-4">
               <div>
@@ -3542,10 +3851,11 @@ export default function BrandMarketingView({
 
                 {/* 1) TOP CARD — Company Overview (Requirement 4 & ADD11) */}
                 {(() => {
+                  const activeContacts = drawerContacts.length > 0 ? drawerContacts : (selectedCandidateDetail.sourcing_contacts || []);
                   const primaryContact =
-                    selectedCandidateDetail.sourcing_contacts?.find((ct: any) => ct.is_primary) ||
-                    selectedCandidateDetail.sourcing_contacts?.[0];
-                  const otherContacts = (selectedCandidateDetail.sourcing_contacts || []).filter(
+                    activeContacts.find((ct: any) => Boolean(ct.is_primary ?? ct.isPrimary)) ||
+                    activeContacts[0];
+                  const otherContacts = activeContacts.filter(
                     (ct: any) => ct !== primaryContact
                   );
 
@@ -3575,7 +3885,20 @@ export default function BrandMarketingView({
                           )}
                         </div>
                         <div className="flex items-center gap-1.5">
-                          {renderGradeBadge(selectedCandidateDetail.grade)}
+                          <div className="flex items-center gap-1 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-0.5 shadow-2xs">
+                            <span className="text-[10px] text-zinc-400 font-semibold">Grade:</span>
+                            <select
+                              aria-label="Candidate Grade"
+                              value={selectedCandidateDetail.grade || "UNRATED"}
+                              onChange={(e) => handleInlineGradeChange(selectedCandidateDetail.id, e.target.value as any)}
+                              className="text-xs font-bold bg-transparent text-zinc-900 dark:text-zinc-100 cursor-pointer focus:outline-none"
+                            >
+                              <option value="A">Grade A</option>
+                              <option value="B">Grade B</option>
+                              <option value="C">Grade C</option>
+                              <option value="UNRATED">UNRATED</option>
+                            </select>
+                          </div>
                           {renderStatusBadge(selectedCandidateDetail.status)}
                         </div>
                       </div>
@@ -3705,40 +4028,389 @@ export default function BrandMarketingView({
                   );
                 })()}
 
-                {/* 2) FIRST SUB-SECTION — Represented Brands (Brands Only) */}
-                <div className="space-y-3">
+                {/* 2) DEDICATED CONTACTS MANAGEMENT SECTION (ADM-BSRC-013) */}
+                <div className="space-y-3 p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850/40 border border-zinc-200 dark:border-zinc-800">
                   <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
-                      Represented Brands ({selectedCandidateDetail.sourcing_brands?.length || 0})
-                    </h4>
-                    <span className="text-[11px] text-zinc-400">보유 브랜드</span>
+                    <div>
+                      <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm flex items-center gap-2">
+                        <span>Company Contacts ({drawerContacts.length})</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-semibold">
+                          다중 연락처 관리
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        모든 등록된 담당자 정보입니다. 이메일 캠페인 수신자로 개별 선택 가능합니다.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddContactForm(!showAddContactForm)}
+                      className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer flex items-center gap-1"
+                    >
+                      <span>+ Add Contact</span>
+                    </button>
                   </div>
 
-                  {selectedCandidateDetail.sourcing_brands && selectedCandidateDetail.sourcing_brands.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {selectedCandidateDetail.sourcing_brands.map((b: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 flex items-center justify-between"
-                        >
-                          <div>
-                            <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100">
-                              {b.brand_name_kr}
-                            </span>
-                            {b.brand_name_en && b.brand_name_en !== b.brand_name_kr && (
-                              <span className="text-zinc-400 text-[11px] block mt-0.5">
-                                {b.brand_name_en}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
-                            Brand
-                          </span>
+                  {/* Add Contact Inline Form */}
+                  {showAddContactForm && (
+                    <div className="p-3.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-white dark:bg-zinc-900 space-y-3">
+                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400 block">
+                        신규 담당자 추가
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                        <div>
+                          <label className="block text-[11px] text-zinc-500 mb-0.5">이름 (Name)</label>
+                          <input
+                            type="text"
+                            placeholder="예: 홍길동"
+                            value={newContactName}
+                            onChange={(e) => setNewContactName(e.target.value)}
+                            className="w-full px-2.5 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                          />
                         </div>
-                      ))}
+                        <div>
+                          <label className="block text-[11px] text-zinc-500 mb-0.5">직함 / 부서 (Job Title / Dept)</label>
+                          <input
+                            type="text"
+                            placeholder="예: 해외영업팀 팀장"
+                            value={newContactJobTitle}
+                            onChange={(e) => setNewContactJobTitle(e.target.value)}
+                            className="w-full px-2.5 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-zinc-500 mb-0.5">이메일 (Email) *</label>
+                          <input
+                            type="email"
+                            placeholder="contact@company.com"
+                            value={newContactEmail}
+                            onChange={(e) => setNewContactEmail(e.target.value)}
+                            className="w-full px-2.5 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-zinc-500 mb-0.5">전화번호 (Phone)</label>
+                          <input
+                            type="text"
+                            placeholder="010-0000-0000"
+                            value={newContactPhone}
+                            onChange={(e) => setNewContactPhone(e.target.value)}
+                            className="w-full px-2.5 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-1">
+                        <label className="inline-flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newContactIsPrimary}
+                            onChange={(e) => setNewContactIsPrimary(e.target.checked)}
+                            className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span>대표 담당자(Primary Contact)로 지정</span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddContactForm(false)}
+                            className="px-2.5 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          >
+                            취소
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleAddDrawerContact}
+                            className="px-3 py-1 text-xs font-bold rounded bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            추가 완료
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Contacts List */}
+                  {drawerContacts.length > 0 ? (
+                    <div className="space-y-2">
+                      {drawerContacts.map((c: any, cIdx: number) => {
+                        const isPrimary = Boolean(c.is_primary ?? c.isPrimary);
+                        const isEditing = editingContactIdx === cIdx;
+
+                        if (isEditing) {
+                          return (
+                            <div key={cIdx} className="p-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-950/20 space-y-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                <input
+                                  type="text"
+                                  placeholder="이름"
+                                  value={c.name || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setDrawerContacts((prev) => prev.map((item, i) => i === cIdx ? { ...item, name: val } : item));
+                                  }}
+                                  className="px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="직함/부서"
+                                  value={c.job_title || c.jobTitle || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setDrawerContacts((prev) => prev.map((item, i) => i === cIdx ? { ...item, job_title: val, jobTitle: val } : item));
+                                  }}
+                                  className="px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                                />
+                                <input
+                                  type="email"
+                                  placeholder="이메일"
+                                  value={c.email || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setDrawerContacts((prev) => prev.map((item, i) => i === cIdx ? { ...item, email: val } : item));
+                                  }}
+                                  className="px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-mono"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="전화번호"
+                                  value={c.phone || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setDrawerContacts((prev) => prev.map((item, i) => i === cIdx ? { ...item, phone: val } : item));
+                                  }}
+                                  className="px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-mono"
+                                />
+                              </div>
+                              <div className="flex justify-end gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingContactIdx(null)}
+                                  className="px-2.5 py-1 text-xs rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200"
+                                >
+                                  완료
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={cIdx}
+                            className={`p-3 rounded-lg border transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                              isPrimary
+                                ? "border-blue-300 dark:border-blue-800/80 bg-white dark:bg-zinc-900 shadow-2xs"
+                                : "border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/40"
+                            }`}
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100">
+                                  {c.name || "담당자 (미기재)"}
+                                </span>
+                                {(c.job_title || c.jobTitle) && (
+                                  <span className="text-[11px] text-zinc-500">
+                                    {c.job_title || c.jobTitle}
+                                  </span>
+                                )}
+                                {isPrimary ? (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                    ★ 대표 담당자 (Primary)
+                                  </span>
+                                ) : null}
+                                {c.source && (
+                                  <span className="text-[9px] font-mono px-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+                                    {c.source}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-xs flex-wrap">
+                                {c.email ? (
+                                  <a href={`mailto:${c.email}`} className="font-mono text-blue-600 dark:text-blue-400 underline hover:text-blue-800">
+                                    {c.email}
+                                  </a>
+                                ) : (
+                                  <span className="text-zinc-400">이메일 없음</span>
+                                )}
+                                {c.phone && (
+                                  <a href={`tel:${c.phone}`} className="font-mono text-zinc-600 dark:text-zinc-400 hover:underline">
+                                    📞 {c.phone}
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+                              {!isPrimary && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetPrimaryContact(cIdx)}
+                                  className="px-2 py-1 text-[11px] font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer"
+                                  title="이 담당자를 대표 연락처로 지정"
+                                >
+                                  대표로 지정
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setEditingContactIdx(cIdx)}
+                                className="px-2 py-1 text-[11px] font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer"
+                              >
+                                수정
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDrawerContact(cIdx)}
+                                className="px-2 py-1 text-[11px] font-semibold rounded text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
+                                title="연락처 삭제"
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
-                    <p className="text-zinc-400 text-xs italic">No brands registered.</p>
+                    <p className="text-zinc-400 text-xs italic">등록된 담당자 연락처가 없습니다.</p>
+                  )}
+                </div>
+
+                {/* 3) REPRESENTED BRANDS SECTION (ADD / EDIT) (ADM-BSRC-013) */}
+                <div className="space-y-3 p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850/40 border border-zinc-200 dark:border-zinc-800">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
+                        Represented Brands ({drawerBrands.length})
+                      </h4>
+                      <span className="text-[11px] text-zinc-400">보유 브랜드 관리 (추가 / 수정 / 연결 해제)</span>
+                    </div>
+                  </div>
+
+                  {brandErrorMessage && (
+                    <div className="p-2 text-xs rounded bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                      {brandErrorMessage}
+                    </div>
+                  )}
+
+                  {/* Add Brand Inline Form */}
+                  <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+                    <input
+                      type="text"
+                      placeholder="브랜드명(한국어) *"
+                      value={newBrandKrInput}
+                      onChange={(e) => setNewBrandKrInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddDrawerBrand();
+                        }
+                      }}
+                      className="px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 min-w-[150px] flex-1"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Brand Name (English)"
+                      value={newBrandEnInput}
+                      onChange={(e) => setNewBrandEnInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddDrawerBrand();
+                        }
+                      }}
+                      className="px-2.5 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 min-w-[150px] flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddDrawerBrand}
+                      className="px-3 py-1 text-xs font-bold rounded bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer shrink-0"
+                    >
+                      + Add Brand
+                    </button>
+                  </div>
+
+                  {/* Brands List */}
+                  {drawerBrands.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {drawerBrands.map((b: any, bIdx: number) => {
+                        const isEditing = editingBrandIdx === bIdx;
+                        const bKr = b.brand_name_kr || b.nameKr || "";
+                        const bEn = b.brand_name_en || b.nameEn || "";
+
+                        if (isEditing) {
+                          return (
+                            <div key={bIdx} className="p-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-950/20 space-y-2">
+                              <input
+                                type="text"
+                                value={bKr}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDrawerBrands((prev) => prev.map((item, i) => i === bIdx ? { ...item, brand_name_kr: val, nameKr: val } : item));
+                                }}
+                                className="w-full px-2 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                                placeholder="브랜드명(한국어)"
+                              />
+                              <input
+                                type="text"
+                                value={bEn}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDrawerBrands((prev) => prev.map((item, i) => i === bIdx ? { ...item, brand_name_en: val, nameEn: val } : item));
+                                }}
+                                className="w-full px-2 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                                placeholder="Brand Name (EN)"
+                              />
+                              <div className="flex justify-end gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingBrandIdx(null)}
+                                  className="px-2 py-0.5 text-xs rounded bg-zinc-200 dark:bg-zinc-700"
+                                >
+                                  완료
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={bIdx}
+                            className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between"
+                          >
+                            <div>
+                              <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100">
+                                {bKr}
+                              </span>
+                              {bEn && bEn !== bKr && (
+                                <span className="text-zinc-400 text-[11px] block mt-0.5">
+                                  {bEn}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setEditingBrandIdx(bIdx)}
+                                className="text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800"
+                              >
+                                수정
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDrawerBrand(bIdx)}
+                                className="text-[11px] text-red-500 hover:text-red-700 px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-950/40"
+                                title="브랜드 연결 해제"
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-zinc-400 text-xs italic">등록된 보유 브랜드가 없습니다.</p>
                   )}
                 </div>
 

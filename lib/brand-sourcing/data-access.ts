@@ -1001,38 +1001,115 @@ export async function updateSourcingCandidateComplete(
     throw new Error(`Failed to update sourcing company: ${compErr.message}`);
   }
 
-  // 2. Replace brands
-  await supabase.from("sourcing_brands").delete().eq("company_id", id);
-  if (draft.brands.length > 0) {
-    const brandRows = draft.brands.map((b, idx) => ({
-      company_id: id,
-      brand_name_kr: b.nameKr,
-      brand_name_en: b.nameEn,
-      description: b.description,
-      categories: b.categories?.length > 0 ? b.categories : (draft.categories || []),
-      key_products: b.keyProducts,
-      source: b.source,
-      display_order: idx,
-    }));
-    await supabase.from("sourcing_brands").insert(brandRows);
+  // 2. Differential update for brands (Preserves existing IDs & historical relationships)
+  const { data: existingBrands } = await supabase
+    .from("sourcing_brands")
+    .select("id, brand_name_kr, brand_name_en")
+    .eq("company_id", id);
+
+  const existingBrandMap = new Map((existingBrands || []).map((b) => [b.id, b]));
+  const incomingBrandIds = new Set<string>();
+
+  for (let idx = 0; idx < (draft.brands || []).length; idx++) {
+    const b = draft.brands[idx];
+    const bId = (b as any).id;
+    if (bId && existingBrandMap.has(bId)) {
+      incomingBrandIds.add(bId);
+      await supabase
+        .from("sourcing_brands")
+        .update({
+          brand_name_kr: b.nameKr,
+          brand_name_en: b.nameEn,
+          description: b.description,
+          categories: b.categories?.length > 0 ? b.categories : (draft.categories || []),
+          key_products: b.keyProducts,
+          source: b.source,
+          display_order: idx,
+        })
+        .eq("id", bId);
+    } else {
+      const { data: insertedBrand } = await supabase
+        .from("sourcing_brands")
+        .insert({
+          company_id: id,
+          brand_name_kr: b.nameKr,
+          brand_name_en: b.nameEn,
+          description: b.description,
+          categories: b.categories?.length > 0 ? b.categories : (draft.categories || []),
+          key_products: b.keyProducts,
+          source: b.source,
+          display_order: idx,
+        })
+        .select("id")
+        .single();
+      if (insertedBrand) incomingBrandIds.add(insertedBrand.id);
+    }
   }
 
-  // 3. Replace contacts
-  await supabase.from("sourcing_contacts").delete().eq("company_id", id);
-  if (draft.contacts.length > 0) {
-    const contactRows = draft.contacts.map((c, idx) => ({
-      company_id: id,
-      name: c.name,
-      department: c.department,
-      job_title: c.jobTitle,
-      email: c.email,
-      phone: c.phone,
-      is_primary: c.isPrimary,
-      source: c.source,
-      source_url: c.sourceUrl,
-      display_order: idx,
-    }));
-    await supabase.from("sourcing_contacts").insert(contactRows);
+  // Remove brands that were unlinked/removed
+  const brandsToDelete = (existingBrands || [])
+    .filter((b) => !incomingBrandIds.has(b.id))
+    .map((b) => b.id);
+  if (brandsToDelete.length > 0) {
+    await supabase.from("sourcing_brands").delete().in("id", brandsToDelete);
+  }
+
+  // 3. Differential update for contacts (Preserves contact IDs & campaign history)
+  const { data: existingContacts } = await supabase
+    .from("sourcing_contacts")
+    .select("id, email, phone, name, is_primary")
+    .eq("company_id", id);
+
+  const existingContactMap = new Map((existingContacts || []).map((c) => [c.id, c]));
+  const incomingContactIds = new Set<string>();
+
+  for (let idx = 0; idx < (draft.contacts || []).length; idx++) {
+    const c = draft.contacts[idx];
+    const cId = (c as any).id;
+    if (cId && existingContactMap.has(cId)) {
+      incomingContactIds.add(cId);
+      await supabase
+        .from("sourcing_contacts")
+        .update({
+          name: c.name,
+          department: c.department,
+          job_title: c.jobTitle,
+          email: c.email,
+          phone: c.phone,
+          is_primary: c.isPrimary,
+          source: c.source,
+          source_url: c.sourceUrl,
+          display_order: idx,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", cId);
+    } else {
+      const { data: insertedContact } = await supabase
+        .from("sourcing_contacts")
+        .insert({
+          company_id: id,
+          name: c.name,
+          department: c.department,
+          job_title: c.jobTitle,
+          email: c.email,
+          phone: c.phone,
+          is_primary: c.isPrimary,
+          source: c.source,
+          source_url: c.sourceUrl,
+          display_order: idx,
+        })
+        .select("id")
+        .single();
+      if (insertedContact) incomingContactIds.add(insertedContact.id);
+    }
+  }
+
+  // Remove contacts that were explicitly deleted
+  const contactsToDelete = (existingContacts || [])
+    .filter((c) => !incomingContactIds.has(c.id))
+    .map((c) => c.id);
+  if (contactsToDelete.length > 0) {
+    await supabase.from("sourcing_contacts").delete().in("id", contactsToDelete);
   }
 
   // 4. Replace websites
@@ -1061,6 +1138,42 @@ export async function deleteSourcingCandidate(id: string, customClient?: Supabas
     throw new Error(`Failed to delete sourcing company: ${error.message}`);
   }
   return { success: true };
+}
+
+/**
+ * Reversibly archives multiple sourcing companies by ID (soft delete).
+ * Preserves all related brands, contacts, activities, and audit exceptions.
+ */
+export async function bulkArchiveSourcingCompanies(
+  ids: string[],
+  customClient?: SupabaseClient
+): Promise<{ success: boolean; count: number }> {
+  if (!ids || ids.length === 0) return { success: true, count: 0 };
+  const supabase = getClient(customClient);
+
+  const { error } = await supabase
+    .from("sourcing_companies")
+    .update({
+      status: "ARCHIVED",
+      updated_at: new Date().toISOString(),
+    })
+    .in("id", ids);
+
+  if (error) {
+    throw new Error(`Failed to archive companies: ${error.message}`);
+  }
+
+  return { success: true, count: ids.length };
+}
+
+/**
+ * Reversibly archives a single sourcing company by ID (soft delete).
+ */
+export async function archiveSourcingCandidate(
+  id: string,
+  customClient?: SupabaseClient
+): Promise<{ success: boolean }> {
+  return bulkArchiveSourcingCompanies([id], customClient).then(() => ({ success: true }));
 }
 
 /**
@@ -1110,6 +1223,9 @@ export async function listSourcingCompanies(
   }
   if (params?.status && params.status !== "ALL") {
     query = query.eq("status", params.status);
+  } else {
+    // Default: exclude archived companies unless 'ARCHIVED' is explicitly selected
+    query = query.neq("status", "ARCHIVED");
   }
   if (params?.assignedTo && params.assignedTo !== "ALL") {
     query = query.eq("assigned_to", params.assignedTo);
@@ -1156,37 +1272,76 @@ export async function listSourcingCompanies(
     }
   }
 
-  // Multi-vector search across company name, brand name, email, website domain
+  // Extended multi-vector search (ADM-BSRC-013):
+  // 1. Korean company name
+  // 2. English company name
+  // 3. Represented brand names (Korean & English)
+  // 4. Contact email addresses (primary & secondary)
+  // 5. Website / domain
+  // 6. Contact telephone & mobile numbers (direct format matching)
+  // 7. Contact telephone & mobile numbers (normalized without hyphens, spaces, parens)
+  // 8. Internal Notes (case-insensitive partial-text matching, e.g. 'Amazon', '샘플', 'AAA')
   if (params?.search) {
     const s = params.search.trim();
-    const [brandMatches, contactMatches, webMatches] = await Promise.all([
+    const sanitized = s.replace(/[,()]/g, " ").trim();
+    const cleanDigits = s.replace(/[^0-9]/g, "");
+
+    const [brandMatches, contactEmailMatches, contactPhoneMatches, webMatches] = await Promise.all([
       supabase
         .from("sourcing_brands")
         .select("company_id")
-        .or(`brand_name_kr.ilike.%${s}%,brand_name_en.ilike.%${s}%`)
-        .limit(50),
+        .or(`brand_name_kr.ilike.%${sanitized}%,brand_name_en.ilike.%${sanitized}%`)
+        .limit(1000),
       supabase
         .from("sourcing_contacts")
         .select("company_id")
-        .ilike("email", `%${s}%`)
-        .limit(50),
+        .ilike("email", `%${sanitized}%`)
+        .limit(1000),
+      supabase
+        .from("sourcing_contacts")
+        .select("company_id, phone")
+        .ilike("phone", `%${sanitized}%`)
+        .limit(1000),
       supabase
         .from("sourcing_websites")
         .select("company_id")
-        .ilike("url", `%${s}%`)
-        .limit(50),
+        .ilike("url", `%${sanitized}%`)
+        .limit(1000),
     ]);
 
     const matchingCompanyIds = new Set<string>();
     brandMatches.data?.forEach((r) => matchingCompanyIds.add(r.company_id));
-    contactMatches.data?.forEach((r) => matchingCompanyIds.add(r.company_id));
+    contactEmailMatches.data?.forEach((r) => matchingCompanyIds.add(r.company_id));
+    contactPhoneMatches.data?.forEach((r) => matchingCompanyIds.add(r.company_id));
     webMatches.data?.forEach((r) => matchingCompanyIds.add(r.company_id));
+
+    // Normalized phone search: ignore hyphens, spaces, and parentheses
+    // Matches e.g. stored '031-632-6600' against query '0316326600' or vice-versa
+    if (cleanDigits.length >= 3) {
+      const { data: allPhoneContacts } = await supabase
+        .from("sourcing_contacts")
+        .select("company_id, phone")
+        .limit(2000);
+
+      if (allPhoneContacts) {
+        for (const cp of allPhoneContacts) {
+          const pDigits = (cp.phone || "").replace(/[^0-9]/g, "");
+          if (pDigits && (pDigits.includes(cleanDigits) || cleanDigits.includes(pDigits))) {
+            matchingCompanyIds.add(cp.company_id);
+          }
+        }
+      }
+    }
 
     if (matchingCompanyIds.size > 0) {
       const idList = Array.from(matchingCompanyIds).join(",");
-      query = query.or(`company_name_kr.ilike.%${s}%,company_name_en.ilike.%${s}%,id.in.(${idList})`);
+      query = query.or(
+        `company_name_kr.ilike.%${sanitized}%,company_name_en.ilike.%${sanitized}%,internal_notes.ilike.%${sanitized}%,id.in.(${idList})`
+      );
     } else {
-      query = query.or(`company_name_kr.ilike.%${s}%,company_name_en.ilike.%${s}%`);
+      query = query.or(
+        `company_name_kr.ilike.%${sanitized}%,company_name_en.ilike.%${sanitized}%,internal_notes.ilike.%${sanitized}%`
+      );
     }
   }
 
