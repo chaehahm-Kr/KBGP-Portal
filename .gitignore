@@ -51,6 +51,8 @@ scratch/
 Manual/
 public/manuals/
 supabase/.temp/
+supabase/certs/
+.audit/
 
 # build logs / backup copies (keep repo root clean)
 *.log
