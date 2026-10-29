@@ -1,6 +1,6 @@
 -- Migration: 0191_brand_sourcing_multi_source_providers.sql
--- Task ID: ADM-BSRC-014
--- Description: Expand sourcing_sources provider check constraint to support INDIE_BEAUTY_SHOW and future exhibition providers
+-- Task ID: ADM-BSRC-014-R1
+-- Description: Expand sourcing_sources provider check constraint to support INDIE_BEAUTY_SHOW while preserving source_url constraints
 -- Standards: DEPLOY-STD-001, CONCURRENT-DEV-001, DEV-SQL-MIGRATION-STD-001, AGENTS.md Rule 27
 
 DO $$
@@ -18,10 +18,6 @@ BEGIN
   ALTER TABLE public.sourcing_sources
     ADD CONSTRAINT sourcing_sources_provider_check
     CHECK (provider IN ('INTERCHARM', 'COSMOPROF', 'INDIE_BEAUTY_SHOW', 'MANUAL', 'OTHER'));
-
-  -- 3. Ensure source_url is nullable for manual entries where no exhibition URL exists
-  ALTER TABLE public.sourcing_sources
-    ALTER COLUMN source_url DROP NOT NULL;
 END $$;
 
 NOTIFY pgrst, 'reload schema';
