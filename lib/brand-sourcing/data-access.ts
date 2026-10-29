@@ -350,18 +350,19 @@ export async function saveSourcingDraft(
 ): Promise<{ success: boolean; companyId: string }> {
   const supabase = getClient(customClient);
 
-  const canonicalSourceUrl = normalizeSourceUrl(draft.source.sourceUrl);
+  const isManual = draft.source?.provider === "MANUAL" || !draft.source?.sourceUrl?.trim();
+  const canonicalSourceUrl = isManual ? null : normalizeSourceUrl(draft.source.sourceUrl);
   const normalizedNameKr = normalizeKoreanCompanyName(draft.company.nameKr);
   const normalizedNameEn = draft.company.nameEn ? normalizeEnglishCompanyName(draft.company.nameEn) : null;
 
-  // 1. Source URL Collision Check (Data Integrity Check)
+  // 1. Source URL Collision Check (Data Integrity Check) - Skipped for manual entries
   let hasSourceConflict = false;
   let conflictingSourceCompanyId: string | null = null;
   let conflictingSourceCompanyName: string | null = null;
 
-  const sourceIdentifier = draft.source.sourceIdentifier?.trim() || null;
+  const sourceIdentifier = draft.source?.sourceIdentifier?.trim() || null;
 
-  if (canonicalSourceUrl || sourceIdentifier) {
+  if (!isManual && (canonicalSourceUrl || sourceIdentifier)) {
     let query = supabase
       .from("sourcing_sources")
       .select("company_id, source_url, canonical_source_url, source_identifier, sourcing_companies(id, company_name_kr)");
@@ -586,7 +587,9 @@ export async function saveSourcingDraft(
   // 9. Insert Source Provenance (ONLY if no conflict on canonical source URL)
   // If source conflict exists, provenance is safely recorded in raw_payload_snapshot.disputedSource
   // and internal_notes without violating uq_sourcing_sources_canonical_url.
-  if (!hasSourceConflict) {
+  // 9. Insert Source Provenance (ONLY if sourceUrl is provided and no conflict)
+  // If Manual Entry or no exhibition source URL, skip sourcing_sources insertion safely.
+  if (!isManual && !hasSourceConflict && draft.source?.sourceUrl?.trim()) {
     const { error: sourceErr } = await supabase.from("sourcing_sources").insert({
       company_id: companyId,
       provider: draft.source.provider,

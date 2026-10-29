@@ -98,15 +98,11 @@ export function validateIntercharmUrl(rawUrl: string): { url: URL; orgId: string
     );
   }
 
-  // Extract organisationId from pathname or hash:
-  // e.g. Exhibitor_detail.주제이코모.org-ec0b85bc-960d-49d4-9dca-146c10ae59cb.html#/
-  const orgMatch = (parsed.pathname + parsed.hash).match(
-    /(org-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
-  );
-
+  // Expecting /Exhibitor_detail.[name].[org-guid].html or similar path
+  const orgMatch = parsed.pathname.match(/(org-[0-9a-f-]{36})/i);
   if (!orgMatch) {
     throw new InvalidSourceUrlError(
-      "URL does not contain a valid InterCHARM organization identifier (org-UUID).",
+      "InterCHARM exhibitor URL missing valid organization identifier (e.g. org-b4fa5886-...).",
       rawUrl
     );
   }
@@ -115,6 +111,31 @@ export function validateIntercharmUrl(rawUrl: string): { url: URL; orgId: string
     url: parsed,
     orgId: orgMatch[1].toLowerCase(),
   };
+}
+
+/**
+ * Validates that a URL is an authentic Indie Beauty Show exhibitor directory link.
+ */
+export function validateIndieBeautyShowUrl(rawUrl: string): { url: URL; idx: string } {
+  const parsed = validateSafeExternalUrl(rawUrl);
+
+  const allowedHosts = ["www.indiebeautyshow.com", "indiebeautyshow.com"];
+  if (!allowedHosts.includes(parsed.hostname.toLowerCase())) {
+    throw new InvalidSourceUrlError(
+      `URL host '${parsed.hostname}' is not a valid Indie Beauty Show domain.`,
+      rawUrl
+    );
+  }
+
+  const idx = parsed.searchParams.get("idx");
+  if (!idx || !/^\d+$/.test(idx)) {
+    throw new InvalidSourceUrlError(
+      "Indie Beauty Show exhibitor URL must contain a numeric 'idx' parameter (e.g. ?idx=170410507).",
+      rawUrl
+    );
+  }
+
+  return { url: parsed, idx };
 }
 
 /**
