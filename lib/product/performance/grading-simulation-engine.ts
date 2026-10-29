@@ -126,8 +126,20 @@ export function calculateProposedDosScore(
   // dos > effectiveMax
   if (dos <= effectiveMax + 15) return { score: 80, bracket: "Mild Overstock" };
   if (dos <= effectiveMax + 45) return { score: 60, bracket: "Moderate Overstock" };
-  if (dos <= effectiveMax + 105) return { score: 30, bracket: "High Overstock (91-180d)" };
-  return { score: 0, bracket: "Chronic Capital Stagnation (>180d)" };
+
+  // D4 Option C: Continuous Inventory DOS Decline (181d - 239d)
+  const overstock180 = effectiveMax + 105;
+  const overstock240 = effectiveMax + 165;
+
+  if (dos <= overstock180) {
+    return { score: 30, bracket: "High Overstock (91-180d)" };
+  }
+  if (dos < overstock240) {
+    const rawScore = 30 - 0.5 * (dos - overstock180);
+    const score = Math.max(0, Math.min(100, safeRound(rawScore, 4) ?? 0));
+    return { score, bracket: "Overstock Capital Decay (181-239d)" };
+  }
+  return { score: 0, bracket: "Chronic Capital Stagnation (>=240d)" };
 }
 
 /**

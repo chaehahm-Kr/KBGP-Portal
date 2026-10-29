@@ -85,7 +85,8 @@ describe('Product Performance & Investment Grading — Simulation Engine V1', ()
       expect(calculateProposedDosScore(50, 0).score).toBe(100);
       expect(calculateProposedDosScore(25, 0).score).toBe(75);
       expect(calculateProposedDosScore(100, 0).score).toBe(60);
-      expect(calculateProposedDosScore(200, 0).score).toBe(0);
+      expect(calculateProposedDosScore(200, 0).score).toBe(20); // D4 Option C: 30 - 0.5 * (200 - 180) = 20
+      expect(calculateProposedDosScore(250, 0).score).toBe(0);  // DOS >= 240d = 0
 
       // Adjusted corridor with 30-day lead time: 60-105d = 100
       expect(calculateProposedDosScore(50, 30).score).toBe(75); // 50d is now understock (<60d)
@@ -301,7 +302,7 @@ describe('Product Performance & Investment Grading — Simulation Engine V1', ()
         hasHistoricalCost: true,
         b2bGrossMarginPercent: -4, // 0 (negative margin)
         b2bNetSalesUsd: 1200,      // 40
-        daysOfSupply: 195,         // 0 (>180d stagnant)
+        daysOfSupply: 195,         // 22.5 (continuous decay 181-239d)
         claimingStoreRatePercent: 18,
         hasReachedDay100: true,    // 0 (>10% claims)
         weeklySellThroughUnits: 0.5,// 25
@@ -335,6 +336,116 @@ describe('Product Performance & Investment Grading — Simulation Engine V1', ()
       expect(defect.grade).toBe('D');
       expect(defect.compositeScore).toBeLessThan(50);
       expect(defect.investmentPriority).toBe('P4_CAPITAL_EXIT');
+    });
+  });
+
+  // ==========================================================================
+  // 5. D4 OPTION C: CONTINUOUS INVENTORY DOS DECLINE VERIFICATION
+  // ==========================================================================
+  describe('D4 Option C: Continuous Inventory DOS Decline Verification', () => {
+    it('verifies exact scores at all canonical checkpoints (lead time = 0)', () => {
+      // 180 days -> 30.0
+      expect(calculateProposedDosScore(180, 0).score).toBe(30.0);
+      expect(calculateProposedDosScore(180, 0).bracket).toBe("High Overstock (91-180d)");
+
+      // 181 days -> 29.5
+      expect(calculateProposedDosScore(181, 0).score).toBe(29.5);
+      expect(calculateProposedDosScore(181, 0).bracket).toBe("Overstock Capital Decay (181-239d)");
+
+      // 190 days -> 25.0
+      expect(calculateProposedDosScore(190, 0).score).toBe(25.0);
+      expect(calculateProposedDosScore(190, 0).bracket).toBe("Overstock Capital Decay (181-239d)");
+
+      // 210 days -> 15.0
+      expect(calculateProposedDosScore(210, 0).score).toBe(15.0);
+      expect(calculateProposedDosScore(210, 0).bracket).toBe("Overstock Capital Decay (181-239d)");
+
+      // 230 days -> 5.0
+      expect(calculateProposedDosScore(230, 0).score).toBe(5.0);
+      expect(calculateProposedDosScore(230, 0).bracket).toBe("Overstock Capital Decay (181-239d)");
+
+      // 239 days -> 0.5
+      expect(calculateProposedDosScore(239, 0).score).toBe(0.5);
+      expect(calculateProposedDosScore(239, 0).bracket).toBe("Overstock Capital Decay (181-239d)");
+
+      // 240 days -> 0.0
+      expect(calculateProposedDosScore(240, 0).score).toBe(0.0);
+      expect(calculateProposedDosScore(240, 0).bracket).toBe("Chronic Capital Stagnation (>=240d)");
+
+      // 241 days -> 0.0
+      expect(calculateProposedDosScore(241, 0).score).toBe(0.0);
+      expect(calculateProposedDosScore(241, 0).bracket).toBe("Chronic Capital Stagnation (>=240d)");
+
+      // 270 days -> 0.0
+      expect(calculateProposedDosScore(270, 0).score).toBe(0.0);
+      expect(calculateProposedDosScore(270, 0).bracket).toBe("Chronic Capital Stagnation (>=240d)");
+    });
+
+    it('verifies fractional DOS calculations', () => {
+      expect(calculateProposedDosScore(180.5, 0).score).toBe(29.75);
+      expect(calculateProposedDosScore(210.25, 0).score).toBe(14.875);
+      expect(calculateProposedDosScore(239.5, 0).score).toBe(0.25);
+    });
+
+    it('verifies strict monotonicity across the transition window (180 to 250 days)', () => {
+      let previousScore = calculateProposedDosScore(180, 0).score!;
+      for (let d = 181; d <= 250; d++) {
+        const currentScore = calculateProposedDosScore(d, 0).score!;
+        expect(currentScore).toBeLessThanOrEqual(previousScore);
+        previousScore = currentScore;
+      }
+    });
+
+    it('verifies non-negativity and clamping for extreme overstock values', () => {
+      expect(calculateProposedDosScore(300, 0).score).toBe(0);
+      expect(calculateProposedDosScore(500, 0).score).toBe(0);
+      expect(calculateProposedDosScore(1000, 0).score).toBe(0);
+      expect(calculateProposedDosScore(Infinity, 0).score).toBeNull();
+      expect(calculateProposedDosScore(null, 0).score).toBeNull();
+      expect(calculateProposedDosScore(undefined, 0).score).toBeNull();
+    });
+
+    it('verifies lead time adjustment shifts the decay window proportionally', () => {
+      // With leadTimeDays = 30:
+      // corridor.max = 75 + 30 = 105
+      // overstock180 = 105 + 105 = 210
+      // overstock240 = 105 + 165 = 270
+      expect(calculateProposedDosScore(210, 30).score).toBe(30.0);
+      expect(calculateProposedDosScore(210, 30).bracket).toBe("High Overstock (91-180d)");
+
+      expect(calculateProposedDosScore(211, 30).score).toBe(29.5);
+      expect(calculateProposedDosScore(211, 30).bracket).toBe("Overstock Capital Decay (181-239d)");
+
+      expect(calculateProposedDosScore(240, 30).score).toBe(15.0);
+      expect(calculateProposedDosScore(240, 30).bracket).toBe("Overstock Capital Decay (181-239d)");
+
+      expect(calculateProposedDosScore(269, 30).score).toBe(0.5);
+      expect(calculateProposedDosScore(269, 30).bracket).toBe("Overstock Capital Decay (181-239d)");
+
+      expect(calculateProposedDosScore(270, 30).score).toBe(0.0);
+      expect(calculateProposedDosScore(270, 30).bracket).toBe("Chronic Capital Stagnation (>=240d)");
+
+      expect(calculateProposedDosScore(300, 30).score).toBe(0.0);
+      expect(calculateProposedDosScore(300, 30).bracket).toBe("Chronic Capital Stagnation (>=240d)");
+    });
+
+    it('proves smooth weighted composite score transition without artificial cliff', () => {
+      // In canonical policy, inventory efficiency has a 20% weight.
+      // Compare composite score drop from Day 180 to Day 181:
+      const score180 = calculateProposedDosScore(180, 0).score!;
+      const score181 = calculateProposedDosScore(181, 0).score!;
+      const scoreDelta = score180 - score181;
+      const compositeDelta = scoreDelta * 0.20;
+
+      // Score drops by exactly 0.5 points
+      expect(scoreDelta).toBe(0.5);
+      // Composite drops by exactly 0.1 points (0.5 * 20%)
+      expect(compositeDelta).toBe(0.1);
+
+      // Contrast with previous hard cliff (30 -> 0 = 30 pts drop, composite drop = 6.0 pts)
+      const oldCliffDrop = (30 - 0) * 0.20;
+      expect(oldCliffDrop).toBe(6.0);
+      expect(compositeDelta).toBeLessThan(oldCliffDrop);
     });
   });
 });
