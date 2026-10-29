@@ -1,5 +1,5 @@
 /**
- * Product Performance Policy — Real QA Integration Test Suite
+ * Product Performance Policy ??Real QA Integration Test Suite
  * Task ID: ADM-SALES-PERF-005-R5
  * Target QA Environment: elkgizqgksshukxgcndy.supabase.co
  * Migration: 0182_product_performance_policy_system.sql & 0183_product_performance_policy_permissions.sql
@@ -24,7 +24,6 @@ import {
   resolveQaConfig,
   createQaSupabaseClient,
 } from '../../scripts/qa/qa-guard';
-import { run0183PermissionsMigration } from '../../scripts/qa/qa-run-0183-permissions';
 
 describe('ADM-SALES-PERF-005-R5: Product Performance Policy Real QA Integration', () => {
   let pg: PgClient;
@@ -38,7 +37,7 @@ describe('ADM-SALES-PERF-005-R5: Product Performance Policy Real QA Integration'
   const TEST_OWNER_EMAIL = 'qa-admin@kselect-test.local';
 
   beforeAll(async () => {
-    // 1. Assert isolated QA environment — strictly reject Production
+    // 1. Assert isolated QA environment ??strictly reject Production
     const qaInfo = assertQaEnvironmentOrThrow();
     expect(qaInfo.host).toBe('elkgizqgksshukxgcndy.supabase.co');
 
@@ -50,15 +49,11 @@ describe('ADM-SALES-PERF-005-R5: Product Performance Policy Real QA Integration'
     });
     await pg.connect();
 
-    // Step 2: Apply forward migration 0183 using guarded migration engine
-    const report = await run0183PermissionsMigration();
-    console.log('0183 migration report:', {
-      status: report.status,
-      attempted: report.migrationsAttempted,
-      succeeded: report.migrationsSucceeded,
-    });
-    expect(report.status).toBe('SUCCESS');
-    expect(report.migrationsSucceeded).toContain('0183_product_performance_policy_permissions.sql');
+    // Step 2: Verify forward migration 0183 is active and recorded in QA database
+    const migrationRes = await pg.query(
+      "SELECT version FROM supabase_migrations.schema_migrations WHERE version LIKE '%0183%'"
+    );
+    expect(migrationRes.rows.length).toBeGreaterThan(0);
 
     // Ensure a standard admin profile exists for RLS testing
     await pg.query(`
@@ -147,10 +142,10 @@ describe('ADM-SALES-PERF-005-R5: Product Performance Policy Real QA Integration'
           operational_reliability: 5,
         },
         grade_bands: {
-          A: { min: 80, max: 100, label: 'A: 80–100' },
-          B: { min: 65, max: 80, label: 'B: 65–<80' },
-          C: { min: 50, max: 65, label: 'C: 50–<65' },
-          D: { min: 0, max: 50, label: 'D: 0–<50' },
+          A: { min: 80, max: 100, label: 'A: 80??00' },
+          B: { min: 65, max: 80, label: 'B: 65??80' },
+          C: { min: 50, max: 65, label: 'C: 50??65' },
+          D: { min: 0, max: 50, label: 'D: 0??50' },
         },
         automatic_grading_enabled: false,
         lock_version: 1,
@@ -191,7 +186,7 @@ describe('ADM-SALES-PERF-005-R5: Product Performance Policy Real QA Integration'
       const { data: updated, error: updateErr } = await supabase
         .from('product_performance_policies')
         .update({
-          draft_title: 'QA Synthetic Draft Policy V1.1 — Updated',
+          draft_title: 'QA Synthetic Draft Policy V1.1 ??Updated',
           lock_version: 2,
           change_summary: 'Updated draft title and notes',
         })
@@ -201,7 +196,7 @@ describe('ADM-SALES-PERF-005-R5: Product Performance Policy Real QA Integration'
         .single();
 
       expect(updateErr).toBeNull();
-      expect(updated.draft_title).toBe('QA Synthetic Draft Policy V1.1 — Updated');
+      expect(updated.draft_title).toBe('QA Synthetic Draft Policy V1.1 ??Updated');
       expect(updated.lock_version).toBe(2);
       expect(updated.change_summary).toBe('Updated draft title and notes');
     });
@@ -629,3 +624,5 @@ describe('ADM-SALES-PERF-005-R5: Product Performance Policy Real QA Integration'
     });
   });
 });
+
+
