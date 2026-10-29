@@ -3,8 +3,9 @@ export * from "./errors";
 export * from "./security";
 export * from "./duplicate-detector";
 export * from "./category-classifier";
+export * from "./source-registry";
+export * from "./manual-entry";
 export * from "./adapters";
 export * from "./enrichment/website-enricher";
 export * from "./service";
 export * from "./data-access";
-

@@ -1,19 +1,15 @@
 import { SourceAdapter } from "./base.adapter";
 import { IntercharmAdapter } from "./intercharm.adapter";
-import { AdapterNotFoundError } from "../errors";
+import { IndieBeautyShowAdapter } from "./indie-beauty-show.adapter";
+import { sourceRegistry } from "../source-registry";
 
 export * from "./base.adapter";
 export * from "./intercharm.adapter";
-
-const registry: SourceAdapter[] = [new IntercharmAdapter()];
+export * from "./indie-beauty-show.adapter";
 
 /**
- * Resolves the appropriate SourceAdapter for a given URL.
+ * Resolves the appropriate SourceAdapter for a given URL via the centralized Source Registry.
  */
 export function resolveSourceAdapter(url: string): SourceAdapter {
-  const adapter = registry.find((a) => a.canHandle(url));
-  if (!adapter) {
-    throw new AdapterNotFoundError(url);
-  }
-  return adapter;
+  return sourceRegistry.resolveAdapter(url);
 }
