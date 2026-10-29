@@ -6,7 +6,7 @@
  * and UI view components (Phase 1 / ADM-BSRC-004).
  */
 
-export type SourcingProvider = "INTERCHARM" | "COSMOPROF" | "MANUAL" | "OTHER";
+export type SourcingProvider = "INTERCHARM" | "COSMOPROF" | "INDIE_BEAUTY_SHOW" | "MANUAL" | "OTHER";
 
 export type FieldOrigin =
   | "SOURCE_EXHIBITION"

@@ -46,6 +46,9 @@ import {
 } from "@/lib/brand-sourcing/actions";
 import { EmailCampaignsView } from "./email-campaigns-view";
 import { CampaignResultsView } from "./campaign-results-view";
+import { SourcingImportHeader } from "./sourcing-import-header";
+import { createBlankManualDraft } from "@/lib/brand-sourcing";
+import type { SourcingProvider } from "@/lib/brand-sourcing/types";
 
 interface StaffMemberOption {
   id: string;
@@ -107,6 +110,8 @@ export default function BrandMarketingView({
   // --------------------------------------------------------------------------
   // TAB 1: IMPORT & REVIEW STATE
   // --------------------------------------------------------------------------
+  const [importMode, setImportMode] = useState<"PARSING" | "MANUAL">("PARSING");
+  const [selectedSourceProvider, setSelectedSourceProvider] = useState<SourcingProvider>("INTERCHARM");
   const [sourceUrl, setSourceUrl] = useState("");
   const [enrichWebsite, setEnrichWebsite] = useState(true);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -297,12 +302,28 @@ export default function BrandMarketingView({
   }, [selectedCandidateDetail]);
 
   // --------------------------------------------------------------------------
-  // EXTRACTION HANDLER
+  // MANUAL ENTRY & EXTRACTION HANDLERS (ADM-BSRC-014)
   // --------------------------------------------------------------------------
+  const handleStartManualEntry = () => {
+    const blank = createBlankManualDraft();
+    setReviewedDraft(blank);
+    setDuplicateCheck(null);
+    setGrade("UNRATED");
+    setStatus("DRAFT");
+    setInternalNotes("");
+    setSelectedBusinessTypes([]);
+    setBusinessTypeEvidence([]);
+    setSelectedPrimaryCategories([]);
+    setPrimaryCategoriesConfirmed(false);
+    setCompanyDocuments([]);
+    setExtractError(null);
+    setSaveSuccessMessage(null);
+  };
+
   const handleExtract = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!sourceUrl.trim()) {
-      setExtractError("Please enter a valid InterCHARM exhibitor URL.");
+      setExtractError("Please enter a valid exhibitor URL.");
       return;
     }
 
@@ -1290,103 +1311,40 @@ export default function BrandMarketingView({
       {/* ------------------------------------------------------------------ */}
       {activeTab === "import" && (
         <div className="space-y-6">
-          {/* Top URL Input Card */}
-          <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-              <div>
-                <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  InterCHARM Korea Exhibitor Sourcing Adapter
-                </h2>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Enter an exhibitor detail URL to parse company, brand, product catalog, and contact channels.
-                </p>
-              </div>
-
-              {/* Enrichment Toggle */}
-              <label className="flex items-center gap-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer select-none bg-zinc-50 dark:bg-zinc-800/60 px-3 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-750">
-                <input
-                  type="checkbox"
-                  checked={enrichWebsite}
-                  onChange={(e) => setEnrichWebsite(e.target.checked)}
-                  className="rounded text-zinc-900 focus:ring-zinc-900 dark:text-white"
-                />
-                <span>Official Website Enrichment (공식 웹사이트 연계 분석)</span>
-              </label>
-            </div>
-
-            <form onSubmit={handleExtract} className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="url"
-                required
-                value={sourceUrl}
-                onChange={(e) => setSourceUrl(e.target.value)}
-                placeholder="https://intercharm.co.kr/fairDash.do?hl=KOR&dType=A&..."
-                className="flex-1 px-3 py-2 text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-400"
-              />
-              <button
-                type="submit"
-                disabled={isExtracting}
-                className="px-5 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-white/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-              >
-                {isExtracting ? (
-                  <>
-                    <svg className="animate-spin h-3.5 w-3.5 text-current" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                    <span>Extracting...</span>
-                  </>
-                ) : (
-                  <span>Extract Exhibitor Info</span>
-                )}
-              </button>
-            </form>
-
-            {/* Quick Test Sample Loader */}
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-850 text-xs text-zinc-500">
-              <span className="font-semibold text-zinc-600 dark:text-zinc-400">Quick Test Samples:</span>
-              {QUICK_TEST_URLS.map((sample) => (
-                <button
-                  key={sample.name}
-                  type="button"
-                  onClick={() => {
-                    setSourceUrl(sample.url);
-                    setExtractError(null);
-                  }}
-                  className="px-2 py-1 text-[11px] rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
-                >
-                  {sample.name}
-                </button>
-              ))}
-            </div>
-
-            {/* Error Message Banner */}
-            {extractError && (
-              <div className="p-3 text-xs rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300">
-                <strong>Extraction Failed:</strong> {extractError}
-              </div>
-            )}
-
-            {/* Success Message Banner */}
-            {saveSuccessMessage && (
-              <div className="p-3.5 text-xs rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 flex justify-between items-center flex-wrap gap-2">
-                <span className="font-semibold">{saveSuccessMessage}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab("list");
-                    refreshBrandList();
-                    if (savedCompanyId) {
-                      handleOpenDetail(savedCompanyId);
-                    }
-                  }}
-                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold cursor-pointer shadow-xs"
-                >
-                  Brand List 상세 보기 →
-                </button>
-              </div>
-            )}
-          </div>
+          {/* ADM-BSRC-014: Unified Multi-Source Sourcing & Manual Entry Header */}
+          <SourcingImportHeader
+            importMode={importMode}
+            onModeChange={(mode) => {
+              setImportMode(mode);
+              setExtractError(null);
+            }}
+            selectedProvider={selectedSourceProvider}
+            onProviderChange={(p) => {
+              setSelectedSourceProvider(p);
+              setExtractError(null);
+            }}
+            sourceUrl={sourceUrl}
+            onSourceUrlChange={(url) => {
+              setSourceUrl(url);
+              if (extractError) setExtractError(null);
+            }}
+            enrichWebsite={enrichWebsite}
+            onEnrichWebsiteChange={setEnrichWebsite}
+            isExtracting={isExtracting}
+            onExtract={handleExtract}
+            onStartManualEntry={handleStartManualEntry}
+            hasActiveManualDraft={reviewedDraft?.source.provider === "MANUAL"}
+            extractError={extractError}
+            onClearError={() => setExtractError(null)}
+            saveSuccessMessage={saveSuccessMessage}
+            onViewBrandList={() => {
+              setActiveTab("list");
+              refreshBrandList();
+              if (savedCompanyId) {
+                handleOpenDetail(savedCompanyId);
+              }
+            }}
+          />
 
           {/* Review Workspace when draft is extracted */}
           {reviewedDraft ? (
@@ -2012,7 +1970,7 @@ export default function BrandMarketingView({
                           Company Categories ({reviewedDraft.categories?.length || 0})
                         </span>
                         <p className="text-[11px] text-zinc-500 mt-0.5">
-                          InterCHARM 카테고리 검색결과 및 전시 품목 분류 (회사 레벨 관리)
+                          전시회 카테고리 검색결과 및 품목 분류 (회사 레벨 관리)
                         </p>
                       </div>
                     </div>
