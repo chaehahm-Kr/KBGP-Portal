@@ -651,6 +651,9 @@ export async function runCampaignDryRun(
   if (criteria.grades && criteria.grades.length > 0) {
     query = query.in("grade", criteria.grades);
   }
+  if (criteria.companyIds && criteria.companyIds.length > 0) {
+    query = query.in("id", criteria.companyIds);
+  }
 
   const { data: companies, error: compErr } = await query;
   const companyList = (!compErr && Array.isArray(companies)) ? companies : [];
@@ -681,6 +684,10 @@ export async function runCampaignDryRun(
     }
 
     for (const c of contacts) {
+      // If specific contacts are selected, filter to only selected contacts
+      if (criteria.contactIds && criteria.contactIds.length > 0 && !criteria.contactIds.includes(c.id)) {
+        continue;
+      }
       const email = (c.email || "").trim().toLowerCase();
 
       // Check Email Validity
@@ -726,7 +733,7 @@ export async function runCampaignDryRun(
       seenEmails.add(email);
 
       // Check Suppression List
-      const isSuppressed = memorySuppression.has(email) || (await isEmailSuppressed(email));
+      const isSuppressed = memorySuppression.has(email) || (await isEmailSuppressed(email, customClient));
       if (isSuppressed) {
         suppressedCount++;
         recipientItems.push({

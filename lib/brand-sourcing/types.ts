@@ -123,6 +123,7 @@ export interface SourcingProductItem {
 }
 
 export interface SourcingBrand {
+  id?: string;
   nameKr: string;
   nameEn: string | null;
   description: string | null;
@@ -132,6 +133,7 @@ export interface SourcingBrand {
 }
 
 export interface SourcingContact {
+  id?: string;
   name: string | null;
   department: string | null;
   jobTitle: string | null;
@@ -190,6 +192,7 @@ export interface NormalizedCompanyDraft {
     primaryCategoriesConfirmed?: boolean;
     representativeName: string | null; // CEO name from enrichment
     businessRegistrationNumber: string | null; // e.g. 123-45-67890
+    telephone?: string | null;
   };
   brands: SourcingBrand[];
   contacts: SourcingContact[];

@@ -189,7 +189,7 @@ export async function recordEmailOptOut(
 /**
  * Checks whether an email address is currently suppressed.
  */
-export async function isEmailSuppressed(email: string): Promise<boolean> {
+export async function isEmailSuppressed(email: string, customClient?: any): Promise<boolean> {
   const normalized = email.toLowerCase().trim();
   if (!normalized) return false;
 
@@ -198,7 +198,7 @@ export async function isEmailSuppressed(email: string): Promise<boolean> {
   }
 
   try {
-    const admin = createAdminClient();
+    const admin = customClient || createAdminClient();
     const { data, error } = await admin
       .from("marketing_suppression_list")
       .select("id")
