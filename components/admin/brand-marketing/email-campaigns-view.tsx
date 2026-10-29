@@ -129,6 +129,8 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   const [selectedCompanyTypes, setSelectedCompanyTypes] = useState<string[]>([]);
   const [requireConsentedOnly, setRequireConsentedOnly] = useState(false);
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [expandedContactCompanyIds, setExpandedContactCompanyIds] = useState<string[]>([]);
 
   // Dry Run & Test Send State
   const [dryRunReport, setDryRunReport] = useState<DryRunReport | null>(null);
@@ -299,7 +301,18 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
 
   useEffect(() => {
     if (viewMode === "editor" && currentStep === 3) {
-      setSelectedCompanyIds(filteredCandidates.map((c) => c.id));
+      if (selectedCompanyIds.length === 0) {
+        setSelectedCompanyIds(filteredCandidates.map((c) => c.id));
+      }
+      if (selectedContactIds.length === 0) {
+        const allContacts: string[] = [];
+        filteredCandidates.forEach((c) => {
+          c.sourcing_contacts?.forEach((ct: any) => {
+            if (ct.id) allContacts.push(ct.id);
+          });
+        });
+        setSelectedContactIds(allContacts);
+      }
     }
   }, [filteredCandidates.length, viewMode, currentStep]);
 
@@ -351,6 +364,13 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     setEditingCampaign(newCamp);
     if (defaultTpl) setSelectedTemplateId(defaultTpl.id);
     setSelectedCompanyIds(candidates.map((c) => c.id));
+    const allContacts: string[] = [];
+    candidates.forEach((c) => {
+      c.sourcing_contacts?.forEach((ct: any) => {
+        if (ct.id) allContacts.push(ct.id);
+      });
+    });
+    setSelectedContactIds(allContacts);
     setCurrentStep(1);
     setDryRunReport(null);
     setTestSendResult(null);
@@ -363,6 +383,8 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     if (c.filterCriteria?.grades) setSelectedGrades(c.filterCriteria.grades);
     if (c.filterCriteria?.companyTypes) setSelectedCompanyTypes(c.filterCriteria.companyTypes);
     setRequireConsentedOnly(Boolean(c.filterCriteria?.requireConsentedOnly));
+    if (c.filterCriteria?.companyIds) setSelectedCompanyIds(c.filterCriteria.companyIds);
+    if (c.filterCriteria?.contactIds) setSelectedContactIds(c.filterCriteria.contactIds);
 
     try {
       const detailRes = await getMarketingCampaignByIdAction(c.id);
@@ -387,6 +409,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
           companyTypes: selectedCompanyTypes,
           requireConsentedOnly,
           companyIds: selectedCompanyIds,
+          contactIds: selectedContactIds,
         },
       };
 
@@ -573,6 +596,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
         companyTypes: selectedCompanyTypes,
         requireConsentedOnly,
         companyIds: selectedCompanyIds,
+        contactIds: selectedContactIds,
       });
 
       if (res.success && res.report) {
@@ -1538,7 +1562,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 <div className="text-right">
                   <span className="text-xs text-zinc-500">선택된 수신 대상: </span>
                   <strong className="text-sm font-mono text-zinc-900 dark:text-zinc-100">
-                    {selectedCompanyIds.length} / {filteredCandidates.length}
+                    {selectedContactIds.length > 0 ? selectedContactIds.length : selectedCompanyIds.length} recipients ({selectedCompanyIds.length} / {filteredCandidates.length} companies)
                   </strong>
                 </div>
               </div>
@@ -1555,8 +1579,16 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                           onChange={(e) => {
                             if (e.target.checked) {
                               setSelectedCompanyIds(filteredCandidates.map((c) => c.id));
+                              const allContacts: string[] = [];
+                              filteredCandidates.forEach((c) => {
+                                c.sourcing_contacts?.forEach((ct: any) => {
+                                  if (ct.id) allContacts.push(ct.id);
+                                });
+                              });
+                              setSelectedContactIds(allContacts);
                             } else {
                               setSelectedCompanyIds([]);
+                              setSelectedContactIds([]);
                             }
                           }}
                         />
@@ -1570,50 +1602,136 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                     {filteredCandidates.map((c) => {
-                      const isChecked = selectedCompanyIds.includes(c.id);
+                      const isCompanyChecked = selectedCompanyIds.includes(c.id);
                       const brand = c.sourcing_brands?.[0]?.brand_name_kr || c.company_name_kr;
-                      const contact = c.sourcing_contacts?.find((ct: any) => ct.is_primary) || c.sourcing_contacts?.[0];
-                      const totalContacts = c.sourcing_contacts?.length || 0;
+                      const contacts = c.sourcing_contacts || [];
+                      const primaryContact = contacts.find((ct: any) => ct.is_primary) || contacts[0];
+                      const totalContacts = contacts.length;
+                      const isExpanded = expandedContactCompanyIds.includes(c.id);
+                      const selectedContactsForComp = contacts.filter((ct: any) => selectedContactIds.includes(ct.id));
+
+                      const toggleCompany = () => {
+                        if (isCompanyChecked) {
+                          setSelectedCompanyIds((prev) => prev.filter((id) => id !== c.id));
+                          setSelectedContactIds((prev) =>
+                            prev.filter((id) => !contacts.some((ct: any) => ct.id === id))
+                          );
+                        } else {
+                          setSelectedCompanyIds((prev) => [...prev, c.id]);
+                          const contactIdsToAdd = contacts.map((ct: any) => ct.id).filter(Boolean);
+                          setSelectedContactIds((prev) => Array.from(new Set([...prev, ...contactIdsToAdd])));
+                        }
+                      };
+
+                      const toggleContact = (contactId: string) => {
+                        const isSelected = selectedContactIds.includes(contactId);
+                        const updated = isSelected
+                          ? selectedContactIds.filter((id) => id !== contactId)
+                          : [...selectedContactIds, contactId];
+                        setSelectedContactIds(updated);
+
+                        const hasAny = contacts.some((ct: any) => updated.includes(ct.id));
+                        if (hasAny && !selectedCompanyIds.includes(c.id)) {
+                          setSelectedCompanyIds((prev) => [...prev, c.id]);
+                        } else if (!hasAny && selectedCompanyIds.includes(c.id)) {
+                          setSelectedCompanyIds((prev) => prev.filter((id) => id !== c.id));
+                        }
+                      };
 
                       return (
-                        <tr key={c.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
-                          <td className="p-2.5">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {
-                                setSelectedCompanyIds((prev) =>
-                                  isChecked ? prev.filter((id) => id !== c.id) : [...prev, c.id]
-                                );
-                              }}
-                            />
-                          </td>
-                          <td className="p-2.5 font-bold text-zinc-900 dark:text-zinc-100">{c.company_name_kr}</td>
-                          <td className="p-2.5 text-zinc-700 dark:text-zinc-300">{brand}</td>
-                          <td className="p-2.5 font-mono">{c.grade}</td>
-                          <td className="p-2.5 text-zinc-600 dark:text-zinc-400">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono text-xs">
-                                {contact?.email || <span className="text-red-400">No email</span>}
-                              </span>
-                              {totalContacts > 1 && (
-                                <span
-                                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 cursor-help"
-                                  title={c.sourcing_contacts
-                                    .map((ct: any) => (ct.name ? ct.name + ": " : "") + ct.email)
-                                    .join("\n")}
-                                >
-                                  +{totalContacts - 1} more
+                        <React.Fragment key={c.id}>
+                          <tr className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
+                            <td className="p-2.5">
+                              <input
+                                type="checkbox"
+                                checked={isCompanyChecked}
+                                onChange={toggleCompany}
+                              />
+                            </td>
+                            <td className="p-2.5 font-bold text-zinc-900 dark:text-zinc-100">{c.company_name_kr}</td>
+                            <td className="p-2.5 text-zinc-700 dark:text-zinc-300">{brand}</td>
+                            <td className="p-2.5 font-mono">{c.grade}</td>
+                            <td className="p-2.5 text-zinc-600 dark:text-zinc-400">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-mono text-xs">
+                                  {primaryContact?.email || <span className="text-red-400">No email</span>}
                                 </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-2.5">
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                              {c.marketing_consent_status || "UNCONFIRMED"}
-                            </span>
-                          </td>
-                        </tr>
+                                {totalContacts > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedContactCompanyIds((prev) =>
+                                        isExpanded ? prev.filter((id) => id !== c.id) : [...prev, c.id]
+                                      )
+                                    }
+                                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 hover:bg-indigo-100 cursor-pointer flex items-center gap-1 border border-indigo-200 dark:border-indigo-800"
+                                  >
+                                    <span>{isExpanded ? "▲ 접기" : `▼ +${totalContacts - 1} 연락처 개별 선택`}</span>
+                                    <span className="font-mono text-[9px] bg-indigo-200 dark:bg-indigo-900 px-1 rounded">
+                                      {selectedContactsForComp.length}/{totalContacts}
+                                    </span>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-2.5">
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                                {c.marketing_consent_status || "UNCONFIRMED"}
+                              </span>
+                            </td>
+                          </tr>
+                          {isExpanded && totalContacts > 1 && (
+                            <tr className="bg-indigo-50/30 dark:bg-indigo-950/20 border-b border-indigo-100 dark:border-indigo-900">
+                              <td colSpan={6} className="p-2.5 pl-8">
+                                <div className="space-y-2 border-l-2 border-indigo-500 pl-3">
+                                  <div className="flex items-center justify-between text-[11px] text-zinc-600 dark:text-zinc-400">
+                                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                                      개별 수신 대상 연락처 선택 ({selectedContactsForComp.length}/{totalContacts} 선택됨):
+                                    </span>
+                                    <span className="text-[10px] text-zinc-500">체크된 연락처로만 발송 시뮬레이션 및 캠페인이 진행됩니다.</span>
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                    {contacts.map((ct: any) => {
+                                      const isCtChecked = selectedContactIds.includes(ct.id);
+                                      return (
+                                        <label
+                                          key={ct.id}
+                                          className={`flex items-center gap-2 p-2 rounded border text-xs cursor-pointer transition-colors ${
+                                            isCtChecked
+                                              ? "bg-white dark:bg-zinc-800 border-indigo-300 dark:border-indigo-700 shadow-xs"
+                                              : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 opacity-60"
+                                          }`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={isCtChecked}
+                                            onChange={() => toggleContact(ct.id)}
+                                            className="rounded border-zinc-300"
+                                          />
+                                          <div className="flex flex-col min-w-0">
+                                            <div className="flex items-center gap-1">
+                                              <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                                                {ct.name || "담당자"}
+                                              </span>
+                                              {ct.is_primary && (
+                                                <span className="text-[9px] font-bold px-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                                                  대표
+                                                </span>
+                                              )}
+                                            </div>
+                                            <span className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
+                                              {ct.email || "이메일 없음"}
+                                            </span>
+                                          </div>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>

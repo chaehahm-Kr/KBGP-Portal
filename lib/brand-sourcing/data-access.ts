@@ -1177,6 +1177,41 @@ export async function archiveSourcingCandidate(
 }
 
 /**
+ * Reversibly restores multiple archived sourcing companies by setting status to 'SAVED'.
+ */
+export async function bulkRestoreSourcingCompanies(
+  ids: string[],
+  customClient?: SupabaseClient
+): Promise<{ success: boolean; count: number }> {
+  if (!ids || ids.length === 0) return { success: true, count: 0 };
+  const supabase = getClient(customClient);
+
+  const { error } = await supabase
+    .from("sourcing_companies")
+    .update({
+      status: "SAVED",
+      updated_at: new Date().toISOString(),
+    })
+    .in("id", ids);
+
+  if (error) {
+    throw new Error(`Failed to restore companies: ${error.message}`);
+  }
+
+  return { success: true, count: ids.length };
+}
+
+/**
+ * Reversibly restores a single archived sourcing company by ID.
+ */
+export async function restoreSourcingCandidate(
+  id: string,
+  customClient?: SupabaseClient
+): Promise<{ success: boolean }> {
+  return bulkRestoreSourcingCompanies([id], customClient).then(() => ({ success: true }));
+}
+
+/**
  * Lists sourcing companies with search and filtering for the Brand List UI.
  */
 export async function listSourcingCompanies(

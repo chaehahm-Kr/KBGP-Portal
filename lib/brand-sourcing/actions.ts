@@ -25,6 +25,8 @@ import {
   deleteSourcingCandidate,
   archiveSourcingCandidate,
   bulkArchiveSourcingCompanies,
+  restoreSourcingCandidate,
+  bulkRestoreSourcingCompanies,
   getClient,
 } from "./index";
 import { validateSafeExternalUrl } from "./security";
@@ -317,6 +319,59 @@ export async function bulkArchiveSourcingCandidatesAction(
     return {
       success: false,
       error: err.message || "Failed to archive selected sourcing candidates",
+    };
+  }
+}
+
+/**
+ * Restores multiple archived sourcing companies by setting status back to 'SAVED'.
+ */
+export async function bulkRestoreSourcingCandidatesAction(
+  companyIds: string[]
+): Promise<{
+  success: boolean;
+  count?: number;
+  error?: string;
+}> {
+  try {
+    await requireBrandStaffPermission("edit");
+
+    if (!companyIds || companyIds.length === 0) {
+      return { success: false, error: "No company IDs provided for restore" };
+    }
+
+    const res = await bulkRestoreSourcingCompanies(companyIds);
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+
+    return { success: true, count: res.count };
+  } catch (err: any) {
+    console.error("[bulkRestoreSourcingCandidatesAction] Bulk restore failed:", err);
+    return {
+      success: false,
+      error: err.message || "Failed to restore selected sourcing candidates",
+    };
+  }
+}
+
+/**
+ * Restores a single archived sourcing company by ID.
+ */
+export async function restoreSourcingCandidateAction(
+  companyId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireBrandStaffPermission("edit");
+
+    if (!companyId) return { success: false, error: "Company ID is required" };
+    await restoreSourcingCandidate(companyId);
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("[restoreSourcingCandidateAction] Restore failed:", err);
+    return {
+      success: false,
+      error: err.message || "Failed to restore sourcing candidate",
     };
   }
 }

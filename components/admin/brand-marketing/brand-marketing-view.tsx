@@ -41,6 +41,8 @@ import {
   updateSourcingCandidateDocumentsAction,
   deleteSourcingCandidateAction,
   bulkArchiveSourcingCandidatesAction,
+  bulkRestoreSourcingCandidatesAction,
+  restoreSourcingCandidateAction,
 } from "@/lib/brand-sourcing/actions";
 import { EmailCampaignsView } from "./email-campaigns-view";
 import { CampaignResultsView } from "./campaign-results-view";
@@ -781,6 +783,49 @@ export default function BrandMarketingView({
       alert(`오류 발생: ${err.message}`);
     } finally {
       setIsBulkDeleting(false);
+    }
+  };
+
+  const [isBulkRestoring, setIsBulkRestoring] = useState(false);
+
+  const handleConfirmBulkRestore = async () => {
+    if (selectedCompanyIds.length === 0) return;
+    setIsBulkRestoring(true);
+    try {
+      const res = await bulkRestoreSourcingCandidatesAction(selectedCompanyIds);
+      if (res.success) {
+        setDeleteSuccessMessage(`선택한 ${res.count || selectedCompanyIds.length}개 회사가 정상 복구(저장됨)되었습니다.`);
+        setSelectedCompanyIds([]);
+        refreshBrandList(1, pageSize);
+        setTimeout(() => setDeleteSuccessMessage(null), 5000);
+      } else {
+        alert(`복구 처리 실패: ${res.error}`);
+      }
+    } catch (err: any) {
+      alert(`오류 발생: ${err.message}`);
+    } finally {
+      setIsBulkRestoring(false);
+    }
+  };
+
+  const handleRestoreSingleCandidate = async (companyId: string) => {
+    try {
+      const res = await restoreSourcingCandidateAction(companyId);
+      if (res.success) {
+        setDeleteSuccessMessage("회사가 정상 복구되었습니다.");
+        if (selectedCandidateDetail && selectedCandidateDetail.id === companyId) {
+          setSelectedCandidateDetail({
+            ...selectedCandidateDetail,
+            status: "SAVED" as any,
+          });
+        }
+        refreshBrandList(currentPage, pageSize);
+        setTimeout(() => setDeleteSuccessMessage(null), 5000);
+      } else {
+        alert(`복구 실패: ${res.error}`);
+      }
+    } catch (err: any) {
+      alert(`오류 발생: ${err.message}`);
     }
   };
 
@@ -2816,16 +2861,30 @@ export default function BrandMarketingView({
               Filter
             </button>
 
-            {/* Bulk Delete Button (ADM-BSRC-013) */}
+            {/* Bulk Delete / Restore Buttons (ADM-BSRC-013) */}
             {selectedCompanyIds.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowBulkDeleteModal(true)}
-                className="px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded cursor-pointer flex items-center gap-1.5 shadow-2xs transition-colors ml-auto"
-              >
-                <span>🗑️</span>
-                <span>Delete Selected ({selectedCompanyIds.length})</span>
-              </button>
+              <div className="flex items-center gap-2 ml-auto">
+                {filterStatus === "ARCHIVED" ? (
+                  <button
+                    type="button"
+                    onClick={handleConfirmBulkRestore}
+                    disabled={isBulkRestoring}
+                    className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded cursor-pointer flex items-center gap-1.5 shadow-2xs transition-colors"
+                  >
+                    <span>🔄</span>
+                    <span>{isBulkRestoring ? "Restoring..." : `Restore Selected (${selectedCompanyIds.length})`}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkDeleteModal(true)}
+                    className="px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded cursor-pointer flex items-center gap-1.5 shadow-2xs transition-colors"
+                  >
+                    <span>🗑️</span>
+                    <span>Delete Selected ({selectedCompanyIds.length})</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -3823,20 +3882,37 @@ export default function BrandMarketingView({
             <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-800 pb-4">
               <div>
                 <span className="text-[11px] font-mono text-zinc-400">Candidate Detail</span>
-                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                  {selectedCandidateDetail?.company_name_kr || "Loading..."}
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <span>{selectedCandidateDetail?.company_name_kr || "Loading..."}</span>
+                  {selectedCandidateDetail?.status === "ARCHIVED" && (
+                    <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 font-semibold">
+                      보관됨 (ARCHIVED)
+                    </span>
+                  )}
                 </h2>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedCandidateId(null);
-                  setSelectedCandidateDetail(null);
-                }}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg cursor-pointer"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                {selectedCandidateDetail?.status === "ARCHIVED" && (
+                  <button
+                    type="button"
+                    onClick={() => handleRestoreSingleCandidate(selectedCandidateDetail.id)}
+                    className="px-2.5 py-1 text-xs font-semibold rounded bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer flex items-center gap-1 shadow-2xs"
+                  >
+                    <span>🔄</span>
+                    <span>보관 해제/복구</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCandidateId(null);
+                    setSelectedCandidateDetail(null);
+                  }}
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {isDetailLoading ? (
