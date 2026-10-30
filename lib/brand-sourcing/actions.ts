@@ -149,6 +149,14 @@ export async function saveSourcingCandidateAction(
       return { success: false, error: "Company Korean Name is required." };
     }
 
+    const validGrades = ["A", "B", "C", "UNRATED"];
+    if (!evaluation?.grade || !validGrades.includes(evaluation.grade)) {
+      return {
+        success: false,
+        error: "Candidate Grade is required. Please select Grade A, B, C, or UNRATED before saving to Brand List.",
+      };
+    }
+
     const res = await saveSourcingDraft(draft, evaluation, {
       allowDuplicateConfirmed: options?.allowDuplicateConfirmed,
       matchedCompanyIds: options?.matchedCompanyIds,
