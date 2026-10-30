@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 interface BrandMarketingPageProps {
   searchParams: Promise<{
     tab?: string;
+    companyId?: string;
   }>;
 }
 
@@ -28,8 +29,11 @@ export default async function BrandMarketingPage({ searchParams }: BrandMarketin
 
   // 2. Resolve query parameters
   const params = await searchParams;
+  const initialCompanyId = params.companyId || null;
   const initialTab =
-    params.tab === "list"
+    initialCompanyId
+      ? "list"
+      : params.tab === "list"
       ? "list"
       : params.tab === "campaigns"
       ? "campaigns"
@@ -55,6 +59,7 @@ export default async function BrandMarketingPage({ searchParams }: BrandMarketin
         initialCandidates={candidates}
         initialTotal={total}
         initialTab={initialTab}
+        initialCompanyId={initialCompanyId}
       />
     </div>
   );

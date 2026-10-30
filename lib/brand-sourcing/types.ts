@@ -193,6 +193,7 @@ export interface NormalizedCompanyDraft {
     representativeName: string | null; // CEO name from enrichment
     businessRegistrationNumber: string | null; // e.g. 123-45-67890
     telephone?: string | null;
+    companyPhone?: string | null; // Corporate legal entity phone (ADM-BSRC-013-R1)
   };
   brands: SourcingBrand[];
   contacts: SourcingContact[];

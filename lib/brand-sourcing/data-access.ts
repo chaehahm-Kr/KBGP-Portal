@@ -414,7 +414,7 @@ export async function saveSourcingDraft(
   const combinedInternalNotes = (baseNotes + sourceCollisionNote).trim() || null;
 
   // 4. Insert Sourcing Company Master
-  const { data: company, error: companyErr } = await supabase
+  let { data: company, error: companyErr } = await supabase
     .from("sourcing_companies")
     .insert({
       company_name_kr: draft.company.nameKr,
@@ -429,22 +429,23 @@ export async function saveSourcingDraft(
       primary_categories_confirmed: evaluation?.primaryCategoriesConfirmed ?? draft.company.primaryCategoriesConfirmed ?? false,
       representative_name: draft.company.representativeName,
       business_registration_number: draft.company.businessRegistrationNumber,
-      address_line1: draft.company.address.line1,
-      address_line2: draft.company.address.line2,
-      address_city: draft.company.address.city,
-      address_state_province: draft.company.address.stateProvince,
-      address_postcode: draft.company.address.postcode,
-      address_country: draft.company.address.country || "한국",
-      address_country_code: draft.company.address.countryCode || "KR",
-      address_formatted_kr: draft.company.address.formattedKr,
-      address_formatted_en: draft.company.address.formattedEn,
+      address_line1: draft.company.address?.line1,
+      address_line2: draft.company.address?.line2,
+      address_city: draft.company.address?.city,
+      address_state_province: draft.company.address?.stateProvince,
+      address_postcode: draft.company.address?.postcode,
+      address_country: draft.company.address?.country || "한국",
+      address_country_code: draft.company.address?.countryCode || "KR",
+      address_formatted_kr: draft.company.address?.formattedKr,
+      address_formatted_en: draft.company.address?.formattedEn,
+      company_phone: (draft.company.companyPhone || draft.company.telephone || "").trim() || null,
       grade: evaluation?.grade || "UNRATED",
       status: evaluation?.status || "DRAFT",
       assigned_to: evaluation?.assignedTo || null,
       internal_notes: combinedInternalNotes,
       marketing_consent_status: evaluation?.marketingConsentStatus || "UNCONFIRMED",
       raw_payload_snapshot: {
-        ...(draft.source.rawPayloadSnapshot || {}),
+        ...(draft.source?.rawPayloadSnapshot || {}),
         categories: draft.categories || [],
         companyProducts: draft.companyProducts || [],
         documents: evaluation?.documents || draft.companyDocuments || [],
@@ -467,6 +468,62 @@ export async function saveSourcingDraft(
     })
     .select("id")
     .single();
+
+  if (companyErr && companyErr.message?.includes("company_phone")) {
+    const { data: retryComp, error: retryErr } = await supabase
+      .from("sourcing_companies")
+      .insert({
+        company_name_kr: draft.company.nameKr,
+        company_name_en: draft.company.nameEn,
+        description_kr: draft.company.descriptionKr,
+        description_en: draft.company.descriptionEn,
+        business_types: evaluation?.businessTypes || draft.company.businessTypes || [],
+        business_type_evidence: evaluation?.businessTypeEvidence || draft.company.businessTypeEvidence,
+        primary_product_categories: evaluation?.primaryProductCategories || draft.company.primaryProductCategories || [],
+        primary_categories_confirmed: evaluation?.primaryCategoriesConfirmed ?? draft.company.primaryCategoriesConfirmed ?? false,
+        representative_name: draft.company.representativeName,
+        business_registration_number: draft.company.businessRegistrationNumber,
+        address_line1: draft.company.address?.line1,
+        address_line2: draft.company.address?.line2,
+        address_city: draft.company.address?.city,
+        address_state_province: draft.company.address?.stateProvince,
+        address_postcode: draft.company.address?.postcode,
+        address_country: draft.company.address?.country || "한국",
+        address_country_code: draft.company.address?.countryCode || "KR",
+        address_formatted_kr: draft.company.address?.formattedKr,
+        address_formatted_en: draft.company.address?.formattedEn,
+        grade: evaluation?.grade || "UNRATED",
+        status: evaluation?.status || "DRAFT",
+        assigned_to: evaluation?.assignedTo || null,
+        internal_notes: combinedInternalNotes,
+        marketing_consent_status: evaluation?.marketingConsentStatus || "UNCONFIRMED",
+        raw_payload_snapshot: {
+          ...(draft.source?.rawPayloadSnapshot || {}),
+          categories: draft.categories || [],
+          companyProducts: draft.companyProducts || [],
+          documents: evaluation?.documents || draft.companyDocuments || [],
+          companyTypeOtherExplanation: evaluation?.companyTypeOtherExplanation || null,
+          disputedSource: hasSourceConflict
+            ? {
+                provider: draft.source.provider,
+                sourceUrl: draft.source.sourceUrl,
+                canonicalSourceUrl: canonicalSourceUrl,
+                sourceIdentifier: draft.source.sourceIdentifier,
+                eventEditionId: draft.source.eventEditionId,
+                standLocation: draft.source.standLocation,
+                conflictingCompanyId: conflictingSourceCompanyId,
+                conflictingCompanyName: conflictingSourceCompanyName,
+                notedAt: new Date().toISOString(),
+              }
+            : null,
+        },
+        audit_summary: draft.audit,
+      })
+      .select("id")
+      .single();
+    company = retryComp;
+    companyErr = retryErr;
+  }
 
   if (companyErr || !company) {
     throw new Error(`Failed to insert sourcing company: ${companyErr?.message || "Unknown error"}`);
@@ -529,7 +586,7 @@ export async function saveSourcingDraft(
   }
 
   // 6. Insert Brands
-  if (draft.brands.length > 0) {
+  if (draft.brands && draft.brands.length > 0) {
     const brandRows = draft.brands.map((b, idx) => ({
       company_id: companyId,
       brand_name_kr: b.nameKr,
@@ -548,7 +605,7 @@ export async function saveSourcingDraft(
   }
 
   // 7. Insert Contacts
-  if (draft.contacts.length > 0) {
+  if (draft.contacts && draft.contacts.length > 0) {
     const contactRows = draft.contacts.map((c, idx) => ({
       company_id: companyId,
       name: c.name,
@@ -569,7 +626,7 @@ export async function saveSourcingDraft(
   }
 
   // 8. Insert Websites
-  if (draft.websites.length > 0) {
+  if (draft.websites && draft.websites.length > 0) {
     const websiteRows = draft.websites.map((w, idx) => ({
       company_id: companyId,
       url: w.url,
@@ -972,6 +1029,9 @@ export async function updateSourcingCandidateComplete(
     address_country_code: draft.company.address.countryCode || "KR",
     address_formatted_kr: draft.company.address.formattedKr,
     address_formatted_en: draft.company.address.formattedEn,
+    ...(draft.company.companyPhone !== undefined || draft.company.telephone !== undefined
+      ? { company_phone: (draft.company.companyPhone || draft.company.telephone || "").trim() || null }
+      : {}),
     raw_payload_snapshot: {
       ...(draft.source.rawPayloadSnapshot || {}),
       categories: draft.categories || [],
@@ -995,10 +1055,19 @@ export async function updateSourcingCandidateComplete(
     companyUpdates.marketing_consent_status = evaluation.marketingConsentStatus;
   }
 
-  const { error: compErr } = await supabase
+  let { error: compErr } = await supabase
     .from("sourcing_companies")
     .update(companyUpdates)
     .eq("id", id);
+
+  if (compErr && compErr.message?.includes("company_phone") && "company_phone" in companyUpdates) {
+    delete companyUpdates.company_phone;
+    const retryRes = await supabase
+      .from("sourcing_companies")
+      .update(companyUpdates)
+      .eq("id", id);
+    compErr = retryRes.error;
+  }
 
   if (compErr) {
     throw new Error(`Failed to update sourcing company: ${compErr.message}`);
@@ -1117,7 +1186,7 @@ export async function updateSourcingCandidateComplete(
 
   // 4. Replace websites
   await supabase.from("sourcing_websites").delete().eq("company_id", id);
-  if (draft.websites.length > 0) {
+  if (draft.websites && draft.websites.length > 0) {
     const websiteRows = draft.websites.map((w, idx) => ({
       company_id: id,
       url: w.url,
