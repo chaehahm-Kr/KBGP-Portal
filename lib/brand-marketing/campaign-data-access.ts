@@ -42,6 +42,18 @@ const memorySuppression = new Set<string>();
 
 async function getClient(customClient?: SupabaseClient): Promise<SupabaseClient> {
   if (customClient) return customClient;
+  if (process.env.ENABLE_QA_ENVIRONMENT === "true" && process.env.QA_SUPABASE_URL) {
+    const { createClient: createSupabaseClient } = await import("@supabase/supabase-js");
+    const qaKey =
+      process.env.QA_SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.QA_SUPABASE_ANON_KEY ||
+      process.env.QA_SUPABASE_SECRET_KEY;
+    if (qaKey) {
+      return createSupabaseClient(process.env.QA_SUPABASE_URL, qaKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+    }
+  }
   return await createClient();
 }
 
@@ -647,16 +659,22 @@ export async function runCampaignDryRun(
       )
     `);
 
-  // Apply filters
-  if (criteria.grades && criteria.grades.length > 0) {
-    query = query.in("grade", criteria.grades);
-  }
-  if (criteria.companyIds && criteria.companyIds.length > 0) {
-    query = query.in("id", criteria.companyIds);
-  }
+  let companyList: any[] = [];
+  if (criteria.companyIds && criteria.companyIds.length === 0) {
+    // Zero companies explicitly selected
+    companyList = [];
+  } else {
+    // Apply filters
+    if (criteria.grades && criteria.grades.length > 0) {
+      query = query.in("grade", criteria.grades);
+    }
+    if (criteria.companyIds && criteria.companyIds.length > 0) {
+      query = query.in("id", criteria.companyIds);
+    }
 
-  const { data: companies, error: compErr } = await query;
-  const companyList = (!compErr && Array.isArray(companies)) ? companies : [];
+    const { data: companies, error: compErr } = await query;
+    companyList = (!compErr && Array.isArray(companies)) ? companies : [];
+  }
 
   const seenEmails = new Set<string>();
   const recipientItems: MarketingCampaignRecipientItem[] = [];
@@ -792,6 +810,114 @@ export async function runCampaignDryRun(
     }
   }
 
+  // 2. Evaluate Standalone Manual Email Recipients
+  if (criteria.manualEmails && Array.isArray(criteria.manualEmails)) {
+    for (const rawEmail of criteria.manualEmails) {
+      const email = (rawEmail || "").trim().toLowerCase();
+      if (!email) continue;
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        invalidEmailCount++;
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: null,
+          contactId: null,
+          recipientEmail: email,
+          recipientName: null,
+          companyNameKr: "수기 입력 수신자",
+          companyNameEn: "Manual Recipient",
+          brandName: "Direct Outreach",
+          sendEligibility: "EXCLUDED_INVALID_EMAIL",
+          exclusionReason: "Malformed or invalid email address",
+          status: "PENDING",
+        });
+        continue;
+      }
+
+      // Check deduplication
+      if (seenEmails.has(email)) {
+        duplicateCount++;
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: null,
+          contactId: null,
+          recipientEmail: email,
+          recipientName: null,
+          companyNameKr: "수기 입력 수신자",
+          companyNameEn: "Manual Recipient",
+          brandName: "Direct Outreach",
+          sendEligibility: "EXCLUDED_DUPLICATE",
+          exclusionReason: "Duplicate email address in target selection",
+          status: "PENDING",
+        });
+        continue;
+      }
+      seenEmails.add(email);
+
+      // Check suppression list
+      const isSuppressed = memorySuppression.has(email) || (await isEmailSuppressed(email, customClient));
+      if (isSuppressed) {
+        suppressedCount++;
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: null,
+          contactId: null,
+          recipientEmail: email,
+          recipientName: null,
+          companyNameKr: "수기 입력 수신자",
+          companyNameEn: "Manual Recipient",
+          brandName: "Direct Outreach",
+          sendEligibility: "EXCLUDED_SUPPRESSED",
+          exclusionReason: "Email address is on the global suppression/opt-out list",
+          status: "PENDING",
+        });
+        continue;
+      }
+
+      // Check commercial consent policy:
+      // Standalone manual entries do not have prior confirmed consent.
+      // Under requireConsentedOnly, flag them as EXCLUDED_UNCONFIRMED_CONSENT.
+      if (criteria.requireConsentedOnly) {
+        unconfirmedConsentCount++;
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: null,
+          contactId: null,
+          recipientEmail: email,
+          recipientName: null,
+          companyNameKr: "수기 입력 수신자",
+          companyNameEn: "Manual Recipient",
+          brandName: "Direct Outreach",
+          sendEligibility: "EXCLUDED_UNCONFIRMED_CONSENT",
+          exclusionReason: "Marketing consent is unconfirmed under commercial email policy for manual entry",
+          status: "PENDING",
+        });
+        continue;
+      }
+
+      // Eligible
+      recipientItems.push({
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+        campaignId,
+        companyId: null,
+        contactId: null,
+        recipientEmail: email,
+        recipientName: null,
+        companyNameKr: "수기 입력 수신자",
+        companyNameEn: "Manual Recipient",
+        brandName: "Direct Outreach",
+        sendEligibility: "ELIGIBLE",
+        status: "PENDING",
+      });
+    }
+  }
+
   // Freeze recipients in memory store
   memoryRecipients.set(campaignId, recipientItems);
 
@@ -823,9 +949,9 @@ export async function runCampaignDryRun(
       tplHtml,
       "안녕하세요, {{company_name}} {{contact_name}} 귀하.",
       {
-        companyName: r.companyNameKr,
+        companyName: r.companyNameKr || "수신사",
         contactName: r.recipientName,
-        brandName: r.brandName,
+        brandName: r.brandName || "K SELECT",
         language: camp?.language || "ko",
       }
     );
@@ -841,9 +967,9 @@ export async function runCampaignDryRun(
 
     return {
       recipientEmail: maskEmailAddress(r.recipientEmail),
-      companyName: r.companyNameKr,
+      companyName: r.companyNameKr || "수신사",
       contactName: r.recipientName || "담당자님",
-      brandName: r.brandName || r.companyNameKr,
+      brandName: r.brandName || r.companyNameKr || "K SELECT",
       resolvedSubject: rendered.subject,
       resolvedHtml: assembledHtml,
       warnings: rendered.warnings,

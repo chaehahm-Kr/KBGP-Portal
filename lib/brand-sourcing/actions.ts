@@ -20,6 +20,7 @@ import {
   getSourcingDuplicateAuditReport,
   getSourcingCompanyById,
   listSourcingCompanies,
+  getSourcingCompaniesByIds,
   updateSourcingCandidateComplete,
   updateSourcingEvaluation,
   deleteSourcingCandidate,
@@ -555,5 +556,29 @@ export async function updateSourcingCandidateDocumentsAction(
   } catch (err: any) {
     console.error("[updateSourcingCandidateDocumentsAction] Failed:", err);
     return { success: false, error: err.message || "Failed to update documents" };
+  }
+}
+
+
+/**
+ * Retrieves a list of sourcing candidates by their company IDs.
+ */
+export async function getSourcingCandidatesByIdsAction(
+  companyIds: string[]
+): Promise<{
+  success: boolean;
+  candidates?: any[];
+  error?: string;
+}> {
+  try {
+    await requireBrandStaffPermission("view");
+    const data = await getSourcingCompaniesByIds(companyIds);
+    return { success: true, candidates: data };
+  } catch (err: any) {
+    console.error("[getSourcingCandidatesByIdsAction] Query failed:", err);
+    return {
+      success: false,
+      error: err.message || "Failed to retrieve sourcing candidates by IDs",
+    };
   }
 }

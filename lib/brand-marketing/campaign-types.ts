@@ -95,9 +95,14 @@ export interface TemplateFilterOptions {
 export interface RecipientSelectionCriteria {
   grades?: Array<"A" | "B" | "C" | "UNRATED">;
   companyTypes?: string[];
+  companyTypeMatchMode?: "ANY" | "ALL";
   categories?: string[];
+  primaryCategories?: string[];
+  status?: string;
+  marketingConsentStatus?: string;
   companyIds?: string[];
   contactIds?: string[];
+  manualEmails?: string[];
   requireConsentedOnly?: boolean;
   searchQuery?: string;
 }
@@ -105,11 +110,11 @@ export interface RecipientSelectionCriteria {
 export interface MarketingCampaignRecipientItem {
   id: string;
   campaignId: string;
-  companyId: string;
+  companyId?: string | null;
   contactId?: string | null;
   recipientEmail: string;
   recipientName?: string | null;
-  companyNameKr: string;
+  companyNameKr?: string;
   companyNameEn?: string | null;
   brandName?: string | null;
   customMessageOverride?: string | null;
