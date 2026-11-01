@@ -33,6 +33,11 @@ export async function POST(req: NextRequest) {
     result.campaignId
   );
 
+  if (!optOutRes.success && !optOutRes.alreadySuppressed) {
+    console.error(`[unsubscribe:rfc8058] Failed to persist opt-out: ${optOutRes.error}`);
+    return NextResponse.json({ error: optOutRes.error || "Failed to persist unsubscribe" }, { status: 500 });
+  }
+
   return NextResponse.json({
     success: true,
     maskedEmail: maskEmailAddress(result.email),

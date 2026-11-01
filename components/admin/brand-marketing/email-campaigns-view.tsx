@@ -44,6 +44,14 @@ import { ImageTemplateComposer } from "./image-template-composer";
 import { DesignerGuideModal } from "./designer-guide-modal";
 import { MarketingFooterSettingsView } from "./marketing-footer-settings-view";
 import { stageLargeFiles } from "@/lib/files/stage-form-files";
+import {
+  listSourcingCandidatesAction,
+  getSourcingCandidatesByIdsAction,
+} from "@/lib/brand-sourcing/actions";
+import {
+  COMPANY_TYPE_OPTIONS,
+  PRIMARY_PRODUCT_CATEGORY_OPTIONS,
+} from "@/lib/brand-sourcing/types";
 
 interface EmailCampaignsViewProps {
   candidates?: any[];
@@ -124,6 +132,28 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     },
   ]);
 
+  // Recipient Selection & Discovery State (ADM-BSRC-009-R5)
+  const [candidatePage, setCandidatePage] = useState<number>(1);
+  const [candidatePageSize, setCandidatePageSize] = useState<number>(20);
+  const [candidateSearch, setCandidateSearch] = useState<string>("");
+  const [candidateSearchInput, setCandidateSearchInput] = useState<string>("");
+  const [candidateFilterGrade, setCandidateFilterGrade] = useState<string>("ALL");
+  const [candidateFilterStatus, setCandidateFilterStatus] = useState<string>("ALL");
+  const [candidateFilterBusinessTypes, setCandidateFilterBusinessTypes] = useState<string[]>([]);
+  const [candidateFilterBusinessTypeMatchMode, setCandidateFilterBusinessTypeMatchMode] = useState<"ANY" | "ALL">("ANY");
+  const [candidateFilterPrimaryCategories, setCandidateFilterPrimaryCategories] = useState<string[]>([]);
+  const [candidateFilterConsent, setCandidateFilterConsent] = useState<string>("ALL");
+  const [candidatesList, setCandidatesList] = useState<any[]>(candidates);
+  const [totalMatchingCandidates, setTotalMatchingCandidates] = useState<number>(0);
+  const [isLoadingCandidates, setIsLoadingCandidates] = useState<boolean>(false);
+
+  // Persistent Selected Company Cache (stores full company objects so metadata persists across page/filter switches)
+  const [selectedCompaniesCache, setSelectedCompaniesCache] = useState<Map<string, any>>(() => {
+    const initialMap = new Map<string, any>();
+    candidates.forEach((comp) => initialMap.set(comp.id, comp));
+    return initialMap;
+  });
+
   // Recipient Selection State
   const [selectedGrades, setSelectedGrades] = useState<string[]>([]);
   const [selectedCompanyTypes, setSelectedCompanyTypes] = useState<string[]>([]);
@@ -131,6 +161,18 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
   const [expandedContactCompanyIds, setExpandedContactCompanyIds] = useState<string[]>([]);
+
+  // Manual Email Recipients State
+  const [manualEmails, setManualEmails] = useState<string[]>([]);
+  const [manualEmailInput, setManualEmailInput] = useState<string>("");
+  const [manualEmailFeedback, setManualEmailFeedback] = useState<{
+    accepted: string[];
+    rejected: Array<{ email: string; reason: string }>;
+  } | null>(null);
+
+  // Manage Selection Modal State
+  const [showManageSelectionModal, setShowManageSelectionModal] = useState<boolean>(false);
+  const [manageSelectionSearch, setManageSelectionSearch] = useState<string>("");
 
   // Dry Run & Test Send State
   const [dryRunReport, setDryRunReport] = useState<DryRunReport | null>(null);
@@ -281,40 +323,281 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     });
   }, [activeTemplate, currentEffectiveSubject, editingCampaign, footerSettings]);
 
-  // Filtered Candidates for Recipient Selection
-  const filteredCandidates = useMemo(() => {
-    return candidates.filter((c) => {
-      if (selectedGrades.length > 0 && !selectedGrades.includes(c.grade || "UNRATED")) {
-        return false;
-      }
-      if (selectedCompanyTypes.length > 0) {
-        const types: string[] = c.business_types || [];
-        const match = selectedCompanyTypes.some((t) => types.includes(t));
-        if (!match) return false;
-      }
-      if (requireConsentedOnly && c.marketing_consent_status !== "CONSENTED") {
-        return false;
-      }
-      return true;
-    });
-  }, [candidates, selectedGrades, selectedCompanyTypes, requireConsentedOnly]);
+  // Server-side Candidate Query Loader (ADM-BSRC-009-R5)
+  const loadCandidates = React.useCallback(
+    async (overrideParams?: {
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      grade?: string;
+      status?: string;
+      businessTypes?: string[];
+      businessTypeMatchMode?: "ANY" | "ALL";
+      primaryCategories?: string[];
+      marketingConsentStatus?: string;
+    }) => {
+      setIsLoadingCandidates(true);
+      try {
+        const page = overrideParams?.page ?? candidatePage;
+        const pageSize = overrideParams?.pageSize ?? candidatePageSize;
+        const offset = (page - 1) * pageSize;
 
+        const res = await listSourcingCandidatesAction({
+          search: overrideParams?.search !== undefined ? overrideParams.search : candidateSearch,
+          grade: overrideParams?.grade !== undefined ? overrideParams.grade : candidateFilterGrade,
+          status: overrideParams?.status !== undefined ? overrideParams.status : candidateFilterStatus,
+          businessTypes: overrideParams?.businessTypes !== undefined ? overrideParams.businessTypes : candidateFilterBusinessTypes,
+          businessTypeMatchMode: overrideParams?.businessTypeMatchMode !== undefined ? overrideParams.businessTypeMatchMode : candidateFilterBusinessTypeMatchMode,
+          primaryCategories: overrideParams?.primaryCategories !== undefined ? overrideParams.primaryCategories : candidateFilterPrimaryCategories,
+          marketingConsentStatus: overrideParams?.marketingConsentStatus !== undefined ? overrideParams.marketingConsentStatus : candidateFilterConsent,
+          limit: pageSize,
+          offset,
+        });
+
+        if (res.success && res.candidates) {
+          setCandidatesList(res.candidates);
+          setTotalMatchingCandidates(res.total || 0);
+
+          // Update cache with freshly retrieved records to retain metadata across filters/pages
+          setSelectedCompaniesCache((prev) => {
+            const next = new Map(prev);
+            res.candidates?.forEach((comp: any) => next.set(comp.id, comp));
+            return next;
+          });
+        } else {
+          showNotification("error", res.error || "Failed to query candidate companies");
+        }
+      } catch (err: any) {
+        showNotification("error", err.message || "Error querying candidate companies");
+      } finally {
+        setIsLoadingCandidates(false);
+      }
+    },
+    [
+      candidatePage,
+      candidatePageSize,
+      candidateSearch,
+      candidateFilterGrade,
+      candidateFilterStatus,
+      candidateFilterBusinessTypes,
+      candidateFilterBusinessTypeMatchMode,
+      candidateFilterPrimaryCategories,
+      candidateFilterConsent,
+    ]
+  );
+
+  // Trigger candidate query when in Step 3 and any filter or pagination changes
   useEffect(() => {
     if (viewMode === "editor" && currentStep === 3) {
-      if (selectedCompanyIds.length === 0) {
-        setSelectedCompanyIds(filteredCandidates.map((c) => c.id));
-      }
-      if (selectedContactIds.length === 0) {
-        const allContacts: string[] = [];
-        filteredCandidates.forEach((c) => {
-          c.sourcing_contacts?.forEach((ct: any) => {
-            if (ct.id) allContacts.push(ct.id);
-          });
-        });
-        setSelectedContactIds(allContacts);
-      }
+      loadCandidates();
     }
-  }, [filteredCandidates.length, viewMode, currentStep]);
+  }, [
+    viewMode,
+    currentStep,
+    candidatePage,
+    candidatePageSize,
+    candidateSearch,
+    candidateFilterGrade,
+    candidateFilterStatus,
+    candidateFilterBusinessTypes,
+    candidateFilterBusinessTypeMatchMode,
+    candidateFilterPrimaryCategories,
+    candidateFilterConsent,
+    loadCandidates,
+  ]);
+
+  // Hydration helper for reopening saved drafts with cross-filter selections
+  const hydrateSelectedCompanies = async (companyIds: string[]) => {
+    if (!companyIds || companyIds.length === 0) return;
+    const missing = companyIds.filter((id) => !selectedCompaniesCache.has(id));
+    if (missing.length === 0) return;
+    try {
+      const res = await getSourcingCandidatesByIdsAction(missing);
+      if (res.success && res.candidates) {
+        setSelectedCompaniesCache((prev) => {
+          const next = new Map(prev);
+          res.candidates?.forEach((c: any) => next.set(c.id, c));
+          return next;
+        });
+      }
+    } catch (e) {
+      console.error("Failed to hydrate selected companies:", e);
+    }
+  };
+
+  // Company selection toggle with multi-contact semantics
+  const handleToggleCompany = (comp: any) => {
+    const contacts = comp.sourcing_contacts || [];
+    const compContactIds: string[] = contacts.map((ct: any) => ct.id).filter(Boolean);
+    const selectedCompContacts = compContactIds.filter((id) => selectedContactIds.includes(id));
+    const isCompanySelected = selectedCompanyIds.includes(comp.id);
+
+    if (isCompanySelected || selectedCompContacts.length > 0) {
+      // Uncheck company and all its contacts
+      setSelectedCompanyIds((prev) => prev.filter((id) => id !== comp.id));
+      setSelectedContactIds((prev) => prev.filter((id) => !compContactIds.includes(id)));
+    } else {
+      // Select company and all its contacts
+      setSelectedCompanyIds((prev) => [...prev, comp.id]);
+      setSelectedContactIds((prev) => Array.from(new Set([...prev, ...compContactIds])));
+      setSelectedCompaniesCache((prev) => new Map(prev).set(comp.id, comp));
+    }
+  };
+
+  // Individual contact selection toggle
+  const handleToggleContact = (comp: any, contactId: string) => {
+    const isSelected = selectedContactIds.includes(contactId);
+    const updated = isSelected
+      ? selectedContactIds.filter((id) => id !== contactId)
+      : [...selectedContactIds, contactId];
+    setSelectedContactIds(updated);
+
+    const compContactIds: string[] = (comp.sourcing_contacts || []).map((ct: any) => ct.id).filter(Boolean);
+    const hasAny = compContactIds.some((id) => updated.includes(id));
+    if (hasAny && !selectedCompanyIds.includes(comp.id)) {
+      setSelectedCompanyIds((prev) => [...prev, comp.id]);
+      setSelectedCompaniesCache((prev) => new Map(prev).set(comp.id, comp));
+    } else if (!hasAny && selectedCompanyIds.includes(comp.id)) {
+      setSelectedCompanyIds((prev) => prev.filter((id) => id !== comp.id));
+    }
+  };
+
+  // Header Select All for CURRENT VISIBLE PAGE only (Never across entire database)
+  const pageCompanyIds = useMemo(() => candidatesList.map((c) => c.id), [candidatesList]);
+  const isAllPageSelected = pageCompanyIds.length > 0 && pageCompanyIds.every((id) => selectedCompanyIds.includes(id));
+  const isSomePageSelected = pageCompanyIds.some((id) => selectedCompanyIds.includes(id)) && !isAllPageSelected;
+
+  const handleToggleSelectAllPage = () => {
+    if (isAllPageSelected) {
+      setSelectedCompanyIds((prev) => prev.filter((id) => !pageCompanyIds.includes(id)));
+      const pageContactIds: string[] = [];
+      candidatesList.forEach((c) => {
+        (c.sourcing_contacts || []).forEach((ct: any) => {
+          if (ct.id) pageContactIds.push(ct.id);
+        });
+      });
+      setSelectedContactIds((prev) => prev.filter((id) => !pageContactIds.includes(id)));
+    } else {
+      setSelectedCompanyIds((prev) => Array.from(new Set([...prev, ...pageCompanyIds])));
+      const pageContactIds: string[] = [];
+      candidatesList.forEach((c) => {
+        (c.sourcing_contacts || []).forEach((ct: any) => {
+          if (ct.id) pageContactIds.push(ct.id);
+        });
+      });
+      setSelectedContactIds((prev) => Array.from(new Set([...prev, ...pageContactIds])));
+      setSelectedCompaniesCache((prev) => {
+        const next = new Map(prev);
+        candidatesList.forEach((c) => next.set(c.id, c));
+        return next;
+      });
+    }
+  };
+
+  // Manual Email Recipient Parser & Validator
+  const handleAddManualEmails = () => {
+    if (!manualEmailInput.trim()) return;
+
+    const tokens = manualEmailInput.split(/[\n,;]+/);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const accepted: string[] = [];
+    const rejected: Array<{ email: string; reason: string }> = [];
+
+    // Collect all existing emails for strict deduplication
+    const existingEmails = new Set<string>();
+    manualEmails.forEach((e) => existingEmails.add(e.toLowerCase().trim()));
+    selectedCompaniesCache.forEach((comp) => {
+      (comp.sourcing_contacts || []).forEach((ct: any) => {
+        if (selectedContactIds.includes(ct.id) && ct.email) {
+          existingEmails.add(ct.email.toLowerCase().trim());
+        }
+      });
+    });
+
+    for (const raw of tokens) {
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      const lower = trimmed.toLowerCase();
+
+      if (!emailRegex.test(lower)) {
+        rejected.push({ email: trimmed, reason: "유효하지 않은 이메일 형식 (Invalid syntax)" });
+        continue;
+      }
+      if (existingEmails.has(lower) || accepted.includes(lower)) {
+        rejected.push({ email: trimmed, reason: "이미 선택되었거나 중복된 이메일 (Duplicate)" });
+        continue;
+      }
+      accepted.push(lower);
+      existingEmails.add(lower);
+    }
+
+    if (accepted.length > 0) {
+      setManualEmails((prev) => [...prev, ...accepted]);
+      setManualEmailInput("");
+    }
+    setManualEmailFeedback({ accepted, rejected });
+  };
+
+  const handleRemoveManualEmail = (email: string) => {
+    setManualEmails((prev) => prev.filter((e) => e !== email));
+  };
+
+  // Selected Company Contact Emails (Unique)
+  const selectedCompanyEmails = useMemo(() => {
+    const emails = new Set<string>();
+    selectedCompaniesCache.forEach((comp) => {
+      if (selectedCompanyIds.includes(comp.id)) {
+        (comp.sourcing_contacts || []).forEach((ct: any) => {
+          if (selectedContactIds.includes(ct.id) && ct.email) {
+            emails.add(ct.email.toLowerCase().trim());
+          }
+        });
+      }
+    });
+    return Array.from(emails);
+  }, [selectedCompaniesCache, selectedCompanyIds, selectedContactIds]);
+
+  // Total Unique Recipient Emails (Company contacts + Manual emails)
+  const totalUniqueRecipients = useMemo(() => {
+    const all = new Set<string>([...selectedCompanyEmails, ...manualEmails.map((e) => e.toLowerCase().trim())]);
+    return Array.from(all);
+  }, [selectedCompanyEmails, manualEmails]);
+
+  // Estimated Consent / Send Eligibility Breakdown
+  const consentEligibilityEstimate = useMemo(() => {
+    let eligible = 0;
+    let excluded = 0;
+    selectedCompaniesCache.forEach((comp) => {
+      if (selectedCompanyIds.includes(comp.id)) {
+        const isConsented = comp.marketing_consent_status === "CONSENTED";
+        (comp.sourcing_contacts || []).forEach((ct: any) => {
+          if (selectedContactIds.includes(ct.id) && ct.email) {
+            if (requireConsentedOnly) {
+              if (isConsented) eligible++;
+              else excluded++;
+            } else {
+              eligible++;
+            }
+          }
+        });
+      }
+    });
+    if (requireConsentedOnly) {
+      excluded += manualEmails.length; // Manual entries have unconfirmed consent
+    } else {
+      eligible += manualEmails.length;
+    }
+    return { eligible, excluded };
+  }, [selectedCompaniesCache, selectedCompanyIds, selectedContactIds, manualEmails, requireConsentedOnly]);
+
+  const handleClearAllSelections = () => {
+    if (typeof window !== "undefined" && window.confirm("선택된 모든 기업, 연락처 및 수기 이메일을 해제하시겠습니까?")) {
+      setSelectedCompanyIds([]);
+      setSelectedContactIds([]);
+      setManualEmails([]);
+      setManualEmailFeedback(null);
+    }
+  };
 
   // Pre-approval checklist loader
   useEffect(() => {
@@ -363,14 +646,10 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
 
     setEditingCampaign(newCamp);
     if (defaultTpl) setSelectedTemplateId(defaultTpl.id);
-    setSelectedCompanyIds(candidates.map((c) => c.id));
-    const allContacts: string[] = [];
-    candidates.forEach((c) => {
-      c.sourcing_contacts?.forEach((ct: any) => {
-        if (ct.id) allContacts.push(ct.id);
-      });
-    });
-    setSelectedContactIds(allContacts);
+    setSelectedCompanyIds([]);
+    setSelectedContactIds([]);
+    setManualEmails([]);
+    setManualEmailFeedback(null);
     setCurrentStep(1);
     setDryRunReport(null);
     setTestSendResult(null);
@@ -380,11 +659,41 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   const handleEditCampaign = async (c: MarketingCampaign) => {
     setEditingCampaign(c);
     if (c.templateId) setSelectedTemplateId(c.templateId);
-    if (c.filterCriteria?.grades) setSelectedGrades(c.filterCriteria.grades);
-    if (c.filterCriteria?.companyTypes) setSelectedCompanyTypes(c.filterCriteria.companyTypes);
+    if (c.filterCriteria?.grades && c.filterCriteria.grades.length > 0) {
+      setSelectedGrades(c.filterCriteria.grades);
+      setCandidateFilterGrade(c.filterCriteria.grades[0]);
+    }
+    if (c.filterCriteria?.companyTypes) {
+      setSelectedCompanyTypes(c.filterCriteria.companyTypes);
+      setCandidateFilterBusinessTypes(c.filterCriteria.companyTypes);
+    }
+    if (c.filterCriteria?.companyTypeMatchMode) {
+      setCandidateFilterBusinessTypeMatchMode(c.filterCriteria.companyTypeMatchMode);
+    }
+    if (c.filterCriteria?.primaryCategories) {
+      setCandidateFilterPrimaryCategories(c.filterCriteria.primaryCategories);
+    }
+    if (c.filterCriteria?.searchQuery) {
+      setCandidateSearch(c.filterCriteria.searchQuery);
+      setCandidateSearchInput(c.filterCriteria.searchQuery);
+    }
+    if (c.filterCriteria?.status) {
+      setCandidateFilterStatus(c.filterCriteria.status);
+    }
+    if (c.filterCriteria?.marketingConsentStatus) {
+      setCandidateFilterConsent(c.filterCriteria.marketingConsentStatus);
+    }
     setRequireConsentedOnly(Boolean(c.filterCriteria?.requireConsentedOnly));
-    if (c.filterCriteria?.companyIds) setSelectedCompanyIds(c.filterCriteria.companyIds);
-    if (c.filterCriteria?.contactIds) setSelectedContactIds(c.filterCriteria.contactIds);
+    if (c.filterCriteria?.companyIds) {
+      setSelectedCompanyIds(c.filterCriteria.companyIds);
+      hydrateSelectedCompanies(c.filterCriteria.companyIds);
+    }
+    if (c.filterCriteria?.contactIds) {
+      setSelectedContactIds(c.filterCriteria.contactIds);
+    }
+    if (c.filterCriteria?.manualEmails) {
+      setManualEmails(c.filterCriteria.manualEmails);
+    }
 
     try {
       const detailRes = await getMarketingCampaignByIdAction(c.id);
@@ -405,11 +714,17 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
         previewText: editingCampaign.previewText || "",
         landingPageUrl: editingCampaign.landingPageUrl || "https://www.kselectnetwork.com",
         filterCriteria: {
-          grades: selectedGrades as any,
-          companyTypes: selectedCompanyTypes,
+          grades: candidateFilterGrade !== "ALL" ? [candidateFilterGrade as any] : [],
+          companyTypes: candidateFilterBusinessTypes,
+          companyTypeMatchMode: candidateFilterBusinessTypeMatchMode,
+          primaryCategories: candidateFilterPrimaryCategories,
+          status: candidateFilterStatus,
+          marketingConsentStatus: candidateFilterConsent,
+          searchQuery: candidateSearch,
           requireConsentedOnly,
           companyIds: selectedCompanyIds,
           contactIds: selectedContactIds,
+          manualEmails: manualEmails,
         },
       };
 
@@ -592,11 +907,17 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
 
     try {
       const res = await runCampaignDryRunAction(editingCampaign.id, {
-        grades: selectedGrades as any,
-        companyTypes: selectedCompanyTypes,
+        grades: candidateFilterGrade !== "ALL" ? [candidateFilterGrade as any] : [],
+        companyTypes: candidateFilterBusinessTypes,
+        companyTypeMatchMode: candidateFilterBusinessTypeMatchMode,
+        primaryCategories: candidateFilterPrimaryCategories,
+        status: candidateFilterStatus,
+        marketingConsentStatus: candidateFilterConsent,
+        searchQuery: candidateSearch,
         requireConsentedOnly,
         companyIds: selectedCompanyIds,
         contactIds: selectedContactIds,
+        manualEmails: manualEmails,
       });
 
       if (res.success && res.report) {
@@ -1546,212 +1867,669 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
           </div>
         )}
 
-        {/* STEP 3: RECIPIENT SELECTION */}
+        {/* STEP 3: RECIPIENT SELECTION & DISCOVERY (ADM-BSRC-009-R5) */}
         {currentStep === 3 && (
-          <div className="space-y-6">
-            <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+          <div className="space-y-4">
+            {/* 1. ALWAYS-VISIBLE SELECTED RECIPIENTS SUMMARY BAR */}
+            <div className="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/80 dark:from-indigo-950/40 dark:via-zinc-900 dark:to-purple-950/30 border border-indigo-200/80 dark:border-indigo-800/80 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 shadow-xs">
+              <div className="flex flex-wrap items-center gap-2.5 text-xs">
+                <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-800/90 px-3 py-1.5 rounded-md border border-indigo-200 dark:border-indigo-800/60 shadow-xs">
+                  <span className="text-zinc-500 dark:text-zinc-400">선택 기업:</span>
+                  <strong className="font-mono text-indigo-600 dark:text-indigo-400 text-sm font-bold">
+                    {selectedCompanyIds.length}개사
+                  </strong>
+                </div>
+                <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-800/90 px-3 py-1.5 rounded-md border border-indigo-200 dark:border-indigo-800/60 shadow-xs">
+                  <span className="text-zinc-500 dark:text-zinc-400">기업 이메일:</span>
+                  <strong className="font-mono text-indigo-600 dark:text-indigo-400 text-sm font-bold">
+                    {selectedCompanyEmails.length}개
+                  </strong>
+                </div>
+                <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-800/90 px-3 py-1.5 rounded-md border border-purple-200 dark:border-purple-800/60 shadow-xs">
+                  <span className="text-zinc-500 dark:text-zinc-400">수기 이메일:</span>
+                  <strong className="font-mono text-purple-600 dark:text-purple-400 text-sm font-bold">
+                    {manualEmails.length}개
+                  </strong>
+                </div>
+                <div className="flex items-center gap-1.5 bg-indigo-600 text-white px-3 py-1.5 rounded-md font-semibold shadow-xs">
+                  <span>총 고유 수신자:</span>
+                  <span className="font-mono text-sm underline font-bold">{totalUniqueRecipients.length}명</span>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] px-2.5 py-1.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                    발송 가능: {consentEligibilityEstimate.eligible}
+                  </span>
+                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                  <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                    동의 미확인: {consentEligibilityEstimate.excluded}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowManageSelectionModal(true)}
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer flex items-center gap-1.5 shadow-xs transition-colors"
+                >
+                  <span>선택 목록 관리 ({totalUniqueRecipients.length})</span>
+                </button>
+                {totalUniqueRecipients.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAllSelections}
+                    className="px-3 py-1.5 text-xs font-medium rounded border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer transition-colors"
+                  >
+                    전체 해제
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 2. ADVANCED SEARCH & BRAND-LIST EQUIVALENT FILTERS */}
+            <div className="bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4 space-y-3 shadow-xs">
+              {/* Row 1: Search + Grade + Status + Consent + Search Action */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2.5 items-center">
+                {/* Multi-vector Text Search */}
+                <div className="md:col-span-4 relative">
+                  <input
+                    type="text"
+                    value={candidateSearchInput}
+                    onChange={(e) => setCandidateSearchInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        setCandidateSearch(candidateSearchInput);
+                        setCandidatePage(1);
+                      }
+                    }}
+                    placeholder="회사명, 브랜드명, 이메일, 전화번호, 웹사이트, 메모 검색..."
+                    className="w-full text-xs px-3 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                  />
+                  {candidateSearchInput && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCandidateSearchInput("");
+                        setCandidateSearch("");
+                        setCandidatePage(1);
+                      }}
+                      className="absolute right-2.5 top-2 text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Grade Filter */}
+                <div className="md:col-span-2">
+                  <select
+                    value={candidateFilterGrade}
+                    onChange={(e) => {
+                      setCandidateFilterGrade(e.target.value);
+                      setCandidatePage(1);
+                    }}
+                    className="w-full text-xs px-2.5 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                  >
+                    <option value="ALL">등급: 전체 (All Grades)</option>
+                    <option value="A">Grade A (최우선 타겟)</option>
+                    <option value="B">Grade B (유망 타겟)</option>
+                    <option value="C">Grade C (일반 타겟)</option>
+                    <option value="UNRATED">UNRATED (미평가)</option>
+                  </select>
+                </div>
+
+                {/* Workflow Status Filter */}
+                <div className="md:col-span-2">
+                  <select
+                    value={candidateFilterStatus}
+                    onChange={(e) => {
+                      setCandidateFilterStatus(e.target.value);
+                      setCandidatePage(1);
+                    }}
+                    className="w-full text-xs px-2.5 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                  >
+                    <option value="ALL">상태: 전체 (All Status)</option>
+                    <option value="SAVED">SAVED (저장 완료)</option>
+                    <option value="REVIEWED">REVIEWED (검토 완료)</option>
+                    <option value="DRAFT">DRAFT (임시 등록)</option>
+                    <option value="ARCHIVED">ARCHIVED (보관됨)</option>
+                  </select>
+                </div>
+
+                {/* Consent Status Filter */}
+                <div className="md:col-span-2">
+                  <select
+                    value={candidateFilterConsent}
+                    onChange={(e) => {
+                      setCandidateFilterConsent(e.target.value);
+                      setCandidatePage(1);
+                    }}
+                    className="w-full text-xs px-2.5 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                  >
+                    <option value="ALL">마케팅 동의: 전체</option>
+                    <option value="CONSENTED">CONSENTED (동의 완료)</option>
+                    <option value="UNCONFIRMED">UNCONFIRMED (미확인)</option>
+                    <option value="REFUSED">REFUSED (거부)</option>
+                    <option value="EXCLUDED">EXCLUDED (제외)</option>
+                  </select>
+                </div>
+
+                {/* Search & Reset Buttons */}
+                <div className="md:col-span-2 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCandidateSearch(candidateSearchInput);
+                      setCandidatePage(1);
+                    }}
+                    className="flex-1 px-3 py-2 text-xs font-semibold rounded bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 cursor-pointer transition-colors"
+                  >
+                    검색
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCandidateSearchInput("");
+                      setCandidateSearch("");
+                      setCandidateFilterGrade("ALL");
+                      setCandidateFilterStatus("ALL");
+                      setCandidateFilterBusinessTypes([]);
+                      setCandidateFilterPrimaryCategories([]);
+                      setCandidateFilterConsent("ALL");
+                      setCandidatePage(1);
+                    }}
+                    title="필터 초기화"
+                    className="px-2.5 py-2 text-xs font-medium rounded border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                  >
+                    초기화
+                  </button>
+                </div>
+              </div>
+
+              {/* Row 2: Business Types + Primary Categories + Strict Consent Checkbox */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-zinc-200 dark:border-zinc-800 text-xs">
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Business Type Multi-select Chips */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-zinc-500 dark:text-zinc-400 font-medium">사업자 유형:</span>
+                    {COMPANY_TYPE_OPTIONS.map((bt) => {
+                      const isSelected = candidateFilterBusinessTypes.includes(bt.value);
+                      return (
+                        <button
+                          key={bt.value}
+                          type="button"
+                          onClick={() => {
+                            setCandidateFilterBusinessTypes((prev) =>
+                              isSelected ? prev.filter((v) => v !== bt.value) : [...prev, bt.value]
+                            );
+                            setCandidatePage(1);
+                          }}
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium border cursor-pointer transition-colors ${
+                            isSelected
+                              ? "bg-indigo-600 text-white border-indigo-600"
+                              : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50"
+                          }`}
+                        >
+                          {bt.labelKr}
+                        </button>
+                      );
+                    })}
+                    {candidateFilterBusinessTypes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCandidateFilterBusinessTypeMatchMode((prev) => (prev === "ANY" ? "ALL" : "ANY"));
+                          setCandidatePage(1);
+                        }}
+                        className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+                      >
+                        매칭: {candidateFilterBusinessTypeMatchMode === "ANY" ? "OR (하나라도)" : "AND (모두)"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Primary Product Categories Filter */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-zinc-500 dark:text-zinc-400 font-medium">대표 카테고리:</span>
+                    {PRIMARY_PRODUCT_CATEGORY_OPTIONS.map((cat) => {
+                      const isSelected = candidateFilterPrimaryCategories.includes(cat.value);
+                      return (
+                        <button
+                          key={cat.value}
+                          type="button"
+                          onClick={() => {
+                            setCandidateFilterPrimaryCategories((prev) =>
+                              isSelected ? prev.filter((v) => v !== cat.value) : [...prev, cat.value]
+                            );
+                            setCandidatePage(1);
+                          }}
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium border cursor-pointer transition-colors ${
+                            isSelected
+                              ? "bg-purple-600 text-white border-purple-600"
+                              : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50"
+                          }`}
+                        >
+                          {cat.labelKr}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Strict Consent Checkbox */}
+                <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-800 px-3 py-1.5 rounded-md border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 shadow-2xs">
+                  <input
+                    type="checkbox"
+                    checked={requireConsentedOnly}
+                    onChange={(e) => setRequireConsentedOnly(e.target.checked)}
+                    className="rounded border-amber-400 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
+                  />
+                  <span className="font-semibold text-xs">상업성 정보 수신 동의 기업만 발송 (Strict Consent)</span>
+                </label>
+              </div>
+            </div>
+
+            {/* 3. MANUAL EMAIL RECIPIENT ENTRY SECTION */}
+            <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                    <span>수기 이메일 수신자 추가 (Add Email Recipients)</span>
+                    <span className="text-[10px] font-normal px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-mono">
+                      {manualEmails.length}개 등록됨
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    줄바꿈(Enter), 쉼표(,), 세미콜론(;)으로 구분하여 여러 이메일을 한 번에 입력할 수 있습니다. 입력된 이메일은 기업 연락처와 분리되어 캠페인에만 단독 저장됩니다.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <textarea
+                  value={manualEmailInput}
+                  onChange={(e) => setManualEmailInput(e.target.value)}
+                  placeholder="buyer@nordstrom.com&#10;sourcing@sephora.com, buyer@ulta.com; contact@target.com"
+                  rows={2}
+                  className="flex-1 text-xs px-3 py-2 font-mono rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddManualEmails}
+                  disabled={!manualEmailInput.trim()}
+                  className="px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded cursor-pointer self-end sm:self-auto flex items-center justify-center gap-1 min-w-[130px] transition-colors"
+                >
+                  <span>이메일 파싱 및 추가</span>
+                </button>
+              </div>
+
+              {/* Validation Feedback Banner */}
+              {manualEmailFeedback && (
+                <div className="text-xs p-2.5 rounded bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 space-y-1.5">
+                  <div className="flex items-center gap-3">
+                    {manualEmailFeedback.accepted.length > 0 && (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                        ✓ {manualEmailFeedback.accepted.length}개 이메일 정상 추가됨
+                      </span>
+                    )}
+                    {manualEmailFeedback.rejected.length > 0 && (
+                      <span className="text-red-500 dark:text-red-400 font-semibold">
+                        ✕ {manualEmailFeedback.rejected.length}개 이메일 제외됨
+                      </span>
+                    )}
+                  </div>
+                  {manualEmailFeedback.rejected.length > 0 && (
+                    <div className="text-[11px] text-zinc-500 space-y-0.5 max-h-24 overflow-y-auto pl-2 border-l-2 border-red-400">
+                      {manualEmailFeedback.rejected.map((rej, idx) => (
+                        <div key={idx}>
+                          <span className="font-mono text-zinc-700 dark:text-zinc-300 font-medium">{rej.email}</span>: {rej.reason}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Manual Email Chips */}
+              {manualEmails.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {manualEmails.map((email) => (
+                    <span
+                      key={email}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-300 font-mono text-xs"
+                    >
+                      <span>{email}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveManualEmail(email)}
+                        className="text-purple-400 hover:text-red-500 cursor-pointer font-bold"
+                        title="제거"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 4. SOURCING CANDIDATES TABLE WITH MULTI-CONTACT SEMANTICS */}
+            <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2.5">
                 <div>
                   <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                    3. Recipient Selection &amp; Commercial Consent Filter
+                    후보 기업 목록 ({totalMatchingCandidates}개사 검색됨)
                   </h3>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    타겟 등급, 사업자 유형 및 마케팅 동의 상태를 바탕으로 발송 대상 후보 기업을 필터링합니다.
+                    필터링 및 페이지 이동 시에도 기존에 선택한 기업과 연락처는 유지됩니다.
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs text-zinc-500">선택된 수신 대상: </span>
-                  <strong className="text-sm font-mono text-zinc-900 dark:text-zinc-100">
-                    {selectedContactIds.length > 0 ? selectedContactIds.length : selectedCompanyIds.length} recipients ({selectedCompanyIds.length} / {filteredCandidates.length} companies)
+                  <span className="text-xs text-zinc-500">현재 페이지 선택: </span>
+                  <strong className="text-xs font-mono text-zinc-900 dark:text-zinc-100">
+                    {pageCompanyIds.filter((id) => selectedCompanyIds.includes(id)).length} / {candidatesList.length}개사
                   </strong>
                 </div>
               </div>
 
-              {/* Candidates Table */}
-              <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto max-h-[360px]">
+              {/* Table Container */}
+              <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto max-h-[460px]">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50 dark:bg-zinc-800/60 sticky top-0">
+                  <thead className="bg-zinc-50 dark:bg-zinc-800/60 sticky top-0 z-10 shadow-2xs">
                     <tr>
                       <th className="p-2.5 w-10">
                         <input
                           type="checkbox"
-                          checked={selectedCompanyIds.length === filteredCandidates.length && filteredCandidates.length > 0}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedCompanyIds(filteredCandidates.map((c) => c.id));
-                              const allContacts: string[] = [];
-                              filteredCandidates.forEach((c) => {
-                                c.sourcing_contacts?.forEach((ct: any) => {
-                                  if (ct.id) allContacts.push(ct.id);
-                                });
-                              });
-                              setSelectedContactIds(allContacts);
-                            } else {
-                              setSelectedCompanyIds([]);
-                              setSelectedContactIds([]);
-                            }
+                          ref={(el) => {
+                            if (el) el.indeterminate = isSomePageSelected;
                           }}
+                          checked={isAllPageSelected}
+                          onChange={handleToggleSelectAllPage}
+                          title="현재 페이지 전체 선택/해제"
+                          className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         />
                       </th>
-                      <th className="p-2.5">Company Name</th>
-                      <th className="p-2.5">Primary Brand</th>
-                      <th className="p-2.5">Grade</th>
-                      <th className="p-2.5">Contact Email</th>
-                      <th className="p-2.5">Consent Status</th>
+                      <th className="p-2.5">기업명 (한국어 / 영문)</th>
+                      <th className="p-2.5">대표 브랜드</th>
+                      <th className="p-2.5">등급</th>
+                      <th className="p-2.5">사업자 유형 / 카테고리</th>
+                      <th className="p-2.5">수신 연락처</th>
+                      <th className="p-2.5">마케팅 동의</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {filteredCandidates.map((c) => {
-                      const isCompanyChecked = selectedCompanyIds.includes(c.id);
-                      const brand = c.sourcing_brands?.[0]?.brand_name_kr || c.company_name_kr;
-                      const contacts = c.sourcing_contacts || [];
-                      const primaryContact = contacts.find((ct: any) => ct.is_primary) || contacts[0];
-                      const totalContacts = contacts.length;
-                      const isExpanded = expandedContactCompanyIds.includes(c.id);
-                      const selectedContactsForComp = contacts.filter((ct: any) => selectedContactIds.includes(ct.id));
+                    {isLoadingCandidates ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-zinc-400">
+                          후보 기업 데이터를 불러오는 중입니다...
+                        </td>
+                      </tr>
+                    ) : candidatesList.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-zinc-400">
+                          검색 및 필터 조건과 일치하는 후보 기업이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      candidatesList.map((c) => {
+                        const contacts = c.sourcing_contacts || [];
+                        const compContactIds: string[] = contacts.map((ct: any) => ct.id).filter(Boolean);
+                        const selectedCompContacts = compContactIds.filter((id) => selectedContactIds.includes(id));
+                        const isCompanySelected = selectedCompanyIds.includes(c.id);
 
-                      const toggleCompany = () => {
-                        if (isCompanyChecked) {
-                          setSelectedCompanyIds((prev) => prev.filter((id) => id !== c.id));
-                          setSelectedContactIds((prev) =>
-                            prev.filter((id) => !contacts.some((ct: any) => ct.id === id))
-                          );
-                        } else {
-                          setSelectedCompanyIds((prev) => [...prev, c.id]);
-                          const contactIdsToAdd = contacts.map((ct: any) => ct.id).filter(Boolean);
-                          setSelectedContactIds((prev) => Array.from(new Set([...prev, ...contactIdsToAdd])));
-                        }
-                      };
+                        const isAllSelected = compContactIds.length > 0 && selectedCompContacts.length === compContactIds.length;
+                        const isSomeSelected = selectedCompContacts.length > 0 && selectedCompContacts.length < compContactIds.length;
+                        const isIndeterminate = isSomeSelected;
+                        const isChecked = isAllSelected || (compContactIds.length === 0 && isCompanySelected);
 
-                      const toggleContact = (contactId: string) => {
-                        const isSelected = selectedContactIds.includes(contactId);
-                        const updated = isSelected
-                          ? selectedContactIds.filter((id) => id !== contactId)
-                          : [...selectedContactIds, contactId];
-                        setSelectedContactIds(updated);
+                        const brand = c.sourcing_brands?.[0]?.brand_name_kr || c.company_name_kr;
+                        const primaryContact = contacts.find((ct: any) => ct.is_primary) || contacts[0];
+                        const totalContacts = contacts.length;
+                        const isExpanded = expandedContactCompanyIds.includes(c.id);
 
-                        const hasAny = contacts.some((ct: any) => updated.includes(ct.id));
-                        if (hasAny && !selectedCompanyIds.includes(c.id)) {
-                          setSelectedCompanyIds((prev) => [...prev, c.id]);
-                        } else if (!hasAny && selectedCompanyIds.includes(c.id)) {
-                          setSelectedCompanyIds((prev) => prev.filter((id) => id !== c.id));
-                        }
-                      };
-
-                      return (
-                        <React.Fragment key={c.id}>
-                          <tr className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
-                            <td className="p-2.5">
-                              <input
-                                type="checkbox"
-                                checked={isCompanyChecked}
-                                onChange={toggleCompany}
-                              />
-                            </td>
-                            <td className="p-2.5 font-bold text-zinc-900 dark:text-zinc-100">{c.company_name_kr}</td>
-                            <td className="p-2.5 text-zinc-700 dark:text-zinc-300">{brand}</td>
-                            <td className="p-2.5 font-mono">{c.grade}</td>
-                            <td className="p-2.5 text-zinc-600 dark:text-zinc-400">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-mono text-xs">
-                                  {primaryContact?.email || <span className="text-red-400">No email</span>}
-                                </span>
-                                {totalContacts > 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setExpandedContactCompanyIds((prev) =>
-                                        isExpanded ? prev.filter((id) => id !== c.id) : [...prev, c.id]
-                                      )
-                                    }
-                                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 hover:bg-indigo-100 cursor-pointer flex items-center gap-1 border border-indigo-200 dark:border-indigo-800"
-                                  >
-                                    <span>{isExpanded ? "▲ 접기" : `▼ +${totalContacts - 1} 연락처 개별 선택`}</span>
-                                    <span className="font-mono text-[9px] bg-indigo-200 dark:bg-indigo-900 px-1 rounded">
-                                      {selectedContactsForComp.length}/{totalContacts}
-                                    </span>
-                                  </button>
+                        return (
+                          <React.Fragment key={c.id}>
+                            <tr
+                              className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors ${
+                                isChecked || isIndeterminate ? "bg-indigo-50/20 dark:bg-indigo-950/10" : ""
+                              }`}
+                            >
+                              <td className="p-2.5">
+                                <input
+                                  type="checkbox"
+                                  ref={(el) => {
+                                    if (el) el.indeterminate = isIndeterminate;
+                                  }}
+                                  checked={isChecked}
+                                  onChange={() => handleToggleCompany(c)}
+                                  className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                />
+                              </td>
+                              <td className="p-2.5">
+                                <div className="font-bold text-zinc-900 dark:text-zinc-100">{c.company_name_kr}</div>
+                                {c.company_name_en && (
+                                  <div className="text-[10px] text-zinc-400 font-mono truncate max-w-[200px]">
+                                    {c.company_name_en}
+                                  </div>
                                 )}
-                              </div>
-                            </td>
-                            <td className="p-2.5">
-                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                                {c.marketing_consent_status || "UNCONFIRMED"}
-                              </span>
-                            </td>
-                          </tr>
-                          {isExpanded && totalContacts > 1 && (
-                            <tr className="bg-indigo-50/30 dark:bg-indigo-950/20 border-b border-indigo-100 dark:border-indigo-900">
-                              <td colSpan={6} className="p-2.5 pl-8">
-                                <div className="space-y-2 border-l-2 border-indigo-500 pl-3">
-                                  <div className="flex items-center justify-between text-[11px] text-zinc-600 dark:text-zinc-400">
-                                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                                      개별 수신 대상 연락처 선택 ({selectedContactsForComp.length}/{totalContacts} 선택됨):
+                              </td>
+                              <td className="p-2.5 text-zinc-700 dark:text-zinc-300">{brand}</td>
+                              <td className="p-2.5 font-mono">
+                                <span
+                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                    c.grade === "A"
+                                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                      : c.grade === "B"
+                                      ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                                      : c.grade === "C"
+                                      ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                      : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                                  }`}
+                                >
+                                  {c.grade || "UNRATED"}
+                                </span>
+                              </td>
+                              <td className="p-2.5">
+                                <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                  {(c.business_types || []).slice(0, 2).map((bt: string) => (
+                                    <span
+                                      key={bt}
+                                      className="text-[9px] px-1 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
+                                    >
+                                      {bt}
                                     </span>
-                                    <span className="text-[10px] text-zinc-500">체크된 연락처로만 발송 시뮬레이션 및 캠페인이 진행됩니다.</span>
-                                  </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                                    {contacts.map((ct: any) => {
-                                      const isCtChecked = selectedContactIds.includes(ct.id);
-                                      return (
-                                        <label
-                                          key={ct.id}
-                                          className={`flex items-center gap-2 p-2 rounded border text-xs cursor-pointer transition-colors ${
-                                            isCtChecked
-                                              ? "bg-white dark:bg-zinc-800 border-indigo-300 dark:border-indigo-700 shadow-xs"
-                                              : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 opacity-60"
-                                          }`}
-                                        >
-                                          <input
-                                            type="checkbox"
-                                            checked={isCtChecked}
-                                            onChange={() => toggleContact(ct.id)}
-                                            className="rounded border-zinc-300"
-                                          />
-                                          <div className="flex flex-col min-w-0">
-                                            <div className="flex items-center gap-1">
-                                              <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-                                                {ct.name || "담당자"}
-                                              </span>
-                                              {ct.is_primary && (
-                                                <span className="text-[9px] font-bold px-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                                                  대표
-                                                </span>
-                                              )}
-                                            </div>
-                                            <span className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
-                                              {ct.email || "이메일 없음"}
-                                            </span>
-                                          </div>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
+                                  ))}
+                                  {(c.primary_product_categories || []).slice(0, 1).map((cat: string) => (
+                                    <span
+                                      key={cat}
+                                      className="text-[9px] px-1 py-0.2 rounded bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                                    >
+                                      {cat}
+                                    </span>
+                                  ))}
                                 </div>
                               </td>
+                              <td className="p-2.5 text-zinc-600 dark:text-zinc-400">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-mono text-xs">
+                                    {primaryContact?.email || <span className="text-red-400">이메일 없음</span>}
+                                  </span>
+                                  {totalContacts > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setExpandedContactCompanyIds((prev) =>
+                                          isExpanded ? prev.filter((id) => id !== c.id) : [...prev, c.id]
+                                        )
+                                      }
+                                      className="text-[10px] font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 hover:bg-indigo-100 cursor-pointer flex items-center gap-1 border border-indigo-200 dark:border-indigo-800 transition-colors"
+                                    >
+                                      <span>{isExpanded ? "▲ 접기" : `▼ +${totalContacts - 1} 연락처 개별 선택`}</span>
+                                      <span className="font-mono text-[9px] bg-indigo-200 dark:bg-indigo-900 px-1 rounded">
+                                        {selectedCompContacts.length}/{totalContacts}
+                                      </span>
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-2.5">
+                                <span
+                                  className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                    c.marketing_consent_status === "CONSENTED"
+                                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                      : c.marketing_consent_status === "REFUSED"
+                                      ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                                  }`}
+                                >
+                                  {c.marketing_consent_status || "UNCONFIRMED"}
+                                </span>
+                              </td>
                             </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
+
+                            {/* Expanded Multi-contact Sub-rows */}
+                            {isExpanded && totalContacts > 1 && (
+                              <tr className="bg-indigo-50/30 dark:bg-indigo-950/20 border-b border-indigo-100 dark:border-indigo-900">
+                                <td colSpan={7} className="p-3 pl-8">
+                                  <div className="space-y-2 border-l-2 border-indigo-500 pl-3">
+                                    <div className="flex items-center justify-between text-[11px] text-zinc-600 dark:text-zinc-400">
+                                      <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                                        {c.company_name_kr} 개별 수신 연락처 선택 ({selectedCompContacts.length}/{totalContacts} 선택됨):
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500">
+                                        체크된 연락처로만 발송 시뮬레이션 및 실제 캠페인이 진행됩니다.
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                      {contacts.map((ct: any) => {
+                                        const isCtChecked = selectedContactIds.includes(ct.id);
+                                        return (
+                                          <label
+                                            key={ct.id}
+                                            className={`flex items-center gap-2 p-2 rounded border text-xs cursor-pointer transition-colors ${
+                                              isCtChecked
+                                                ? "bg-white dark:bg-zinc-800 border-indigo-300 dark:border-indigo-700 shadow-xs"
+                                                : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 opacity-60"
+                                            }`}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={isCtChecked}
+                                              onChange={() => handleToggleContact(c, ct.id)}
+                                              className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                            <div className="flex flex-col min-w-0">
+                                              <div className="flex items-center gap-1">
+                                                <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                                                  {ct.name || "담당자"}
+                                                </span>
+                                                {ct.is_primary && (
+                                                  <span className="text-[9px] font-bold px-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                                                    대표
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <span className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
+                                                {ct.email || "이메일 없음"}
+                                              </span>
+                                            </div>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
 
+              {/* 5. SERVER-SIDE PAGINATION & PAGE SIZE CONTROLS */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2.5 border-t border-zinc-100 dark:border-zinc-800 text-xs">
+                <div className="flex items-center gap-3">
+                  <span className="text-zinc-500">
+                    총 <strong className="font-mono text-zinc-900 dark:text-zinc-100">{totalMatchingCandidates}</strong>개사 중{" "}
+                    <strong className="font-mono text-zinc-900 dark:text-zinc-100">{candidatesList.length}</strong>개사 표시 (페이지{" "}
+                    <strong className="font-mono">{candidatePage}</strong> / {Math.max(1, Math.ceil(totalMatchingCandidates / candidatePageSize))})
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-zinc-400">페이지당:</span>
+                    <select
+                      value={candidatePageSize}
+                      onChange={(e) => {
+                        setCandidatePageSize(Number(e.target.value));
+                        setCandidatePage(1);
+                      }}
+                      className="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-mono"
+                    >
+                      <option value={20}>20개</option>
+                      <option value={50}>50개</option>
+                      <option value={100}>100개</option>
+                      <option value={200}>200개</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Pagination Navigation Buttons */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={candidatePage <= 1 || isLoadingCandidates}
+                    onClick={() => setCandidatePage(1)}
+                    className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                  >
+                    « 처음
+                  </button>
+                  <button
+                    type="button"
+                    disabled={candidatePage <= 1 || isLoadingCandidates}
+                    onClick={() => setCandidatePage((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                  >
+                    ‹ 이전
+                  </button>
+                  <span className="px-3 py-1 font-mono font-semibold text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 rounded">
+                    {candidatePage} / {Math.max(1, Math.ceil(totalMatchingCandidates / candidatePageSize))}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={candidatePage >= Math.ceil(totalMatchingCandidates / candidatePageSize) || isLoadingCandidates}
+                    onClick={() => setCandidatePage((p) => p + 1)}
+                    className="px-3 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                  >
+                    다음 ›
+                  </button>
+                  <button
+                    type="button"
+                    disabled={candidatePage >= Math.ceil(totalMatchingCandidates / candidatePageSize) || isLoadingCandidates}
+                    onClick={() => setCandidatePage(Math.max(1, Math.ceil(totalMatchingCandidates / candidatePageSize)))}
+                    className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                  >
+                    끝 »
+                  </button>
+                </div>
+              </div>
+
+              {/* Step Navigation Actions */}
               <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(2)}
-                  className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-900 cursor-pointer"
+                  className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 cursor-pointer"
                 >
-                  ← Back
+                  ← Back: Email Template &amp; Live Preview
                 </button>
                 <button
                   type="button"
                   onClick={() => setCurrentStep(4)}
-                  className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer"
+                  className="px-5 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer transition-colors shadow-xs"
                 >
-                  Next: Sample Personalization Review →
+                  Next: Sample Personalization Review ({totalUniqueRecipients.length}명 대상) →
                 </button>
               </div>
             </div>
@@ -2531,6 +3309,242 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     );
   };
 
+
+  // --------------------------------------------------------------------------
+  // RENDER: MANAGE SELECTION MODAL (ADM-BSRC-009-R5)
+  // --------------------------------------------------------------------------
+  const renderManageSelectionModal = () => {
+    if (!showManageSelectionModal) return null;
+
+    const query = manageSelectionSearch.trim().toLowerCase();
+
+    // Prepare list of all selected items
+    const items: Array<{
+      id: string;
+      type: "COMPANY_CONTACT" | "MANUAL";
+      companyId?: string;
+      companyNameKr: string;
+      companyNameEn?: string;
+      brandName?: string;
+      contactId?: string;
+      contactName?: string;
+      email: string;
+      consentStatus: string;
+      isSendable: boolean;
+      exclusionReason?: string;
+    }> = [];
+
+    // Add company contacts
+    selectedCompaniesCache.forEach((comp) => {
+      if (selectedCompanyIds.includes(comp.id)) {
+        const isConsented = comp.marketing_consent_status === "CONSENTED";
+        (comp.sourcing_contacts || []).forEach((ct: any) => {
+          if (selectedContactIds.includes(ct.id) && ct.email) {
+            const isSendable = requireConsentedOnly ? isConsented : true;
+            items.push({
+              id: `comp-${comp.id}-contact-${ct.id}`,
+              type: "COMPANY_CONTACT",
+              companyId: comp.id,
+              companyNameKr: comp.company_name_kr,
+              companyNameEn: comp.company_name_en,
+              brandName: comp.sourcing_brands?.[0]?.brand_name_kr || comp.company_name_kr,
+              contactId: ct.id,
+              contactName: ct.name,
+              email: ct.email.toLowerCase().trim(),
+              consentStatus: comp.marketing_consent_status || "UNCONFIRMED",
+              isSendable,
+              exclusionReason: !isSendable ? "마케팅 동의 미확인 (Strict Consent 필터 적용됨)" : undefined,
+            });
+          }
+        });
+      }
+    });
+
+    // Add manual emails
+    manualEmails.forEach((email) => {
+      const isSendable = !requireConsentedOnly;
+      items.push({
+        id: `manual-${email}`,
+        type: "MANUAL",
+        companyNameKr: "수기 입력 수신자",
+        companyNameEn: "Manual Entry Recipient",
+        brandName: "Direct Outreach",
+        email: email.toLowerCase().trim(),
+        consentStatus: "미확인 (수기 입력)",
+        isSendable,
+        exclusionReason: !isSendable ? "수기 입력 이메일은 마케팅 동의 미확인으로 발송 제외됩니다" : undefined,
+      });
+    });
+
+    // Filter by manageSelectionSearch
+    const filteredItems = items.filter((item) => {
+      if (!query) return true;
+      return (
+        item.email.includes(query) ||
+        item.companyNameKr.toLowerCase().includes(query) ||
+        (item.companyNameEn && item.companyNameEn.toLowerCase().includes(query)) ||
+        (item.contactName && item.contactName.toLowerCase().includes(query)) ||
+        (item.brandName && item.brandName.toLowerCase().includes(query))
+      );
+    });
+
+    return (
+      <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-4xl w-full p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <span>선택된 수신 대상 관리 (Manage Selected Recipients)</span>
+                <span className="text-xs font-mono font-normal px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">
+                  총 {items.length}개 대상 ({items.filter((i) => i.isSendable).length}개 발송 가능)
+                </span>
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                기업 연락처 및 수기 추가된 모든 이메일을 검토하고 불필요한 대상을 개별 제거할 수 있습니다.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowManageSelectionModal(false)}
+              className="text-zinc-400 hover:text-zinc-600 text-sm font-bold cursor-pointer p-1"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Search within selections & Clear All action */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={manageSelectionSearch}
+                onChange={(e) => setManageSelectionSearch(e.target.value)}
+                placeholder="선택 목록 내 이메일, 회사명, 담당자명 검색..."
+                className="w-full text-xs px-3 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+              />
+              {manageSelectionSearch && (
+                <button
+                  type="button"
+                  onClick={() => setManageSelectionSearch("")}
+                  className="absolute right-2.5 top-2 text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleClearAllSelections}
+              className="px-3 py-2 text-xs font-semibold rounded border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
+            >
+              전체 선택 해제
+            </button>
+          </div>
+
+          {/* Items Table */}
+          <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto flex-1 min-h-[300px] max-h-[480px]">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-zinc-50 dark:bg-zinc-800/60 sticky top-0">
+                <tr>
+                  <th className="p-2.5">유형</th>
+                  <th className="p-2.5">기업명 / 브랜드</th>
+                  <th className="p-2.5">담당자 / 이메일</th>
+                  <th className="p-2.5">동의 상태</th>
+                  <th className="p-2.5">발송 자격</th>
+                  <th className="p-2.5 text-right w-16">제거</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                {filteredItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-zinc-400">
+                      {items.length === 0 ? "선택된 수신 대상이 없습니다." : "검색 조건과 일치하는 수신 대상이 없습니다."}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredItems.map((item) => (
+                    <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
+                      <td className="p-2.5">
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            item.type === "COMPANY_CONTACT"
+                              ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                              : "bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+                          }`}
+                        >
+                          {item.type === "COMPANY_CONTACT" ? "기업 연락처" : "수기 입력"}
+                        </span>
+                      </td>
+                      <td className="p-2.5">
+                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">{item.companyNameKr}</div>
+                        {item.brandName && (
+                          <div className="text-[10px] text-zinc-500">{item.brandName}</div>
+                        )}
+                      </td>
+                      <td className="p-2.5 font-mono">
+                        <div className="text-zinc-800 dark:text-zinc-200">{item.email}</div>
+                        {item.contactName && (
+                          <div className="text-[10px] text-zinc-500 font-sans">{item.contactName}</div>
+                        )}
+                      </td>
+                      <td className="p-2.5">
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                          {item.consentStatus}
+                        </span>
+                      </td>
+                      <td className="p-2.5">
+                        {item.isSendable ? (
+                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            ✓ 발송 가능
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400" title={item.exclusionReason}>
+                            ⚠️ 동의 미확인
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (item.type === "COMPANY_CONTACT" && item.contactId && item.companyId) {
+                              const comp = selectedCompaniesCache.get(item.companyId);
+                              if (comp) handleToggleContact(comp, item.contactId);
+                            } else if (item.type === "MANUAL") {
+                              handleRemoveManualEmail(item.email);
+                            }
+                          }}
+                          className="px-2 py-0.5 text-[11px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 rounded cursor-pointer"
+                        >
+                          제거
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
+            <span className="text-xs text-zinc-500">
+              * 상업성 정보 수신 동의가 미확인된 대상은 Dry Run 및 발송 승인 시 자동 제외됩니다.
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowManageSelectionModal(false)}
+              className="px-4 py-1.5 text-xs font-bold rounded bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 cursor-pointer"
+            >
+              확인 및 닫기
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // --------------------------------------------------------------------------
   // RENDER: DELETE CONFIRMATION MODAL
   // --------------------------------------------------------------------------
@@ -2604,6 +3618,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       {renderDuplicateModal()}
       {renderTemplatePreviewModal()}
       {renderDeleteConfirmModal()}
+      {renderManageSelectionModal()}
       <DesignerGuideModal isOpen={showGuideModal} onClose={() => setShowGuideModal(false)} />
     </div>
   );

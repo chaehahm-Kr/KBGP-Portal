@@ -40,6 +40,7 @@ export interface SourcingListParams {
   businessTypes?: string[];
   businessTypeMatchMode?: "ANY" | "ALL";
   assignedTo?: string;
+  marketingConsentStatus?: string;
   limit?: number;
   offset?: number;
 }
@@ -1313,6 +1314,7 @@ export async function listSourcingCompanies(
       status,
       assigned_to,
       internal_notes,
+      marketing_consent_status,
       raw_payload_snapshot,
       created_at,
       updated_at,
@@ -1336,6 +1338,9 @@ export async function listSourcingCompanies(
   }
   if (params?.assignedTo && params.assignedTo !== "ALL") {
     query = query.eq("assigned_to", params.assignedTo);
+  }
+  if (params?.marketingConsentStatus && params.marketingConsentStatus !== "ALL") {
+    query = query.eq("marketing_consent_status", params.marketingConsentStatus);
   }
 
   // Company Type filter (multi-value)
@@ -1527,4 +1532,41 @@ export async function updateSourcingEvaluation(
   }
 
   return data;
+}
+
+
+/**
+ * Retrieves sourcing companies by a list of IDs.
+ */
+export async function getSourcingCompaniesByIds(
+  ids: string[],
+  customClient?: SupabaseClient
+) {
+  if (!ids || ids.length === 0) return [];
+  const supabase = getClient(customClient);
+  const { data, error } = await supabase
+    .from("sourcing_companies")
+    .select(`
+      id,
+      company_name_kr,
+      company_name_en,
+      description_kr,
+      description_en,
+      business_types,
+      primary_product_categories,
+      grade,
+      status,
+      marketing_consent_status,
+      internal_notes,
+      sourcing_brands(id, brand_name_kr, brand_name_en, categories, key_products),
+      sourcing_contacts(id, name, department, job_title, email, phone, is_primary),
+      sourcing_websites(id, url, label, is_primary)
+    `)
+    .in("id", ids);
+
+  if (error) {
+    console.error("[getSourcingCompaniesByIds] Error:", error);
+    return [];
+  }
+  return data || [];
 }
