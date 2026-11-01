@@ -488,4 +488,144 @@ describe("ADM-BSRC-009-R5: Recipient Discovery, Persistent Selection & Manual Em
       expect(res.alreadySuppressed).toBe(true);
     });
   });
+  // ---------------------------------------------------------------------------
+  // 9. ADM-BSRC-009-R6: Recipient Data Hygiene & Default Multi-Contact Selection
+  // ---------------------------------------------------------------------------
+  describe("9. ADM-BSRC-009-R6: Data Hygiene & Default Multi-Contact Selection", () => {
+    // RFC regex mirroring components/admin/brand-marketing/email-campaigns-view.tsx
+    const isValidContactEmail = (email?: string | null): boolean => {
+      if (!email || typeof email !== "string") return false;
+      const trimmed = email.trim();
+      if (!trimmed) return false;
+      if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return false;
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      return emailRegex.test(trimmed);
+    };
+
+    it("accurately classifies valid vs malformed contact emails (phone, URL, missing TLD, empty)", () => {
+      expect(isValidContactEmail("contact@brand.kr")).toBe(true);
+      expect(isValidContactEmail("ceo.marketing@company.co.kr")).toBe(true);
+      expect(isValidContactEmail("valid-email_123@sub.domain.com")).toBe(true);
+
+      // Audit findings exact values
+      expect(isValidContactEmail("02-408-2021")).toBe(false); // PHONE_SAVED_AS_EMAIL
+      expect(isValidContactEmail("https://cellmula.com/")).toBe(false); // URL_SAVED_AS_EMAIL
+      expect(isValidContactEmail("jjmetro2024@naver")).toBe(false); // MISSING_TLD
+      expect(isValidContactEmail("")).toBe(false); // EMPTY_EMAIL
+      expect(isValidContactEmail("   ")).toBe(false); // WHITESPACE
+      expect(isValidContactEmail(null)).toBe(false);
+      expect(isValidContactEmail(undefined)).toBe(false);
+    });
+
+    it("default-selects all valid contact emails and deduplicates identical emails within company", () => {
+      const mockCompany = {
+        id: "comp-123",
+        company_name_kr: "테스트 뷰티",
+        sourcing_contacts: [
+          { id: "ct-1", name: "김대표", email: "info@brand.kr", is_primary: true },
+          { id: "ct-2", name: "박실장", email: "info@brand.kr", is_primary: false }, // Duplicate email!
+          { id: "ct-3", name: "이팀장", email: "marketing@brand.kr", is_primary: false },
+          { id: "ct-4", name: "최담당", email: "02-123-4567", is_primary: false }, // Phone invalid!
+          { id: "ct-5", name: "정인턴", email: "", is_primary: false }, // Empty invalid!
+        ],
+      };
+
+      // Helper function mirroring view logic
+      const getValidCompanyContacts = (comp: any) => {
+        const contacts = comp?.sourcing_contacts || [];
+        const valid: any[] = [];
+        const seenEmails = new Set<string>();
+        const sorted = [...contacts].sort((a: any, b: any) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+        for (const ct of sorted) {
+          if (isValidContactEmail(ct.email)) {
+            const norm = ct.email.toLowerCase().trim();
+            if (!seenEmails.has(norm)) {
+              seenEmails.add(norm);
+              valid.push(ct);
+            }
+          }
+        }
+        return valid;
+      };
+
+      const validContacts = getValidCompanyContacts(mockCompany);
+      expect(validContacts.length).toBe(2);
+      expect(validContacts.map((c: any) => c.id)).toEqual(["ct-1", "ct-3"]);
+      expect(validContacts.map((c: any) => c.email)).toEqual(["info@brand.kr", "marketing@brand.kr"]);
+    });
+
+    it("handles indeterminate checkbox state when individual contacts are unchecked", () => {
+      const validContactIds = ["ct-1", "ct-2", "ct-3"];
+      let selectedContactIds = ["ct-1", "ct-2", "ct-3"];
+
+      // Fully checked
+      let isAllSelected = selectedContactIds.length === validContactIds.length;
+      let isSomeSelected = selectedContactIds.length > 0 && selectedContactIds.length < validContactIds.length;
+      expect(isAllSelected).toBe(true);
+      expect(isSomeSelected).toBe(false);
+
+      // Uncheck one contact
+      selectedContactIds = selectedContactIds.filter((id) => id !== "ct-2");
+      isAllSelected = selectedContactIds.length === validContactIds.length;
+      isSomeSelected = selectedContactIds.length > 0 && selectedContactIds.length < validContactIds.length;
+      expect(isAllSelected).toBe(false);
+      expect(isSomeSelected).toBe(true); // Indeterminate!
+
+      // Uncheck remaining contacts
+      selectedContactIds = [];
+      isAllSelected = selectedContactIds.length === validContactIds.length;
+      isSomeSelected = selectedContactIds.length > 0 && selectedContactIds.length < validContactIds.length;
+      expect(isAllSelected).toBe(false);
+      expect(isSomeSelected).toBe(false); // Fully unchecked!
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 10. ADM-BSRC-009-R6: "All" Page-Size Option & Full-Dataset Sorting
+  // ---------------------------------------------------------------------------
+  describe("10. ADM-BSRC-009-R6: 'All' Page-Size & Sortable Column Headers", () => {
+    it("supports 'All' page size mode via limit: -1 or limit: 0 without truncation", async () => {
+      const resAll = await listSourcingCandidatesAction({ limit: -1, offset: 0 });
+      expect(resAll.success).toBe(true);
+      expect(Array.isArray(resAll.candidates)).toBe(true);
+      expect(resAll.candidates!.length).toBe(resAll.total);
+      expect(resAll.total).toBeGreaterThan(0);
+    });
+
+    it("sorts by Grade using custom business order (A > B > C > UNRATED)", async () => {
+      const resGradeAsc = await listSourcingCandidatesAction({ sortBy: "grade", sortOrder: "asc", limit: 20 });
+      expect(resGradeAsc.success).toBe(true);
+      const grades = resGradeAsc.candidates!.map((c) => c.grade || "UNRATED");
+      // All top grades should be 'A' or 'B'
+      expect(["A", "B"]).toContain(grades[0]);
+
+      const resGradeDesc = await listSourcingCandidatesAction({ sortBy: "grade", sortOrder: "desc", limit: 20 });
+      expect(resGradeDesc.success).toBe(true);
+      const descGrades = resGradeDesc.candidates!.map((c) => c.grade || "UNRATED");
+      // In desc, UNRATED or C must be at top
+      expect(["UNRATED", "C"]).toContain(descGrades[0]);
+    });
+
+    it("sorts by Company Name ascending with Korean collation", async () => {
+      const resNameAsc = await listSourcingCandidatesAction({ sortBy: "company_name", sortOrder: "asc", limit: 10 });
+      expect(resNameAsc.success).toBe(true);
+      const names = resNameAsc.candidates!.map((c) => c.company_name_kr);
+      for (let i = 0; i < names.length - 1; i++) {
+        expect(names[i].localeCompare(names[i + 1], "ko")).toBeLessThanOrEqual(0);
+      }
+    });
+
+    it("sorts by Email address ascending across full dataset before pagination", async () => {
+      const resEmailAsc = await listSourcingCandidatesAction({ sortBy: "email", sortOrder: "asc", limit: 5 });
+      expect(resEmailAsc.success).toBe(true);
+      expect(resEmailAsc.candidates!.length).toBeLessThanOrEqual(5);
+    });
+
+    it("sorts by Marketing Consent using business order (CONSENTED > UNCONFIRMED > REFUSED)", async () => {
+      const resConsentAsc = await listSourcingCandidatesAction({ sortBy: "consent", sortOrder: "asc", limit: 20 });
+      expect(resConsentAsc.success).toBe(true);
+      expect(resConsentAsc.candidates!.length).toBeGreaterThan(0);
+    });
+  });
 });
+

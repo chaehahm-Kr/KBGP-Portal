@@ -43,6 +43,8 @@ export interface SourcingListParams {
   marketingConsentStatus?: string;
   limit?: number;
   offset?: number;
+  sortBy?: "company_name" | "brand_name" | "grade" | "category" | "email" | "consent" | "created_at" | null;
+  sortOrder?: "asc" | "desc" | null;
 }
 
 /**
@@ -1457,16 +1459,87 @@ export async function listSourcingCompanies(
     }
   }
 
-  const limit = params?.limit || 25;
+  const limit = params?.limit;
   const offset = params?.offset || 0;
-  query = query.range(offset, offset + limit - 1);
+  const sortBy = params?.sortBy;
+  const sortOrder = params?.sortOrder || "asc";
+
+  // When sorting is requested or "ALL" mode (limit <= 0 or limit === -1),
+  // retrieve full matching dataset up to 5,000 records so we can sort before pagination
+  const needsFullFetch = !!sortBy || limit === 0 || limit === -1 || (limit !== undefined && limit >= 5000);
+
+  if (needsFullFetch) {
+    query = query.range(0, 4999);
+  } else {
+    const pageLimit = limit !== undefined && limit > 0 ? limit : 25;
+    query = query.range(offset, offset + pageLimit - 1);
+  }
 
   const { data, error, count } = await query;
   if (error) {
     throw new Error(`Failed to list sourcing companies: ${error.message}`);
   }
 
-  return { data, total: count || 0 };
+  let results = data || [];
+
+  if (sortBy && results.length > 0) {
+    results = [...results].sort((a: any, b: any) => {
+      if (sortBy === "company_name") {
+        const nameA = (a.company_name_kr || a.company_name_en || "").toLowerCase();
+        const nameB = (b.company_name_kr || b.company_name_en || "").toLowerCase();
+        return sortOrder === "desc" ? nameB.localeCompare(nameA, "ko") : nameA.localeCompare(nameB, "ko");
+      }
+      if (sortBy === "brand_name") {
+        const brandA = (a.sourcing_brands?.[0]?.brand_name_kr || a.sourcing_brands?.[0]?.brand_name_en || a.company_name_kr || "").toLowerCase();
+        const brandB = (b.sourcing_brands?.[0]?.brand_name_kr || b.sourcing_brands?.[0]?.brand_name_en || b.company_name_kr || "").toLowerCase();
+        return sortOrder === "desc" ? brandB.localeCompare(brandA, "ko") : brandA.localeCompare(brandB, "ko");
+      }
+      if (sortBy === "grade") {
+        // Business order: A, B, C, UNRATED
+        const gradeRank: Record<string, number> = { A: 1, B: 2, C: 3, UNRATED: 4 };
+        const rankA = gradeRank[a.grade || "UNRATED"] ?? 4;
+        const rankB = gradeRank[b.grade || "UNRATED"] ?? 4;
+        if (rankA !== rankB) {
+          return sortOrder === "desc" ? rankB - rankA : rankA - rankB;
+        }
+        return (a.company_name_kr || "").localeCompare(b.company_name_kr || "", "ko");
+      }
+      if (sortBy === "category") {
+        const catA = ((a.primary_product_categories && a.primary_product_categories[0]) || (a.business_types && a.business_types[0]) || "").toLowerCase();
+        const catB = ((b.primary_product_categories && b.primary_product_categories[0]) || (b.business_types && b.business_types[0]) || "").toLowerCase();
+        return sortOrder === "desc" ? catB.localeCompare(catA, "ko") : catA.localeCompare(catB, "ko");
+      }
+      if (sortBy === "email") {
+        const getEmail = (c: any) => {
+          const primary = (c.sourcing_contacts || []).find((ct: any) => ct.is_primary)?.email;
+          return (primary || c.sourcing_contacts?.[0]?.email || "").toLowerCase();
+        };
+        const emailA = getEmail(a);
+        const emailB = getEmail(b);
+        if (!emailA && emailB) return 1;
+        if (emailA && !emailB) return -1;
+        return sortOrder === "desc" ? emailB.localeCompare(emailA) : emailA.localeCompare(emailB);
+      }
+      if (sortBy === "consent") {
+        // Business order: CONSENTED (1), UNCONFIRMED (2), REFUSED (3)
+        const consentRank: Record<string, number> = { CONSENTED: 1, UNCONFIRMED: 2, REFUSED: 3 };
+        const rankA = consentRank[a.marketing_consent_status || "UNCONFIRMED"] ?? 2;
+        const rankB = consentRank[b.marketing_consent_status || "UNCONFIRMED"] ?? 2;
+        if (rankA !== rankB) {
+          return sortOrder === "desc" ? rankB - rankA : rankA - rankB;
+        }
+        return (a.company_name_kr || "").localeCompare(b.company_name_kr || "", "ko");
+      }
+      return 0;
+    });
+  }
+
+  // If we fetched the full dataset for sorting and a specific page limit was requested
+  if (needsFullFetch && limit !== undefined && limit > 0) {
+    results = results.slice(offset, offset + limit);
+  }
+
+  return { data: results, total: count || 0 };
 }
 
 /**
