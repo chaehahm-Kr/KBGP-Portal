@@ -225,14 +225,25 @@ export function assembleEmailWithMarketingFooter(
   }
 
   // 4. Resolve explicit CTA links if template designated a campaign CTA
-  if (options.landingPageUrl && options.landingPageUrl.trim().length > 0) {
-    const targetUrl = options.landingPageUrl.trim();
-    assembled = assembled.replace(/\{\{landing_page_url\}\}/gi, targetUrl);
-    assembled = assembled.replace(/href=["']\{\{cta_url\}\}["']/gi, `href="${escapeHtml(targetUrl)}"`);
-  }
+  const targetLandingUrl = (options.landingPageUrl || "https://www.kselectnetwork.com").trim();
+  assembled = assembled.replace(/\{\{(?:landing_page_url|landing_url)\}\}/gi, targetLandingUrl);
+  assembled = assembled.replace(/href=["']\{\{cta_url\}\}["']/gi, `href="${escapeHtml(targetLandingUrl)}"`);
 
   // 5. Replace any standalone {{unsubscribe_url}} placeholders
   assembled = assembled.replace(/\{\{unsubscribe_url\}\}/gi, options.unsubscribeUrl);
+
+  // 6. Replace any standalone {{company_address}} placeholders
+  if (options.footerSettings?.physicalAddress) {
+    assembled = assembled.replace(/\{\{company_address\}\}/gi, options.footerSettings.physicalAddress);
+  }
+
+  // 7. Fallback for raw {{image_host}} if not already rewritten by zip package importer
+  const adminUrl = (
+    process.env.NEXT_PUBLIC_ADMIN_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    "https://admin.kselectnetwork.com"
+  ).replace(/\/$/, "");
+  assembled = assembled.replace(/\{\{image_host\}\}/gi, adminUrl);
 
   return assembled;
 }

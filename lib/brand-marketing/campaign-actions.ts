@@ -737,6 +737,53 @@ export async function deleteMarketingTemplateAction(
 }
 
 /**
+ * Bulk deletes templates after checking dependencies against existing campaign history.
+ */
+export async function deleteMarketingTemplatesBulkAction(
+  templateIds: string[]
+): Promise<{
+  success: boolean;
+  deletedCount: number;
+  blockedCount: number;
+  blockedDetails: Array<{ id: string; error: string }>;
+  error?: string;
+}> {
+  try {
+    const admin = await requireCampaignAdmin();
+    let deletedCount = 0;
+    let blockedCount = 0;
+    const blockedDetails: Array<{ id: string; error: string }> = [];
+
+    for (const tplId of templateIds) {
+      const res = await deleteMarketingTemplate(tplId, admin.userId);
+      if (res.success) {
+        deletedCount++;
+      } else {
+        blockedCount++;
+        blockedDetails.push({ id: tplId, error: res.error || "Cannot delete template" });
+      }
+    }
+
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+    return {
+      success: deletedCount > 0 || templateIds.length === 0,
+      deletedCount,
+      blockedCount,
+      blockedDetails,
+      error: blockedCount > 0 && deletedCount === 0 ? "All selected templates are protected by campaign dependencies." : undefined,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      deletedCount: 0,
+      blockedCount: templateIds.length,
+      blockedDetails: [],
+      error: err.message || "Failed to bulk delete templates",
+    };
+  }
+}
+
+/**
  * Retrieves the centrally managed Marketing Email Footer settings.
  */
 export async function getMarketingFooterSettingsAction(): Promise<{
