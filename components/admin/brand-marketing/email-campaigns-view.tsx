@@ -177,6 +177,9 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
   // Manage Selection Modal State
   const [showManageSelectionModal, setShowManageSelectionModal] = useState<boolean>(false);
   const [manageSelectionSearch, setManageSelectionSearch] = useState<string>("");
+  // Manage Selection Modal Sorting State (ADM-BSRC-009-R8)
+  const [manageSelectionSortBy, setManageSelectionSortBy] = useState<"type" | "company" | "email" | "consent" | "eligibility" | null>(null);
+  const [manageSelectionSortOrder, setManageSelectionSortOrder] = useState<"asc" | "desc" | null>(null);
 
   // Dry Run & Test Send State
   const [dryRunReport, setDryRunReport] = useState<DryRunReport | null>(null);
@@ -503,6 +506,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       setSelectedCompanyIds((prev) => prev.filter((id) => id !== comp.id));
       setSelectedContactIds((prev) => prev.filter((id) => !allCompContactIds.includes(id)));
     } else {
+      if (validContactIds.length === 0) return; // Do not select companies without valid contacts (ADM-BSRC-009-R8)
       // Select company and ALL valid deduplicated contact emails
       setSelectedCompanyIds((prev) => [...prev, comp.id]);
       setSelectedContactIds((prev) => Array.from(new Set([...prev, ...validContactIds])));
@@ -532,8 +536,12 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
 
   // Header Select All for CURRENT VISIBLE PAGE only (Never across entire database)
   const pageCompanyIds = useMemo(() => candidatesList.map((c) => c.id), [candidatesList]);
-  const isAllPageSelected = pageCompanyIds.length > 0 && pageCompanyIds.every((id) => selectedCompanyIds.includes(id));
-  const isSomePageSelected = pageCompanyIds.some((id) => selectedCompanyIds.includes(id)) && !isAllPageSelected;
+  const pageSelectableCompanyIds = useMemo(
+    () => candidatesList.filter((c) => getValidCompanyContacts(c).length > 0).map((c) => c.id),
+    [candidatesList]
+  );
+  const isAllPageSelected = pageSelectableCompanyIds.length > 0 && pageSelectableCompanyIds.every((id) => selectedCompanyIds.includes(id));
+  const isSomePageSelected = pageSelectableCompanyIds.some((id) => selectedCompanyIds.includes(id)) && !isAllPageSelected;
 
   const handleToggleSelectAllPage = () => {
     if (isAllPageSelected) {
@@ -546,7 +554,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       });
       setSelectedContactIds((prev) => prev.filter((id) => !pageContactIds.includes(id)));
     } else {
-      setSelectedCompanyIds((prev) => Array.from(new Set([...prev, ...pageCompanyIds])));
+      setSelectedCompanyIds((prev) => Array.from(new Set([...prev, ...pageSelectableCompanyIds])));
       const pageValidContactIds: string[] = [];
       candidatesList.forEach((c) => {
         const valid = getValidCompanyContacts(c);
@@ -630,32 +638,202 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     return Array.from(all);
   }, [selectedCompanyEmails, manualEmails]);
 
-  // Estimated Consent / Send Eligibility Breakdown
-  const consentEligibilityEstimate = useMemo(() => {
-    let eligible = 0;
-    let excluded = 0;
+  // Authoritative Selected Recipient Model (ADM-BSRC-009-R8)
+  // Perfectly reconciled with totalUniqueRecipients, powering Modal and Campaign Resolution
+  interface SelectedRecipientItem {
+    id: string;
+    type: "COMPANY_CONTACT" | "MANUAL";
+    email: string;
+    companyId?: string;
+    companyNameKr: string;
+    companyNameEn?: string;
+    brandName?: string;
+    contactId?: string;
+    contactName?: string;
+    consentStatus: string;
+    isSendable: boolean;
+    exclusionReason?: string;
+    associatedCompanyIds: string[];
+    associatedContactIds: string[];
+    sharedCompanyCount: number;
+    sharingCompanyNames: string[];
+  }
+
+  const selectedRecipientItems = useMemo<SelectedRecipientItem[]>(() => {
+    const emailToItemMap = new Map<string, SelectedRecipientItem>();
+
+    // 1. Process selected company contacts
     selectedCompaniesCache.forEach((comp) => {
       if (selectedCompanyIds.includes(comp.id)) {
         const isConsented = comp.marketing_consent_status === "CONSENTED";
         (comp.sourcing_contacts || []).forEach((ct: any) => {
           if (selectedContactIds.includes(ct.id) && isValidContactEmail(ct.email)) {
-            if (requireConsentedOnly) {
-              if (isConsented) eligible++;
-              else excluded++;
+            const normEmail = ct.email.toLowerCase().trim();
+            const isSendable = requireConsentedOnly ? isConsented : true;
+            const exclusionReason = !isSendable ? "마케팅 동의 미확인 (Strict Consent 필터 적용됨)" : undefined;
+
+            if (emailToItemMap.has(normEmail)) {
+              const existing = emailToItemMap.get(normEmail)!;
+              if (!existing.associatedCompanyIds.includes(comp.id)) {
+                existing.associatedCompanyIds.push(comp.id);
+                existing.sharedCompanyCount = existing.associatedCompanyIds.length;
+                if (!existing.sharingCompanyNames.includes(comp.company_name_kr)) {
+                  existing.sharingCompanyNames.push(comp.company_name_kr);
+                }
+              }
+              if (!existing.associatedContactIds.includes(ct.id)) {
+                existing.associatedContactIds.push(ct.id);
+              }
+              if (isConsented && !existing.isSendable) {
+                existing.isSendable = true;
+                existing.exclusionReason = undefined;
+                existing.consentStatus = "CONSENTED";
+              }
             } else {
-              eligible++;
+              emailToItemMap.set(normEmail, {
+                id: `rec-comp-${comp.id}-${ct.id}`,
+                type: "COMPANY_CONTACT",
+                email: normEmail,
+                companyId: comp.id,
+                companyNameKr: comp.company_name_kr,
+                companyNameEn: comp.company_name_en,
+                brandName: comp.sourcing_brands?.[0]?.brand_name_kr || comp.company_name_kr,
+                contactId: ct.id,
+                contactName: ct.name,
+                consentStatus: comp.marketing_consent_status || "UNCONFIRMED",
+                isSendable,
+                exclusionReason,
+                associatedCompanyIds: [comp.id],
+                associatedContactIds: [ct.id],
+                sharedCompanyCount: 1,
+                sharingCompanyNames: [comp.company_name_kr],
+              });
             }
           }
         });
       }
     });
-    if (requireConsentedOnly) {
-      excluded += manualEmails.length; // Manual entries have unconfirmed consent
-    } else {
-      eligible += manualEmails.length;
-    }
-    return { eligible, excluded };
+
+    // 2. Process manual emails
+    manualEmails.forEach((rawEmail) => {
+      const normEmail = rawEmail.toLowerCase().trim();
+      if (!normEmail) return;
+      if (!emailToItemMap.has(normEmail)) {
+        const isSendable = !requireConsentedOnly;
+        emailToItemMap.set(normEmail, {
+          id: `rec-manual-${normEmail}`,
+          type: "MANUAL",
+          email: normEmail,
+          companyNameKr: "수기 입력 수신자",
+          companyNameEn: "Manual Entry Recipient",
+          brandName: "Direct Outreach",
+          contactName: "직접 입력",
+          consentStatus: "미확인 (수기 입력)",
+          isSendable,
+          exclusionReason: !isSendable ? "수기 입력 이메일은 마케팅 동의 미확인으로 발송 제외됩니다" : undefined,
+          associatedCompanyIds: [],
+          associatedContactIds: [],
+          sharedCompanyCount: 1,
+          sharingCompanyNames: [],
+        });
+      }
+    });
+
+    return Array.from(emailToItemMap.values());
   }, [selectedCompaniesCache, selectedCompanyIds, selectedContactIds, manualEmails, requireConsentedOnly]);
+
+  // Handle individual recipient removal inside modal (ADM-BSRC-009-R8)
+  const handleRemoveRecipientItem = (item: SelectedRecipientItem) => {
+    if (item.type === "MANUAL") {
+      setManualEmails((prev) => prev.filter((e) => e.toLowerCase().trim() !== item.email));
+    } else {
+      const toRemoveContactIds = new Set(item.associatedContactIds);
+      const remainingContactIds = selectedContactIds.filter((id) => !toRemoveContactIds.has(id));
+      setSelectedContactIds(remainingContactIds);
+
+      // Check associated companies: if a company has no remaining selected valid contacts, uncheck it
+      setSelectedCompanyIds((prev) => {
+        return prev.filter((cId) => {
+          if (!item.associatedCompanyIds.includes(cId)) return true;
+          const comp = selectedCompaniesCache.get(cId);
+          if (!comp) return true;
+          const validContacts = getValidCompanyContacts(comp);
+          const hasRemaining = validContacts.some(
+            (ct) => !toRemoveContactIds.has(ct.id) && remainingContactIds.includes(ct.id)
+          );
+          return hasRemaining;
+        });
+      });
+    }
+  };
+
+  // 3-state Sorting for Manage Selection Modal (ADM-BSRC-009-R8)
+  const handleToggleManageSelectionSort = (column: "type" | "company" | "email" | "consent" | "eligibility") => {
+    if (manageSelectionSortBy !== column) {
+      setManageSelectionSortBy(column);
+      setManageSelectionSortOrder("asc");
+    } else if (manageSelectionSortOrder === "asc") {
+      setManageSelectionSortOrder("desc");
+    } else {
+      setManageSelectionSortBy(null);
+      setManageSelectionSortOrder(null);
+    }
+  };
+
+  const sortedManageSelectionItems = useMemo(() => {
+    if (!manageSelectionSortBy || !manageSelectionSortOrder) {
+      // Deterministic default order: Company name asc (Korean collation), then email asc
+      return [...selectedRecipientItems].sort((a, b) => {
+        const compCmp = (a.companyNameKr || "").localeCompare(b.companyNameKr || "", "ko");
+        if (compCmp !== 0) return compCmp;
+        return a.email.localeCompare(b.email);
+      });
+    }
+    const factor = manageSelectionSortOrder === "asc" ? 1 : -1;
+    return [...selectedRecipientItems].sort((a, b) => {
+      switch (manageSelectionSortBy) {
+        case "type":
+          return a.type.localeCompare(b.type) * factor;
+        case "company":
+          return (a.companyNameKr || "").localeCompare(b.companyNameKr || "", "ko") * factor;
+        case "email":
+          return a.email.localeCompare(b.email) * factor;
+        case "consent":
+          return (a.consentStatus || "").localeCompare(b.consentStatus || "", "ko") * factor;
+        case "eligibility": {
+          const aVal = a.isSendable ? 1 : 0;
+          const bVal = b.isSendable ? 1 : 0;
+          return (aVal - bVal) * factor;
+        }
+        default:
+          return 0;
+      }
+    });
+  }, [selectedRecipientItems, manageSelectionSortBy, manageSelectionSortOrder]);
+
+  const filteredManageSelectionItems = useMemo(() => {
+    const q = manageSelectionSearch.trim().toLowerCase();
+    if (!q) return sortedManageSelectionItems;
+    return sortedManageSelectionItems.filter(
+      (item) =>
+        item.email.includes(q) ||
+        item.companyNameKr.toLowerCase().includes(q) ||
+        (item.companyNameEn && item.companyNameEn.toLowerCase().includes(q)) ||
+        (item.brandName && item.brandName.toLowerCase().includes(q)) ||
+        (item.contactName && item.contactName.toLowerCase().includes(q))
+    );
+  }, [sortedManageSelectionItems, manageSelectionSearch]);
+
+  // Estimated Consent / Send Eligibility Breakdown (Reconciled from Authoritative Model)
+  const consentEligibilityEstimate = useMemo(() => {
+    let eligible = 0;
+    let excluded = 0;
+    selectedRecipientItems.forEach((item) => {
+      if (item.isSendable) eligible++;
+      else excluded++;
+    });
+    return { eligible, excluded };
+  }, [selectedRecipientItems]);
 
   const handleClearAllSelections = () => {
     if (typeof window !== "undefined" && window.confirm("선택된 모든 기업, 연락처 및 수기 이메일을 해제하시겠습니까?")) {
@@ -2490,8 +2668,10 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                                     if (el) el.indeterminate = isIndeterminate;
                                   }}
                                   checked={isChecked}
+                                  disabled={validContactIds.length === 0}
                                   onChange={() => handleToggleCompany(c)}
-                                  className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                  title={validContactIds.length === 0 ? "발송 가능한 유효 연락처가 없습니다" : undefined}
+                                  className={`w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 ${validContactIds.length === 0 ? "cursor-not-allowed opacity-40" : "cursor-pointer"}`}
                                 />
                               </td>
                               <td className="p-2.5">
@@ -3545,211 +3725,256 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
 
 
   // --------------------------------------------------------------------------
-  // RENDER: MANAGE SELECTION MODAL (ADM-BSRC-009-R5)
+  // RENDER: MANAGE SELECTION MODAL (ADM-BSRC-009-R8: Expanded 1500px, Opaque Sticky Header & 3-state Sorting)
   // --------------------------------------------------------------------------
   const renderManageSelectionModal = () => {
     if (!showManageSelectionModal) return null;
 
-    const query = manageSelectionSearch.trim().toLowerCase();
-
-    // Prepare list of all selected items
-    const items: Array<{
-      id: string;
-      type: "COMPANY_CONTACT" | "MANUAL";
-      companyId?: string;
-      companyNameKr: string;
-      companyNameEn?: string;
-      brandName?: string;
-      contactId?: string;
-      contactName?: string;
-      email: string;
-      consentStatus: string;
-      isSendable: boolean;
-      exclusionReason?: string;
-    }> = [];
-
-    // Add company contacts
-    selectedCompaniesCache.forEach((comp) => {
-      if (selectedCompanyIds.includes(comp.id)) {
-        const isConsented = comp.marketing_consent_status === "CONSENTED";
-        (comp.sourcing_contacts || []).forEach((ct: any) => {
-          if (selectedContactIds.includes(ct.id) && ct.email) {
-            const isSendable = requireConsentedOnly ? isConsented : true;
-            items.push({
-              id: `comp-${comp.id}-contact-${ct.id}`,
-              type: "COMPANY_CONTACT",
-              companyId: comp.id,
-              companyNameKr: comp.company_name_kr,
-              companyNameEn: comp.company_name_en,
-              brandName: comp.sourcing_brands?.[0]?.brand_name_kr || comp.company_name_kr,
-              contactId: ct.id,
-              contactName: ct.name,
-              email: ct.email.toLowerCase().trim(),
-              consentStatus: comp.marketing_consent_status || "UNCONFIRMED",
-              isSendable,
-              exclusionReason: !isSendable ? "마케팅 동의 미확인 (Strict Consent 필터 적용됨)" : undefined,
-            });
-          }
-        });
+    const renderSortIndicator = (field: "type" | "company" | "email" | "consent" | "eligibility") => {
+      if (manageSelectionSortBy !== field) {
+        return <span className="text-zinc-400 dark:text-zinc-500 text-[10px]">↕</span>;
       }
-    });
-
-    // Add manual emails
-    manualEmails.forEach((email) => {
-      const isSendable = !requireConsentedOnly;
-      items.push({
-        id: `manual-${email}`,
-        type: "MANUAL",
-        companyNameKr: "수기 입력 수신자",
-        companyNameEn: "Manual Entry Recipient",
-        brandName: "Direct Outreach",
-        email: email.toLowerCase().trim(),
-        consentStatus: "미확인 (수기 입력)",
-        isSendable,
-        exclusionReason: !isSendable ? "수기 입력 이메일은 마케팅 동의 미확인으로 발송 제외됩니다" : undefined,
-      });
-    });
-
-    // Filter by manageSelectionSearch
-    const filteredItems = items.filter((item) => {
-      if (!query) return true;
       return (
-        item.email.includes(query) ||
-        item.companyNameKr.toLowerCase().includes(query) ||
-        (item.companyNameEn && item.companyNameEn.toLowerCase().includes(query)) ||
-        (item.contactName && item.contactName.toLowerCase().includes(query)) ||
-        (item.brandName && item.brandName.toLowerCase().includes(query))
+        <span className="text-indigo-600 dark:text-indigo-400 font-bold text-[11px]">
+          {manageSelectionSortOrder === "asc" ? "▲" : "▼"}
+        </span>
       );
-    });
+    };
+
+    const sendableCount = selectedRecipientItems.filter((i) => i.isSendable).length;
+    const excludedCount = selectedRecipientItems.length - sendableCount;
 
     return (
-      <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-4xl w-full p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
-          {/* Modal Header */}
-          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+      <div className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 md:p-8 animate-in fade-in duration-150">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl w-[95vw] max-w-[1500px] h-[88vh] max-h-[90vh] shadow-2xl flex flex-col overflow-hidden">
+          {/* Modal Header (Fixed height, no scroll) */}
+          <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-4 bg-zinc-50/80 dark:bg-zinc-900 shrink-0">
             <div>
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <span>선택된 수신 대상 관리 (Manage Selected Recipients)</span>
-                <span className="text-xs font-mono font-normal px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">
-                  총 {items.length}개 대상 ({items.filter((i) => i.isSendable).length}개 발송 가능)
+              <div className="flex items-center gap-3">
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <span>선택된 수신 대상 관리</span>
+                  <span className="text-xs font-normal text-zinc-400">(Manage Selected Recipients)</span>
+                </h3>
+                <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  총 {selectedRecipientItems.length}명
                 </span>
-              </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                기업 연락처 및 수기 추가된 모든 이메일을 검토하고 불필요한 대상을 개별 제거할 수 있습니다.
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  발송 가능 {sendableCount}명
+                </span>
+                {excludedCount > 0 && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    발송 제외 {excludedCount}명
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                기업 연락처 및 수기 추가된 모든 고유 이메일을 확인하고, 불필요한 대상을 개별 제거하거나 정렬하여 검토할 수 있습니다.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setShowManageSelectionModal(false)}
-              className="text-zinc-400 hover:text-zinc-600 text-sm font-bold cursor-pointer p-1"
+              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg font-bold cursor-pointer p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              title="닫기"
             >
               ✕
             </button>
           </div>
 
-          {/* Search within selections & Clear All action */}
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
+          {/* Search within selections & Action Toolbar (Fixed, no scroll) */}
+          <div className="flex items-center justify-between gap-4 px-6 py-3 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0">
+            <div className="relative flex-1 max-w-xl">
               <input
                 type="text"
                 value={manageSelectionSearch}
                 onChange={(e) => setManageSelectionSearch(e.target.value)}
-                placeholder="선택 목록 내 이메일, 회사명, 담당자명 검색..."
-                className="w-full text-xs px-3 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                placeholder="선택 목록 내 이메일, 회사명, 담당자명, 브랜드명 검색..."
+                className="w-full text-xs px-3.5 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-all"
               />
               {manageSelectionSearch && (
                 <button
                   type="button"
                   onClick={() => setManageSelectionSearch("")}
-                  className="absolute right-2.5 top-2 text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
+                  className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs cursor-pointer font-bold"
                 >
                   ✕
                 </button>
               )}
             </div>
-            <button
-              type="button"
-              onClick={handleClearAllSelections}
-              className="px-3 py-2 text-xs font-semibold rounded border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
-            >
-              전체 선택 해제
-            </button>
+
+            <div className="flex items-center gap-3 shrink-0">
+              {manageSelectionSearch && (
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  검색 결과: <strong className="text-zinc-900 dark:text-zinc-100 font-mono">{filteredManageSelectionItems.length}</strong> / {selectedRecipientItems.length}명
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleClearAllSelections}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer transition-colors"
+              >
+                전체 선택 해제
+              </button>
+            </div>
           </div>
 
-          {/* Items Table */}
-          <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto flex-1 min-h-[300px] max-h-[480px]">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-zinc-50 dark:bg-zinc-800/60 sticky top-0">
+          {/* Table Container (Independently scrollable with OPAQUE STICKY HEADER) */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto relative bg-white dark:bg-zinc-900">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="sticky top-0 z-20 bg-zinc-100 dark:bg-zinc-800 shadow-xs border-b border-zinc-200 dark:border-zinc-700">
                 <tr>
-                  <th className="p-2.5">유형</th>
-                  <th className="p-2.5">기업명 / 브랜드</th>
-                  <th className="p-2.5">담당자 / 이메일</th>
-                  <th className="p-2.5">동의 상태</th>
-                  <th className="p-2.5">발송 자격</th>
-                  <th className="p-2.5 text-right w-16">제거</th>
+                  <th
+                    onClick={() => handleToggleManageSelectionSort("type")}
+                    className="p-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-semibold cursor-pointer select-none hover:bg-zinc-200/80 dark:hover:bg-zinc-700 transition-colors w-28 shrink-0"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>유형</span>
+                      {renderSortIndicator("type")}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleToggleManageSelectionSort("company")}
+                    className="p-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-semibold cursor-pointer select-none hover:bg-zinc-200/80 dark:hover:bg-zinc-700 transition-colors min-w-[280px]"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>기업명 / 브랜드</span>
+                      {renderSortIndicator("company")}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleToggleManageSelectionSort("email")}
+                    className="p-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-semibold cursor-pointer select-none hover:bg-zinc-200/80 dark:hover:bg-zinc-700 transition-colors min-w-[320px]"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>담당자 / 이메일</span>
+                      {renderSortIndicator("email")}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleToggleManageSelectionSort("consent")}
+                    className="p-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-semibold cursor-pointer select-none hover:bg-zinc-200/80 dark:hover:bg-zinc-700 transition-colors w-36 shrink-0"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>동의 상태</span>
+                      {renderSortIndicator("consent")}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleToggleManageSelectionSort("eligibility")}
+                    className="p-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-semibold cursor-pointer select-none hover:bg-zinc-200/80 dark:hover:bg-zinc-700 transition-colors w-36 shrink-0"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>발송 자격</span>
+                      {renderSortIndicator("eligibility")}
+                    </div>
+                  </th>
+                  <th className="p-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-semibold text-right w-20 shrink-0">
+                    <span>제거</span>
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {filteredItems.length === 0 ? (
+              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
+                {filteredManageSelectionItems.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-zinc-400">
-                      {items.length === 0 ? "선택된 수신 대상이 없습니다." : "검색 조건과 일치하는 수신 대상이 없습니다."}
+                    <td colSpan={6} className="p-12 text-center text-zinc-400 dark:text-zinc-500">
+                      {selectedRecipientItems.length === 0
+                        ? "선택된 수신 대상이 없습니다."
+                        : "검색 조건과 일치하는 수신 대상이 없습니다."}
                     </td>
                   </tr>
                 ) : (
-                  filteredItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
-                      <td className="p-2.5">
+                  filteredManageSelectionItems.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                    >
+                      {/* 1. Recipient Type */}
+                      <td className="p-3 align-middle w-28 shrink-0">
                         <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block ${
                             item.type === "COMPANY_CONTACT"
-                              ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                              : "bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+                              ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60"
+                              : "bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/60"
                           }`}
                         >
                           {item.type === "COMPANY_CONTACT" ? "기업 연락처" : "수기 입력"}
                         </span>
                       </td>
-                      <td className="p-2.5">
-                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">{item.companyNameKr}</div>
+
+                      {/* 2. Company / Brand */}
+                      <td className="p-3 align-middle min-w-[280px]">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[260px]"
+                            title={item.sharingCompanyNames.length > 1 ? item.sharingCompanyNames.join(", ") : item.companyNameKr}
+                          >
+                            {item.companyNameKr}
+                          </span>
+                          {item.sharedCompanyCount > 1 && (
+                            <span
+                              className="text-[10px] font-mono font-medium px-1.5 py-0.2 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0"
+                              title={`공유 기업: ${item.sharingCompanyNames.join(", ")}`}
+                            >
+                              외 {item.sharedCompanyCount - 1}개사
+                            </span>
+                          )}
+                        </div>
                         {item.brandName && (
-                          <div className="text-[10px] text-zinc-500">{item.brandName}</div>
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 truncate max-w-[260px]">
+                            {item.brandName}
+                          </div>
                         )}
                       </td>
-                      <td className="p-2.5 font-mono">
-                        <div className="text-zinc-800 dark:text-zinc-200">{item.email}</div>
+
+                      {/* 3. Contact / Email */}
+                      <td className="p-3 align-middle min-w-[320px]">
+                        <div className="font-mono text-xs font-medium text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
+                          {item.email}
+                        </div>
                         {item.contactName && (
-                          <div className="text-[10px] text-zinc-500 font-sans">{item.contactName}</div>
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 font-sans mt-0.5">
+                            {item.contactName}
+                          </div>
                         )}
                       </td>
-                      <td className="p-2.5">
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+
+                      {/* 4. Consent Status */}
+                      <td className="p-3 align-middle w-36 shrink-0">
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded inline-block ${
+                            item.consentStatus === "CONSENTED"
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                              : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700"
+                          }`}
+                        >
                           {item.consentStatus}
                         </span>
                       </td>
-                      <td className="p-2.5">
+
+                      {/* 5. Send Eligibility */}
+                      <td className="p-3 align-middle w-36 shrink-0">
                         {item.isSendable ? (
-                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                            ✓ 발송 가능
+                          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <span>✓</span>
+                            <span>발송 가능</span>
                           </span>
                         ) : (
-                          <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400" title={item.exclusionReason}>
-                            ⚠️ 동의 미확인
+                          <span
+                            className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1 cursor-help"
+                            title={item.exclusionReason || "발송 조건 미충족"}
+                          >
+                            <span>⚠️</span>
+                            <span>발송 제외</span>
                           </span>
                         )}
                       </td>
-                      <td className="p-2.5 text-right">
+
+                      {/* 6. Remove Action */}
+                      <td className="p-3 align-middle text-right w-20 shrink-0">
                         <button
                           type="button"
-                          onClick={() => {
-                            if (item.type === "COMPANY_CONTACT" && item.contactId && item.companyId) {
-                              const comp = selectedCompaniesCache.get(item.companyId);
-                              if (comp) handleToggleContact(comp, item.contactId);
-                            } else if (item.type === "MANUAL") {
-                              handleRemoveManualEmail(item.email);
-                            }
-                          }}
-                          className="px-2 py-0.5 text-[11px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 rounded cursor-pointer"
+                          onClick={() => handleRemoveRecipientItem(item)}
+                          className="px-2.5 py-1 text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-md cursor-pointer transition-colors"
                         >
                           제거
                         </button>
@@ -3761,15 +3986,15 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
             </table>
           </div>
 
-          {/* Modal Footer */}
-          <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
-            <span className="text-xs text-zinc-500">
-              * 상업성 정보 수신 동의가 미확인된 대상은 Dry Run 및 발송 승인 시 자동 제외됩니다.
+          {/* Modal Footer (Fixed, no scroll) */}
+          <div className="flex items-center justify-between px-6 py-3.5 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900 shrink-0">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              * 마케팅 동의 미확인 및 수기 입력 대상은 Strict Consent 필터 활성화 시 발송에서 자동 제외됩니다.
             </span>
             <button
               type="button"
               onClick={() => setShowManageSelectionModal(false)}
-              className="px-4 py-1.5 text-xs font-bold rounded bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 cursor-pointer"
+              className="px-5 py-2 text-xs font-bold rounded-lg bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer shadow-xs transition-colors"
             >
               확인 및 닫기
             </button>

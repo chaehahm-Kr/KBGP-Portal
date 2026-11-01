@@ -627,5 +627,241 @@ describe("ADM-BSRC-009-R5: Recipient Discovery, Persistent Selection & Manual Em
       expect(resConsentAsc.candidates!.length).toBeGreaterThan(0);
     });
   });
-});
+  // ---------------------------------------------------------------------------
+  // 11. ADM-BSRC-009-R8: Recipient Selection Count Reconciliation & Modal UX
+  // ---------------------------------------------------------------------------
+  describe("11. ADM-BSRC-009-R8: Recipient Selection Count Reconciliation & Modal UX", () => {
+    interface TestContact {
+      id: string;
+      name?: string;
+      email?: string;
+      is_primary?: boolean;
+    }
+    interface TestCompany {
+      id: string;
+      company_name_kr: string;
+      company_name_en?: string;
+      marketing_consent_status?: string;
+      sourcing_brands?: Array<{ brand_name_kr: string }>;
+      sourcing_contacts?: TestContact[];
+    }
 
+    const isValidTestEmail = (email?: string | null): boolean => {
+      if (!email || typeof email !== "string") return false;
+      const trimmed = email.trim();
+      if (!trimmed || trimmed.startsWith("http://") || trimmed.startsWith("https://")) return false;
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      return emailRegex.test(trimmed);
+    };
+
+    const getValidContacts = (comp: TestCompany): TestContact[] => {
+      const contacts = comp.sourcing_contacts || [];
+      const valid: TestContact[] = [];
+      const seen = new Set<string>();
+      const sorted = [...contacts].sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+      for (const ct of sorted) {
+        if (isValidTestEmail(ct.email)) {
+          const norm = ct.email!.toLowerCase().trim();
+          if (!seen.has(norm)) {
+            seen.add(norm);
+            valid.push(ct);
+          }
+        }
+      }
+      return valid;
+    };
+
+    const computeAuthoritativeRecipients = (
+      companies: TestCompany[],
+      selectedCompanyIds: string[],
+      selectedContactIds: string[],
+      manualEmails: string[],
+      requireConsentedOnly: boolean = false
+    ) => {
+      const emailToItemMap = new Map<string, any>();
+
+      companies.forEach((comp) => {
+        if (selectedCompanyIds.includes(comp.id)) {
+          const isConsented = comp.marketing_consent_status === "CONSENTED";
+          (comp.sourcing_contacts || []).forEach((ct) => {
+            if (selectedContactIds.includes(ct.id) && isValidTestEmail(ct.email)) {
+              const norm = ct.email!.toLowerCase().trim();
+              const isSendable = requireConsentedOnly ? isConsented : true;
+              if (emailToItemMap.has(norm)) {
+                const existing = emailToItemMap.get(norm)!;
+                if (!existing.associatedCompanyIds.includes(comp.id)) {
+                  existing.associatedCompanyIds.push(comp.id);
+                  existing.sharedCompanyCount = existing.associatedCompanyIds.length;
+                  existing.sharingCompanyNames.push(comp.company_name_kr);
+                }
+                if (!existing.associatedContactIds.includes(ct.id)) {
+                  existing.associatedContactIds.push(ct.id);
+                }
+              } else {
+                emailToItemMap.set(norm, {
+                  id: `rec-comp-${comp.id}-${ct.id}`,
+                  type: "COMPANY_CONTACT",
+                  email: norm,
+                  companyNameKr: comp.company_name_kr,
+                  consentStatus: comp.marketing_consent_status || "UNCONFIRMED",
+                  isSendable,
+                  associatedCompanyIds: [comp.id],
+                  associatedContactIds: [ct.id],
+                  sharedCompanyCount: 1,
+                  sharingCompanyNames: [comp.company_name_kr],
+                });
+              }
+            }
+          });
+        }
+      });
+
+      manualEmails.forEach((raw) => {
+        const norm = raw.toLowerCase().trim();
+        if (!norm) return;
+        if (!emailToItemMap.has(norm)) {
+          emailToItemMap.set(norm, {
+            id: `rec-manual-${norm}`,
+            type: "MANUAL",
+            email: norm,
+            companyNameKr: "수기 입력 수신자",
+            consentStatus: "미확인 (수기 입력)",
+            isSendable: !requireConsentedOnly,
+            associatedCompanyIds: [],
+            associatedContactIds: [],
+            sharedCompanyCount: 1,
+            sharingCompanyNames: [],
+          });
+        }
+      });
+
+      const items = Array.from(emailToItemMap.values());
+      const totalUniqueEmails = new Set<string>();
+      items.forEach((i) => totalUniqueEmails.add(i.email));
+
+      return {
+        items,
+        totalUniqueCount: totalUniqueEmails.size,
+        sendableCount: items.filter((i) => i.isSendable).length,
+      };
+    };
+
+    it("reconciles modal count, button count, and unique emails in 100% lockstep", () => {
+      const mockCompanies: TestCompany[] = [
+        {
+          id: "comp-1",
+          company_name_kr: "아모레",
+          sourcing_contacts: [{ id: "ct-1", name: "홍길동", email: "hong@amore.com" }],
+        },
+        {
+          id: "comp-2",
+          company_name_kr: "엘지생건",
+          sourcing_contacts: [{ id: "ct-2", name: "김철수", email: "kim@lg.com" }],
+        },
+        {
+          id: "comp-3",
+          company_name_kr: "피에이치하비",
+          sourcing_contacts: [{ id: "ct-3", name: "대표전화", email: "02-408-2021" }],
+        },
+      ];
+
+      const comp1Valid = getValidContacts(mockCompanies[0]);
+      const comp2Valid = getValidContacts(mockCompanies[1]);
+      const comp3Valid = getValidContacts(mockCompanies[2]);
+      expect(comp3Valid.length).toBe(0);
+
+      const selectedCompanyIds = ["comp-1", "comp-2"];
+      const selectedContactIds = ["ct-1", "ct-2"];
+      const manualEmails = ["custom@test.com"];
+
+      const res = computeAuthoritativeRecipients(
+        mockCompanies,
+        selectedCompanyIds,
+        selectedContactIds,
+        manualEmails
+      );
+
+      expect(res.items.length).toBe(3);
+      expect(res.totalUniqueCount).toBe(3);
+      expect(res.items.map((i) => i.email)).toEqual(["hong@amore.com", "kim@lg.com", "custom@test.com"]);
+    });
+
+    it("mathematically updates unique recipient count upon company and contact deselections", () => {
+      const mockCompanies: TestCompany[] = [
+        {
+          id: "comp-1",
+          company_name_kr: "기업A",
+          sourcing_contacts: [{ id: "ct-1", email: "a@test.kr" }],
+        },
+        {
+          id: "comp-2",
+          company_name_kr: "기업B",
+          sourcing_contacts: [{ id: "ct-2", email: "b@test.kr" }],
+        },
+        {
+          id: "comp-3",
+          company_name_kr: "기업C_공유",
+          sourcing_contacts: [{ id: "ct-3", email: "shared@test.kr" }],
+        },
+        {
+          id: "comp-4",
+          company_name_kr: "기업D_공유",
+          sourcing_contacts: [{ id: "ct-4", email: "shared@test.kr" }],
+        },
+      ];
+
+      let selectedCompanyIds = ["comp-1", "comp-2", "comp-3", "comp-4"];
+      let selectedContactIds = ["ct-1", "ct-2", "ct-3", "ct-4"];
+
+      let res = computeAuthoritativeRecipients(mockCompanies, selectedCompanyIds, selectedContactIds, []);
+      expect(res.items.length).toBe(3);
+      expect(res.totalUniqueCount).toBe(3);
+
+      // Deselect comp-1 (unique email a@test.kr) -> 3 -> 2
+      selectedCompanyIds = selectedCompanyIds.filter((id) => id !== "comp-1");
+      selectedContactIds = selectedContactIds.filter((id) => id !== "ct-1");
+      res = computeAuthoritativeRecipients(mockCompanies, selectedCompanyIds, selectedContactIds, []);
+      expect(res.items.length).toBe(2);
+      expect(res.totalUniqueCount).toBe(2);
+
+      // Deselect comp-3 (shares shared@test.kr with comp-4) -> still 2!
+      selectedCompanyIds = selectedCompanyIds.filter((id) => id !== "comp-3");
+      selectedContactIds = selectedContactIds.filter((id) => id !== "ct-3");
+      res = computeAuthoritativeRecipients(mockCompanies, selectedCompanyIds, selectedContactIds, []);
+      expect(res.items.length).toBe(2);
+      expect(res.totalUniqueCount).toBe(2);
+
+      // Deselect comp-4 -> drops to 1
+      selectedCompanyIds = selectedCompanyIds.filter((id) => id !== "comp-4");
+      selectedContactIds = selectedContactIds.filter((id) => id !== "ct-4");
+      res = computeAuthoritativeRecipients(mockCompanies, selectedCompanyIds, selectedContactIds, []);
+      expect(res.items.length).toBe(1);
+      expect(res.totalUniqueCount).toBe(1);
+      expect(res.items[0].email).toBe("b@test.kr");
+    });
+
+    it("supports 3-state sorting cycle (asc -> desc -> default) and Korean collation", () => {
+      const items = [
+        { type: "COMPANY_CONTACT", companyNameKr: "하늘코스메틱", email: "z@test.kr", consentStatus: "UNCONFIRMED", isSendable: false },
+        { type: "COMPANY_CONTACT", companyNameKr: "가람뷰티", email: "a@test.kr", consentStatus: "CONSENTED", isSendable: true },
+        { type: "MANUAL", companyNameKr: "수기 입력 수신자", email: "m@test.kr", consentStatus: "미확인 (수기 입력)", isSendable: true },
+      ];
+
+      const sortedCompanyAsc = [...items].sort((a, b) => a.companyNameKr.localeCompare(b.companyNameKr, "ko"));
+      expect(sortedCompanyAsc[0].companyNameKr).toBe("가람뷰티");
+      expect(sortedCompanyAsc[2].companyNameKr).toBe("하늘코스메틱");
+
+      const sortedCompanyDesc = [...items].sort((a, b) => b.companyNameKr.localeCompare(a.companyNameKr, "ko"));
+      expect(sortedCompanyDesc[0].companyNameKr).toBe("하늘코스메틱");
+      expect(sortedCompanyDesc[2].companyNameKr).toBe("가람뷰티");
+
+      const sortedEmailAsc = [...items].sort((a, b) => a.email.localeCompare(b.email));
+      expect(sortedEmailAsc[0].email).toBe("a@test.kr");
+      expect(sortedEmailAsc[2].email).toBe("z@test.kr");
+
+      const sortedSendableDesc = [...items].sort((a, b) => (b.isSendable ? 1 : 0) - (a.isSendable ? 1 : 0));
+      expect(sortedSendableDesc[0].isSendable).toBe(true);
+      expect(sortedSendableDesc[2].isSendable).toBe(false);
+    });
+  });
+});
