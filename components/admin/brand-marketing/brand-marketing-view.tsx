@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useTransition, useMemo, useEffect, useRef } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type {
   NormalizedCompanyDraft,
   DuplicateMatchResult,
@@ -62,6 +64,7 @@ interface BrandMarketingViewProps {
   initialTotal: number;
   initialTab?: "import" | "list" | "campaigns" | "results";
   initialCompanyId?: string | null;
+  initialView?: "campaigns" | "library" | "footer";
 }
 
 function formatFileSize(bytes?: number | null): string {
@@ -105,9 +108,41 @@ export default function BrandMarketingView({
   initialTotal,
   initialTab = "import",
   initialCompanyId,
+  initialView = "campaigns",
 }: BrandMarketingViewProps) {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams?.get("tab");
+  const companyIdParam = searchParams?.get("companyId");
+
   // Navigation Tabs: import | list | campaigns | results
   const [activeTab, setActiveTab] = useState<"import" | "list" | "campaigns" | "results">(initialTab);
+  const [hasVisitedCampaigns, setHasVisitedCampaigns] = useState(
+    initialTab === "campaigns" || (typeof window !== "undefined" && window.location.search.includes("tab=campaigns"))
+  );
+
+  // Sync activeTab with URL searchParams (handles browser Back/Forward & direct links)
+  useEffect(() => {
+    if (companyIdParam) {
+      setActiveTab("list");
+    } else if (tabParam === "list" || tabParam === "brands") {
+      setActiveTab("list");
+    } else if (tabParam === "campaigns") {
+      setActiveTab("campaigns");
+      setHasVisitedCampaigns(true);
+    } else if (tabParam === "results") {
+      setActiveTab("results");
+    } else if (tabParam === "import") {
+      setActiveTab("import");
+    } else if (!tabParam) {
+      setActiveTab(initialTab || "import");
+    }
+  }, [tabParam, companyIdParam, initialTab]);
+
+  useEffect(() => {
+    if (activeTab === "campaigns") {
+      setHasVisitedCampaigns(true);
+    }
+  }, [activeTab]);
 
   // --------------------------------------------------------------------------
   // TAB 1: IMPORT & REVIEW STATE
@@ -1289,7 +1324,8 @@ export default function BrandMarketingView({
 
         {/* 4 Top-level Tabs */}
         <div className="flex border-b border-zinc-200 dark:border-zinc-800 gap-2">
-          <button
+          <Link
+            href="/admin/brand-marketing?tab=import"
             onClick={() => setActiveTab("import")}
             className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
               activeTab === "import"
@@ -1301,9 +1337,10 @@ export default function BrandMarketingView({
             {reviewedDraft && (
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             )}
-          </button>
+          </Link>
 
-          <button
+          <Link
+            href="/admin/brand-marketing?tab=list"
             onClick={() => {
               setActiveTab("list");
               refreshBrandList();
@@ -1318,11 +1355,11 @@ export default function BrandMarketingView({
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-normal">
               {totalCandidates}
             </span>
-          </button>
+          </Link>
 
           {/* Phase 2: Email Campaigns Tab */}
-          <button
-            type="button"
+          <Link
+            href="/admin/brand-marketing?tab=campaigns"
             onClick={() => setActiveTab("campaigns")}
             className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === "campaigns"
@@ -1334,11 +1371,11 @@ export default function BrandMarketingView({
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-medium">
               V1
             </span>
-          </button>
+          </Link>
 
           {/* Phase 2: Results & Follow-up Tab (ADM-BSRC-007) */}
-          <button
-            type="button"
+          <Link
+            href="/admin/brand-marketing?tab=results"
             onClick={() => setActiveTab("results")}
             className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === "results"
@@ -1350,7 +1387,7 @@ export default function BrandMarketingView({
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-medium">
               V1
             </span>
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -2984,13 +3021,13 @@ export default function BrandMarketingView({
                     <tr>
                       <td colSpan={10} className="p-12 text-center space-y-2">
                         <p className="text-zinc-500 font-medium">No sourcing candidates found.</p>
-                        <button
-                          type="button"
+                        <Link
+                          href="/admin/brand-marketing?tab=import"
                           onClick={() => setActiveTab("import")}
-                          className="text-xs text-blue-600 dark:text-blue-400 font-bold underline cursor-pointer"
+                          className="text-xs text-blue-600 dark:text-blue-400 font-bold underline cursor-pointer inline-block"
                         >
                           Extract and add candidates from InterCHARM →
-                        </button>
+                        </Link>
                       </td>
                     </tr>
                   ) : (
@@ -3027,13 +3064,13 @@ export default function BrandMarketingView({
                             />
                           </td>
                           <td className="p-3">
-                            <button
-                              type="button"
+                            <Link
+                              href={`/admin/brand-marketing?tab=list&companyId=${encodeURIComponent(c.id)}`}
                               onClick={() => handleOpenDetail(c.id)}
                               className="text-left font-bold text-zinc-900 dark:text-zinc-100 hover:text-blue-600 dark:hover:text-blue-400 hover:underline cursor-pointer block"
                             >
                               {c.company_name_kr}
-                            </button>
+                            </Link>
                             {c.company_name_en && (
                               <p className="text-[11px] text-zinc-400 truncate max-w-[180px]">
                                 {c.company_name_en}
@@ -3351,27 +3388,27 @@ export default function BrandMarketingView({
                           {/* Actions: View/Edit + Delete Button */}
                           <td className="p-3 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
+                              <Link
+                                href={`/admin/brand-marketing?tab=list&companyId=${encodeURIComponent(c.id)}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleOpenDetail(c.id);
                                 }}
-                                className="px-2.5 py-1 text-[11px] font-semibold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 cursor-pointer"
+                                className="px-2.5 py-1 text-[11px] font-semibold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 cursor-pointer inline-block"
                               >
                                 View / Edit
-                              </button>
-                              <button
-                                type="button"
+                              </Link>
+                              <Link
+                                href="/admin/brand-marketing?tab=results"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setActiveTab("results");
                                 }}
-                                className="px-2 py-1 text-[11px] font-medium rounded text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer"
+                                className="px-2 py-1 text-[11px] font-medium rounded text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer inline-block"
                                 title="View Campaign & Outreach Results"
                               >
                                 Results ↗
-                              </button>
+                              </Link>
                             </div>
                           </td>
                         </tr>
@@ -3444,8 +3481,10 @@ export default function BrandMarketingView({
       {/* ------------------------------------------------------------------ */}
       {/* TAB 3: EMAIL CAMPAIGNS VIEW                                       */}
       {/* ------------------------------------------------------------------ */}
-      {activeTab === "campaigns" && (
-        <EmailCampaignsView candidates={candidates} />
+      {hasVisitedCampaigns && (
+        <div className={activeTab === "campaigns" ? "block" : "hidden"}>
+          <EmailCampaignsView candidates={candidates} initialSubTab={initialView} />
+        </div>
       )}
 
       {/* ------------------------------------------------------------------ */}

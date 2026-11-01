@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { verifyAdminSession, getAdminStaffContext } from "@/lib/auth/dal";
 import { getActiveStaffMembersAction, listSourcingCandidatesAction } from "@/lib/brand-sourcing/actions";
@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 interface BrandMarketingPageProps {
   searchParams: Promise<{
     tab?: string;
+    view?: string;
+    subtab?: string;
     companyId?: string;
   }>;
 }
@@ -33,13 +35,20 @@ export default async function BrandMarketingPage({ searchParams }: BrandMarketin
   const initialTab =
     initialCompanyId
       ? "list"
-      : params.tab === "list"
+      : params.tab === "list" || params.tab === "brands"
       ? "list"
       : params.tab === "campaigns"
       ? "campaigns"
       : params.tab === "results"
       ? "results"
       : "import";
+
+  const initialView =
+    params.view === "footer"
+      ? "footer"
+      : params.view === "templates" || params.view === "library" || params.subtab === "library"
+      ? "library"
+      : "campaigns";
 
   // 3. Pre-fetch initial staff and initial candidates
   const [staffRes, candidatesRes] = await Promise.all([
@@ -54,13 +63,16 @@ export default async function BrandMarketingPage({ searchParams }: BrandMarketin
   // 4. Render within Global 1800px Shell (Rule 27 compliant: w-full, left-aligned)
   return (
     <div className="w-full p-6 md:p-8">
-      <BrandMarketingView
-        initialStaff={activeStaff}
-        initialCandidates={candidates}
-        initialTotal={total}
-        initialTab={initialTab}
-        initialCompanyId={initialCompanyId}
-      />
+      <Suspense fallback={<div className="p-8 text-xs text-zinc-500">Loading Brand Marketing...</div>}>
+        <BrandMarketingView
+          initialStaff={activeStaff}
+          initialCandidates={candidates}
+          initialTotal={total}
+          initialTab={initialTab}
+          initialCompanyId={initialCompanyId}
+          initialView={initialView}
+        />
+      </Suspense>
     </div>
   );
 }

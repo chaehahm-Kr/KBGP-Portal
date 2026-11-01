@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition, useRef } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   MarketingCampaign,
   MarketingTemplatePackage,
@@ -57,14 +59,33 @@ import {
 
 interface EmailCampaignsViewProps {
   candidates?: any[];
+  initialSubTab?: "campaigns" | "library" | "footer";
 }
 
-export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps) {
+export function EmailCampaignsView({
+  candidates = [],
+  initialSubTab = "campaigns",
+}: EmailCampaignsViewProps) {
+  const searchParams = useSearchParams();
+  const viewParam = searchParams?.get("view") || searchParams?.get("subtab");
+
   // Top-level Navigation Tabs
-  const [mainTab, setMainTab] = useState<"campaigns" | "library" | "footer">("campaigns");
+  const [mainTab, setMainTab] = useState<"campaigns" | "library" | "footer">(initialSubTab);
 
   // Campaign View Mode & Step
   const [viewMode, setViewMode] = useState<"list" | "editor">("list");
+
+  // Sync sub-tabs with URL searchParams (handles browser Back/Forward & direct links)
+  useEffect(() => {
+    if (viewParam === "footer") {
+      setMainTab("footer");
+    } else if (viewParam === "templates" || viewParam === "library") {
+      setMainTab("library");
+    } else if (viewParam === "list" || viewParam === "campaigns") {
+      setMainTab("campaigns");
+      setViewMode("list");
+    }
+  }, [viewParam]);
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [, startTransition] = useTransition();
 
@@ -1301,8 +1322,8 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     return (
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 dark:border-zinc-800 pb-2">
         <div className="flex items-center gap-1">
-          <button
-            type="button"
+          <Link
+            href="/admin/brand-marketing?tab=campaigns&view=list"
             onClick={() => {
               setMainTab("campaigns");
               setViewMode("list");
@@ -1314,9 +1335,9 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
             }`}
           >
             Campaigns (캠페인 목록)
-          </button>
-          <button
-            type="button"
+          </Link>
+          <Link
+            href="/admin/brand-marketing?tab=campaigns&view=templates"
             onClick={() => setMainTab("library")}
             className={`px-3 py-1.5 text-xs font-bold rounded-md transition cursor-pointer ${
               mainTab === "library"
@@ -1325,9 +1346,9 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
             }`}
           >
             Template Library (템플릿 관리)
-          </button>
-          <button
-            type="button"
+          </Link>
+          <Link
+            href="/admin/brand-marketing?tab=campaigns&view=footer"
             onClick={() => setMainTab("footer")}
             className={`px-3 py-1.5 text-xs font-bold rounded-md transition cursor-pointer flex items-center gap-1.5 ${
               mainTab === "footer"
@@ -1337,7 +1358,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
           >
             <span>⚖️</span>
             Marketing Footer Settings (중앙 푸터 설정)
-          </button>
+          </Link>
         </div>
 
         {mainTab === "campaigns" && viewMode === "list" && (
@@ -1664,13 +1685,13 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 shadow-xs">
           <div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
+              <Link
+                href="/admin/brand-marketing?tab=campaigns&view=list"
                 onClick={() => setViewMode("list")}
                 className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 cursor-pointer"
               >
                 ← Back to List
-              </button>
+              </Link>
               <span className="text-zinc-300">/</span>
               <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                 {editingCampaign.name}
@@ -1694,16 +1715,16 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
             >
               Save Draft 💾
             </button>
-            <button
-              type="button"
+            <Link
+              href="/admin/brand-marketing?tab=campaigns&view=list"
               onClick={() => {
                 setViewMode("list");
                 refreshCampaignsAndTemplates();
               }}
-              className="px-3 py-1.5 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 cursor-pointer"
+              className="px-3 py-1.5 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 cursor-pointer inline-block"
             >
               Close
-            </button>
+            </Link>
           </div>
         </div>
 
