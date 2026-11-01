@@ -148,7 +148,8 @@ export async function recordEmailOptOut(
   email: string,
   reason: "UNSUBSCRIBED" | "BOUNCED" | "COMPLAINT" | "MANUAL_ADMIN" = "UNSUBSCRIBED",
   notes?: string,
-  campaignId?: string | null
+  campaignId?: string | null,
+  customClient?: any
 ): Promise<{ success: boolean; alreadySuppressed?: boolean; error?: string }> {
   const normalized = email.toLowerCase().trim();
   if (!normalized || !normalized.includes("@")) {
@@ -159,7 +160,7 @@ export async function recordEmailOptOut(
   memorySuppressionList.add(normalized);
 
   try {
-    const admin = createAdminClient();
+    const admin = customClient || createAdminClient();
     const finalNotes = notes || (campaignId ? `Opt-out via unsubscribe link (Campaign: ${campaignId})` : "Direct recipient opt-out");
 
     const { error } = await admin.from("marketing_suppression_list").insert({
@@ -175,18 +176,14 @@ export async function recordEmailOptOut(
       if (error.code === "23505" || error.message.includes("unique") || error.message.includes("already exists")) {
         return { success: true, alreadySuppressed: true };
       }
-      if (error.message && (error.message.includes("fetch failed") || error.message.includes("Failed to fetch") || error.message.includes("network"))) {
-        console.warn("[marketing:unsubscribe] DB unreachable (memory fallback used):", error.message);
-        return { success: true, alreadySuppressed: false };
-      }
       console.warn("[marketing:unsubscribe] DB insert warning:", error.message);
       return { success: false, error: error.message };
     }
 
     return { success: true, alreadySuppressed: false };
   } catch (err: any) {
-    console.warn("[marketing:unsubscribe] Exception during DB insert (memory fallback used):", err.message);
-    return { success: true, alreadySuppressed: false };
+    console.warn("[marketing:unsubscribe] Exception during DB insert:", err.message);
+    return { success: false, error: err.message || "Database insert exception" };
   }
 }
 

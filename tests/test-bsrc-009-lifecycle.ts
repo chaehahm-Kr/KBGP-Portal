@@ -291,8 +291,35 @@ async function runTests() {
   const suppressionBefore = await isEmailSuppressed(testRecipient);
   assert(!suppressionBefore, 'Simply visiting GET route does not opt-out recipient (scanner safe)');
 
-  // 5D. Opt-out Execution
-  const optOutResult = await recordEmailOptOut(testRecipient, 'UNSUBSCRIBED', 'QA R1 Opt-out', testCampaignId);
+  // 5D. Opt-out Execution (with simulated database persistence)
+  const mockSuppressionDb = new Map<string, any>();
+  const mockDbClient = {
+    from: (table: string) => ({
+      insert: async (row: any) => {
+        if (mockSuppressionDb.has(row.email)) {
+          return { data: null, error: { code: '23505', message: 'duplicate key value' } };
+        }
+        mockSuppressionDb.set(row.email, row);
+        return { data: row, error: null };
+      },
+      select: () => ({
+        eq: (col: string, val: string) => ({
+          limit: async () => ({
+            data: mockSuppressionDb.has(val) ? [{ id: 'mock-id' }] : [],
+            error: null,
+          }),
+        }),
+      }),
+    }),
+  };
+
+  const optOutResult = await recordEmailOptOut(
+    testRecipient,
+    'UNSUBSCRIBED',
+    'QA R1 Opt-out',
+    testCampaignId,
+    mockDbClient
+  );
   assert(optOutResult.success, 'Opt-out recorded into suppression list');
 
   const suppressionAfter = await isEmailSuppressed(testRecipient);

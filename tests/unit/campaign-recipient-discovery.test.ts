@@ -418,4 +418,74 @@ describe("ADM-BSRC-009-R5: Recipient Discovery, Persistent Selection & Manual Em
       });
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // 8. Mandatory Unsubscribe Safety Gate Negative Tests (Fail-Closed & No False Success)
+  // ---------------------------------------------------------------------------
+  describe("8. Mandatory Unsubscribe Safety Gate (Section 1 Invariants)", () => {
+    it("returns success: false when database connection is unavailable, but keeps in-memory suppression fail-closed", async () => {
+      const { recordEmailOptOut, isEmailSuppressed } = await import("../../lib/brand-marketing/unsubscribe");
+      const mockFailingClient = {
+        from: () => ({
+          insert: async () => { throw new Error("Database connection unavailable"); }
+        })
+      };
+      const email = `unavail-${Date.now()}@test-gate.com`;
+      const res = await recordEmailOptOut(email, "UNSUBSCRIBED", "test", null, mockFailingClient);
+      
+      // Invariant A & F: No false success when DB write fails
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("Database connection unavailable");
+      
+      // Invariant B & C: In-memory suppression active (fail-closed)
+      const isSupp = await isEmailSuppressed(email);
+      expect(isSupp).toBe(true);
+    });
+
+    it("returns success: false when database write is rejected", async () => {
+      const { recordEmailOptOut, isEmailSuppressed } = await import("../../lib/brand-marketing/unsubscribe");
+      const mockRejectClient = {
+        from: () => ({
+          insert: async () => ({ error: { message: "permission denied for table marketing_suppression_list", code: "42501" } })
+        })
+      };
+      const email = `reject-${Date.now()}@test-gate.com`;
+      const res = await recordEmailOptOut(email, "UNSUBSCRIBED", "test", null, mockRejectClient);
+      
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("permission denied");
+      
+      const isSupp = await isEmailSuppressed(email);
+      expect(isSupp).toBe(true);
+    });
+
+    it("handles DB suppression lookup failure gracefully via fallback registry", async () => {
+      const { isEmailSuppressed } = await import("../../lib/brand-marketing/unsubscribe");
+      const mockFailingLookupClient = {
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              limit: async () => { throw new Error("Query timeout"); }
+            })
+          })
+        })
+      };
+      const unknownEmail = `never-seen-${Date.now()}@test-gate.com`;
+      const isSupp = await isEmailSuppressed(unknownEmail, mockFailingLookupClient);
+      expect(isSupp).toBe(false);
+    });
+
+    it("returns success: true and alreadySuppressed: true for duplicate opt-out (code 23505)", async () => {
+      const { recordEmailOptOut } = await import("../../lib/brand-marketing/unsubscribe");
+      const mockDuplicateClient = {
+        from: () => ({
+          insert: async () => ({ error: { message: "duplicate key value", code: "23505" } })
+        })
+      };
+      const email = `dup-${Date.now()}@test-gate.com`;
+      const res = await recordEmailOptOut(email, "UNSUBSCRIBED", "test", null, mockDuplicateClient);
+      expect(res.success).toBe(true);
+      expect(res.alreadySuppressed).toBe(true);
+    });
+  });
 });
