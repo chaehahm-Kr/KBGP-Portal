@@ -132,9 +132,13 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     },
   ]);
 
-  // Recipient Selection & Discovery State (ADM-BSRC-009-R5)
+  // Recipient Selection & Discovery State (ADM-BSRC-009-R5 / R6)
   const [candidatePage, setCandidatePage] = useState<number>(1);
-  const [candidatePageSize, setCandidatePageSize] = useState<number>(20);
+  const [candidatePageSize, setCandidatePageSize] = useState<number | "ALL">(20);
+  const [candidateSortBy, setCandidateSortBy] = useState<
+    "company_name" | "brand_name" | "grade" | "category" | "email" | "consent" | null
+  >(null);
+  const [candidateSortOrder, setCandidateSortOrder] = useState<"asc" | "desc" | null>(null);
   const [candidateSearch, setCandidateSearch] = useState<string>("");
   const [candidateSearchInput, setCandidateSearchInput] = useState<string>("");
   const [candidateFilterGrade, setCandidateFilterGrade] = useState<string>("ALL");
@@ -323,11 +327,11 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     });
   }, [activeTemplate, currentEffectiveSubject, editingCampaign, footerSettings]);
 
-  // Server-side Candidate Query Loader (ADM-BSRC-009-R5)
+  // Server-side Candidate Query Loader (ADM-BSRC-009-R5 / R6)
   const loadCandidates = React.useCallback(
     async (overrideParams?: {
       page?: number;
-      pageSize?: number;
+      pageSize?: number | "ALL";
       search?: string;
       grade?: string;
       status?: string;
@@ -335,12 +339,17 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       businessTypeMatchMode?: "ANY" | "ALL";
       primaryCategories?: string[];
       marketingConsentStatus?: string;
+      sortBy?: "company_name" | "brand_name" | "grade" | "category" | "email" | "consent" | null;
+      sortOrder?: "asc" | "desc" | null;
     }) => {
       setIsLoadingCandidates(true);
       try {
         const page = overrideParams?.page ?? candidatePage;
-        const pageSize = overrideParams?.pageSize ?? candidatePageSize;
-        const offset = (page - 1) * pageSize;
+        const pageSize = overrideParams?.pageSize !== undefined ? overrideParams.pageSize : candidatePageSize;
+        const limit = pageSize === "ALL" ? -1 : pageSize;
+        const offset = pageSize === "ALL" ? 0 : (page - 1) * pageSize;
+        const sortBy = overrideParams?.sortBy !== undefined ? overrideParams.sortBy : candidateSortBy;
+        const sortOrder = overrideParams?.sortOrder !== undefined ? overrideParams.sortOrder : candidateSortOrder;
 
         const res = await listSourcingCandidatesAction({
           search: overrideParams?.search !== undefined ? overrideParams.search : candidateSearch,
@@ -350,8 +359,10 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
           businessTypeMatchMode: overrideParams?.businessTypeMatchMode !== undefined ? overrideParams.businessTypeMatchMode : candidateFilterBusinessTypeMatchMode,
           primaryCategories: overrideParams?.primaryCategories !== undefined ? overrideParams.primaryCategories : candidateFilterPrimaryCategories,
           marketingConsentStatus: overrideParams?.marketingConsentStatus !== undefined ? overrideParams.marketingConsentStatus : candidateFilterConsent,
-          limit: pageSize,
+          limit,
           offset,
+          sortBy,
+          sortOrder,
         });
 
         if (res.success && res.candidates) {
@@ -383,10 +394,12 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       candidateFilterBusinessTypeMatchMode,
       candidateFilterPrimaryCategories,
       candidateFilterConsent,
+      candidateSortBy,
+      candidateSortOrder,
     ]
   );
 
-  // Trigger candidate query when in Step 3 and any filter or pagination changes
+  // Trigger candidate query when in Step 3 and any filter, pagination, or sorting changes
   useEffect(() => {
     if (viewMode === "editor" && currentStep === 3) {
       loadCandidates();
@@ -403,6 +416,8 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     candidateFilterBusinessTypeMatchMode,
     candidateFilterPrimaryCategories,
     candidateFilterConsent,
+    candidateSortBy,
+    candidateSortOrder,
     loadCandidates,
   ]);
 
@@ -425,26 +440,77 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     }
   };
 
-  // Company selection toggle with multi-contact semantics
+  // RFC-compliant email validation helper for contact hygiene (ADM-BSRC-009-R6)
+  const isValidContactEmail = (email?: string | null): boolean => {
+    if (!email || typeof email !== "string") return false;
+    const trimmed = email.trim();
+    if (!trimmed) return false;
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return false;
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return emailRegex.test(trimmed);
+  };
+
+  // Extracts valid contacts for a company, deduplicating identical email addresses (primary preferred)
+  const getValidCompanyContacts = (comp: any): any[] => {
+    const contacts = comp?.sourcing_contacts || [];
+    const valid: any[] = [];
+    const seenEmails = new Set<string>();
+    const sorted = [...contacts].sort((a: any, b: any) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+    for (const ct of sorted) {
+      if (isValidContactEmail(ct.email)) {
+        const norm = ct.email.toLowerCase().trim();
+        if (!seenEmails.has(norm)) {
+          seenEmails.add(norm);
+          valid.push(ct);
+        }
+      }
+    }
+    return valid;
+  };
+
+  // 3-State Column Header Sort Handler (Ascending -> Descending -> Default/Unsorted)
+  const handleHeaderSort = (
+    field: "company_name" | "brand_name" | "grade" | "category" | "email" | "consent"
+  ) => {
+    let nextSortBy: typeof candidateSortBy = field;
+    let nextSortOrder: typeof candidateSortOrder = "asc";
+
+    if (candidateSortBy === field) {
+      if (candidateSortOrder === "asc") {
+        nextSortOrder = "desc";
+      } else {
+        nextSortBy = null;
+        nextSortOrder = null;
+      }
+    }
+
+    setCandidateSortBy(nextSortBy);
+    setCandidateSortOrder(nextSortOrder);
+    setCandidatePage(1);
+  };
+
+  // Company selection toggle with multi-contact default selection (ADM-BSRC-009-R6)
   const handleToggleCompany = (comp: any) => {
     const contacts = comp.sourcing_contacts || [];
-    const compContactIds: string[] = contacts.map((ct: any) => ct.id).filter(Boolean);
-    const selectedCompContacts = compContactIds.filter((id) => selectedContactIds.includes(id));
+    const validContacts = getValidCompanyContacts(comp);
+    const validContactIds: string[] = validContacts.map((ct) => ct.id);
+    const allCompContactIds: string[] = contacts.map((ct: any) => ct.id).filter(Boolean);
+    const selectedValidCompContacts = validContactIds.filter((id) => selectedContactIds.includes(id));
     const isCompanySelected = selectedCompanyIds.includes(comp.id);
 
-    if (isCompanySelected || selectedCompContacts.length > 0) {
+    if (isCompanySelected || selectedValidCompContacts.length > 0) {
       // Uncheck company and all its contacts
       setSelectedCompanyIds((prev) => prev.filter((id) => id !== comp.id));
-      setSelectedContactIds((prev) => prev.filter((id) => !compContactIds.includes(id)));
+      setSelectedContactIds((prev) => prev.filter((id) => !allCompContactIds.includes(id)));
     } else {
-      // Select company and all its contacts
+      // Select company and ALL valid deduplicated contact emails
       setSelectedCompanyIds((prev) => [...prev, comp.id]);
-      setSelectedContactIds((prev) => Array.from(new Set([...prev, ...compContactIds])));
+      setSelectedContactIds((prev) => Array.from(new Set([...prev, ...validContactIds])));
       setSelectedCompaniesCache((prev) => new Map(prev).set(comp.id, comp));
     }
   };
 
-  // Individual contact selection toggle
+  // Individual contact selection toggle (preserves manual unchecks across pagination/sorting)
   const handleToggleContact = (comp: any, contactId: string) => {
     const isSelected = selectedContactIds.includes(contactId);
     const updated = isSelected
@@ -452,12 +518,14 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       : [...selectedContactIds, contactId];
     setSelectedContactIds(updated);
 
-    const compContactIds: string[] = (comp.sourcing_contacts || []).map((ct: any) => ct.id).filter(Boolean);
-    const hasAny = compContactIds.some((id) => updated.includes(id));
-    if (hasAny && !selectedCompanyIds.includes(comp.id)) {
+    const validContacts = getValidCompanyContacts(comp);
+    const validContactIds: string[] = validContacts.map((ct) => ct.id);
+    const hasAnyValid = validContactIds.some((id) => updated.includes(id));
+
+    if (hasAnyValid && !selectedCompanyIds.includes(comp.id)) {
       setSelectedCompanyIds((prev) => [...prev, comp.id]);
       setSelectedCompaniesCache((prev) => new Map(prev).set(comp.id, comp));
-    } else if (!hasAny && selectedCompanyIds.includes(comp.id)) {
+    } else if (!hasAnyValid && selectedCompanyIds.includes(comp.id)) {
       setSelectedCompanyIds((prev) => prev.filter((id) => id !== comp.id));
     }
   };
@@ -479,13 +547,12 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       setSelectedContactIds((prev) => prev.filter((id) => !pageContactIds.includes(id)));
     } else {
       setSelectedCompanyIds((prev) => Array.from(new Set([...prev, ...pageCompanyIds])));
-      const pageContactIds: string[] = [];
+      const pageValidContactIds: string[] = [];
       candidatesList.forEach((c) => {
-        (c.sourcing_contacts || []).forEach((ct: any) => {
-          if (ct.id) pageContactIds.push(ct.id);
-        });
+        const valid = getValidCompanyContacts(c);
+        valid.forEach((ct) => pageValidContactIds.push(ct.id));
       });
-      setSelectedContactIds((prev) => Array.from(new Set([...prev, ...pageContactIds])));
+      setSelectedContactIds((prev) => Array.from(new Set([...prev, ...pageValidContactIds])));
       setSelectedCompaniesCache((prev) => {
         const next = new Map(prev);
         candidatesList.forEach((c) => next.set(c.id, c));
@@ -542,13 +609,13 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     setManualEmails((prev) => prev.filter((e) => e !== email));
   };
 
-  // Selected Company Contact Emails (Unique)
+  // Selected Company Contact Emails (Unique & Hygiene Guarded)
   const selectedCompanyEmails = useMemo(() => {
     const emails = new Set<string>();
     selectedCompaniesCache.forEach((comp) => {
       if (selectedCompanyIds.includes(comp.id)) {
         (comp.sourcing_contacts || []).forEach((ct: any) => {
-          if (selectedContactIds.includes(ct.id) && ct.email) {
+          if (selectedContactIds.includes(ct.id) && isValidContactEmail(ct.email)) {
             emails.add(ct.email.toLowerCase().trim());
           }
         });
@@ -571,7 +638,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
       if (selectedCompanyIds.includes(comp.id)) {
         const isConsented = comp.marketing_consent_status === "CONSENTED";
         (comp.sourcing_contacts || []).forEach((ct: any) => {
-          if (selectedContactIds.includes(ct.id) && ct.email) {
+          if (selectedContactIds.includes(ct.id) && isValidContactEmail(ct.email)) {
             if (requireConsentedOnly) {
               if (isConsented) eligible++;
               else excluded++;
@@ -2232,12 +2299,12 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 </div>
               </div>
 
-              {/* Table Container */}
+              {/* Table Container with Fully Opaque Sticky Header (ADM-BSRC-009-R6) */}
               <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto max-h-[460px]">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50 dark:bg-zinc-800/60 sticky top-0 z-10 shadow-2xs">
+                  <thead className="bg-zinc-100 dark:bg-zinc-900 sticky top-0 z-20 shadow-xs border-b border-zinc-200 dark:border-zinc-800">
                     <tr>
-                      <th className="p-2.5 w-10">
+                      <th className="p-2.5 w-10 bg-zinc-100 dark:bg-zinc-900">
                         <input
                           type="checkbox"
                           ref={(el) => {
@@ -2249,12 +2316,132 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                           className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         />
                       </th>
-                      <th className="p-2.5">기업명 (한국어 / 영문)</th>
-                      <th className="p-2.5">대표 브랜드</th>
-                      <th className="p-2.5">등급</th>
-                      <th className="p-2.5">사업자 유형 / 카테고리</th>
-                      <th className="p-2.5">수신 연락처</th>
-                      <th className="p-2.5">마케팅 동의</th>
+                      <th className="p-2.5 bg-zinc-100 dark:bg-zinc-900 select-none">
+                        <button
+                          type="button"
+                          onClick={() => handleHeaderSort("company_name")}
+                          aria-sort={candidateSortBy === "company_name" ? (candidateSortOrder === "asc" ? "ascending" : "descending") : "none"}
+                          className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-colors group"
+                        >
+                          <span>기업명 (한국어 / 영문)</span>
+                          <span className="text-[10px] font-mono">
+                            {candidateSortBy === "company_name" ? (
+                              candidateSortOrder === "asc" ? (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▲</span>
+                              ) : (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▼</span>
+                              )
+                            ) : (
+                              <span className="text-zinc-400 dark:text-zinc-500 opacity-60 group-hover:opacity-100">⇅</span>
+                            )}
+                          </span>
+                        </button>
+                      </th>
+                      <th className="p-2.5 bg-zinc-100 dark:bg-zinc-900 select-none">
+                        <button
+                          type="button"
+                          onClick={() => handleHeaderSort("brand_name")}
+                          aria-sort={candidateSortBy === "brand_name" ? (candidateSortOrder === "asc" ? "ascending" : "descending") : "none"}
+                          className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-colors group"
+                        >
+                          <span>대표 브랜드</span>
+                          <span className="text-[10px] font-mono">
+                            {candidateSortBy === "brand_name" ? (
+                              candidateSortOrder === "asc" ? (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▲</span>
+                              ) : (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▼</span>
+                              )
+                            ) : (
+                              <span className="text-zinc-400 dark:text-zinc-500 opacity-60 group-hover:opacity-100">⇅</span>
+                            )}
+                          </span>
+                        </button>
+                      </th>
+                      <th className="p-2.5 bg-zinc-100 dark:bg-zinc-900 select-none">
+                        <button
+                          type="button"
+                          onClick={() => handleHeaderSort("grade")}
+                          aria-sort={candidateSortBy === "grade" ? (candidateSortOrder === "asc" ? "ascending" : "descending") : "none"}
+                          className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-colors group"
+                        >
+                          <span>등급</span>
+                          <span className="text-[10px] font-mono">
+                            {candidateSortBy === "grade" ? (
+                              candidateSortOrder === "asc" ? (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▲</span>
+                              ) : (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▼</span>
+                              )
+                            ) : (
+                              <span className="text-zinc-400 dark:text-zinc-500 opacity-60 group-hover:opacity-100">⇅</span>
+                            )}
+                          </span>
+                        </button>
+                      </th>
+                      <th className="p-2.5 bg-zinc-100 dark:bg-zinc-900 select-none">
+                        <button
+                          type="button"
+                          onClick={() => handleHeaderSort("category")}
+                          aria-sort={candidateSortBy === "category" ? (candidateSortOrder === "asc" ? "ascending" : "descending") : "none"}
+                          className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-colors group"
+                        >
+                          <span>사업자 유형 / 카테고리</span>
+                          <span className="text-[10px] font-mono">
+                            {candidateSortBy === "category" ? (
+                              candidateSortOrder === "asc" ? (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▲</span>
+                              ) : (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▼</span>
+                              )
+                            ) : (
+                              <span className="text-zinc-400 dark:text-zinc-500 opacity-60 group-hover:opacity-100">⇅</span>
+                            )}
+                          </span>
+                        </button>
+                      </th>
+                      <th className="p-2.5 bg-zinc-100 dark:bg-zinc-900 select-none">
+                        <button
+                          type="button"
+                          onClick={() => handleHeaderSort("email")}
+                          aria-sort={candidateSortBy === "email" ? (candidateSortOrder === "asc" ? "ascending" : "descending") : "none"}
+                          className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-colors group"
+                        >
+                          <span>수신 연락처</span>
+                          <span className="text-[10px] font-mono">
+                            {candidateSortBy === "email" ? (
+                              candidateSortOrder === "asc" ? (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▲</span>
+                              ) : (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▼</span>
+                              )
+                            ) : (
+                              <span className="text-zinc-400 dark:text-zinc-500 opacity-60 group-hover:opacity-100">⇅</span>
+                            )}
+                          </span>
+                        </button>
+                      </th>
+                      <th className="p-2.5 bg-zinc-100 dark:bg-zinc-900 select-none">
+                        <button
+                          type="button"
+                          onClick={() => handleHeaderSort("consent")}
+                          aria-sort={candidateSortBy === "consent" ? (candidateSortOrder === "asc" ? "ascending" : "descending") : "none"}
+                          className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-colors group"
+                        >
+                          <span>마케팅 동의</span>
+                          <span className="text-[10px] font-mono">
+                            {candidateSortBy === "consent" ? (
+                              candidateSortOrder === "asc" ? (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▲</span>
+                              ) : (
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">▼</span>
+                              )
+                            ) : (
+                              <span className="text-zinc-400 dark:text-zinc-500 opacity-60 group-hover:opacity-100">⇅</span>
+                            )}
+                          </span>
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -2273,19 +2460,21 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                     ) : (
                       candidatesList.map((c) => {
                         const contacts = c.sourcing_contacts || [];
-                        const compContactIds: string[] = contacts.map((ct: any) => ct.id).filter(Boolean);
-                        const selectedCompContacts = compContactIds.filter((id) => selectedContactIds.includes(id));
+                        const validContacts = getValidCompanyContacts(c);
+                        const validContactIds: string[] = validContacts.map((ct) => ct.id);
+                        const selectedValidCompContacts = validContactIds.filter((id) => selectedContactIds.includes(id));
                         const isCompanySelected = selectedCompanyIds.includes(c.id);
 
-                        const isAllSelected = compContactIds.length > 0 && selectedCompContacts.length === compContactIds.length;
-                        const isSomeSelected = selectedCompContacts.length > 0 && selectedCompContacts.length < compContactIds.length;
+                        const isAllSelected = validContactIds.length > 0 && selectedValidCompContacts.length === validContactIds.length;
+                        const isSomeSelected = selectedValidCompContacts.length > 0 && selectedValidCompContacts.length < validContactIds.length;
                         const isIndeterminate = isSomeSelected;
-                        const isChecked = isAllSelected || (compContactIds.length === 0 && isCompanySelected);
+                        const isChecked = isAllSelected || (validContactIds.length === 0 && isCompanySelected);
 
                         const brand = c.sourcing_brands?.[0]?.brand_name_kr || c.company_name_kr;
                         const primaryContact = contacts.find((ct: any) => ct.is_primary) || contacts[0];
                         const totalContacts = contacts.length;
                         const isExpanded = expandedContactCompanyIds.includes(c.id);
+                        const isPrimaryEmailValid = primaryContact?.email ? isValidContactEmail(primaryContact.email) : false;
 
                         return (
                           <React.Fragment key={c.id}>
@@ -2352,7 +2541,17 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                               <td className="p-2.5 text-zinc-600 dark:text-zinc-400">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-mono text-xs">
-                                    {primaryContact?.email || <span className="text-red-400">이메일 없음</span>}
+                                    {primaryContact?.email ? (
+                                      isPrimaryEmailValid ? (
+                                        primaryContact.email
+                                      ) : (
+                                        <span className="text-red-500 dark:text-red-400 font-semibold" title="이메일 형식 오류">
+                                          {primaryContact.email} <span className="text-[10px] font-sans px-1 rounded bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">오류</span>
+                                        </span>
+                                      )
+                                    ) : (
+                                      <span className="text-red-400">이메일 없음</span>
+                                    )}
                                   </span>
                                   {totalContacts > 1 && (
                                     <button
@@ -2366,7 +2565,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                                     >
                                       <span>{isExpanded ? "▲ 접기" : `▼ +${totalContacts - 1} 연락처 개별 선택`}</span>
                                       <span className="font-mono text-[9px] bg-indigo-200 dark:bg-indigo-900 px-1 rounded">
-                                        {selectedCompContacts.length}/{totalContacts}
+                                        {selectedValidCompContacts.length}/{validContacts.length}
                                       </span>
                                     </button>
                                   )}
@@ -2387,36 +2586,40 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                               </td>
                             </tr>
 
-                            {/* Expanded Multi-contact Sub-rows */}
+                            {/* Expanded Multi-contact Sub-rows with Hygiene Filtering */}
                             {isExpanded && totalContacts > 1 && (
                               <tr className="bg-indigo-50/30 dark:bg-indigo-950/20 border-b border-indigo-100 dark:border-indigo-900">
                                 <td colSpan={7} className="p-3 pl-8">
                                   <div className="space-y-2 border-l-2 border-indigo-500 pl-3">
                                     <div className="flex items-center justify-between text-[11px] text-zinc-600 dark:text-zinc-400">
                                       <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                                        {c.company_name_kr} 개별 수신 연락처 선택 ({selectedCompContacts.length}/{totalContacts} 선택됨):
+                                        {c.company_name_kr} 개별 수신 연락처 선택 ({selectedValidCompContacts.length}/{validContacts.length} 선택됨):
                                       </span>
                                       <span className="text-[10px] text-zinc-500">
-                                        체크된 연락처로만 발송 시뮬레이션 및 실제 캠페인이 진행됩니다.
+                                        유효한 이메일만 선택 가능하며, 체크된 연락처로 발송 시뮬레이션 및 실제 캠페인이 진행됩니다.
                                       </span>
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                                       {contacts.map((ct: any) => {
+                                        const isValid = isValidContactEmail(ct.email);
                                         const isCtChecked = selectedContactIds.includes(ct.id);
                                         return (
                                           <label
                                             key={ct.id}
-                                            className={`flex items-center gap-2 p-2 rounded border text-xs cursor-pointer transition-colors ${
-                                              isCtChecked
-                                                ? "bg-white dark:bg-zinc-800 border-indigo-300 dark:border-indigo-700 shadow-xs"
-                                                : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 opacity-60"
+                                            className={`flex items-center gap-2 p-2 rounded border text-xs transition-colors ${
+                                              !isValid
+                                                ? "bg-red-50/40 dark:bg-red-950/20 border-red-200 dark:border-red-900/50 opacity-60 cursor-not-allowed"
+                                                : isCtChecked
+                                                ? "bg-white dark:bg-zinc-800 border-indigo-300 dark:border-indigo-700 shadow-xs cursor-pointer"
+                                                : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 opacity-60 cursor-pointer"
                                             }`}
                                           >
                                             <input
                                               type="checkbox"
                                               checked={isCtChecked}
-                                              onChange={() => handleToggleContact(c, ct.id)}
-                                              className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500"
+                                              disabled={!isValid}
+                                              onChange={() => isValid && handleToggleContact(c, ct.id)}
+                                              className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
                                             />
                                             <div className="flex flex-col min-w-0">
                                               <div className="flex items-center gap-1">
@@ -2429,8 +2632,20 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                                                   </span>
                                                 )}
                                               </div>
-                                              <span className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
-                                                {ct.email || "이메일 없음"}
+                                              <span
+                                                className={`font-mono text-[10px] truncate ${
+                                                  !isValid ? "text-red-500 dark:text-red-400 font-semibold" : "text-zinc-500 dark:text-zinc-400"
+                                                }`}
+                                              >
+                                                {ct.email ? (
+                                                  isValid ? (
+                                                    ct.email
+                                                  ) : (
+                                                    <span title="유효하지 않은 이메일 형식">{ct.email} (오류)</span>
+                                                  )
+                                                ) : (
+                                                  "이메일 없음"
+                                                )}
                                               </span>
                                             </div>
                                           </label>
@@ -2449,20 +2664,28 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 </table>
               </div>
 
-              {/* 5. SERVER-SIDE PAGINATION & PAGE SIZE CONTROLS */}
+              {/* 5. SERVER-SIDE PAGINATION & PAGE SIZE CONTROLS (ADM-BSRC-009-R6) */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2.5 border-t border-zinc-100 dark:border-zinc-800 text-xs">
                 <div className="flex items-center gap-3">
-                  <span className="text-zinc-500">
-                    총 <strong className="font-mono text-zinc-900 dark:text-zinc-100">{totalMatchingCandidates}</strong>개사 중{" "}
-                    <strong className="font-mono text-zinc-900 dark:text-zinc-100">{candidatesList.length}</strong>개사 표시 (페이지{" "}
-                    <strong className="font-mono">{candidatePage}</strong> / {Math.max(1, Math.ceil(totalMatchingCandidates / candidatePageSize))})
-                  </span>
+                  {candidatePageSize === "ALL" ? (
+                    <span className="text-zinc-500">
+                      총 <strong className="font-mono text-zinc-900 dark:text-zinc-100">{totalMatchingCandidates}</strong>개사 중{" "}
+                      <strong className="font-mono text-zinc-900 dark:text-zinc-100">{candidatesList.length}</strong>개사 표시 (전체 보기)
+                    </span>
+                  ) : (
+                    <span className="text-zinc-500">
+                      총 <strong className="font-mono text-zinc-900 dark:text-zinc-100">{totalMatchingCandidates}</strong>개사 중{" "}
+                      <strong className="font-mono text-zinc-900 dark:text-zinc-100">{candidatesList.length}</strong>개사 표시 (페이지{" "}
+                      <strong className="font-mono">{candidatePage}</strong> / {Math.max(1, Math.ceil(totalMatchingCandidates / (candidatePageSize as number)))})
+                    </span>
+                  )}
                   <div className="flex items-center gap-1.5">
                     <span className="text-zinc-400">페이지당:</span>
                     <select
                       value={candidatePageSize}
                       onChange={(e) => {
-                        setCandidatePageSize(Number(e.target.value));
+                        const val = e.target.value === "ALL" ? "ALL" : Number(e.target.value);
+                        setCandidatePageSize(val);
                         setCandidatePage(1);
                       }}
                       className="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-mono"
@@ -2471,6 +2694,7 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                       <option value={50}>50개</option>
                       <option value={100}>100개</option>
                       <option value={200}>200개</option>
+                      <option value="ALL">전체 보기 (All)</option>
                     </select>
                   </div>
                 </div>
@@ -2479,36 +2703,46 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    disabled={candidatePage <= 1 || isLoadingCandidates}
+                    disabled={candidatePageSize === "ALL" || candidatePage <= 1 || isLoadingCandidates}
                     onClick={() => setCandidatePage(1)}
-                    className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                    className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer disabled:cursor-not-allowed"
                   >
                     « 처음
                   </button>
                   <button
                     type="button"
-                    disabled={candidatePage <= 1 || isLoadingCandidates}
+                    disabled={candidatePageSize === "ALL" || candidatePage <= 1 || isLoadingCandidates}
                     onClick={() => setCandidatePage((p) => Math.max(1, p - 1))}
-                    className="px-3 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                    className="px-3 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer disabled:cursor-not-allowed"
                   >
                     ‹ 이전
                   </button>
                   <span className="px-3 py-1 font-mono font-semibold text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 rounded">
-                    {candidatePage} / {Math.max(1, Math.ceil(totalMatchingCandidates / candidatePageSize))}
+                    {candidatePageSize === "ALL"
+                      ? "1 / 1 (전체)"
+                      : `${candidatePage} / ${Math.max(1, Math.ceil(totalMatchingCandidates / (candidatePageSize as number)))}`}
                   </span>
                   <button
                     type="button"
-                    disabled={candidatePage >= Math.ceil(totalMatchingCandidates / candidatePageSize) || isLoadingCandidates}
+                    disabled={
+                      candidatePageSize === "ALL" ||
+                      candidatePage >= Math.ceil(totalMatchingCandidates / (candidatePageSize as number)) ||
+                      isLoadingCandidates
+                    }
                     onClick={() => setCandidatePage((p) => p + 1)}
-                    className="px-3 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                    className="px-3 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer disabled:cursor-not-allowed"
                   >
                     다음 ›
                   </button>
                   <button
                     type="button"
-                    disabled={candidatePage >= Math.ceil(totalMatchingCandidates / candidatePageSize) || isLoadingCandidates}
-                    onClick={() => setCandidatePage(Math.max(1, Math.ceil(totalMatchingCandidates / candidatePageSize)))}
-                    className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                    disabled={
+                      candidatePageSize === "ALL" ||
+                      candidatePage >= Math.ceil(totalMatchingCandidates / (candidatePageSize as number)) ||
+                      isLoadingCandidates
+                    }
+                    onClick={() => setCandidatePage(Math.max(1, Math.ceil(totalMatchingCandidates / (candidatePageSize as number))))}
+                    className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer disabled:cursor-not-allowed"
                   >
                     끝 »
                   </button>
