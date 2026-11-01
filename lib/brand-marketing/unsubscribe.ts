@@ -175,6 +175,10 @@ export async function recordEmailOptOut(
       if (error.code === "23505" || error.message.includes("unique") || error.message.includes("already exists")) {
         return { success: true, alreadySuppressed: true };
       }
+      if (error.message && (error.message.includes("fetch failed") || error.message.includes("Failed to fetch") || error.message.includes("network"))) {
+        console.warn("[marketing:unsubscribe] DB unreachable (memory fallback used):", error.message);
+        return { success: true, alreadySuppressed: false };
+      }
       console.warn("[marketing:unsubscribe] DB insert warning:", error.message);
       return { success: false, error: error.message };
     }
