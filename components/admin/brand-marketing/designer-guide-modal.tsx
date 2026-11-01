@@ -1,258 +1,262 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { CampaignBrief } from "@/lib/brand-marketing/master-prompt-types";
 import {
-  DEFAULT_IMAGE_DESIGN_PROMPT,
-  DEFAULT_HTML_DESIGN_PROMPT,
-  DESIGNER_GUIDE_SECTIONS,
-} from "@/lib/brand-marketing/designer-guide-constants";
+  DEFAULT_CAMPAIGN_BRIEF,
+  CAMPAIGN_BRIEF_PRESETS,
+  validateCampaignBrief,
+  generateUniversalMasterPrompt,
+} from "@/lib/brand-marketing/master-prompt-generator";
+import { CampaignBriefSection } from "./campaign-brief-section";
+import { MasterPromptSection } from "./master-prompt-section";
+import { DeliveryRequirementsSection } from "./delivery-requirements-section";
+import { ValidationChecklistSection } from "./validation-checklist-section";
 
 interface DesignerGuideModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+type ActiveSection = "brief" | "prompt" | "delivery" | "checklist";
+
 export function DesignerGuideModal({ isOpen, onClose }: DesignerGuideModalProps) {
-  const [activeTab, setActiveTab] = useState<"guide" | "prompt">("guide");
-  const [promptFormat, setPromptFormat] = useState<"image" | "html">("image");
+  const [activeTab, setActiveTab] = useState<ActiveSection>("brief");
+  const [brief, setBrief] = useState<CampaignBrief>(DEFAULT_CAMPAIGN_BRIEF);
+  const [activePresetId, setActivePresetId] = useState<string>("us-wholesale-retail");
 
-  const [imagePrompt, setImagePrompt] = useState(DEFAULT_IMAGE_DESIGN_PROMPT);
-  const [htmlPrompt, setHtmlPrompt] = useState(DEFAULT_HTML_DESIGN_PROMPT);
+  // Track whether the user manually edited the prompt text directly
+  const [isCustomPrompt, setIsCustomPrompt] = useState(false);
+  const [customPromptText, setCustomPromptText] = useState("");
 
-  const [copiedPrompt, setCopiedPrompt] = useState(false);
-  const [copiedGuide, setCopiedGuide] = useState(false);
+  const [copiedPromptQuick, setCopiedPromptQuick] = useState(false);
+
+  const generatedPrompt = useMemo(() => {
+    return generateUniversalMasterPrompt(brief);
+  }, [brief]);
+
+  const activePrompt = isCustomPrompt ? customPromptText : generatedPrompt;
+
+  const validation = useMemo(() => {
+    return validateCampaignBrief(brief);
+  }, [brief]);
 
   if (!isOpen) return null;
 
-  const currentPrompt = promptFormat === "image" ? imagePrompt : htmlPrompt;
-  const setCurrentPrompt = promptFormat === "image" ? setImagePrompt : setHtmlPrompt;
-  const defaultForFormat =
-    promptFormat === "image" ? DEFAULT_IMAGE_DESIGN_PROMPT : DEFAULT_HTML_DESIGN_PROMPT;
+  const handleBriefChange = (updated: CampaignBrief) => {
+    setBrief(updated);
+    // If prompt wasn't manually detached, it stays synced with generatedPrompt
+  };
 
-  const handleCopyPrompt = async () => {
-    try {
-      await navigator.clipboard.writeText(currentPrompt);
-      setCopiedPrompt(true);
-      setTimeout(() => setCopiedPrompt(false), 2000);
-    } catch {
-      // Fallback
+  const handleApplyPreset = (presetId: string) => {
+    const found = CAMPAIGN_BRIEF_PRESETS.find((p) => p.id === presetId);
+    if (found) {
+      setBrief(found.brief);
+      setActivePresetId(presetId);
+      setIsCustomPrompt(false);
     }
   };
 
-  const handleResetPrompt = () => {
-    if (confirm("Reset prompt to original default instructions?")) {
-      setCurrentPrompt(defaultForFormat);
+  const handleResetToDefault = () => {
+    if (confirm("캠페인 브리프를 기본값으로 되돌리시겠습니까?")) {
+      setBrief(DEFAULT_CAMPAIGN_BRIEF);
+      setActivePresetId("us-wholesale-retail");
+      setIsCustomPrompt(false);
     }
   };
 
-  const handleCopyEntireGuide = async () => {
-    try {
-      const guideText = DESIGNER_GUIDE_SECTIONS.map((sec) => {
-        const items = sec.items.map((it) => `  - ${it.subtitle}: ${it.description}`).join("\n");
-        return `## ${sec.title}\n${items}`;
-      }).join("\n\n");
+  const handlePromptChange = (updatedText: string) => {
+    setIsCustomPrompt(true);
+    setCustomPromptText(updatedText);
+  };
 
-      await navigator.clipboard.writeText(guideText);
-      setCopiedGuide(true);
-      setTimeout(() => setCopiedGuide(false), 2000);
+  const handleResetToGenerated = () => {
+    setIsCustomPrompt(false);
+    setCustomPromptText("");
+  };
+
+  const handleQuickCopyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(activePrompt);
+      setCopiedPromptQuick(true);
+      setTimeout(() => setCopiedPromptQuick(false), 2000);
     } catch {
       // Fallback
+      const textarea = document.createElement("textarea");
+      textarea.value = activePrompt;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setCopiedPromptQuick(true);
+      setTimeout(() => setCopiedPromptQuick(false), 2000);
     }
   };
 
   return (
     <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl max-w-3xl w-full shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-5xl w-full shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/80">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-lg">📖</span>
+              <span className="text-xl">📖</span>
               <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                Designer Guide & AI Prompt Library
+                Email Design Guide & Universal Master AI Prompt
               </h3>
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-                Phase 2 Outreach
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                ADM-EMAIL-TPL-002
               </span>
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              외주 디자이너를 위한 이메일 캔버스 납품 가이드 및 원클릭 복사 가능한 AI 생성 프롬프트
+              비즈니스 브리프 설정, 범용 마스터 AI 프롬프트 생성, 표준 ZIP 납품 규격 및 인박스 6단계 수신 품질 체크리스트
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-sm font-bold cursor-pointer"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-sm font-bold cursor-pointer transition-colors"
           >
             ✕
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-2 px-6 pt-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+        {/* 4-Section Navigation Tabs */}
+        <div className="flex items-center gap-1 sm:gap-2 px-6 pt-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-x-auto">
           <button
             type="button"
-            onClick={() => setActiveTab("guide")}
-            className={`pb-2.5 px-3 text-xs font-bold border-b-2 cursor-pointer transition-colors ${
-              activeTab === "guide"
-                ? "border-zinc-950 dark:border-zinc-100 text-zinc-950 dark:text-zinc-100"
+            onClick={() => setActiveTab("brief")}
+            className={`pb-3 px-3 text-xs font-bold border-b-2 whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1.5 ${
+              activeTab === "brief"
+                ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
                 : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
             }`}
           >
-            📘 TAB A: 납품 규격 가이드 (Design Guide)
+            <span>📝</span>
+            <span>1. Campaign Brief</span>
+            {!validation.isValid && (
+              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+            )}
           </button>
+
           <button
             type="button"
             onClick={() => setActiveTab("prompt")}
-            className={`pb-2.5 px-3 text-xs font-bold border-b-2 cursor-pointer transition-colors ${
+            className={`pb-3 px-3 text-xs font-bold border-b-2 whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1.5 ${
               activeTab === "prompt"
-                ? "border-zinc-950 dark:border-zinc-100 text-zinc-950 dark:text-zinc-100"
+                ? "border-purple-600 text-purple-600 dark:border-purple-400 dark:text-purple-400"
                 : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
             }`}
           >
-            🤖 TAB B: AI 디자인 프롬프트 (AI Prompts)
+            <span>🤖</span>
+            <span>2. Master AI Prompt</span>
+            {isCustomPrompt && (
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
+                수정됨
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("delivery")}
+            className={`pb-3 px-3 text-xs font-bold border-b-2 whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1.5 ${
+              activeTab === "delivery"
+                ? "border-amber-600 text-amber-600 dark:border-amber-400 dark:text-amber-400"
+                : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+            }`}
+          >
+            <span>📦</span>
+            <span>3. Delivery Requirements</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("checklist")}
+            className={`pb-3 px-3 text-xs font-bold border-b-2 whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1.5 ${
+              activeTab === "checklist"
+                ? "border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400"
+                : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+            }`}
+          >
+            <span>✅</span>
+            <span>4. How to Use & Checklist</span>
           </button>
         </div>
 
-        {/* Body Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {activeTab === "guide" && (
-            <div className="space-y-5">
-              <div className="flex items-center justify-between bg-zinc-50 dark:bg-zinc-850 p-3.5 rounded-lg border border-zinc-200 dark:border-zinc-750">
-                <div className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                  외주 디자이너 또는 크리에이티브 에이전시에게 전달할 표준 이메일 디자인 지침입니다.
-                  아래 전체 가이드를 복사하여 작업 요청서에 첨부하세요.
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCopyEntireGuide}
-                  className="shrink-0 ml-4 px-3 py-1.5 rounded text-xs font-bold bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 text-zinc-800 dark:text-zinc-200 cursor-pointer shadow-2xs"
-                >
-                  {copiedGuide ? "✓ Copied!" : "📋 전체 가이드 복사"}
-                </button>
-              </div>
-
-              {DESIGNER_GUIDE_SECTIONS.map((sec, idx) => (
-                <div
-                  key={idx}
-                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 space-y-3 bg-white dark:bg-zinc-900"
-                >
-                  <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                    <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                      {sec.title}
-                    </h4>
-                    {sec.badge && (
-                      <span className="text-[10px] px-2 py-0.5 rounded font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                        {sec.badge}
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 gap-2.5">
-                    {sec.items.map((it, i) => (
-                      <div key={i} className="text-xs">
-                        <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                          • {it.subtitle}:{" "}
-                        </span>
-                        <span className="text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                          {it.description}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+        {/* Modal Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50/30 dark:bg-zinc-950/20">
+          {activeTab === "brief" && (
+            <CampaignBriefSection
+              brief={brief}
+              onChange={handleBriefChange}
+              onApplyPreset={handleApplyPreset}
+              onResetToDefault={handleResetToDefault}
+              activePresetId={activePresetId}
+              validation={validation}
+            />
           )}
 
           {activeTab === "prompt" && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-zinc-50 dark:bg-zinc-850 p-3.5 rounded-lg border border-zinc-200 dark:border-zinc-750">
-                <div className="space-y-0.5">
-                  <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                    생성 포맷 선택:
-                  </div>
-                  <div className="text-[11px] text-zinc-500">
-                    프롬프트를 복사하여 Claude, ChatGPT 또는 디자이너 브리프에 붙여넣으세요.
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-900 p-1 rounded-md border border-zinc-200 dark:border-zinc-700">
-                  <button
-                    type="button"
-                    onClick={() => setPromptFormat("image")}
-                    className={`px-3 py-1 text-xs font-bold rounded cursor-pointer transition-colors ${
-                      promptFormat === "image"
-                        ? "bg-purple-600 text-white shadow-2xs"
-                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900"
-                    }`}
-                  >
-                    🖼️ 이미지 템플릿 프롬프트
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPromptFormat("html")}
-                    className={`px-3 py-1 text-xs font-bold rounded cursor-pointer transition-colors ${
-                      promptFormat === "html"
-                        ? "bg-blue-600 text-white shadow-2xs"
-                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900"
-                    }`}
-                  >
-                    📄 HTML 템플릿 프롬프트
-                  </button>
-                </div>
-              </div>
-
-              {/* Editable Prompt Area */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                    {promptFormat === "image"
-                      ? "IMAGE EMAIL DESIGN PROMPT (편집 가능)"
-                      : "HTML EMAIL DESIGN PROMPT (편집 가능)"}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleResetPrompt}
-                      className="text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 font-medium cursor-pointer"
-                    >
-                      ↺ 기본값으로 리셋
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCopyPrompt}
-                      className="px-3.5 py-1.5 rounded text-xs font-bold bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer shadow-xs flex items-center gap-1.5"
-                    >
-                      {copiedPrompt ? "✓ Copied!" : "📋 Copy Prompt"}
-                    </button>
-                  </div>
-                </div>
-
-                <textarea
-                  rows={14}
-                  value={currentPrompt}
-                  onChange={(e) => setCurrentPrompt(e.target.value)}
-                  className="w-full p-4 font-mono text-[11px] rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 leading-relaxed focus:bg-white dark:focus:bg-zinc-900 transition-colors"
-                />
-
-                <div className="text-[11px] text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900 p-3 rounded border border-zinc-200 dark:border-zinc-800">
-                  💡 <strong>Tip:</strong> 이 프롬프트는 비즈니스 과장이나 허위 지표를 요구하지 않도록 설계되었습니다.
-                  생성된 이미지는 <strong>Image Template</strong>에 각 슬라이스별로 업로드하고, HTML 결과물은 <strong>HTML Template</strong>에 업로드하여 즉시 검증할 수 있습니다.
-                </div>
-              </div>
-            </div>
+            <MasterPromptSection
+              prompt={activePrompt}
+              onChange={handlePromptChange}
+              onResetToGenerated={handleResetToGenerated}
+              isCustomized={isCustomPrompt}
+            />
           )}
+
+          {activeTab === "delivery" && <DeliveryRequirementsSection />}
+
+          {activeTab === "checklist" && <ValidationChecklistSection />}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-md hover:bg-zinc-100 cursor-pointer"
-          >
-            닫기 (Close)
-          </button>
+        {/* Modal Footer */}
+        <div className="px-6 py-3.5 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+            {activeTab === "brief" && (
+              <span>
+                💡 브리프 수정 완료 후 <strong className="text-zinc-800 dark:text-zinc-200">&quot;2. Master AI Prompt&quot;</strong> 탭에서 프롬프트를 복사하세요.
+              </span>
+            )}
+            {activeTab === "prompt" && (
+              <span>
+                💡 프롬프트를 복사하여 Claude, ChatGPT, Gemini에 붙여넣어 이메일 코드를 생성하세요.
+              </span>
+            )}
+            {activeTab === "delivery" && (
+              <span>
+                💡 표준 ZIP 파일 규격은 ADM-EMAIL-TPL-001 (Agent 3) 연계 승인 후 확정됩니다.
+              </span>
+            )}
+            {activeTab === "checklist" && (
+              <span>
+                💡 실제 발송 전 &quot;테스트 발송&quot; 기능을 사용하여 6단계 렌더링 체크리스트를 점검하세요.
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-center">
+            <button
+              type="button"
+              onClick={handleQuickCopyPrompt}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs flex items-center gap-1.5 ${
+                copiedPromptQuick
+                  ? "bg-emerald-600 text-white"
+                  : "bg-purple-600 hover:bg-purple-700 text-white"
+              }`}
+            >
+              {copiedPromptQuick ? "✓ 프롬프트 복사됨!" : "📋 프롬프트 즉시 복사"}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-750 cursor-pointer transition-colors"
+            >
+              닫기 (Close)
+            </button>
+          </div>
         </div>
       </div>
     </div>
