@@ -29,6 +29,7 @@ import {
   removeMarketingTestAllowlistEmailAction,
   SendTestCampaignEmailsResult,
   approveMarketingCampaignAction,
+  deleteMarketingTemplatesBulkAction,
 } from "@/lib/brand-marketing/campaign-actions";
 import {
   parseAndValidateTestRecipients,
@@ -43,6 +44,7 @@ import { personalizeEmail } from "@/lib/brand-marketing/personalization-engine";
 import { ImageTemplateComposer } from "./image-template-composer";
 import { DesignerGuideModal } from "./designer-guide-modal";
 import { MarketingFooterSettingsView } from "./marketing-footer-settings-view";
+import { TemplatePickerTable } from "./template-picker-table";
 import { stageLargeFiles } from "@/lib/files/stage-form-files";
 import {
   listSourcingCandidatesAction,
@@ -869,6 +871,21 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
     } catch (err: any) {
       showNotification("error", err.message);
     }
+  };
+
+  const handleBulkDeleteTemplates = async (templateIds: string[]) => {
+    const res = await deleteMarketingTemplatesBulkAction(templateIds);
+    if (res.deletedCount > 0) {
+      showNotification("success", `${res.deletedCount}개 템플릿이 삭제되었습니다.`);
+    }
+    if (res.blockedCount > 0) {
+      showNotification(
+        "error",
+        `${res.blockedCount}개 템플릿은 기존 캠페인에서 참조 중이어서 삭제가 차단되었습니다.`
+      );
+    }
+    refreshCampaignsAndTemplates();
+    return res;
   };
 
   // --------------------------------------------------------------------------
@@ -1735,99 +1752,17 @@ export function EmailCampaignsView({ candidates = [] }: EmailCampaignsViewProps)
         {/* STEP 2: TEMPLATE PACKAGE SELECTION & LIBRARY */}
         {currentStep === 2 && (
           <div className="space-y-6">
-            <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                <div>
-                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                    2. Select Template Package
-                  </h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    디자이너가 작성한 외부 완성형 이메일 패키지를 선택하거나 신규 업로드합니다.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowGuideModal(true)}
-                    className="px-3 py-1.5 rounded text-xs font-semibold border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 cursor-pointer"
-                  >
-                    📖 Designer Guide &amp; AI Prompt
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleOpenUploadModal}
-                    className="px-3 py-1.5 rounded text-xs font-bold bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 cursor-pointer"
-                  >
-                    + Upload HTML / ZIP Package
-                  </button>
-                </div>
-              </div>
-
-              {/* Template Radio Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {templates.map((tpl) => {
-                  const isSelected = tpl.id === selectedTemplateId;
-                  const isImage = tpl.templateType === "IMAGE";
-                  const isArchived = tpl.status === "ARCHIVED";
-
-                  return (
-                    <div
-                      key={tpl.id}
-                      onClick={() => setSelectedTemplateId(tpl.id)}
-                      className={`p-3.5 rounded-lg border text-xs cursor-pointer transition-all flex flex-col justify-between ${
-                        isSelected
-                          ? "border-zinc-950 dark:border-white bg-zinc-50 dark:bg-zinc-800/80 shadow-xs ring-1 ring-zinc-950 dark:ring-white"
-                          : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:bg-zinc-50"
-                      } ${isArchived ? "opacity-60" : ""}`}
-                    >
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                              isImage
-                                ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
-                                : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                            }`}
-                          >
-                            {isImage ? "🖼️ IMAGE" : "📄 HTML"}
-                          </span>
-                          {tpl.isDefault && (
-                            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
-                              Default
-                            </span>
-                          )}
-                        </div>
-                        <div className="font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1">{tpl.name}</div>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2">
-                          {tpl.subject}
-                        </p>
-                      </div>
-
-                      <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/60 mt-3 flex items-center justify-between text-[10px] text-zinc-400">
-                        <span>v{tpl.version} · {tpl.language.toUpperCase()}</span>
-                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={() => setPreviewModalTemplate(tpl)}
-                            className="hover:text-zinc-800 underline"
-                          >
-                            Preview
-                          </button>
-                          <span>·</span>
-                          <button
-                            type="button"
-                            onClick={(e) => handleOpenDuplicateModal(tpl, e)}
-                            className="hover:text-zinc-800"
-                          >
-                            복제
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <TemplatePickerTable
+              templates={templates}
+              selectedTemplateId={selectedTemplateId}
+              onSelectTemplate={(tplId) => setSelectedTemplateId(tplId)}
+              onPreviewTemplate={(tpl) => setPreviewModalTemplate(tpl)}
+              onDuplicateTemplate={(tpl) => handleOpenDuplicateModal(tpl)}
+              onDeleteTemplate={(tpl) => handleDeleteTemplate(tpl)}
+              onBulkDeleteTemplates={handleBulkDeleteTemplates}
+              onOpenUploadModal={handleOpenUploadModal}
+              onOpenGuideModal={() => setShowGuideModal(true)}
+            />
 
             {/* LIVE VISUAL PREVIEW HEADER WITH CAMPAIGN EMAIL SUBJECT BAR */}
             {activeTemplate && (

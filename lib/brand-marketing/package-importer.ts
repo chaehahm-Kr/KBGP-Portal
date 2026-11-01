@@ -267,6 +267,10 @@ export async function importZipPackage(
     // Exclude design canvas files (.dc.html) and design system bundles
     if (f.toLowerCase().endsWith(".dc.html")) return false;
     if (f.startsWith("_ds/") || f.includes("/_ds/")) return false;
+    // Exclude link maps and plain-text companion files from primary template selection
+    const fLower = f.toLowerCase();
+    if (fLower.includes("link map") || fLower.includes("link-map") || fLower.includes("link_map")) return false;
+    if (fLower.includes("plain text") || fLower.includes("plain-text") || fLower.includes("plain_text")) return false;
     return true;
   });
 
@@ -289,12 +293,21 @@ export async function importZipPackage(
   const productionCandidates = htmlFiles.filter((f) => !f.toLowerCase().includes("preview"));
   const pool = productionCandidates.length > 0 ? productionCandidates : htmlFiles;
 
-  // Sort descending so highest version (outreach-03 > 02 > 01) or index.html comes first
+  // Prioritize authoritative send-ready files (*- SEND.html, *_send.html, send.html)
   pool.sort((a, b) => {
+    const aLower = a.toLowerCase();
+    const bLower = b.toLowerCase();
+    const aIsSend = aLower.includes("- send.html") || aLower.includes("_send.html") || aLower.endsWith("send.html") || aLower.endsWith("send.htm");
+    const bIsSend = bLower.includes("- send.html") || bLower.includes("_send.html") || bLower.endsWith("send.html") || bLower.endsWith("send.htm");
+
+    if (aIsSend && !bIsSend) return -1;
+    if (!aIsSend && bIsSend) return 1;
+
     const aBase = path.basename(a).toLowerCase();
     const bBase = path.basename(b).toLowerCase();
     if (aBase === "index.html" || aBase === "index.htm") return -1;
     if (bBase === "index.html" || bBase === "index.htm") return 1;
+
     return b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" });
   });
 
@@ -306,7 +319,7 @@ export async function importZipPackage(
 
   if (htmlFiles.length > 1) {
     warnings.push(
-      `Multiple HTML files detected in package: [${pool.join(", ")}]. Currently using "${selectedHtmlFile}".`
+      `Multiple HTML files detected in package: [${pool.join(", ")}]. Prioritizing authoritative send-ready template "${selectedHtmlFile}".`
     );
   }
 
@@ -360,14 +373,10 @@ export async function importZipPackage(
       return trimmed;
     }
 
-    const cleanSrc = trimmed.replace(/^\.\//, "").toLowerCase();
-    let baseName = "";
-    try {
-      const urlObj = new URL(trimmed, "http://localhost");
-      baseName = path.basename(urlObj.pathname).toLowerCase();
-    } catch {
-      baseName = path.basename(trimmed).toLowerCase();
-    }
+    // Strip {{IMAGE_HOST}} template prefix if present
+    const normalized = trimmed.replace(/\{\{\s*image_host\s*\}\}\/?/gi, "").replace(/\\/g, "/");
+    const cleanSrc = normalized.replace(/^\.\//, "").toLowerCase();
+    const baseName = (cleanSrc.split("/").pop() || "").toLowerCase();
 
     // Direct match by clean path or base filename
     const hosted = assetMap.get(cleanSrc) || assetMap.get(baseName);
