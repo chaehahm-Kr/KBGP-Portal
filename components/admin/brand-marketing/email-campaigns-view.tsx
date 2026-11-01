@@ -46,6 +46,8 @@ import { personalizeEmail } from "@/lib/brand-marketing/personalization-engine";
 import { ImageTemplateComposer } from "./image-template-composer";
 import { DesignerGuideModal } from "./designer-guide-modal";
 import { MarketingFooterSettingsView } from "./marketing-footer-settings-view";
+import { SuppressionListView } from "./suppression-list-view";
+import { validateSendReadyHtml, SendReadyHtmlValidationResult } from "@/lib/brand-marketing/personalization-engine";
 import { TemplatePickerTable } from "./template-picker-table";
 import { stageLargeFiles } from "@/lib/files/stage-form-files";
 import {
@@ -59,7 +61,7 @@ import {
 
 interface EmailCampaignsViewProps {
   candidates?: any[];
-  initialSubTab?: "campaigns" | "library" | "footer";
+  initialSubTab?: "campaigns" | "library" | "footer" | "suppression";
 }
 
 export function EmailCampaignsView({
@@ -70,7 +72,7 @@ export function EmailCampaignsView({
   const viewParam = searchParams?.get("view") || searchParams?.get("subtab");
 
   // Top-level Navigation Tabs
-  const [mainTab, setMainTab] = useState<"campaigns" | "library" | "footer">(initialSubTab);
+  const [mainTab, setMainTab] = useState<"campaigns" | "library" | "footer" | "suppression">(initialSubTab as any);
 
   // Campaign View Mode & Step
   const [viewMode, setViewMode] = useState<"list" | "editor">("list");
@@ -198,6 +200,35 @@ export function EmailCampaignsView({
   } | null>(null);
 
   // Manage Selection Modal State
+  // Auto-height & Full Preview States (ADM-EMAIL-TPL-005)
+  const [step2IframeHeight, setStep2IframeHeight] = useState<number>(1400);
+  const [step4IframeHeight, setStep4IframeHeight] = useState<number>(1400);
+  const [tplModalIframeHeight, setTplModalIframeHeight] = useState<number>(1400);
+  const [fullPreviewHeight, setFullPreviewHeight] = useState<number>(1400);
+  const [showFullPreviewModal, setShowFullPreviewModal] = useState<boolean>(false);
+  const [step4Viewport, setStep4Viewport] = useState<"desktop" | "mobile">("desktop");
+  const [tplModalViewport, setTplModalViewport] = useState<"desktop" | "mobile">("desktop");
+
+  const measureIframeHeight = (e: React.SyntheticEvent<HTMLIFrameElement>, setter: (h: number) => void) => {
+    try {
+      const iframe = e.currentTarget;
+      const doc = iframe.contentDocument;
+      if (doc) {
+        const h = Math.max(
+          doc.body?.scrollHeight || 0,
+          doc.documentElement?.scrollHeight || 0,
+          doc.body?.offsetHeight || 0,
+          doc.documentElement?.offsetHeight || 0
+        );
+        if (h > 200) {
+          setter(h + 24);
+        }
+      }
+    } catch {
+      // sandbox fallback
+    }
+  };
+
   const [showManageSelectionModal, setShowManageSelectionModal] = useState<boolean>(false);
   const [manageSelectionSearch, setManageSelectionSearch] = useState<string>("");
   // Manage Selection Modal Sorting State (ADM-BSRC-009-R8)
@@ -352,6 +383,14 @@ export function EmailCampaignsView({
       landingPageUrl: editingCampaign?.landingPageUrl || "https://www.kselectnetwork.com",
     });
   }, [activeTemplate, currentEffectiveSubject, editingCampaign, footerSettings]);
+
+  // Send-Ready Preflight Validation (ADM-EMAIL-TPL-005)
+  const preflightValidationResult: SendReadyHtmlValidationResult = useMemo(() => {
+    if (!assembledPreviewHtml) {
+      return { isValid: true, blockingCount: 0, warningCount: 0, issues: [] };
+    }
+    return validateSendReadyHtml(assembledPreviewHtml, sampleResolvedSubject);
+  }, [assembledPreviewHtml, sampleResolvedSubject]);
 
   // Server-side Candidate Query Loader (ADM-BSRC-009-R5 / R6)
   const loadCandidates = React.useCallback(
@@ -3634,6 +3673,93 @@ export function EmailCampaignsView({
   // --------------------------------------------------------------------------
   // RENDER: TEMPLATE PREVIEW MODAL
   // --------------------------------------------------------------------------
+
+  // --------------------------------------------------------------------------
+  // RENDER: FULL PREVIEW MODAL (ADM-EMAIL-TPL-005)
+  // --------------------------------------------------------------------------
+  const renderFullPreviewModal = () => {
+    if (!showFullPreviewModal) return null;
+
+    return (
+      <div className="fixed inset-0 z-[95] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl max-w-5xl w-full p-5 shadow-2xl flex flex-col h-[94vh]">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                  전체 화면 미리보기 (Full Screen Send-Ready Preview)
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                  {previewViewport === "desktop" ? "Desktop (680px)" : "Mobile (375px)"}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 truncate max-w-xl">
+                제목: &quot;{sampleResolvedSubject}&quot;
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-950">
+                <button
+                  type="button"
+                  onClick={() => setPreviewViewport("desktop")}
+                  className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
+                    previewViewport === "desktop"
+                      ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                      : "text-zinc-500 hover:text-zinc-800"
+                  }`}
+                >
+                  Desktop (680px)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewViewport("mobile")}
+                  className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
+                    previewViewport === "mobile"
+                      ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                      : "text-zinc-500 hover:text-zinc-800"
+                  }`}
+                >
+                  Mobile (375px)
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowFullPreviewModal(false)}
+                className="w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 flex items-center justify-center text-zinc-600 dark:text-zinc-300 font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="bg-zinc-100 dark:bg-zinc-950 p-6 rounded-lg flex justify-center overflow-x-auto overflow-y-auto flex-1 mt-3">
+            <div
+              style={{
+                width: previewViewport === "desktop" ? "680px" : "375px",
+                minWidth: previewViewport === "desktop" ? "680px" : "375px",
+                transition: "width 0.2s ease-in-out",
+              }}
+              className="bg-white rounded shadow-md border border-zinc-200 overflow-hidden self-start"
+            >
+              <iframe
+                title="Full Screen Preview"
+                srcDoc={assembledPreviewHtml}
+                onLoad={(e) => measureIframeHeight(e, setFullPreviewHeight)}
+                style={{ height: `${fullPreviewHeight}px` }}
+                className="w-full border-0 block"
+                sandbox="allow-same-origin"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderTemplatePreviewModal = () => {
     if (!previewModalTemplate) return null;
 
@@ -4032,6 +4158,7 @@ export function EmailCampaignsView({
       {renderUploadModal()}
       {renderDuplicateModal()}
       {renderTemplatePreviewModal()}
+      {renderFullPreviewModal()}
       {renderDeleteConfirmModal()}
       {renderManageSelectionModal()}
       <DesignerGuideModal isOpen={showGuideModal} onClose={() => setShowGuideModal(false)} />

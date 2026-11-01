@@ -24,7 +24,7 @@ import {
 } from "./unsubscribe";
 import { DEFAULT_MARKETING_TEMPLATES, resolveTemplateId } from "./default-templates";
 import { compileImageTemplateToHtml } from "./image-template-compiler";
-import { personalizeEmail } from "./personalization-engine";
+import { personalizeEmail, validateSendReadyHtml } from "./personalization-engine";
 import { sendEmail, maskEmailAddress } from "@/lib/notifications/email";
 import {
   getMarketingTestAllowlist,
@@ -1056,6 +1056,28 @@ export async function sendTestCampaignEmail(
     landingPageUrl: camp?.landingPageUrl || "https://www.kselectnetwork.com",
   });
 
+  // 3.5 Preflight validation on final assembled HTML (Task ADM-EMAIL-TPL-005)
+  const preflight = validateSendReadyHtml(assembledHtml, personalized.subject, { isTestSend: true });
+  if (!preflight.isValid) {
+    const blockingIssue = preflight.issues.find((i) => i.severity === "BLOCKING");
+    const err = "Preflight Rejection: " + (blockingIssue ? blockingIssue.message : "Unresolved placeholders or invalid assets found.");
+    console.error("[campaigns:test-send]", err);
+    recordCampaignAuditLog(campaignId, "TEST_EMAIL_REJECTED", false, {
+      testRecipient: maskEmailAddress(targetEmail),
+      reason: err,
+      issues: preflight.issues,
+    });
+    return { success: false, error: err };
+  }
+
+  // 3.6 Check suppression status (Fail-Closed awareness & explicit policy warning)
+  const isSuppressed = await isEmailSuppressed(targetEmail);
+  let suppressionWarning;
+  if (isSuppressed) {
+    suppressionWarning = "Notice: Internal test recipient is currently on the suppression list (Unsubscribed). Dispatch permitted strictly for administrative layout verification only; this recipient is excluded from normal marketing campaigns.";
+    console.warn("[campaigns:test-send] " + suppressionWarning + " (" + maskEmailAddress(targetEmail) + ")");
+  }
+
   // 4. Dispatch via central email gateway
   const res = await sendEmail({
     to: targetEmail,
@@ -1069,6 +1091,7 @@ export async function sendTestCampaignEmail(
     testRecipient: maskEmailAddress(targetEmail),
     success: res.success,
     messageId: res.messageId,
+    suppressionWarning,
   });
 
   return res;
@@ -1246,4 +1269,33 @@ export async function saveMarketingFooterSettings(
 
   cachedFooterSettings = { ...updated };
   return { ...cachedFooterSettings };
+}
+
+
+export async function listMarketingSuppressionList(
+  search?: string,
+  customClient?: any
+): Promise<{ success: boolean; suppressions: any[]; error?: string }> {
+  try {
+    const supabase = await getClient(customClient);
+    let query = supabase
+      .from("marketing_suppression_list")
+      .select("*")
+      .order("suppressed_at", { ascending: false });
+
+    if (search && search.trim()) {
+      query = query.ilike("email", "%" + search.trim().toLowerCase() + "%");
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn("[campaigns:suppression-list] DB error:", error.message);
+      return { success: false, suppressions: [], error: error.message };
+    }
+
+    return { success: true, suppressions: data || [] };
+  } catch (err: any) {
+    console.warn("[campaigns:suppression-list] Exception:", err.message);
+    return { success: false, suppressions: [], error: err.message };
+  }
 }

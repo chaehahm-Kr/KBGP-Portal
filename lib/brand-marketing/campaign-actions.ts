@@ -37,6 +37,7 @@ import {
 } from "./marketing-footer";
 import { TemplateFilterOptions } from "./campaign-types";
 import { validateAndSanitizeTemplate } from "./template-parser";
+import { validateSendReadyHtml } from "./personalization-engine";
 import { compileImageTemplateToHtml } from "./image-template-compiler";
 import { ImageTemplateSection, DesignerPromptSettings, TemplateType } from "./campaign-types";
 import {
@@ -934,5 +935,25 @@ export async function validateCampaignPreApprovalAction(
       isValid: false,
       checks: [{ name: "System Check", status: "FAIL", detail: err.message }],
     };
+  }
+}
+
+
+/**
+ * Lists authoritative suppressed marketing email addresses with optional search filter.
+ * Task ID: ADM-EMAIL-TPL-005 (Suppression List Admin Access)
+ */
+export async function listMarketingSuppressionListAction(search?: string): Promise<{
+  success: boolean;
+  suppressions?: any[];
+  error?: string;
+}> {
+  try {
+    await verifyAdminSession();
+    const { listMarketingSuppressionList } = await import("./campaign-data-access");
+    return await listMarketingSuppressionList(search);
+  } catch (err: any) {
+    console.error("[campaign-actions:listMarketingSuppressionListAction] Exception:", err.message);
+    return { success: false, error: err.message };
   }
 }
