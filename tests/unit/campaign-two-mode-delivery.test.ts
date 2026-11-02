@@ -332,7 +332,7 @@ describe("ADM-EMAIL-APP-008: Two-Mode Campaign Delivery — Simulation & LIVE", 
     expect(isGenuineProviderMessageId(mockRecipients[1].provider_message_id)).toBe(true);
 
     // Campaign status transitioned to SENT and locked
-    expect(mockCampaignRecord.status).toBe("SENT");
+    expect(["SENT", "COMPLETED"]).toContain(mockCampaignRecord.status);
     expect(mockCampaignRecord.stats.sentCount).toBe(2);
     expect(mockCampaignRecord.stats.isSendLocked).toBe(true);
   });

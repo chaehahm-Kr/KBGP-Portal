@@ -164,6 +164,7 @@ export interface CampaignStats {
   isLiveModeEnabled?: boolean;
   liveActivatedAt?: string;
   liveActivatedBy?: string;
+  deliveryStatus?: string;
 }
 
 export interface CampaignApprovalSnapshot {

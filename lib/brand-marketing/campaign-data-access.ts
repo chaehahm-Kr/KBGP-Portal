@@ -453,6 +453,13 @@ export async function listMarketingCampaigns(
         let resolvedStatus: CampaignStatus = d.status as CampaignStatus;
         if (!isActuallySent && hasSimHistory && (d.status === "COMPLETED" || d.status === "APPROVED")) {
           resolvedStatus = "SIMULATED";
+        } else if (isActuallySent && d.status === "COMPLETED") {
+          resolvedStatus = (d.stats?.deliveryStatus as CampaignStatus) || "COMPLETED";
+        } else if (d.status === "SENDING" && !activeDispatchingCampaigns.has(d.id)) {
+          const totalTarget = d.stats?.totalRecipients || deliv.realSent;
+          if (deliv.realSent > 0 && deliv.realSent + deliv.realFailed >= totalTarget) {
+            resolvedStatus = (d.stats?.deliveryStatus as CampaignStatus) || "SENT";
+          }
         }
 
         const normalizedStats: CampaignStats = {
@@ -463,6 +470,8 @@ export async function listMarketingCampaigns(
           sentCount: realSentCount,
           deliveredCount: realDeliveredCount,
           failedCount: realFailedCount,
+          isSendLocked: isActuallySent || Boolean(d.stats?.isSendLocked),
+          deliveryStatus: d.stats?.deliveryStatus || (isActuallySent ? "SENT" : undefined),
           simulationStats: d.stats?.simulationStats || (deliv.simCount > 0 ? {
             lastSimulatedAt: d.updated_at,
             simulatedCount: deliv.simCount,
@@ -1126,6 +1135,13 @@ export async function getMarketingCampaignById(
 
     if (!isActuallySent && hasSimHistory && (campaign.status === "COMPLETED" || campaign.status === "APPROVED")) {
       campaign.status = "SIMULATED";
+    } else if (isActuallySent && campaign.status === "COMPLETED") {
+      campaign.status = (campaign.stats?.deliveryStatus as CampaignStatus) || "COMPLETED";
+    } else if (campaign.status === "SENDING" && !activeDispatchingCampaigns.has(campaign.id)) {
+      const allTerminal = recipients.length > 0 && recipients.every((r) => r.status === "SENT" || r.status === "FAILED" || r.status === "DELIVERED");
+      if (allTerminal && isActuallySent) {
+        campaign.status = (campaign.stats?.deliveryStatus as CampaignStatus) || "SENT";
+      }
     }
 
     campaign.stats = {
@@ -1652,7 +1668,9 @@ export function recordCampaignAuditLog(
   eventType: string,
   isTestMode: boolean,
   details: Record<string, any>,
-  performedBy?: string
+  performedBy?: string,
+  recipientId?: string,
+  customClient?: SupabaseClient
 ): void {
   const log: CampaignAuditLogItem = {
     id: "log-" + (crypto.randomUUID ? crypto.randomUUID() : Date.now()),
@@ -1666,6 +1684,28 @@ export function recordCampaignAuditLog(
 
   const existing = memoryLogs.get(campaignId) || [];
   memoryLogs.set(campaignId, [log, ...existing]);
+
+  // Persist to Postgres table public.marketing_campaign_logs asynchronously
+  void (async () => {
+    try {
+      const supabase = await getClient(customClient);
+      const { error } = await supabase
+        .from("marketing_campaign_logs")
+        .insert({
+          campaign_id: campaignId,
+          recipient_id: recipientId || null,
+          event_type: eventType,
+          is_test_mode: isTestMode,
+          details: details || {},
+          performed_by: performedBy || "admin",
+        });
+      if (error) {
+        console.warn("[campaigns:audit] DB log insert warning:", error.message);
+      }
+    } catch (e: any) {
+      // Non-blocking log warning
+    }
+  })();
 }
 
 /**
@@ -2641,9 +2681,16 @@ export async function executeCampaignRealDelivery(
   }
 
   // 6. Post-Dispatch State Resolution
-  let finalStatus: CampaignStatus = "SENT";
-  if (failedCount > 0 && sentCount > 0) finalStatus = "PARTIAL";
-  else if (failedCount > 0 && sentCount === 0) finalStatus = "FAILED";
+  const finalDeliveryStatus: "SENT" | "PARTIAL" | "FAILED" =
+    failedCount > 0 && sentCount > 0
+      ? "PARTIAL"
+      : failedCount > 0 && sentCount === 0
+      ? "FAILED"
+      : "SENT";
+  const finalStatus: CampaignStatus = finalDeliveryStatus;
+
+  // PostgreSQL table constraint requires status IN ('DRAFT', 'TESTING', 'READY_FOR_APPROVAL', 'APPROVED', 'SCHEDULED', 'SENDING', 'PAUSED', 'COMPLETED', 'CANCELLED')
+  const dbStatus: CampaignStatus = "COMPLETED";
 
   const updatedStats: CampaignStats = {
     ...(existing.campaign.stats || {
@@ -2659,12 +2706,13 @@ export async function executeCampaignRealDelivery(
     deliveredCount: existing.campaign.stats?.deliveredCount || 0, // Delivered remains 0 until delivery event confirmed
     failedCount: (existing.campaign.stats?.failedCount || 0) + failedCount,
     isSendLocked: true,
+    deliveryStatus: finalDeliveryStatus,
   };
 
   await supabase
     .from("marketing_campaigns")
     .update({
-      status: finalStatus,
+      status: dbStatus,
       scheduled_at: null,
       stats: updatedStats,
       updated_at: nowIso,
@@ -2713,7 +2761,7 @@ export async function executeCampaignRealDelivery(
       const rollbackIso = new Date().toISOString();
       const rollbackStatus: CampaignStatus =
         sentCount > 0
-          ? "PARTIAL"
+          ? "COMPLETED"
           : ((previousStatus as string) === "APPROVED" || (previousStatus as string) === "SIMULATED" ? (previousStatus as CampaignStatus) : "APPROVED");
 
       await supabase
