@@ -23,6 +23,7 @@ import {
   archiveMarketingTemplate,
   restoreMarketingTemplate,
   deleteMarketingTemplate,
+  deleteMarketingCampaign,
   getMarketingFooterSettings,
   saveMarketingFooterSettings,
 } from "./campaign-data-access";
@@ -297,6 +298,22 @@ export async function archiveMarketingCampaignAction(
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to archive campaign" };
+  }
+}
+
+/**
+ * Safely deletes a marketing campaign after dependency and policy checks.
+ */
+export async function deleteMarketingCampaignAction(
+  campaignId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const res = await deleteMarketingCampaign(campaignId, admin.userId);
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+    return res;
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to delete campaign" };
   }
 }
 

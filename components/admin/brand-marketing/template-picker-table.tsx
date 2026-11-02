@@ -5,8 +5,8 @@ import { MarketingTemplatePackage, TemplateType } from "@/lib/brand-marketing/ca
 
 interface TemplatePickerTableProps {
   templates: MarketingTemplatePackage[];
-  selectedTemplateId: string;
-  onSelectTemplate: (templateId: string) => void;
+  selectedTemplateId?: string;
+  onSelectTemplate?: (templateId: string) => void;
   onPreviewTemplate: (template: MarketingTemplatePackage) => void;
   onDuplicateTemplate: (template: MarketingTemplatePackage) => void;
   onDeleteTemplate: (template: MarketingTemplatePackage) => void;
@@ -18,6 +18,7 @@ interface TemplatePickerTableProps {
   }>;
   onOpenUploadModal: () => void;
   onOpenGuideModal: () => void;
+  mode?: "picker" | "library";
 }
 
 export function TemplatePickerTable({
@@ -30,6 +31,7 @@ export function TemplatePickerTable({
   onBulkDeleteTemplates,
   onOpenUploadModal,
   onOpenGuideModal,
+  mode = "picker",
 }: TemplatePickerTableProps) {
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -215,14 +217,16 @@ export function TemplatePickerTable({
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-              2. Select Template Package
+              {mode === "library" ? "Template Library (템플릿 보관함)" : "2. Select Template Package"}
             </h3>
             <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
               {filteredTemplates.length} / {templates.length} templates
             </span>
           </div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            캠페인에 사용할 이메일 템플릿 패키지를 선택하거나 신규 업로드합니다.
+            {mode === "library"
+              ? "등록된 이메일 템플릿 패키지를 관리, 복제, 미리보기하거나 일괄 정리합니다."
+              : "캠페인에 사용할 이메일 템플릿 패키지를 선택하거나 신규 업로드합니다."}
           </p>
         </div>
 
@@ -357,7 +361,9 @@ export function TemplatePickerTable({
               </th>
 
               {/* Active Selection Radio Column */}
-              <th className="py-2.5 px-3 w-14 text-center">Active</th>
+              {mode !== "library" && (
+                <th className="py-2.5 px-3 w-14 text-center">Active</th>
+              )}
 
               {/* Template Name & Subject */}
               <th
@@ -400,7 +406,7 @@ export function TemplatePickerTable({
               </th>
 
               {/* Actions */}
-              <th className="py-2.5 px-3 w-32 text-right font-semibold text-zinc-900 dark:text-zinc-200">
+              <th className="py-2.5 px-3 min-w-[200px] w-52 text-right font-semibold text-zinc-900 dark:text-zinc-200">
                 Actions
               </th>
             </tr>
@@ -409,7 +415,7 @@ export function TemplatePickerTable({
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {paginatedTemplates.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-12 text-center text-zinc-400">
+                <td colSpan={mode === "library" ? 8 : 9} className="py-12 text-center text-zinc-400">
                   <div className="space-y-1">
                     <p className="text-sm font-medium">검색 조건에 일치하는 템플릿이 없습니다.</p>
                     <p className="text-xs text-zinc-400">
@@ -420,7 +426,7 @@ export function TemplatePickerTable({
               </tr>
             ) : (
               paginatedTemplates.map((tpl) => {
-                const isSelected = tpl.id === selectedTemplateId;
+                const isSelected = mode !== "library" && tpl.id === selectedTemplateId;
                 const isChecked = selectedIds.has(tpl.id);
                 const isImage = tpl.templateType === "IMAGE";
                 const isArchived = tpl.status === "ARCHIVED";
@@ -428,7 +434,13 @@ export function TemplatePickerTable({
                 return (
                   <tr
                     key={tpl.id}
-                    onClick={() => onSelectTemplate(tpl.id)}
+                    onClick={() => {
+                      if (mode === "library") {
+                        onPreviewTemplate(tpl);
+                      } else if (onSelectTemplate) {
+                        onSelectTemplate(tpl.id);
+                      }
+                    }}
                     className={`cursor-pointer transition-colors ${
                       isSelected
                         ? "bg-zinc-100/90 dark:bg-zinc-800/70 font-medium"
@@ -446,17 +458,19 @@ export function TemplatePickerTable({
                     </td>
 
                     {/* Active Radio Badge */}
-                    <td className="py-3 px-3 text-center">
-                      <span
-                        className={`inline-flex items-center justify-center w-5 h-5 rounded-full border text-[11px] ${
-                          isSelected
-                            ? "bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 border-zinc-950 dark:border-white font-bold"
-                            : "border-zinc-300 dark:border-zinc-700 text-transparent"
-                        }`}
-                      >
-                        ✓
-                      </span>
-                    </td>
+                    {mode !== "library" && (
+                      <td className="py-3 px-3 text-center">
+                        <span
+                          className={`inline-flex items-center justify-center w-5 h-5 rounded-full border text-[11px] ${
+                            isSelected
+                              ? "bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 border-zinc-950 dark:border-white font-bold"
+                              : "border-zinc-300 dark:border-zinc-700 text-transparent"
+                          }`}
+                        >
+                          ✓
+                        </span>
+                      </td>
+                    )}
 
                     {/* Template Name & Subject */}
                     <td className="py-3 px-3 max-w-[280px]">
@@ -525,11 +539,11 @@ export function TemplatePickerTable({
 
                     {/* Actions */}
                     <td className="py-3 px-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1.5 text-xs">
+                      <div className="flex items-center justify-end gap-1.5 text-xs flex-nowrap whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => onPreviewTemplate(tpl)}
-                          className="px-2 py-1 rounded text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800 cursor-pointer font-medium"
+                          className="px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 cursor-pointer font-medium whitespace-nowrap transition-colors"
                           title="Preview full email"
                         >
                           👁️ View
@@ -537,18 +551,23 @@ export function TemplatePickerTable({
                         <button
                           type="button"
                           onClick={() => onDuplicateTemplate(tpl)}
-                          className="px-2 py-1 rounded text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800 cursor-pointer font-medium"
+                          className="px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 cursor-pointer font-medium whitespace-nowrap transition-colors"
                           title="Duplicate template"
                         >
-                          복제
+                          📋 복제
                         </button>
                         <button
                           type="button"
                           onClick={() => onDeleteTemplate(tpl)}
-                          className="px-2 py-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer font-medium"
-                          title="Delete or Archive template"
+                          disabled={tpl.isDefault}
+                          className={`px-2 py-1 rounded border font-medium whitespace-nowrap transition-colors ${
+                            tpl.isDefault
+                              ? "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed"
+                              : "border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 cursor-pointer"
+                          }`}
+                          title={tpl.isDefault ? "Default template cannot be deleted" : "Delete template"}
                         >
-                          삭제
+                          🗑️ 삭제
                         </button>
                       </div>
                     </td>
@@ -628,11 +647,31 @@ export function TemplatePickerTable({
               템플릿을 삭제하시겠습니까?
             </p>
 
-            <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 text-[11px] text-zinc-500 space-y-1">
-              <p className="font-semibold text-zinc-700 dark:text-zinc-300">안전 검증 규칙:</p>
-              <p>• 기존 캠페인(임시저장 및 발송완료)에서 참조 중인 템플릿은 데이터 보호를 위해 삭제가 자동 차단됩니다.</p>
-              <p>• 참조되지 않은 템플릿만 영구 삭제됩니다.</p>
-            </div>
+            {(() => {
+              const defaultCount = Array.from(selectedIds).filter((id) =>
+                templates.find((t) => t.id === id)?.isDefault
+              ).length;
+              const eligibleCount = selectedIds.size - defaultCount;
+              return (
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 text-[11px] text-zinc-500 space-y-1.5">
+                  <div className="flex justify-between font-semibold text-zinc-700 dark:text-zinc-300">
+                    <span>선택된 템플릿 총계:</span>
+                    <span>{selectedIds.size}개</span>
+                  </div>
+                  <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                    <span>• 시스템 기본 템플릿 (삭제 차단):</span>
+                    <span>{defaultCount}개</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-600 dark:text-zinc-400 font-medium">
+                    <span>• 삭제 검토 대상 (의존성 검증 대상):</span>
+                    <span>{eligibleCount}개</span>
+                  </div>
+                  <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 text-[10.5px] text-zinc-400 leading-normal">
+                    * 기존 캠페인(임시저장, 승인, 발송)에서 참조 중인 템플릿은 데이터 보호를 위해 삭제가 자동 차단됩니다.
+                  </div>
+                </div>
+              );
+            })()}
 
             {bulkDeleteResult && (
               <div

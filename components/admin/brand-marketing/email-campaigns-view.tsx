@@ -32,6 +32,8 @@ import {
   SendTestCampaignEmailsResult,
   approveMarketingCampaignAction,
   deleteMarketingTemplatesBulkAction,
+  deleteMarketingCampaignAction,
+  archiveMarketingCampaignAction,
 } from "@/lib/brand-marketing/campaign-actions";
 import {
   parseAndValidateTestRecipients,
@@ -98,9 +100,22 @@ export function EmailCampaignsView({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
   const [isLoadingList, setIsLoadingList] = useState(false);
+  const [campaignSortDir, setCampaignSortDir] = useState<"desc" | "asc">("desc");
+  const [deletingCampaign, setDeletingCampaign] = useState<MarketingCampaign | null>(null);
+  const [isDeletingCampaign, setIsDeletingCampaign] = useState(false);
+  const [campaignDeleteError, setCampaignDeleteError] = useState<string | null>(null);
 
-  // Active Campaign in Editor
+  // Active Campaign in Editor & Unsaved Changes Guard (Task ADM-EMAIL-UX-001 - P0)
   const [editingCampaign, setEditingCampaign] = useState<MarketingCampaign | null>(null);
+  const initialFormSnapshotRef = useRef<string>("");
+  const pendingNavigationRef = useRef<{
+    type: "url" | "action" | "back";
+    url?: string;
+    action?: () => void;
+  } | null>(null);
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [isSavingAndLeaving, setIsSavingAndLeaving] = useState(false);
+  const [saveAndLeaveError, setSaveAndLeaveError] = useState<string | null>(null);
 
   // Central Marketing Footer State
   const [footerSettings, setFooterSettings] = useState<MarketingFooterSettings>({ ...DEFAULT_MARKETING_FOOTER });
@@ -435,6 +450,268 @@ export function EmailCampaignsView({
     }
     return validateSendReadyHtml(assembledPreviewHtml, sampleResolvedSubject);
   }, [assembledPreviewHtml, sampleResolvedSubject]);
+
+  // --------------------------------------------------------------------------
+  // TASK ADM-EMAIL-UX-001: CAMPAIGN LIST SORTING & SAFE DELETION
+  // --------------------------------------------------------------------------
+  const filteredAndSortedCampaigns = useMemo(() => {
+    const list = campaigns.filter((c) => {
+      if (filterStatus !== "ALL" && c.status !== filterStatus) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchName = c.name?.toLowerCase().includes(q);
+        const matchPurpose = c.purpose?.toLowerCase().includes(q);
+        const matchSubject = c.subjectOverride?.toLowerCase().includes(q);
+        if (!matchName && !matchPurpose && !matchSubject) return false;
+      }
+      return true;
+    });
+
+    list.sort((a, b) => {
+      const aTime = new Date(a.createdAt || 0).getTime();
+      const bTime = new Date(b.createdAt || 0).getTime();
+      if (aTime !== bTime) {
+        return campaignSortDir === "desc" ? bTime - aTime : aTime - bTime;
+      }
+      // Deterministic tie-breaker for identical timestamps
+      return (b.id || "").localeCompare(a.id || "");
+    });
+
+    return list;
+  }, [campaigns, filterStatus, searchQuery, campaignSortDir]);
+
+  const isProtectedCampaign = (c: MarketingCampaign) => {
+    const protectedStatuses = ["APPROVED", "SCHEDULED", "SENDING", "COMPLETED"];
+    return protectedStatuses.includes(c.status) || c.approvalStatus === "APPROVED";
+  };
+
+  const handleConfirmDeleteCampaign = async () => {
+    if (!deletingCampaign) return;
+    setIsDeletingCampaign(true);
+    setCampaignDeleteError(null);
+
+    const res = await deleteMarketingCampaignAction(deletingCampaign.id);
+    setIsDeletingCampaign(false);
+
+    if (res.success) {
+      showNotification("success", `Campaign "${deletingCampaign.name}" has been deleted.`);
+      setDeletingCampaign(null);
+      refreshCampaignsAndTemplates();
+    } else {
+      setCampaignDeleteError(res.error || "Failed to delete campaign.");
+    }
+  };
+
+  const handleArchiveCampaign = async (c: MarketingCampaign) => {
+    if (confirm(`캠페인 "${c.name}"은 승인/발송 이력이 있어 영구 삭제할 수 없습니다. 보관(Archive) 처리하시겠습니까?`)) {
+      const res = await archiveMarketingCampaignAction(c.id);
+      if (res.success) {
+        showNotification("success", `캠페인 "${c.name}"이(가) 보관되었습니다.`);
+        refreshCampaignsAndTemplates();
+      } else {
+        showNotification("error", res.error || "캠페인 보관에 실패했습니다.");
+      }
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // TASK ADM-EMAIL-UX-001: UNSAVED CHANGES NAVIGATION GUARD (P0)
+  // --------------------------------------------------------------------------
+  const getCampaignFormSnapshot = (c: MarketingCampaign | null, tplId?: string) => {
+    if (!c) return "";
+    return JSON.stringify({
+      name: c.name || "",
+      purpose: c.purpose || "",
+      description: c.description || "",
+      language: c.language || "ko",
+      templateId: tplId || c.templateId || "",
+      templateVersion: c.templateVersion || "",
+      subjectOverride: c.subjectOverride || "",
+      previewText: c.previewText || "",
+      landingPageUrl: c.landingPageUrl || "",
+      footerStyle: c.footerStyle || "classic",
+      customMessage: c.customMessage || "",
+      filterCriteria: c.filterCriteria || {},
+    });
+  };
+
+  const isDirty = useMemo(() => {
+    if (viewMode !== "editor" || !editingCampaign) return false;
+    const currentSnapshot = getCampaignFormSnapshot(editingCampaign, selectedTemplateId);
+    return Boolean(initialFormSnapshotRef.current && currentSnapshot !== initialFormSnapshotRef.current);
+  }, [viewMode, editingCampaign, selectedTemplateId]);
+
+  const executeNavigation = (nav: {
+    type: "url" | "action" | "back";
+    url?: string;
+    action?: () => void;
+  }) => {
+    if (nav.type === "action" && nav.action) {
+      nav.action();
+    } else if (nav.type === "url" && nav.url) {
+      window.location.href = nav.url;
+    } else if (nav.type === "back") {
+      window.history.back();
+    }
+  };
+
+  const handleRequestNavigation = (nav: {
+    type: "url" | "action" | "back";
+    url?: string;
+    action?: () => void;
+  }) => {
+    if (isDirty) {
+      pendingNavigationRef.current = nav;
+      setShowUnsavedModal(true);
+    } else {
+      executeNavigation(nav);
+    }
+  };
+
+  const handleSaveAndLeave = async () => {
+    if (!editingCampaign) return;
+    setIsSavingAndLeaving(true);
+    setSaveAndLeaveError(null);
+
+    try {
+      const payload: Partial<MarketingCampaign> & { name: string } = {
+        ...editingCampaign,
+        templateId: selectedTemplateId || editingCampaign.templateId,
+        subjectOverride: currentEffectiveSubject,
+        previewText: editingCampaign.previewText || "",
+        landingPageUrl: editingCampaign.landingPageUrl || "https://www.kselectnetwork.com",
+        footerStyle: editingCampaign.footerStyle || "classic",
+        filterCriteria: {
+          grades: candidateFilterGrade !== "ALL" ? [candidateFilterGrade as any] : [],
+          companyTypes: candidateFilterBusinessTypes,
+          companyTypeMatchMode: candidateFilterBusinessTypeMatchMode,
+          primaryCategories: candidateFilterPrimaryCategories,
+          status: candidateFilterStatus,
+          marketingConsentStatus: candidateFilterConsent,
+          searchQuery: candidateSearch,
+          requireConsentedOnly,
+          companyIds: selectedCompanyIds,
+          contactIds: selectedContactIds,
+          manualEmails: manualEmails,
+        },
+      };
+
+      const res = await saveMarketingCampaignAction(payload);
+      if (res.success && res.campaign) {
+        setEditingCampaign(res.campaign);
+        initialFormSnapshotRef.current = getCampaignFormSnapshot(
+          res.campaign,
+          res.campaign.templateId || ""
+        );
+        showNotification("success", `Campaign "${res.campaign.name}" saved successfully.`);
+        refreshCampaignsAndTemplates();
+        setIsSavingAndLeaving(false);
+        setShowUnsavedModal(false);
+
+        if (pendingNavigationRef.current) {
+          executeNavigation(pendingNavigationRef.current);
+          pendingNavigationRef.current = null;
+        }
+      } else {
+        setIsSavingAndLeaving(false);
+        setSaveAndLeaveError(res.error || "Failed to save draft. Please check required fields.");
+      }
+    } catch (err: any) {
+      setIsSavingAndLeaving(false);
+      setSaveAndLeaveError(err.message || "An unexpected error occurred while saving draft.");
+    }
+  };
+
+  const handleLeaveWithoutSaving = () => {
+    setShowUnsavedModal(false);
+    setSaveAndLeaveError(null);
+    initialFormSnapshotRef.current = "";
+    setEditingCampaign(null);
+    setViewMode("list");
+    setCurrentStep(1);
+
+    if (pendingNavigationRef.current) {
+      executeNavigation(pendingNavigationRef.current);
+      pendingNavigationRef.current = null;
+    }
+  };
+
+  const handleCancelLeave = () => {
+    setShowUnsavedModal(false);
+    setSaveAndLeaveError(null);
+    pendingNavigationRef.current = null;
+  };
+
+  // Intercept normal in-tab document link clicks while preserving multi-tab opening
+  useEffect(() => {
+    if (!isDirty) return;
+
+    const handleGlobalClick = (e: MouseEvent) => {
+      // Multi-tab check: Ctrl, Cmd, Shift, Alt, middle-click (button 1), right-click (button 2)
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) {
+        return; // Allow native browser behavior without warning!
+      }
+
+      const target = e.target as HTMLElement | null;
+      const anchor = target?.closest("a");
+      if (!anchor) return;
+
+      if (anchor.target === "_blank") return;
+
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      handleRequestNavigation({
+        type: "url",
+        url: href,
+      });
+    };
+
+    document.addEventListener("click", handleGlobalClick, true);
+    return () => {
+      document.removeEventListener("click", handleGlobalClick, true);
+    };
+  }, [isDirty]);
+
+  // Intercept browser back/forward buttons
+  useEffect(() => {
+    if (!isDirty) return;
+
+    window.history.pushState({ inCampaignEditor: true }, "");
+
+    const handlePopState = () => {
+      if (isDirty) {
+        window.history.pushState({ inCampaignEditor: true }, "");
+        handleRequestNavigation({
+          type: "back",
+        });
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [isDirty]);
+
+  // Native beforeunload for page refresh or tab closing
+  useEffect(() => {
+    if (!isDirty) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isDirty]);
 
   // Server-side Candidate Query Loader (ADM-BSRC-009-R5 / R6)
   const loadCandidates = React.useCallback(
@@ -965,6 +1242,14 @@ export function EmailCampaignsView({
   // ACTIONS: CAMPAIGN CRUD
   // --------------------------------------------------------------------------
   const handleCreateNewCampaign = () => {
+    if (isDirty) {
+      handleRequestNavigation({
+        type: "action",
+        action: () => handleCreateNewCampaign(),
+      });
+      return;
+    }
+
     const defaultTpl = templates.find((t) => t.isDefault) || templates[0];
     const newCamp: MarketingCampaign = {
       id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "",
@@ -1006,11 +1291,21 @@ export function EmailCampaignsView({
     setDryRunReport(null);
     setTestSendResult(null);
     setViewMode("editor");
+    initialFormSnapshotRef.current = getCampaignFormSnapshot(newCamp, defaultTpl?.id || "");
   };
 
   const handleEditCampaign = async (c: MarketingCampaign) => {
+    if (isDirty && editingCampaign?.id !== c.id) {
+      handleRequestNavigation({
+        type: "action",
+        action: () => handleEditCampaign(c),
+      });
+      return;
+    }
+
     setEditingCampaign({ ...c, footerStyle: c.footerStyle || "classic" });
     if (c.templateId) setSelectedTemplateId(c.templateId);
+    initialFormSnapshotRef.current = getCampaignFormSnapshot(c, c.templateId || "");
     if (c.filterCriteria?.grades && c.filterCriteria.grades.length > 0) {
       setSelectedGrades(c.filterCriteria.grades);
       setCandidateFilterGrade(c.filterCriteria.grades[0]);
@@ -1084,6 +1379,7 @@ export function EmailCampaignsView({
       const res = await saveMarketingCampaignAction(payload);
       if (res.success && res.campaign) {
         setEditingCampaign(res.campaign);
+        initialFormSnapshotRef.current = getCampaignFormSnapshot(res.campaign, res.campaign.templateId || "");
         showNotification("success", `Campaign "${res.campaign.name}" saved to database successfully.`);
         refreshCampaignsAndTemplates();
       } else {
@@ -1491,7 +1787,7 @@ export function EmailCampaignsView({
   };
 
   // --------------------------------------------------------------------------
-  // RENDER: CAMPAIGN LIST VIEW
+  // RENDER: CAMPAIGN LIST VIEW (Task ADM-EMAIL-UX-001)
   // --------------------------------------------------------------------------
   const renderCampaignList = () => {
     return (
@@ -1505,19 +1801,32 @@ export function EmailCampaignsView({
             onChange={(e) => setSearchQuery(e.target.value)}
             className="px-3 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 max-w-sm"
           />
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500">Status:</span>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-2 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="DRAFT">DRAFT</option>
-              <option value="TESTING">TESTING</option>
-              <option value="READY_FOR_APPROVAL">READY_FOR_APPROVAL</option>
-              <option value="APPROVED">APPROVED</option>
-            </select>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">Sort:</span>
+              <select
+                value={campaignSortDir}
+                onChange={(e) => setCampaignSortDir(e.target.value as "desc" | "asc")}
+                className="px-2 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 cursor-pointer"
+              >
+                <option value="desc">Newest First (최신순)</option>
+                <option value="asc">Oldest First (과거순)</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">Status:</span>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-2 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 cursor-pointer"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="DRAFT">DRAFT</option>
+                <option value="TESTING">TESTING</option>
+                <option value="READY_FOR_APPROVAL">READY_FOR_APPROVAL</option>
+                <option value="APPROVED">APPROVED</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -1531,25 +1840,28 @@ export function EmailCampaignsView({
                 <th className="p-3">Status</th>
                 <th className="p-3">Approval</th>
                 <th className="p-3">Recipients</th>
-                <th className="p-3">Created</th>
-                <th className="p-3 text-right">Actions</th>
+                <th
+                  onClick={() => setCampaignSortDir((prev) => (prev === "desc" ? "asc" : "desc"))}
+                  className="p-3 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none whitespace-nowrap"
+                  title="Click to toggle Newest / Oldest first"
+                >
+                  Created {campaignSortDir === "desc" ? "▼" : "▲"}
+                </th>
+                <th className="p-3 min-w-[170px] w-44 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {campaigns.length === 0 ? (
+              {filteredAndSortedCampaigns.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-zinc-500">
                     No marketing campaigns found. Click &quot;+ Create Campaign&quot; to begin.
                   </td>
                 </tr>
               ) : (
-                campaigns
-                  .filter((c) => {
-                    if (filterStatus !== "ALL" && c.status !== filterStatus) return false;
-                    if (searchQuery.trim() && !c.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-                    return true;
-                  })
-                  .map((c) => (
+                filteredAndSortedCampaigns.map((c) => {
+                  const protectedCamp = isProtectedCampaign(c);
+
+                  return (
                     <tr key={c.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
                       <td className="p-3">
                         <div className="font-bold text-zinc-900 dark:text-zinc-100">{c.name}</div>
@@ -1575,20 +1887,45 @@ export function EmailCampaignsView({
                         </span>
                       </td>
                       <td className="p-3 font-mono">{c.stats?.totalRecipients || 0}</td>
-                      <td className="p-3 text-zinc-400 text-[11px]">
+                      <td className="p-3 text-zinc-400 text-[11px] whitespace-nowrap">
                         {new Date(c.createdAt).toLocaleDateString()}
                       </td>
                       <td className="p-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleEditCampaign(c)}
-                          className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-800 dark:text-zinc-200 cursor-pointer"
-                        >
-                          Edit / Open →
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5 flex-nowrap whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => handleEditCampaign(c)}
+                            className="px-2.5 py-1 text-xs font-semibold rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 cursor-pointer transition-colors"
+                          >
+                            Edit / Open →
+                          </button>
+                          {protectedCamp ? (
+                            <button
+                              type="button"
+                              onClick={() => handleArchiveCampaign(c)}
+                              className="px-2 py-1 text-xs font-semibold rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                              title="Approved or active campaigns cannot be deleted. Click to archive."
+                            >
+                              📦 보관
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeletingCampaign(c);
+                                setCampaignDeleteError(null);
+                              }}
+                              className="px-2 py-1 text-xs font-semibold rounded border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 cursor-pointer transition-colors"
+                              title="Delete draft campaign"
+                            >
+                              🗑️ 삭제
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
-                  ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -1598,166 +1935,21 @@ export function EmailCampaignsView({
   };
 
   // --------------------------------------------------------------------------
-  // RENDER: TEMPLATE LIBRARY STANDALONE VIEW (Section 3)
+  // RENDER: TEMPLATE LIBRARY STANDALONE VIEW (Task ADM-EMAIL-UX-001)
+  // Shared TemplatePickerTable architecture replacing card grid
   // --------------------------------------------------------------------------
   const renderTemplateLibraryStandaloneView = () => {
     return (
-      <div className="space-y-6">
-        {/* Filter & Search Bar */}
-        <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 shadow-xs space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
-            <div className="md:col-span-2">
-              <input
-                type="text"
-                placeholder="Search templates by name or subject..."
-                value={templateSearch}
-                onChange={(e) => setTemplateSearch(e.target.value)}
-                className="w-full px-3 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-              />
-            </div>
-            <div>
-              <select
-                value={templateFormatFilter}
-                onChange={(e) => setTemplateFormatFilter(e.target.value as any)}
-                className="w-full px-2 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-              >
-                <option value="ALL">All Formats</option>
-                <option value="HTML">📄 HTML Packages</option>
-                <option value="IMAGE">🖼️ IMAGE Slices</option>
-              </select>
-            </div>
-            <div>
-              <select
-                value={templateLangFilter}
-                onChange={(e) => setTemplateLangFilter(e.target.value as any)}
-                className="w-full px-2 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-              >
-                <option value="ALL">All Languages</option>
-                <option value="ko">한국어 (KO)</option>
-                <option value="en">English (EN)</option>
-              </select>
-            </div>
-            <div>
-              <select
-                value={templateStatusFilter}
-                onChange={(e) => setTemplateStatusFilter(e.target.value as any)}
-                className="w-full px-2 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="ACTIVE">Active Only</option>
-                <option value="ARCHIVED">Archived Only</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Templates Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredTemplates.length === 0 ? (
-            <div className="col-span-full p-12 text-center text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-900/40 rounded-lg border border-dashed border-zinc-300 dark:border-zinc-800">
-              No matching template packages found. Click &quot;+ Upload HTML / ZIP Package&quot; to add one.
-            </div>
-          ) : (
-            filteredTemplates.map((tpl) => {
-              const isImage = tpl.templateType === "IMAGE";
-              const isArchived = tpl.status === "ARCHIVED";
-
-              return (
-                <div
-                  key={tpl.id}
-                  className={`rounded-lg border p-4 shadow-xs flex flex-col justify-between transition-all ${
-                    isArchived
-                      ? "border-zinc-300 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 opacity-75"
-                      : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-400"
-                  }`}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
-                          isImage
-                            ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
-                            : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                        }`}
-                      >
-                        {isImage ? "🖼️ IMAGE" : "📄 HTML"}
-                      </span>
-
-                      <div className="flex items-center gap-1">
-                        {tpl.isDefault && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                            Default
-                          </span>
-                        )}
-                        {isArchived && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                            Archived
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1">
-                      {tpl.name}
-                    </h4>
-
-                    <p className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 leading-relaxed">
-                      {tpl.subject || "No default subject specified"}
-                    </p>
-
-                    <div className="text-[11px] text-zinc-400 flex items-center gap-3 pt-1">
-                      <span>언어: <strong>{tpl.language === "ko" ? "한국어" : "English"}</strong></span>
-                      <span>변수: <strong>{tpl.variables?.length || 4}개</strong></span>
-                      {tpl.importedAssets && tpl.importedAssets.length > 0 && (
-                        <span>호스팅 이미지: <strong>{tpl.importedAssets.length}개</strong></span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Card Actions */}
-                  <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 mt-4 flex items-center justify-between gap-1 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewModalTemplate(tpl)}
-                      className="px-2.5 py-1 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 font-medium cursor-pointer"
-                    >
-                      🔍 Preview
-                    </button>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={(e) => handleOpenDuplicateModal(tpl, e)}
-                        className="px-2 py-1 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer"
-                        title="Duplicate Template"
-                      >
-                        📋 복제
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => handleToggleArchiveTemplate(tpl, e)}
-                        className="px-2 py-1 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer"
-                        title={isArchived ? "Restore Template" : "Archive Template"}
-                      >
-                        {isArchived ? "↺ 복원" : "📦 보관"}
-                      </button>
-                      {!tpl.isDefault && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteTemplate(tpl, e)}
-                          className="px-2 py-1 text-red-500 hover:text-red-700 cursor-pointer"
-                          title="Delete Template"
-                        >
-                          🗑️
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
+      <TemplatePickerTable
+        mode="library"
+        templates={templates}
+        onPreviewTemplate={(tpl) => setPreviewModalTemplate(tpl)}
+        onDuplicateTemplate={(tpl) => handleOpenDuplicateModal(tpl)}
+        onDeleteTemplate={(tpl) => handleDeleteTemplate(tpl)}
+        onBulkDeleteTemplates={handleBulkDeleteTemplates}
+        onOpenUploadModal={handleOpenUploadModal}
+        onOpenGuideModal={() => setShowGuideModal(true)}
+      />
     );
   };
 
@@ -4334,6 +4526,118 @@ export function EmailCampaignsView({
     );
   };
 
+  // --------------------------------------------------------------------------
+  // RENDER: CAMPAIGN DELETE CONFIRMATION MODAL (Task ADM-EMAIL-UX-001)
+  // --------------------------------------------------------------------------
+  const renderCampaignDeleteModal = () => {
+    if (!deletingCampaign) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+        <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 max-w-md w-full p-5 space-y-4 shadow-xl">
+          <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+            <span>🗑️</span> 캠페인 삭제 확인 (Confirm Campaign Deletion)
+          </h4>
+
+          <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
+            캠페인 <strong className="text-zinc-900 dark:text-zinc-100">&quot;{deletingCampaign.name}&quot;</strong>을(를)
+            정말 삭제하시겠습니까?
+          </p>
+
+          <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 text-[11px] text-zinc-500 space-y-1">
+            <p className="font-semibold text-zinc-700 dark:text-zinc-300">보안 및 정책 안내:</p>
+            <p>• 임시저장(DRAFT) 또는 취소된 캠페인만 안전하게 삭제할 수 있습니다.</p>
+            <p>• 승인(APPROVED) 및 발송 이력이 존재하는 캠페인은 감사 및 규정 준수를 위해 영구 삭제가 차단됩니다.</p>
+            <p>• 삭제된 캠페인은 복구할 수 없습니다.</p>
+          </div>
+
+          {campaignDeleteError && (
+            <div className="p-3 rounded bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200 border border-red-200 text-xs">
+              {campaignDeleteError}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => {
+                setDeletingCampaign(null);
+                setCampaignDeleteError(null);
+              }}
+              disabled={isDeletingCampaign}
+              className="px-3 py-1.5 text-xs font-semibold rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+            >
+              취소 (Cancel)
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmDeleteCampaign}
+              disabled={isDeletingCampaign}
+              className="px-3.5 py-1.5 text-xs font-bold rounded bg-red-600 text-white hover:bg-red-700 cursor-pointer shadow-xs disabled:opacity-50"
+            >
+              {isDeletingCampaign ? "삭제 중..." : "확인 및 삭제 실행"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // --------------------------------------------------------------------------
+  // RENDER: UNSAVED CHANGES NAVIGATION GUARD MODAL (Task ADM-EMAIL-UX-001 - P0)
+  // --------------------------------------------------------------------------
+  const renderUnsavedChangesModal = () => {
+    if (!showUnsavedModal) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+        <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 max-w-md w-full p-5 space-y-4 shadow-xl">
+          <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+            <span>⚠️</span> 저장되지 않은 변경사항 (Unsaved Changes)
+          </h4>
+
+          <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
+            작성 중인 캠페인 <strong className="text-zinc-900 dark:text-zinc-100">&quot;{editingCampaign?.name || "새 캠페인"}&quot;</strong>에
+            저장되지 않은 변경사항이 있습니다. 페이지를 벗어나면 수정 내용이 유실될 수 있습니다.
+          </p>
+
+          {saveAndLeaveError && (
+            <div className="p-3 rounded bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200 border border-red-200 text-xs">
+              {saveAndLeaveError}
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={handleCancelLeave}
+              disabled={isSavingAndLeaving}
+              className="px-3 py-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer order-3 sm:order-1"
+            >
+              계속 편집 (Cancel)
+            </button>
+            <button
+              type="button"
+              onClick={handleLeaveWithoutSaving}
+              disabled={isSavingAndLeaving}
+              className="px-3 py-2 rounded border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 cursor-pointer order-2"
+            >
+              저장하지 않고 이동 (Leave Without Saving)
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveAndLeave}
+              disabled={isSavingAndLeaving}
+              className="px-3.5 py-2 rounded bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-white/90 cursor-pointer shadow-xs disabled:opacity-50 order-1 sm:order-3"
+            >
+              {isSavingAndLeaving ? "저장 중..." : "저장하고 이동 (Save & Leave)"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
@@ -4372,6 +4676,8 @@ export function EmailCampaignsView({
       {renderFullPreviewModal()}
       {renderDeleteConfirmModal()}
       {renderManageSelectionModal()}
+      {renderCampaignDeleteModal()}
+      {renderUnsavedChangesModal()}
       <DesignerGuideModal isOpen={showGuideModal} onClose={() => setShowGuideModal(false)} />
     </div>
   );

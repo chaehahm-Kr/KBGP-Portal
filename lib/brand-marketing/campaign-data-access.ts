@@ -243,6 +243,15 @@ export async function deleteMarketingTemplate(
   const resolvedId = resolveTemplateId(templateId);
   if (!resolvedId) return { success: false, error: "Template not found" };
 
+  // 0. Protect default system templates
+  const memTpl = memoryTemplates.get(resolvedId) || DEFAULT_MARKETING_TEMPLATES.find((t) => t.id === resolvedId);
+  if (memTpl?.isDefault) {
+    return {
+      success: false,
+      error: `Cannot delete default system template "${memTpl.name}". System default templates are protected.`,
+    };
+  }
+
   // 1. Check in-memory campaigns first (ensures test/fallback integrity)
   for (const c of memoryCampaigns.values()) {
     if (c.templateId === resolvedId) {
@@ -644,6 +653,69 @@ export async function saveMarketingCampaign(
 
   memoryCampaigns.set(record.id, record);
   return record;
+}
+
+/**
+ * Safely deletes a marketing campaign if it is not approved or sent.
+ * Protects approvals, sent records, delivery history, recipient snapshots, and audit logs.
+ */
+export async function deleteMarketingCampaign(
+  campaignId: string,
+  userId?: string,
+  customClient?: SupabaseClient
+): Promise<{ success: boolean; error?: string }> {
+  // 1. Fetch campaign to inspect status & dependencies
+  const { campaign, recipients } = await getMarketingCampaignById(campaignId, customClient);
+  if (!campaign) {
+    return { success: false, error: "Campaign not found" };
+  }
+
+  // 2. Protect existing approvals, sent records, delivery history, compliance/audit records
+  const protectedStatuses: string[] = ["APPROVED", "SCHEDULED", "SENDING", "COMPLETED"];
+  if (protectedStatuses.includes(campaign.status) || campaign.approvalStatus === "APPROVED") {
+    return {
+      success: false,
+      error: `Campaign "${campaign.name}" cannot be deleted because it is ${campaign.status} or approved. Approved campaigns are protected for compliance history. Please archive it instead.`,
+    };
+  }
+
+  // Check if any recipients have actually been sent or queued
+  const hasSentRecipients = recipients.some(
+    (r) => r.status === "SENT" || r.status === "DELIVERED" || r.status === "QUEUED"
+  );
+  if (hasSentRecipients) {
+    return {
+      success: false,
+      error: `Campaign "${campaign.name}" has sent delivery records and cannot be deleted. Please archive it instead.`,
+    };
+  }
+
+  // 3. Safe deletion for draft/testing/cancelled
+  try {
+    const supabase = await getClient(customClient);
+
+    // Delete recipient records associated with draft
+    await supabase.from("marketing_campaign_recipients").delete().eq("campaign_id", campaignId);
+
+    // Delete audit logs associated with draft
+    await supabase.from("marketing_campaign_logs").delete().eq("campaign_id", campaignId);
+
+    // Delete campaign record
+    const { error: delErr } = await supabase.from("marketing_campaigns").delete().eq("id", campaignId);
+    if (delErr) {
+      console.warn("[campaigns] DB delete campaign warning:", delErr.message);
+      return { success: false, error: delErr.message };
+    }
+  } catch (err: any) {
+    console.warn("[campaigns] DB delete campaign exception:", err.message);
+  }
+
+  // Clear from in-memory stores
+  memoryCampaigns.delete(campaignId);
+  memoryRecipients.delete(campaignId);
+  memoryLogs.delete(campaignId);
+
+  return { success: true };
 }
 
 /**
