@@ -2174,9 +2174,22 @@ export async function updateCampaignSchedule(
 }
 
 /**
+ * In-flight campaign dispatch tracking & stale job detection (ADM-EMAIL-APP-007)
+ */
+export const STALE_SENDING_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+export function isCampaignActivelyDispatching(campaignId: string, updatedAt?: string | null): boolean {
+  if (activeDispatchingCampaigns.has(campaignId)) return true;
+  if (!updatedAt) return false;
+  const ageMs = Date.now() - new Date(updatedAt).getTime();
+  return ageMs < STALE_SENDING_THRESHOLD_MS;
+}
+
+/**
  * Safely executes simulated campaign delivery.
  * Enforces LIVE_MODE: FALSE invariant, rechecks suppression Fail-Closed,
  * records recipient-level ledger events, and updates campaign statistics.
+ * CRITICAL (ADM-EMAIL-APP-007): Simulation must NEVER mutate persistent DB status to SENDING!
  */
 export async function executeCampaignDeliverySimulation(
   campaignId: string,
@@ -2202,16 +2215,16 @@ export async function executeCampaignDeliverySimulation(
     throw new Error("이미 발송 완료된 캠페인입니다.");
   }
 
-  const supabase = await getClient(customClient);
-  const nowIso = new Date().toISOString();
+  if (activeDispatchingCampaigns.has(campaignId)) {
+    throw new Error("캠페인 발송 또는 시뮬레이션이 이미 실행 중입니다.");
+  }
 
-  // 1. Idempotency lock: Set campaign status to SENDING
-  await supabase
-    .from("marketing_campaigns")
-    .update({ status: "SENDING", updated_at: nowIso })
-    .eq("id", campaignId);
+  activeDispatchingCampaigns.add(campaignId);
+  try {
+    const supabase = await getClient(customClient);
+    const nowIso = new Date().toISOString();
 
-  // 2. Fetch all frozen recipients
+    // 2. Fetch all frozen recipients
   const recipients = existing.recipients || [];
   const eligibleRecipients = recipients.filter((r) => r.sendEligibility === "ELIGIBLE");
 
@@ -2320,6 +2333,9 @@ export async function executeCampaignDeliverySimulation(
     simulatedEligible,
     message: `안전 시뮬레이션 완료: 총 ${eligibleRecipients.length}명 대상 사전 검증 완료 (수신적격: ${simulatedEligible}명, 수신거부 차단: ${blockedSuppressed}명). LIVE_MODE가 비활성화되어 있으므로 실제 고객 메일 발송 및 실제 발송 카운트는 발생하지 않았습니다.`,
   };
+  } finally {
+    activeDispatchingCampaigns.delete(campaignId);
+  }
 }
 
 /**
@@ -2370,7 +2386,14 @@ export async function executeCampaignRealDelivery(
   }
 
   if (existing.campaign.status === "SENDING") {
-    throw new Error("캠페인 발송이 이미 진행 중입니다. 중복 발송을 방지합니다.");
+    const isRunning = isCampaignActivelyDispatching(campaignId, existing.campaign.updatedAt);
+    if (isRunning) {
+      throw new Error("캠페인 발송이 이미 진행 중입니다. 중복 발송을 방지합니다.");
+    } else {
+      throw new Error(
+        "캠페인 발송이 비정상 중단된 상태(SENDING)입니다. 중복 발송 방지를 위해 먼저 'Unlock Send'로 상태를 복구한 후 발송하세요."
+      );
+    }
   }
 
   // Preflight Simulation Contamination Guard (Requirement 1 & Safety Gate)
@@ -2434,6 +2457,11 @@ export async function executeCampaignRealDelivery(
   }
 
   activeDispatchingCampaigns.add(campaignId);
+  let sentCount = 0;
+  let failedCount = 0;
+  let blockedSuppressed = 0;
+  const previousStatus = existing.campaign.status;
+
   try {
     const supabase = await getClient(customClient);
     const nowIso = new Date().toISOString();
@@ -2462,10 +2490,6 @@ export async function executeCampaignRealDelivery(
   }
 
   const footerSettings = await getMarketingFooterSettings(customClient);
-
-  let sentCount = 0;
-  let failedCount = 0;
-  let blockedSuppressed = 0;
 
   // 5. Recipient-Level Processing & Dispatch
   for (const r of targets) {
@@ -2629,6 +2653,51 @@ export async function executeCampaignRealDelivery(
     isSimulated: false,
     message: `실제 발송 완료: 총 ${sentCount}건 전송 접수 완료 (실패: ${failedCount}건, 수신거부 차단: ${blockedSuppressed}건). 전달(Delivered)은 프로바이더 웹훅 확인 후 갱신됩니다.`,
   };
+  } catch (err: any) {
+    // IN-FLIGHT ERROR RECOVERY (ADM-EMAIL-APP-007)
+    // If a fatal failure occurred before any emails were dispatched (sentCount === 0),
+    // automatically rollback status to previous valid state (e.g. APPROVED) so campaign is never stranded in SENDING!
+    console.error(`[campaigns:delivery] Fatal error during dispatch for ${campaignId}:`, err);
+    try {
+      const supabase = await getClient(customClient);
+      const rollbackIso = new Date().toISOString();
+      const rollbackStatus: CampaignStatus =
+        sentCount > 0
+          ? "PARTIAL"
+          : ((previousStatus as string) === "APPROVED" || (previousStatus as string) === "SIMULATED" ? (previousStatus as CampaignStatus) : "APPROVED");
+
+      await supabase
+        .from("marketing_campaigns")
+        .update({
+          status: rollbackStatus,
+          updated_at: rollbackIso,
+        })
+        .eq("id", campaignId);
+
+      if (existing.campaign) {
+        memoryCampaigns.set(campaignId, {
+          ...existing.campaign,
+          status: rollbackStatus,
+          updatedAt: rollbackIso,
+        });
+      }
+
+      recordCampaignAuditLog(
+        campaignId,
+        "CAMPAIGN_DISPATCH_ABORTED",
+        true,
+        {
+          error: err?.message || String(err),
+          sentCount,
+          rollbackStatus,
+          performedBy: adminEmail,
+        },
+        adminEmail
+      );
+    } catch (rollbackErr) {
+      console.error("[campaigns:delivery] Status rollback failed:", rollbackErr);
+    }
+    throw err;
   } finally {
     activeDispatchingCampaigns.delete(campaignId);
   }
@@ -2702,8 +2771,15 @@ export async function unlockCampaignSend(
     throw new Error(`Campaign '${campaignId}' not found.`);
   }
 
-  if (existing.campaign.status === "SENDING") {
-    throw new Error("발송이 진행 중인 캠페인은 잠금 해제할 수 없습니다. 발송 종료 후 다시 시도하세요.");
+  const isStaleSendingRecovery = existing.campaign.status === "SENDING";
+
+  if (isStaleSendingRecovery) {
+    const isActivelyRunning = isCampaignActivelyDispatching(campaignId, existing.campaign.updatedAt);
+    if (isActivelyRunning) {
+      throw new Error(
+        "발송 작업이 현재 활발히 진행 중입니다. 백그라운드 발송 완료 또는 타임아웃(최대 5분) 경과 후 다시 시도하세요."
+      );
+    }
   }
 
   const recipients = existing.recipients || [];
@@ -2744,33 +2820,44 @@ export async function unlockCampaignSend(
     unlockHistory: [...(existing.campaign.stats?.unlockHistory || []), unlockEntry],
   };
 
+  const updatePayload: Record<string, any> = {
+    status: "APPROVED",
+    stats: updatedStats,
+    updated_at: nowIso,
+  };
+
+  // If approval status was INVALIDATED or broken during stuck SENDING state,
+  // recover approvalStatus back to APPROVED so the campaign can be sent immediately
+  if (existing.campaign.approvalStatus !== "APPROVED") {
+    updatePayload.approval_status = "APPROVED";
+  }
+
   await supabase
     .from("marketing_campaigns")
-    .update({
-      status: "APPROVED",
-      stats: updatedStats,
-      updated_at: nowIso,
-    })
+    .update(updatePayload)
     .eq("id", campaignId);
 
   // In-memory cache update
   memoryCampaigns.set(campaignId, {
     ...existing.campaign,
     status: "APPROVED",
+    approvalStatus: "APPROVED",
     stats: updatedStats,
     updatedAt: nowIso,
   });
 
-  // Record Audit Log in marketing_campaign_logs
+  // Record Immutable Audit Log
   recordCampaignAuditLog(
     campaignId,
-    "CAMPAIGN_SEND_UNLOCKED",
+    isStaleSendingRecovery ? "CAMPAIGN_STALE_SENDING_UNLOCKED" : "CAMPAIGN_SEND_UNLOCKED",
     false,
     {
+      previousStatus: existing.campaign.status,
+      recoveredToStatus: "APPROVED",
+      eligibleUnsentCount: unsentTargets.length,
       reason: trimmedReason,
       unlockedBy: adminEmail,
-      eligibleUnsentCount: unsentTargets.length,
-      previousStatus: existing.campaign.status,
+      wasStaleSending: isStaleSendingRecovery,
     },
     adminEmail
   );

@@ -338,6 +338,10 @@ export function EmailCampaignsView({
   const [unlockReason, setUnlockReason] = useState("");
   const [isUnlocking, setIsUnlocking] = useState(false);
 
+  // Controlled Internal Test Send Selection (ADM-EMAIL-APP-007)
+  const [sendNowTargetMode, setSendNowTargetMode] = useState<"FULL" | "INTERNAL_TEST">("FULL");
+  const [selectedInternalRecipient, setSelectedInternalRecipient] = useState<string>("");
+
   // Notification Toast
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -1804,12 +1808,12 @@ export function EmailCampaignsView({
     }
   };
 
-  const handleExecuteSendNow = async () => {
+  const handleExecuteSendNow = async (options?: { internalTestOnly?: boolean; approvedInternalRecipient?: string }) => {
     if (!editingCampaign?.id) return;
     setIsDispatching(true);
     setDeliveryResult(null);
     try {
-      const res = await executeCampaignLiveDeliveryAction(editingCampaign.id);
+      const res = await executeCampaignLiveDeliveryAction(editingCampaign.id, options);
       if (res.success && res.result) {
         setDeliveryResult(res.result);
         showNotification("success", res.result.message || "캠페인 실제 발송이 완료되었습니다.");
@@ -3954,8 +3958,12 @@ export function EmailCampaignsView({
                 </div>
               </div>
 
-              {/* Delivery Management Card (ADM-EMAIL-APP-002) */}
-              {editingCampaign.approvalStatus === "APPROVED" && (
+              {/* Delivery Management Card (ADM-EMAIL-APP-002 / ADM-EMAIL-APP-007) */}
+              {(editingCampaign.approvalStatus === "APPROVED" ||
+                editingCampaign.status === "SENDING" ||
+                editingCampaign.status === "SIMULATED" ||
+                editingCampaign.status === "SENT" ||
+                editingCampaign.status === "COMPLETED") && (
                 <div className="p-4 rounded-lg bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 space-y-4 text-xs">
                   {/* Prominent Safety Banner (ADM-EMAIL-APP-003) */}
                   <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between text-xs">
@@ -4091,8 +4099,18 @@ export function EmailCampaignsView({
                     </div>
                   )}
 
-                  {/* Send Lock & Safe Unlock Status (ADM-EMAIL-APP-006) */}
+                  {/* Send Lock & Safe Unlock Status (ADM-EMAIL-APP-006 / ADM-EMAIL-APP-007) */}
                   {(() => {
+                    const isStaleSending =
+                      editingCampaign.status === "SENDING" &&
+                      (!isDispatching &&
+                        Boolean(editingCampaign.updatedAt) &&
+                        Date.now() - new Date(editingCampaign.updatedAt).getTime() >= 5 * 60 * 1000);
+
+                    const isActivelyDispatching =
+                      isDispatching ||
+                      (editingCampaign.status === "SENDING" && !isStaleSending);
+
                     const isSendLocked =
                       editingCampaign.status === "SENT" ||
                       editingCampaign.status === "COMPLETED" ||
@@ -4113,6 +4131,20 @@ export function EmailCampaignsView({
 
                     return (
                       <div className="space-y-3">
+                        {/* ⚠️ Stale Sending Recovery Notice (ADM-EMAIL-APP-007) */}
+                        {isStaleSending && (
+                          <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 rounded-lg border border-rose-300 dark:border-rose-800 text-xs space-y-1.5">
+                            <div className="font-bold text-rose-800 dark:text-rose-200 flex items-center gap-1.5">
+                              <span>⚠️</span> 비정상 발송 중단 감지 (Stale SENDING State)
+                            </div>
+                            <p className="text-[11px] text-rose-700 dark:text-rose-300 leading-relaxed">
+                              이전 발송 프로세스가 정상 완료되지 못하고 중단되었습니다 (최종 갱신:{" "}
+                              {editingCampaign.updatedAt ? new Date(editingCampaign.updatedAt).toLocaleString() : "N/A"}).
+                              현재 실행 중인 백그라운드 작업이 없으므로, 관리자 잠금 해제(Unlock Send)를 실행하여 캠페인을 안전한 승인 상태(APPROVED)로 복구하고 미발송 적격 대상({unsentCount}명)에게 발송할 수 있습니다.
+                            </p>
+                          </div>
+                        )}
+
                         {/* 🔒 Send Locked Banner */}
                         {isSendLocked && (
                           <div className="p-4 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800 space-y-2.5">
@@ -4127,7 +4159,9 @@ export function EmailCampaignsView({
                                     </span>
                                   </div>
                                   <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
-                                    본 캠페인은 이미 발송 처리되었거나 완료 상태입니다. 동일 수신자에 대한 실수나 중복 발송을 방지하기 위해 Send Now가 자동으로 잠겨 있습니다.
+                                    {isStaleSending
+                                      ? "발송 프로세스가 중단된 상태입니다. 아래 'Unlock Send (비정상 중단 복구)'를 실행하여 안전하게 복구할 수 있습니다."
+                                      : "본 캠페인은 이미 발송 처리되었거나 완료 상태입니다. 동일 수신자에 대한 실수나 중복 발송을 방지하기 위해 Send Now가 자동으로 잠겨 있습니다."}
                                   </p>
                                 </div>
                               </div>
@@ -4135,11 +4169,15 @@ export function EmailCampaignsView({
                               <button
                                 type="button"
                                 onClick={() => setShowUnlockModal(true)}
-                                disabled={isDispatching || editingCampaign.status === "SENDING"}
-                                className="px-3.5 py-2 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
-                                title="관리자 권한 및 사유 입력을 통해 미발송 대상에 대한 발송 잠금을 해제합니다."
+                                disabled={isActivelyDispatching}
+                                className={'px-3.5 py-2 rounded font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5 shrink-0 self-start sm:self-auto ' + (isStaleSending ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse' : 'bg-amber-600 hover:bg-amber-700 text-white')}
+                                title={
+                                  isStaleSending
+                                    ? "비정상 중단된 발송 상태를 복구하고 미발송 대상 발송을 허용합니다."
+                                    : "관리자 권한 및 사유 입력을 통해 미발송 대상에 대한 발송 잠금을 해제합니다."
+                                }
                               >
-                                <span>🔓</span> Unlock Send (미발송 대상 잠금 해제)
+                                <span>🔓</span> {isStaleSending ? "Unlock Send (비정상 중단 복구)" : "Unlock Send (미발송 대상 잠금 해제)"}
                               </button>
                             </div>
 
@@ -5324,6 +5362,91 @@ export function EmailCampaignsView({
               </div>
             </div>
 
+            {/* Delivery Target Selector: Full vs Controlled Internal Live Test (ADM-EMAIL-APP-007) */}
+            {(() => {
+              const internalEligibleRecipients = selectedRecipientItems.filter(
+                (r) =>
+                  r.isSendable &&
+                  (r.email.endsWith("@letusto.com") ||
+                    r.email.endsWith("@kselectnetwork.com") ||
+                    r.email === "tammyhahm@gmail.com")
+              );
+
+              return (
+                <div className="space-y-2 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                  <div className="font-bold text-zinc-900 dark:text-zinc-100 text-[11px]">발송 대상 선택:</div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-start gap-2 p-2 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/80 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="sendTargetMode"
+                        checked={sendNowTargetMode === "FULL"}
+                        onChange={() => setSendNowTargetMode("FULL")}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <div className="font-bold text-zinc-900 dark:text-zinc-100 text-xs flex items-center gap-1.5">
+                          <span>전체 적격 대상 대량 발송 ({eligible}건)</span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 font-mono">
+                            LIVE_MODE 필요
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mt-0.5">
+                          전체 고객사 대상 실제 발송을 시도합니다. 글로벌 LIVE_MODE가 활성화되어 있어야 합니다.
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2 p-2 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/80 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="sendTargetMode"
+                        checked={sendNowTargetMode === "INTERNAL_TEST"}
+                        onChange={() => setSendNowTargetMode("INTERNAL_TEST")}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <div className="font-bold text-zinc-900 dark:text-zinc-100 text-xs flex items-center gap-1.5">
+                          <span>내부 승인 메일함 실제 테스트 발송 (Controlled Internal Test)</span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-mono font-bold">
+                            SAFE INTERNAL MODE
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mt-0.5">
+                          소유자/관리자 허용 도메인 메일함으로만 실제 발송을 전송하여 외부 고객사 노출 없이 프로바이더 발송을 안전하게 검증합니다.
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {sendNowTargetMode === "INTERNAL_TEST" && (
+                    <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 rounded border border-blue-200 dark:border-blue-800 space-y-1.5">
+                      <div className="text-[11px] font-bold text-blue-900 dark:text-blue-200">
+                        테스트 수신자 선택 (캠페인 적격 대상 중 내부 허용 메일):
+                      </div>
+                      {internalEligibleRecipients.length > 0 ? (
+                        <select
+                          value={selectedInternalRecipient || internalEligibleRecipients[0]?.email || ""}
+                          onChange={(e) => setSelectedInternalRecipient(e.target.value)}
+                          className="w-full text-xs p-1.5 rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-zinc-900 font-mono text-zinc-800 dark:text-zinc-200"
+                        >
+                          {internalEligibleRecipients.map((r) => (
+                            <option key={r.email} value={r.email}>
+                              {r.email} ({r.contactName || r.companyNameKr || "내부"})
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="text-[10px] text-rose-600 dark:text-rose-400">
+                          캠페인 적격 대상 중 내부 허용 도메인(@letusto.com, @kselectnetwork.com) 메일함이 없습니다. Step 3에서 내부 메일함을 수신자로 포함해주세요.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
               * 안전 시뮬레이션을 실행하려면 &apos;닫기&apos; 후 &apos;안전 시뮬레이션 (Dry Run)&apos; 버튼을 이용하세요.
             </p>
@@ -5341,13 +5464,37 @@ export function EmailCampaignsView({
             <button
               type="button"
               onClick={async () => {
-                await handleExecuteSendNow();
+                if (sendNowTargetMode === "INTERNAL_TEST") {
+                  const internalEligibleRecipients = selectedRecipientItems.filter(
+                    (r) =>
+                      r.isSendable &&
+                      (r.email.endsWith("@letusto.com") ||
+                        r.email.endsWith("@kselectnetwork.com") ||
+                        r.email === "tammyhahm@gmail.com")
+                  );
+                  const targetEmail =
+                    selectedInternalRecipient || internalEligibleRecipients[0]?.email;
+                  if (!targetEmail) {
+                    showNotification("error", "내부 테스트 수신자를 선택하세요.");
+                    return;
+                  }
+                  await handleExecuteSendNow({
+                    internalTestOnly: true,
+                    approvedInternalRecipient: targetEmail,
+                  });
+                } else {
+                  await handleExecuteSendNow();
+                }
                 setShowSendNowModal(false);
               }}
               disabled={isDispatching}
-              className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1"
+              className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1 font-bold text-xs"
             >
-              {isDispatching ? "발송 시도 중..." : "Confirm & Attempt Live Send 🚀"}
+              {isDispatching
+                ? "발송 시도 중..."
+                : sendNowTargetMode === "INTERNAL_TEST"
+                ? "Confirm & Send to Internal Mailbox 🚀"
+                : "Confirm & Attempt Live Send 🚀"}
             </button>
           </div>
         </div>
@@ -5390,16 +5537,29 @@ export function EmailCampaignsView({
           </div>
 
           <div className="space-y-3 text-xs">
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
-              <div className="font-bold flex items-center gap-1 mb-1 text-xs">
-                <span>🛡️</span> STRICT RECIPIENT DEDUPLICATION GUARANTEE
+            {editingCampaign.status === "SENDING" ? (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 rounded border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200">
+                <div className="font-bold flex items-center gap-1 mb-1 text-xs">
+                  <span>⚠️</span> STALE SENDING RECOVERY (비정상 중단 상태 복구)
+                </div>
+                <p className="text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-300">
+                  이전 발송 프로세스가 중단되어 캠페인이 <code>SENDING</code> 상태로 잠겨 있습니다.
+                  잠금을 해제하면 캠페인이 <strong>승인 완료(APPROVED)</strong> 상태로 복구되며, 미발송 적격 대상({unsentCount}명)에게 안전하게 발송할 수 있습니다.
+                  이미 발송된 메일은 100% 중복 발송 방지됩니다.
+                </p>
               </div>
-              <p className="text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-300">
-                잠금을 해제하더라도, <strong>이미 발송 성공 또는 전달 완료된 수신자({sentCount}명)에게는 절대로 재발송되지 않습니다.</strong>
-                <br />
-                오직 <strong>아직 발송되지 않은 적격 대상({unsentCount}명)</strong>에게만 추가 발송 권한이 부여됩니다.
-              </p>
-            </div>
+            ) : (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+                <div className="font-bold flex items-center gap-1 mb-1 text-xs">
+                  <span>🛡️</span> STRICT RECIPIENT DEDUPLICATION GUARANTEE
+                </div>
+                <p className="text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-300">
+                  잠금을 해제하더라도, <strong>이미 발송 성공 또는 전달 완료된 수신자({sentCount}명)에게는 절대로 재발송되지 않습니다.</strong>
+                  <br />
+                  오직 <strong>아직 발송되지 않은 적격 대상({unsentCount}명)</strong>에게만 추가 발송 권한이 부여됩니다.
+                </p>
+              </div>
+            )}
 
             <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded border border-zinc-200 dark:border-zinc-700 space-y-2 text-xs">
               <div className="font-bold text-zinc-900 dark:text-zinc-100">수신자 대상 분석:</div>
