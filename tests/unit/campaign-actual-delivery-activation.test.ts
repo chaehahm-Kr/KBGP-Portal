@@ -22,6 +22,7 @@ const mockSendEmail = vi.fn().mockResolvedValue({
 });
 vi.mock("@/lib/notifications/email", () => ({
   sendEmail: (...args: any[]) => mockSendEmail(...args),
+  sendEmailBatch: async (payloads: any[]) => Promise.all(payloads.map((p) => mockSendEmail(p))),
   maskEmailAddress: (email: string) => email.replace(/(.{2})(.*)(@.*)/, "$1***$3"),
   isRecipientAllowlisted: (email: string) =>
     email.endsWith("@kselectnetwork.com") ||

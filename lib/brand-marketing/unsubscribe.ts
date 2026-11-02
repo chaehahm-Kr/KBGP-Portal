@@ -436,9 +436,149 @@ export async function checkEmailSuppression(
       status: "ACTIVE",
       reason: "SYSTEM_LOOKUP_FAILURE",
       isFailClosedError: true,
-      errorDetail: err.message,
+      errorDetail: err?.message || String(err),
     };
   }
+}
+
+/**
+ * High-performance batch suppression lookup for large campaigns (e.g. 700+ recipients).
+ * Reduces N individual database round-trips to a single .in() query while strictly
+ * preserving FAIL-CLOSED security guarantees.
+ */
+export async function checkEmailsSuppressionBatch(
+  emails: string[],
+  customClient?: any
+): Promise<Map<string, SuppressionCheckResult>> {
+  const resultMap = new Map<string, SuppressionCheckResult>();
+  const normalizedList = Array.from(new Set(emails.map((e) => e.toLowerCase().trim()).filter(Boolean)));
+
+  if (normalizedList.length === 0) {
+    return resultMap;
+  }
+
+  // 1. Check in-memory fast registry
+  const remainingToCheck = [];
+  for (const norm of normalizedList) {
+    if (memorySuppressionList.has(norm)) {
+      resultMap.set(norm, {
+        isSuppressed: true,
+        status: "ACTIVE",
+        reason: "UNSUBSCRIBED",
+      });
+    } else {
+      remainingToCheck.push(norm);
+    }
+  }
+
+  if (remainingToCheck.length === 0) {
+    return resultMap;
+  }
+
+  // 2. Query Supabase in chunks of 500
+  const CHUNK_SIZE = 500;
+  try {
+    const admin = customClient || createAdminClient();
+
+    for (let i = 0; i < remainingToCheck.length; i += CHUNK_SIZE) {
+      const chunk = remainingToCheck.slice(i, i + CHUNK_SIZE);
+      let data = null;
+      let queryError = null;
+
+      const queryBuilder = admin
+        .from("marketing_suppression_list")
+        .select("email, id, status, reason, suppressed_at, released_at");
+
+      if (typeof queryBuilder?.in !== "function") {
+        for (const email of chunk) {
+          const single = await checkEmailSuppression(email, customClient);
+          resultMap.set(email, single);
+        }
+        continue;
+      }
+
+      const res = await queryBuilder.in("email", chunk);
+
+      if (res.error) {
+        if (res.error.code === "42703" || res.error.message?.includes("status")) {
+          const fallback = await admin
+            .from("marketing_suppression_list")
+            .select("email, id, reason, suppressed_at")
+            .in("email", chunk);
+          data = fallback.data;
+          queryError = fallback.error;
+        } else {
+          queryError = res.error;
+        }
+      } else {
+        data = res.data;
+      }
+
+      if (queryError) {
+        console.error("[marketing:suppression] Batch DB query error, enforcing FAIL-CLOSED:", queryError.message);
+        for (const email of chunk) {
+          resultMap.set(email, {
+            isSuppressed: true,
+            status: "ACTIVE",
+            reason: "SYSTEM_LOOKUP_FAILURE",
+            isFailClosedError: true,
+            errorDetail: queryError.message,
+          });
+        }
+        continue;
+      }
+
+      const foundByEmail = new Map();
+      (data || []).forEach((row: any) => {
+        if (row.email) {
+          foundByEmail.set(row.email.toLowerCase().trim(), row);
+        }
+      });
+
+      for (const email of chunk) {
+        const record = foundByEmail.get(email);
+        if (record) {
+          if (record.status === "RELEASED") {
+            memorySuppressionList.delete(email);
+            resultMap.set(email, {
+              isSuppressed: false,
+              status: "RELEASED",
+              reason: record.reason,
+              releasedAt: record.released_at,
+            });
+          } else {
+            memorySuppressionList.add(email);
+            resultMap.set(email, {
+              isSuppressed: true,
+              status: record.status || "ACTIVE",
+              reason: record.reason || "UNSUBSCRIBED",
+              suppressedAt: record.suppressed_at,
+            });
+          }
+        } else {
+          memorySuppressionList.delete(email);
+          resultMap.set(email, {
+            isSuppressed: false,
+          });
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error("[marketing:suppression] Exception in batch DB query, enforcing FAIL-CLOSED:", err?.message || err);
+    for (const email of remainingToCheck) {
+      if (!resultMap.has(email)) {
+        resultMap.set(email, {
+          isSuppressed: true,
+          status: "ACTIVE",
+          reason: "SYSTEM_LOOKUP_FAILURE",
+          isFailClosedError: true,
+          errorDetail: err.message,
+        });
+      }
+    }
+  }
+
+  return resultMap;
 }
 
 /**

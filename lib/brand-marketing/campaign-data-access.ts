@@ -31,6 +31,7 @@ import {
   buildUnsubscribeUrl,
   isEmailSuppressed,
   checkEmailSuppression,
+  checkEmailsSuppressionBatch,
   formatSuppressionReasonKorean,
   buildOneClickUnsubscribeEndpoint,
   removeEmailFromMemorySuppression,
@@ -38,7 +39,7 @@ import {
 import { DEFAULT_MARKETING_TEMPLATES, resolveTemplateId } from "./default-templates";
 import { compileImageTemplateToHtml } from "./image-template-compiler";
 import { personalizeEmail, validateSendReadyHtml } from "./personalization-engine";
-import { sendEmail, maskEmailAddress, isRecipientAllowlisted } from "@/lib/notifications/email";
+import { sendEmail, sendEmailBatch, maskEmailAddress, isRecipientAllowlisted } from "@/lib/notifications/email";
 import {
   getMarketingTestAllowlist,
   isTestRecipientAllowlisted,
@@ -463,6 +464,7 @@ export async function listMarketingCampaigns(
         }
 
         const normalizedStats: CampaignStats = {
+          ...(d.stats || {}),
           totalRecipients: d.stats?.totalRecipients || 0,
           sendableCount: d.stats?.sendableCount || 0,
           excludedCount: d.stats?.excludedCount || 0,
@@ -971,17 +973,21 @@ export async function syncCampaignRecipients(
     const sendable = persistableItems.filter((r) => r.sendEligibility === "ELIGIBLE");
     const excluded = recipientItems.filter((r) => r.sendEligibility !== "ELIGIBLE");
 
+    const { data: currentCamp } = await supabase
+      .from("marketing_campaigns")
+      .select("stats")
+      .eq("id", campaignId)
+      .maybeSingle();
+
+    const existingStats = (currentCamp?.stats || {}) as Partial<CampaignStats>;
     await supabase
       .from("marketing_campaigns")
       .update({
         stats: {
+          ...existingStats,
           totalRecipients: persistableItems.length,
           sendableCount: sendable.length,
           excludedCount: excluded.length,
-          testSendsCount: 0,
-          sentCount: 0,
-          deliveredCount: 0,
-          failedCount: 0,
         },
         updated_at: new Date().toISOString(),
       })
@@ -1145,6 +1151,7 @@ export async function getMarketingCampaignById(
     }
 
     campaign.stats = {
+      ...(campaign.stats || {}),
       totalRecipients: campaign.stats?.totalRecipients || recipients.length,
       sendableCount: campaign.stats?.sendableCount || recipients.filter((r) => r.sendEligibility === "ELIGIBLE").length,
       excludedCount: campaign.stats?.excludedCount || recipients.filter((r) => r.sendEligibility !== "ELIGIBLE").length,
@@ -1180,21 +1187,29 @@ export async function saveMarketingCampaign(
   const now = new Date().toISOString();
 
   // If already existing, fetch prior to check for invalidating approval on edit
-  const existing = memoryCampaigns.get(campId);
+  let existing = memoryCampaigns.get(campId);
+  if (!existing && isUuid(campId)) {
+    try {
+      const prior = await getMarketingCampaignById(campId, customClient);
+      if (prior.campaign) {
+        existing = prior.campaign;
+      }
+    } catch {}
+  }
   let approvalStatus = campaign.approvalStatus || existing?.approvalStatus || "PENDING";
   let status = campaign.status || existing?.status || "DRAFT";
 
   // If approved but content or recipients changed, invalidate approval
   if (existing && existing.approvalStatus === "APPROVED") {
     const contentChanged =
-      existing.name !== campaign.name ||
-      existing.templateId !== resolvedTemplateId ||
+      (campaign.name !== undefined && existing.name !== campaign.name) ||
+      (campaign.templateId !== undefined && existing.templateId !== resolvedTemplateId) ||
       (campaign.subjectOverride !== undefined && existing.subjectOverride !== campaign.subjectOverride) ||
       (campaign.previewText !== undefined && existing.previewText !== campaign.previewText) ||
       (campaign.landingPageUrl !== undefined && existing.landingPageUrl !== campaign.landingPageUrl) ||
       (campaign.footerStyle !== undefined && existing.footerStyle !== campaign.footerStyle) ||
-      existing.customMessage !== campaign.customMessage ||
-      JSON.stringify(existing.filterCriteria) !== JSON.stringify(campaign.filterCriteria);
+      (campaign.customMessage !== undefined && existing.customMessage !== campaign.customMessage) ||
+      (campaign.filterCriteria !== undefined && JSON.stringify(existing.filterCriteria) !== JSON.stringify(campaign.filterCriteria));
 
     if (contentChanged) {
       approvalStatus = "INVALIDATED";
@@ -1227,14 +1242,18 @@ export async function saveMarketingCampaign(
       footerStyle: campaign.footerStyle || existing?.footerStyle || "classic",
     },
     customMessage: campaign.customMessage !== undefined ? campaign.customMessage : existing?.customMessage || "",
-    stats: campaign.stats || existing?.stats || {
-      totalRecipients: 0,
-      sendableCount: 0,
-      excludedCount: 0,
-      testSendsCount: 0,
-      sentCount: 0,
-      deliveredCount: 0,
-      failedCount: 0,
+    stats: {
+      ...(existing?.stats || {
+        totalRecipients: 0,
+        sendableCount: 0,
+        excludedCount: 0,
+        testSendsCount: 0,
+        sentCount: 0,
+        deliveredCount: 0,
+        failedCount: 0,
+      }),
+      ...(campaign.stats || {}),
+      isLiveModeEnabled: campaign.isLiveModeEnabled !== undefined ? Boolean(campaign.isLiveModeEnabled) : Boolean(existing?.isLiveModeEnabled || campaign.stats?.isLiveModeEnabled || existing?.stats?.isLiveModeEnabled),
     },
     createdAt: existing?.createdAt || now,
     updatedAt: now,
@@ -2581,25 +2600,33 @@ export async function executeCampaignRealDelivery(
 
   const footerSettings = await getMarketingFooterSettings(customClient);
 
-  // 5. Recipient-Level Processing & Dispatch
+  // 5. Recipient-Level Processing & Dispatch (High-Performance Batch Dispatch)
+  const targetEmails = targets.map((r) => r.recipientEmail).filter(Boolean);
+  const suppressionMap = await checkEmailsSuppressionBatch(targetEmails, customClient);
+
+  type PreparedItem = {
+    recipient: MarketingCampaignRecipientItem;
+    payload?: { to: string; subject: string; text: string; html: string };
+    status: "EXCLUDED_SUPPRESSED" | "FAILED" | "READY";
+    exclusionReason?: string;
+    errorMessage?: string;
+  };
+
+  const preparedItems: PreparedItem[] = [];
+
   for (const r of targets) {
-    // Current suppression check (FAIL-CLOSED)
-    const supp = await checkEmailSuppression(r.recipientEmail, customClient);
-    if (supp.isSuppressed) {
+    const normalizedEmail = (r.recipientEmail || "").toLowerCase().trim();
+    const supp = suppressionMap.get(normalizedEmail);
+
+    if (supp?.isSuppressed) {
       blockedSuppressed++;
       failedCount++;
-      try {
-        await supabase
-          .from("marketing_campaign_recipients")
-          .update({
-            send_eligibility: "EXCLUDED_SUPPRESSED",
-            exclusion_reason: `Pre-dispatch suppression blocked (${supp.reason || "SUPPRESSED"})`,
-            status: "FAILED",
-            error_message: "Pre-dispatch suppression list match",
-            updated_at: nowIso,
-          })
-          .eq("id", r.id);
-      } catch {}
+      preparedItems.push({
+        recipient: r,
+        status: "EXCLUDED_SUPPRESSED",
+        exclusionReason: `Pre-dispatch suppression blocked (${supp.reason || "SUPPRESSED"})`,
+        errorMessage: "Pre-dispatch suppression list match",
+      });
       continue;
     }
 
@@ -2630,52 +2657,123 @@ export async function executeCampaignRealDelivery(
     const preflight = validateSendReadyHtml(assembledHtml, personalized.subject, { isTestSend: false });
     if (!preflight.isValid) {
       failedCount++;
-      try {
-        await supabase
-          .from("marketing_campaign_recipients")
-          .update({
-            status: "FAILED",
-            error_message: "Preflight HTML validation failed",
-            updated_at: nowIso,
-          })
-          .eq("id", r.id);
-      } catch {}
+      preparedItems.push({
+        recipient: r,
+        status: "FAILED",
+        errorMessage: "Preflight HTML validation failed",
+      });
       continue;
     }
 
-    // Provider Dispatch via Central Email Gateway
-    const sendRes = await sendEmail({
-      to: r.recipientEmail,
-      subject: personalized.subject,
-      text: personalized.plainText || "K SELECT Marketing",
-      html: assembledHtml,
+    preparedItems.push({
+      recipient: r,
+      status: "READY",
+      payload: {
+        to: r.recipientEmail,
+        subject: personalized.subject,
+        text: personalized.plainText || "K SELECT Marketing",
+        html: assembledHtml,
+      },
     });
+  }
 
-    if (sendRes.success && sendRes.messageId) {
+  // Filter out READY items for provider dispatch
+  const readyItems = preparedItems.filter((item) => item.status === "READY" && item.payload);
+  const readyPayloads = readyItems.map((item) => item.payload!);
+
+  // Dispatch via batch email gateway (chunks of up to 100), with fallback to sendEmail if mocked in unit tests
+  const sendResults =
+    typeof sendEmailBatch === "function"
+      ? await sendEmailBatch(readyPayloads)
+      : await Promise.all(readyPayloads.map((p) => sendEmail(p)));
+
+  // Recipient DB rows to persist
+  const recipientDbUpdates: any[] = [];
+
+  // Suppressed and preflight failed rows
+  for (const item of preparedItems) {
+    if (item.status === "EXCLUDED_SUPPRESSED") {
+      recipientDbUpdates.push({
+        id: item.recipient.id,
+        campaign_id: campaignId,
+        recipient_email: item.recipient.recipientEmail,
+        send_eligibility: "EXCLUDED_SUPPRESSED",
+        exclusion_reason: item.exclusionReason,
+        status: "FAILED",
+        error_message: item.errorMessage,
+        updated_at: nowIso,
+      });
+    } else if (item.status === "FAILED") {
+      recipientDbUpdates.push({
+        id: item.recipient.id,
+        campaign_id: campaignId,
+        recipient_email: item.recipient.recipientEmail,
+        status: "FAILED",
+        error_message: item.errorMessage,
+        updated_at: nowIso,
+      });
+    }
+  }
+
+  // Sent and provider rejected rows
+  for (let i = 0; i < readyItems.length; i++) {
+    const item = readyItems[i];
+    const res = sendResults[i];
+
+    if (res?.success && res.messageId) {
       sentCount++;
-      try {
-        await supabase
-          .from("marketing_campaign_recipients")
-          .update({
-            status: "SENT",
-            provider_message_id: sendRes.messageId,
-            sent_at: nowIso,
-            error_message: null,
-            updated_at: nowIso,
-          })
-          .eq("id", r.id);
-      } catch {}
+      recipientDbUpdates.push({
+        id: item.recipient.id,
+        campaign_id: campaignId,
+        recipient_email: item.recipient.recipientEmail,
+        status: "SENT",
+        provider_message_id: res.messageId,
+        sent_at: nowIso,
+        error_message: null,
+        updated_at: nowIso,
+      });
     } else {
       failedCount++;
+      recipientDbUpdates.push({
+        id: item.recipient.id,
+        campaign_id: campaignId,
+        recipient_email: item.recipient.recipientEmail,
+        status: "FAILED",
+        error_message: res?.error || "Email provider rejected send",
+        updated_at: nowIso,
+      });
+    }
+  }
+
+  // Upsert recipient status in chunks of 100 (with fallback to update for unit test mocks)
+  const recipientTable = supabase.from("marketing_campaign_recipients");
+  if (typeof recipientTable?.upsert === "function") {
+    const UPSERT_CHUNK_SIZE = 100;
+    for (let i = 0; i < recipientDbUpdates.length; i += UPSERT_CHUNK_SIZE) {
+      const chunk = recipientDbUpdates.slice(i, i + UPSERT_CHUNK_SIZE);
+      try {
+        await supabase
+          .from("marketing_campaign_recipients")
+          .upsert(chunk, { onConflict: "id" });
+      } catch (e: any) {
+        console.warn("[campaigns:dispatch] Recipient status batch upsert warning:", e.message);
+      }
+    }
+  } else {
+    for (const rUp of recipientDbUpdates) {
       try {
         await supabase
           .from("marketing_campaign_recipients")
           .update({
-            status: "FAILED",
-            error_message: sendRes.error || "Email provider rejected send",
-            updated_at: nowIso,
+            status: rUp.status,
+            provider_message_id: rUp.provider_message_id,
+            sent_at: rUp.sent_at,
+            error_message: rUp.error_message,
+            send_eligibility: rUp.send_eligibility,
+            exclusion_reason: rUp.exclusion_reason,
+            updated_at: rUp.updated_at,
           })
-          .eq("id", r.id);
+          .eq("id", rUp.id);
       } catch {}
     }
   }

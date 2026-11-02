@@ -335,6 +335,7 @@ export function EmailCampaignsView({
   const [isDispatching, setIsDispatching] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   const [deliveryResult, setDeliveryResult] = useState<any>(null);
+  const [sendModalError, setSendModalError] = useState<string | null>(null);
 
   // Admin Unlock Send State (ADM-EMAIL-APP-006)
   const [showUnlockModal, setShowUnlockModal] = useState(false);
@@ -1824,10 +1825,11 @@ export function EmailCampaignsView({
     }
   };
 
-  const handleExecuteSendNow = async () => {
-    if (!editingCampaign?.id) return;
+  const handleExecuteSendNow = async (): Promise<boolean> => {
+    if (!editingCampaign?.id) return false;
     setIsDispatching(true);
     setDeliveryResult(null);
+    setSendModalError(null);
     try {
       const res = await executeCampaignLiveDeliveryAction(editingCampaign.id);
       if (res.success && res.result) {
@@ -1839,11 +1841,18 @@ export function EmailCampaignsView({
           if (updated.logs) setCampaignLogs(updated.logs);
         }
         refreshCampaignsAndTemplates();
+        return true;
       } else {
-        showNotification("error", res.error || "발송 실행 실패");
+        const errorMsg = res.error || "발송 실행 실패";
+        setSendModalError(errorMsg);
+        showNotification("error", errorMsg);
+        return false;
       }
     } catch (err: any) {
-      showNotification("error", err.message || "발송 실행 중 오류가 발생했습니다.");
+      const errorMsg = err.message || "발송 실행 중 오류가 발생했습니다.";
+      setSendModalError(errorMsg);
+      showNotification("error", errorMsg);
+      return false;
     } finally {
       setIsDispatching(false);
     }
@@ -5553,7 +5562,10 @@ export function EmailCampaignsView({
             </h3>
             <button
               type="button"
-              onClick={() => setShowSendNowModal(false)}
+              onClick={() => {
+                setSendModalError(null);
+                setShowSendNowModal(false);
+              }}
               className="text-zinc-400 hover:text-zinc-600 cursor-pointer"
             >
               ✕
@@ -5606,6 +5618,26 @@ export function EmailCampaignsView({
               </div>
             </div>
 
+            {!isLiveActive && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-xs">
+                  <span>🛡️</span> LIVE 모드 비활성화 (실제 발송 불가)
+                </div>
+                <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+                  본 캠페인의 LIVE 모드가 아직 활성화되지 않았습니다. 실제 메일을 발송하려면 먼저 Step 6에서 &apos;LIVE 모드 활성화 (관리자 승인)&apos;을 완료해야 합니다.
+                </p>
+              </div>
+            )}
+
+            {sendModalError && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/50 rounded border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-xs space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <span>❌</span> 발송 요청 거절 / 오류 안내
+                </div>
+                <div className="text-[11px] leading-relaxed break-words">{sendModalError}</div>
+              </div>
+            )}
+
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
               * 안전 시뮬레이션을 실행하려면 &apos;닫기&apos; 후 SIMULATION 탭의 &apos;안전 시뮬레이션 (Dry Run)&apos; 버튼을 이용하세요.
             </p>
@@ -5614,7 +5646,10 @@ export function EmailCampaignsView({
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs font-semibold">
             <button
               type="button"
-              onClick={() => setShowSendNowModal(false)}
+              onClick={() => {
+                setSendModalError(null);
+                setShowSendNowModal(false);
+              }}
               disabled={isDispatching}
               className="px-3 py-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 cursor-pointer"
             >
@@ -5623,13 +5658,19 @@ export function EmailCampaignsView({
             <button
               type="button"
               onClick={async () => {
-                await handleExecuteSendNow();
-                setShowSendNowModal(false);
+                const ok = await handleExecuteSendNow();
+                if (ok) {
+                  setShowSendNowModal(false);
+                }
               }}
-              disabled={isDispatching || (alreadySent > 0 && unsentCount === 0)}
-              className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1 font-bold text-xs"
+              disabled={isDispatching || !isLiveActive || (alreadySent > 0 && unsentCount === 0)}
+              className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 font-bold text-xs"
             >
-              {isDispatching ? "발송 시도 중..." : "Confirm & Attempt Live Send 🚀"}
+              {isDispatching
+                ? "발송 시도 중..."
+                : !isLiveActive
+                ? "LIVE 모드 활성화 필요"
+                : "Confirm & Attempt Live Send 🚀"}
             </button>
           </div>
         </div>
