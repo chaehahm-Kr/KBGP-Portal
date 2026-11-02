@@ -14,6 +14,9 @@ import {
   CampaignDeliveryExecutionResult,
   CampaignStatus,
   CampaignStats,
+  CampaignUnlockAudit,
+  UnlockCampaignSendInput,
+  UnlockCampaignSendResult,
 } from "./campaign-types";
 import {
   MarketingFooterSettings,
@@ -2337,12 +2340,24 @@ export interface RealDeliveryOptions {
   approvedInternalRecipient?: string;
 }
 
+export function isGenuineProviderMessageId(id?: string | null): boolean {
+  if (!id) return false;
+  return !id.startsWith("sim_");
+}
+
+const activeDispatchingCampaigns = new Set<string>();
+
 export async function executeCampaignRealDelivery(
   campaignId: string,
   adminEmail: string,
   options: RealDeliveryOptions,
   customClient?: SupabaseClient
 ): Promise<CampaignDeliveryExecutionResult> {
+  // Concurrency In-flight Mutex Guard (Rule 2)
+  if (activeDispatchingCampaigns.has(campaignId)) {
+    throw new Error("캠페인 발송이 현재 실행 중입니다. 중복 발송을 방지합니다.");
+  }
+
   const existing = await getMarketingCampaignById(campaignId, customClient);
   if (!existing.campaign) {
     throw new Error(`Campaign '${campaignId}' not found.`);
@@ -2358,8 +2373,20 @@ export async function executeCampaignRealDelivery(
     throw new Error("캠페인 발송이 이미 진행 중입니다. 중복 발송을 방지합니다.");
   }
 
-  if (existing.campaign.status === "COMPLETED") {
-    throw new Error("이미 발송 완료된 캠페인입니다.");
+  if (existing.campaign.status === "SENT" || existing.campaign.status === "COMPLETED") {
+    throw new Error(
+      "이미 발송 완료된 캠페인입니다. 미발송 대상에게 추가 발송하려면 먼저 관리자 잠금 해제(Unlock Send)를 완료해야 합니다."
+    );
+  }
+
+  // Preflight Simulation Contamination Guard (Requirement 1 & Safety Gate)
+  const hasUnreconciledSimulations = (existing.recipients || []).some(
+    (r) => r.providerMessageId && r.providerMessageId.startsWith("sim_") && r.status === "SENT"
+  );
+  if (hasUnreconciledSimulations && !options?.internalTestOnly) {
+    throw new Error(
+      "과거 시뮬레이션 이력이 존재하는 캠페인입니다. 실제 고객 발송 전 데이터 정합성 보정(APP-005 Reconciliation) 승인 및 적용이 필요합니다."
+    );
   }
 
   // 1. LIVE_MODE SAFETY GATE (Rule 4 & Mandatory Invariant)
@@ -2379,33 +2406,43 @@ export async function executeCampaignRealDelivery(
     }
   }
 
-  const supabase = await getClient(customClient);
-  const nowIso = new Date().toISOString();
-
-  // 2. Idempotency Lock: Set campaign status to SENDING
-  await supabase
-    .from("marketing_campaigns")
-    .update({ status: "SENDING", updated_at: nowIso })
-    .eq("id", campaignId);
-
-  // 3. Resolve eligible recipient targets
+  // 2. Resolve eligible recipient targets with strict deduplication
   const recipients = existing.recipients || [];
   let targets = recipients.filter(
-    (r) => r.sendEligibility === "ELIGIBLE" && r.status !== "SENT" && r.status !== "DELIVERED"
+    (r) =>
+      r.sendEligibility === "ELIGIBLE" &&
+      r.status !== "SENT" &&
+      r.status !== "DELIVERED" &&
+      !isGenuineProviderMessageId(r.providerMessageId)
   );
 
   if (options?.internalTestOnly && options.approvedInternalRecipient) {
     const targetEmail = options.approvedInternalRecipient.toLowerCase().trim();
     targets = targets.filter((r) => r.recipientEmail.toLowerCase().trim() === targetEmail);
     if (targets.length === 0) {
-      // Revert status from SENDING back to previous status
-      await supabase
-        .from("marketing_campaigns")
-        .update({ status: existing.campaign.status, updated_at: nowIso })
-        .eq("id", campaignId);
-      throw new Error(`지정된 내부 테스트 수신자(${options.approvedInternalRecipient})가 캠페인 적격 대상 목록에 존재하지 않습니다.`);
+      throw new Error(`지정된 내부 테스트 수신자(${options.approvedInternalRecipient})가 캠페인 적격 대상 목록에 존재하지 않거나 이미 발송되었습니다.`);
     }
   }
+
+  // Enforce internal test mode 1-3 recipient maximum
+  if (options?.internalTestOnly && targets.length > 3) {
+    throw new Error("내부 테스트 모드(Internal Test Mode)에서는 최대 3명까지만 발송 가능합니다.");
+  }
+
+  if (targets.length === 0) {
+    throw new Error("발송 가능한 미발송 적격 수신자가 없습니다. 모든 대상에게 이미 발송되었거나 적격 대상이 없습니다.");
+  }
+
+  activeDispatchingCampaigns.add(campaignId);
+  try {
+    const supabase = await getClient(customClient);
+    const nowIso = new Date().toISOString();
+
+    // Idempotency Lock: Set campaign status to SENDING
+    await supabase
+      .from("marketing_campaigns")
+      .update({ status: "SENDING", updated_at: nowIso })
+      .eq("id", campaignId);
 
   // 4. Resolve Template, Subject, and Footer Settings
   let templateHtml = "<p>안녕하세요, {{company_name}} {{contact_name}} 귀하. {{brand_name}} 입점을 제안드립니다.</p>";
@@ -2547,6 +2584,7 @@ export async function executeCampaignRealDelivery(
     sentCount: (existing.campaign.stats?.sentCount || 0) + sentCount,
     deliveredCount: existing.campaign.stats?.deliveredCount || 0, // Delivered remains 0 until delivery event confirmed
     failedCount: (existing.campaign.stats?.failedCount || 0) + failedCount,
+    isSendLocked: true,
   };
 
   await supabase
@@ -2577,7 +2615,7 @@ export async function executeCampaignRealDelivery(
     failedCount,
     blockedSuppressed,
     performedBy: adminEmail,
-  });
+  }, adminEmail);
 
   return {
     success: true,
@@ -2591,6 +2629,9 @@ export async function executeCampaignRealDelivery(
     isSimulated: false,
     message: `실제 발송 완료: 총 ${sentCount}건 전송 접수 완료 (실패: ${failedCount}건, 수신거부 차단: ${blockedSuppressed}건). 전달(Delivered)은 프로바이더 웹훅 확인 후 갱신됩니다.`,
   };
+  } finally {
+    activeDispatchingCampaigns.delete(campaignId);
+  }
 }
 
 export async function processScheduledCampaigns(
@@ -2638,4 +2679,108 @@ export async function processScheduledCampaigns(
   }
 
   return { processedCount: results.length, results };
+}
+
+/**
+ * Unlocks a locked or dispatched marketing campaign for safe subsequent sending.
+ * Strictly guarantees that already-contacted recipients (SENT / DELIVERED) will NEVER be resent.
+ * Requires Admin privilege and written justification (min 5 characters).
+ */
+export async function unlockCampaignSend(
+  campaignId: string,
+  adminEmail: string,
+  input: UnlockCampaignSendInput,
+  customClient?: SupabaseClient
+): Promise<UnlockCampaignSendResult> {
+  const trimmedReason = (input?.reason || "").trim();
+  if (!trimmedReason || trimmedReason.length < 5) {
+    throw new Error("잠금 해제 사유(최소 5자 이상)를 반드시 입력해야 합니다.");
+  }
+
+  const existing = await getMarketingCampaignById(campaignId, customClient);
+  if (!existing.campaign) {
+    throw new Error(`Campaign '${campaignId}' not found.`);
+  }
+
+  if (existing.campaign.status === "SENDING") {
+    throw new Error("발송이 진행 중인 캠페인은 잠금 해제할 수 없습니다. 발송 종료 후 다시 시도하세요.");
+  }
+
+  const recipients = existing.recipients || [];
+  // Calculate verified uncontacted eligible recipients
+  const unsentTargets = recipients.filter(
+    (r) =>
+      r.sendEligibility === "ELIGIBLE" &&
+      r.status !== "SENT" &&
+      r.status !== "DELIVERED" &&
+      !isGenuineProviderMessageId(r.providerMessageId)
+  );
+
+  if (unsentTargets.length === 0) {
+    throw new Error("모든 적격 수신자에게 이미 발송이 완료되어 잠금 해제할 대상이 없습니다. (중복 발송 방지)");
+  }
+
+  const supabase = await getClient(customClient);
+  const nowIso = new Date().toISOString();
+
+  const unlockEntry: CampaignUnlockAudit = {
+    unlockedAt: nowIso,
+    unlockedBy: adminEmail,
+    reason: trimmedReason,
+    eligibleUnsentCount: unsentTargets.length,
+  };
+
+  const updatedStats: CampaignStats = {
+    ...(existing.campaign.stats || {
+      totalRecipients: 0,
+      sendableCount: 0,
+      excludedCount: 0,
+      testSendsCount: 0,
+      sentCount: 0,
+      deliveredCount: 0,
+      failedCount: 0,
+    }),
+    isSendLocked: false,
+    unlockHistory: [...(existing.campaign.stats?.unlockHistory || []), unlockEntry],
+  };
+
+  await supabase
+    .from("marketing_campaigns")
+    .update({
+      status: "APPROVED",
+      stats: updatedStats,
+      updated_at: nowIso,
+    })
+    .eq("id", campaignId);
+
+  // In-memory cache update
+  memoryCampaigns.set(campaignId, {
+    ...existing.campaign,
+    status: "APPROVED",
+    stats: updatedStats,
+    updatedAt: nowIso,
+  });
+
+  // Record Audit Log in marketing_campaign_logs
+  recordCampaignAuditLog(
+    campaignId,
+    "CAMPAIGN_SEND_UNLOCKED",
+    false,
+    {
+      reason: trimmedReason,
+      unlockedBy: adminEmail,
+      eligibleUnsentCount: unsentTargets.length,
+      previousStatus: existing.campaign.status,
+    },
+    adminEmail
+  );
+
+  return {
+    success: true,
+    campaignId,
+    unlockedBy: adminEmail,
+    unlockedAt: nowIso,
+    reason: trimmedReason,
+    unsentCount: unsentTargets.length,
+  };
 }

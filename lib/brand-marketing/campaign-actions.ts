@@ -10,6 +10,8 @@ import {
   MarketingTemplatePackage,
   DryRunReport,
   CampaignDeliveryExecutionResult,
+  UnlockCampaignSendInput,
+  UnlockCampaignSendResult,
 } from "./campaign-types";
 import {
   listMarketingTemplates,
@@ -32,6 +34,7 @@ import {
   getMarketingFooterSettings,
   saveMarketingFooterSettings,
   recordCampaignAuditLog,
+  unlockCampaignSend,
 } from "./campaign-data-access";
 import {
   checkEmailSuppression,
@@ -1281,4 +1284,28 @@ export async function executeCampaignDeliveryAction(
     success: false,
     error: "발송 모드를 명시해야 합니다: 'SIMULATE' (안전 시뮬레이션) 또는 'LIVE' (실제 발송)",
   };
+}
+
+/**
+ * Unlocks a locked or dispatched marketing campaign for safe subsequent dispatch.
+ * Requires admin authorization, minimum written reason, and audit logging.
+ * Strictly guarantees that already-contacted recipients are never resent.
+ */
+export async function unlockCampaignSendAction(
+  campaignId: string,
+  input: UnlockCampaignSendInput
+): Promise<{ success: boolean; result?: UnlockCampaignSendResult; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const result = await unlockCampaignSend(campaignId, admin.email, input);
+    try {
+      revalidatePath("/admin/brand-marketing");
+    } catch {}
+    return { success: true, result };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || "Failed to unlock campaign send",
+    };
+  }
 }
