@@ -12,6 +12,8 @@ import {
   SampleRecipientPreview,
   TemplateFilterOptions,
   CampaignDeliveryExecutionResult,
+  CampaignStatus,
+  CampaignStats,
 } from "./campaign-types";
 import {
   MarketingFooterSettings,
@@ -31,7 +33,7 @@ import {
 import { DEFAULT_MARKETING_TEMPLATES, resolveTemplateId } from "./default-templates";
 import { compileImageTemplateToHtml } from "./image-template-compiler";
 import { personalizeEmail, validateSendReadyHtml } from "./personalization-engine";
-import { sendEmail, maskEmailAddress } from "@/lib/notifications/email";
+import { sendEmail, maskEmailAddress, isRecipientAllowlisted } from "@/lib/notifications/email";
 import {
   getMarketingTestAllowlist,
   isTestRecipientAllowlisted,
@@ -397,39 +399,96 @@ export async function listMarketingCampaigns(
       .order("created_at", { ascending: false });
 
     if (!error && Array.isArray(data) && data.length > 0) {
-      return data.map((d: any) => ({
-        id: d.id,
-        name: d.name,
-        purpose: d.purpose,
-        description: d.description,
-        language: d.language,
-        templateId: d.template_id,
-        templateVersion: d.template_version,
-        subjectOverride: d.subject_override || d.approval_snapshot?.subjectOverride || null,
-        previewText: d.preview_text || d.approval_snapshot?.previewText || d.filter_criteria?.previewText || null,
-        landingPageUrl: d.landing_page_url || d.approval_snapshot?.landingPageUrl || d.filter_criteria?.landingPageUrl || null,
-        footerStyle: (d.approval_snapshot?.footerStyle || d.filter_criteria?.footerStyle || "classic") as MarketingFooterStyle,
-        status: d.status,
-        approvalStatus: d.approval_status,
-        approvedBy: d.approved_by,
-        approvedAt: d.approved_at,
-        approvalSnapshot: d.approval_snapshot,
-        scheduledAt: d.scheduled_at,
-        isLiveModeEnabled: false, // ALWAYS false in V1
-        filterCriteria: d.filter_criteria || {},
-        customMessage: d.custom_message,
-        stats: d.stats || {
-          totalRecipients: 0,
-          sendableCount: 0,
-          excludedCount: 0,
-          testSendsCount: 0,
-          sentCount: 0,
-          deliveredCount: 0,
-          failedCount: 0,
-        },
-        createdAt: d.created_at,
-        updatedAt: d.updated_at,
-      }));
+      // Query recipient ledger summary to compute authoritative real delivery metrics
+      const { data: recipientRows } = await supabase
+        .from("marketing_campaign_recipients")
+        .select("campaign_id, status, provider_message_id");
+
+      const deliveryMap: Record<
+        string,
+        { realSent: number; realDelivered: number; realFailed: number; simCount: number }
+      > = {};
+
+      (recipientRows || []).forEach((r: any) => {
+        if (!deliveryMap[r.campaign_id]) {
+          deliveryMap[r.campaign_id] = { realSent: 0, realDelivered: 0, realFailed: 0, simCount: 0 };
+        }
+        const isReal = r.provider_message_id && !r.provider_message_id.startsWith("sim_");
+        if (isReal && (r.status === "SENT" || r.status === "DELIVERED")) {
+          deliveryMap[r.campaign_id].realSent++;
+        }
+        if (isReal && r.status === "DELIVERED") {
+          deliveryMap[r.campaign_id].realDelivered++;
+        }
+        if (r.status === "FAILED") {
+          deliveryMap[r.campaign_id].realFailed++;
+        }
+        if (r.provider_message_id && r.provider_message_id.startsWith("sim_")) {
+          deliveryMap[r.campaign_id].simCount++;
+        }
+      });
+
+      return data.map((d: any) => {
+        const deliv = deliveryMap[d.id] || { realSent: 0, realDelivered: 0, realFailed: 0, simCount: 0 };
+        const hasSimHistory = deliv.simCount > 0 || Boolean(d.stats?.simulationStats);
+        const isActuallySent = deliv.realSent > 0;
+
+        // Authoritative metric normalization:
+        // Real Sent and Delivered MUST be supported by genuine provider delivery records.
+        // If historical DB records have sentCount > 0 from simulation, normalize real counts to 0.
+        const realSentCount = isActuallySent ? deliv.realSent : 0;
+        const realDeliveredCount = isActuallySent ? deliv.realDelivered : 0;
+        const realFailedCount = isActuallySent ? deliv.realFailed : 0;
+
+        let resolvedStatus: CampaignStatus = d.status as CampaignStatus;
+        if (!isActuallySent && hasSimHistory && (d.status === "COMPLETED" || d.status === "APPROVED")) {
+          resolvedStatus = "SIMULATED";
+        }
+
+        const normalizedStats: CampaignStats = {
+          totalRecipients: d.stats?.totalRecipients || 0,
+          sendableCount: d.stats?.sendableCount || 0,
+          excludedCount: d.stats?.excludedCount || 0,
+          testSendsCount: d.stats?.testSendsCount || 0,
+          sentCount: realSentCount,
+          deliveredCount: realDeliveredCount,
+          failedCount: realFailedCount,
+          simulationStats: d.stats?.simulationStats || (deliv.simCount > 0 ? {
+            lastSimulatedAt: d.updated_at,
+            simulatedCount: deliv.simCount,
+            simulatedEligible: deliv.simCount,
+            simulatedSuppressed: 0,
+            simulatedFailed: 0,
+            simulatedBy: "historical-simulation",
+          } : undefined),
+        };
+
+        return {
+          id: d.id,
+          name: d.name,
+          purpose: d.purpose,
+          description: d.description,
+          language: d.language,
+          templateId: d.template_id,
+          templateVersion: d.template_version,
+          subjectOverride: d.subject_override || d.approval_snapshot?.subjectOverride || null,
+          previewText: d.preview_text || d.approval_snapshot?.previewText || d.filter_criteria?.previewText || null,
+          landingPageUrl: d.landing_page_url || d.approval_snapshot?.landingPageUrl || d.filter_criteria?.landingPageUrl || null,
+          footerStyle: (d.approval_snapshot?.footerStyle || d.filter_criteria?.footerStyle || "classic") as MarketingFooterStyle,
+          status: resolvedStatus,
+          approvalStatus: d.approval_status,
+          approvedBy: d.approved_by,
+          approvedAt: d.approved_at,
+          approvalSnapshot: d.approval_snapshot,
+          scheduledAt: d.scheduled_at,
+          isLiveModeEnabled: false, // ALWAYS false in V1
+          filterCriteria: d.filter_criteria || {},
+          customMessage: d.custom_message,
+          stats: normalizedStats,
+          createdAt: d.created_at,
+          updatedAt: d.updated_at,
+        };
+      });
     }
   } catch (err) {
     console.warn("[campaigns] DB read failed, falling back to memory store:", err);
@@ -997,6 +1056,47 @@ export async function getMarketingCampaignById(
     logs = memoryLogs.get(id) || [];
   }
 
+  // Authoritative normalization for single campaign fetch
+  if (campaign && recipients) {
+    let realSent = 0;
+    let realDelivered = 0;
+    let realFailed = 0;
+    let simCount = 0;
+
+    recipients.forEach((r) => {
+      const isReal = r.providerMessageId && !r.providerMessageId.startsWith("sim_");
+      if (isReal && (r.status === "SENT" || r.status === "DELIVERED")) realSent++;
+      if (isReal && r.status === "DELIVERED") realDelivered++;
+      if (r.status === "FAILED") realFailed++;
+      if (r.providerMessageId && r.providerMessageId.startsWith("sim_")) simCount++;
+    });
+
+    const isActuallySent = realSent > 0;
+    const hasSimHistory = simCount > 0 || Boolean(campaign.stats?.simulationStats);
+
+    if (!isActuallySent && hasSimHistory && (campaign.status === "COMPLETED" || campaign.status === "APPROVED")) {
+      campaign.status = "SIMULATED";
+    }
+
+    campaign.stats = {
+      totalRecipients: campaign.stats?.totalRecipients || recipients.length,
+      sendableCount: campaign.stats?.sendableCount || recipients.filter((r) => r.sendEligibility === "ELIGIBLE").length,
+      excludedCount: campaign.stats?.excludedCount || recipients.filter((r) => r.sendEligibility !== "ELIGIBLE").length,
+      testSendsCount: campaign.stats?.testSendsCount || 0,
+      sentCount: isActuallySent ? realSent : 0,
+      deliveredCount: isActuallySent ? realDelivered : 0,
+      failedCount: isActuallySent ? realFailed : 0,
+      simulationStats: campaign.stats?.simulationStats || (simCount > 0 ? {
+        lastSimulatedAt: campaign.updatedAt,
+        simulatedCount: simCount,
+        simulatedEligible: simCount,
+        simulatedSuppressed: 0,
+        simulatedFailed: 0,
+        simulatedBy: "historical-simulation",
+      } : undefined),
+    };
+  }
+
   return { campaign, recipients, logs };
 }
 
@@ -1223,7 +1323,7 @@ export async function runCampaignDryRun(
 
   // Sample previews (3-5 sample recipient records)
   const sampleCandidates = sendable.slice(0, 5);
-  const footerSettings = await getMarketingFooterSettings();
+  const footerSettings = await getMarketingFooterSettings(customClient);
   const existingCamp = await getMarketingCampaignById(campaignId, customClient);
   const camp = existingCamp.campaign;
   let tplHtml = "<p>안녕하세요, {{company_name}} {{contact_name}} 귀하. {{brand_name}} 입점을 제안드립니다.</p>";
@@ -1360,7 +1460,7 @@ export async function sendTestCampaignEmail(
   );
 
   // 4. Assemble with central marketing footer & real working test unsubscribe link
-  const footerSettings = await getMarketingFooterSettings();
+  const footerSettings = await getMarketingFooterSettings(customClient);
   const testUnsubUrl = buildUnsubscribeUrl(normalizedEmail, campaignId);
   const existingCamp = await getMarketingCampaignById(campaignId);
   const camp = existingCamp.campaign;
@@ -1449,7 +1549,7 @@ export async function approveMarketingCampaign(
     throw new Error(`Cannot approve campaign: No send-eligible recipients available (${recipients.length} selected, but all are excluded by policy).`);
   }
 
-  const footerSettings = await getMarketingFooterSettings();
+  const footerSettings = await getMarketingFooterSettings(customClient);
   const footerCheck = validateMarketingFooterCompleteness(footerSettings);
   if (!footerCheck.isValid) {
     throw new Error(`Cannot approve campaign: Marketing footer is incomplete. Missing: ${footerCheck.missingFields.join(", ")}. Please configure Brand Marketing Email Settings.`);
@@ -2169,7 +2269,7 @@ export async function executeCampaignDeliverySimulation(
   await supabase
     .from("marketing_campaigns")
     .update({
-      status: "APPROVED",
+      status: "SIMULATED",
       scheduled_at: null,
       stats: updatedStats,
       updated_at: nowIso,
@@ -2177,14 +2277,14 @@ export async function executeCampaignDeliverySimulation(
     .eq("id", campaignId);
 
   // Update in-memory cache
-  const approvedCamp: MarketingCampaign = {
+  const simulatedCamp: MarketingCampaign = {
     ...existing.campaign,
-    status: "APPROVED",
+    status: "SIMULATED",
     scheduledAt: null,
     stats: updatedStats,
     updatedAt: nowIso,
   };
-  memoryCampaigns.set(campaignId, approvedCamp);
+  memoryCampaigns.set(campaignId, simulatedCamp);
 
   // 5. Record immutable audit log
   recordCampaignAuditLog(
@@ -2206,7 +2306,7 @@ export async function executeCampaignDeliverySimulation(
   return {
     success: true,
     campaignId,
-    status: "APPROVED",
+    status: "SIMULATED",
     totalEvaluated: eligibleRecipients.length,
     totalSent: 0,
     totalDelivered: 0,
@@ -2216,6 +2316,280 @@ export async function executeCampaignDeliverySimulation(
     simulatedCount: eligibleRecipients.length,
     simulatedEligible,
     message: `안전 시뮬레이션 완료: 총 ${eligibleRecipients.length}명 대상 사전 검증 완료 (수신적격: ${simulatedEligible}명, 수신거부 차단: ${blockedSuppressed}명). LIVE_MODE가 비활성화되어 있으므로 실제 고객 메일 발송 및 실제 발송 카운트는 발생하지 않았습니다.`,
+  };
+}
+
+/**
+ * -----------------------------------------------------------------------------
+ * ACTUAL CAMPAIGN DELIVERY ENGINE (ADM-EMAIL-APP-004)
+ * Real approved-campaign delivery with immutable snapshot verification,
+ * fail-closed suppression checks, personalized content with central footer,
+ * provider API submission, and authoritative delivery ledger tracking.
+ * -----------------------------------------------------------------------------
+ */
+export interface RealDeliveryOptions {
+  mode: "LIVE";
+  /**
+   * Controlled internal test safety gate (Requirement 4):
+   * When true, only dispatches to explicitly approved internal test mailboxes.
+   */
+  internalTestOnly?: boolean;
+  approvedInternalRecipient?: string;
+}
+
+export async function executeCampaignRealDelivery(
+  campaignId: string,
+  adminEmail: string,
+  options: RealDeliveryOptions,
+  customClient?: SupabaseClient
+): Promise<CampaignDeliveryExecutionResult> {
+  const existing = await getMarketingCampaignById(campaignId, customClient);
+  if (!existing.campaign) {
+    throw new Error(`Campaign '${campaignId}' not found.`);
+  }
+
+  if (existing.campaign.approvalStatus !== "APPROVED") {
+    throw new Error(
+      `Cannot execute delivery: Campaign must be APPROVED first (current approval status: ${existing.campaign.approvalStatus}).`
+    );
+  }
+
+  if (existing.campaign.status === "SENDING") {
+    throw new Error("캠페인 발송이 이미 진행 중입니다. 중복 발송을 방지합니다.");
+  }
+
+  if (existing.campaign.status === "COMPLETED") {
+    throw new Error("이미 발송 완료된 캠페인입니다.");
+  }
+
+  // 1. LIVE_MODE SAFETY GATE (Rule 4 & Mandatory Invariant)
+  const isLiveGloballyEnabled = process.env.ENABLE_LIVE_MARKETING_CAMPAIGN_DISPATCH === "true";
+  if (!isLiveGloballyEnabled && !options?.internalTestOnly) {
+    throw new Error(
+      "Live delivery is not activated. (실제 고객 대량 발송(LIVE_MODE)이 비활성화되어 있습니다. 별도의 소유자(Owner) 승인 및 활성화가 필요합니다.)"
+    );
+  }
+
+  // Controlled Internal Test Mode validation
+  if (options?.internalTestOnly) {
+    if (!options.approvedInternalRecipient || !isRecipientAllowlisted(options.approvedInternalRecipient)) {
+      throw new Error(
+        `승인되지 않은 내부 테스트 수신자입니다 (${options?.approvedInternalRecipient}). 내부 허용 도메인 메일함만 발송 가능합니다.`
+      );
+    }
+  }
+
+  const supabase = await getClient(customClient);
+  const nowIso = new Date().toISOString();
+
+  // 2. Idempotency Lock: Set campaign status to SENDING
+  await supabase
+    .from("marketing_campaigns")
+    .update({ status: "SENDING", updated_at: nowIso })
+    .eq("id", campaignId);
+
+  // 3. Resolve eligible recipient targets
+  const recipients = existing.recipients || [];
+  let targets = recipients.filter(
+    (r) => r.sendEligibility === "ELIGIBLE" && r.status !== "SENT" && r.status !== "DELIVERED"
+  );
+
+  if (options?.internalTestOnly && options.approvedInternalRecipient) {
+    const targetEmail = options.approvedInternalRecipient.toLowerCase().trim();
+    targets = targets.filter((r) => r.recipientEmail.toLowerCase().trim() === targetEmail);
+    if (targets.length === 0) {
+      // Revert status from SENDING back to previous status
+      await supabase
+        .from("marketing_campaigns")
+        .update({ status: existing.campaign.status, updated_at: nowIso })
+        .eq("id", campaignId);
+      throw new Error(`지정된 내부 테스트 수신자(${options.approvedInternalRecipient})가 캠페인 적격 대상 목록에 존재하지 않습니다.`);
+    }
+  }
+
+  // 4. Resolve Template, Subject, and Footer Settings
+  let templateHtml = "<p>안녕하세요, {{company_name}} {{contact_name}} 귀하. {{brand_name}} 입점을 제안드립니다.</p>";
+  let templateSubject = existing.campaign.subjectOverride || "[K SELECT] {{company_name}}의 미국 뷰티 리테일 네트워크 진출을 제안드립니다";
+  let templatePlainText = existing.campaign.customMessage || "K SELECT NETWORK 파트너십 제안 안내";
+
+  if (existing.campaign.templateId) {
+    const tpls = await listMarketingTemplates({ status: "ALL" }, customClient);
+    const activeTpl = tpls.find((t) => t.id === existing.campaign?.templateId);
+    if (activeTpl) {
+      templateHtml = activeTpl.htmlContent;
+      templatePlainText = activeTpl.plainText || templatePlainText;
+      if (!existing.campaign.subjectOverride && activeTpl.subject) {
+        templateSubject = activeTpl.subject;
+      }
+    }
+  }
+
+  const footerSettings = await getMarketingFooterSettings(customClient);
+
+  let sentCount = 0;
+  let failedCount = 0;
+  let blockedSuppressed = 0;
+
+  // 5. Recipient-Level Processing & Dispatch
+  for (const r of targets) {
+    // Current suppression check (FAIL-CLOSED)
+    const supp = await checkEmailSuppression(r.recipientEmail, customClient);
+    if (supp.isSuppressed) {
+      blockedSuppressed++;
+      failedCount++;
+      try {
+        await supabase
+          .from("marketing_campaign_recipients")
+          .update({
+            send_eligibility: "EXCLUDED_SUPPRESSED",
+            exclusion_reason: `Pre-dispatch suppression blocked (${supp.reason || "SUPPRESSED"})`,
+            status: "FAILED",
+            error_message: "Pre-dispatch suppression list match",
+            updated_at: nowIso,
+          })
+          .eq("id", r.id);
+      } catch {}
+      continue;
+    }
+
+    // Personalization & Footer Assembly
+    const personalized = personalizeEmail(
+      templateSubject,
+      templateHtml,
+      templatePlainText,
+      {
+        companyName: r.companyNameKr || r.companyNameEn || "파트너사",
+        contactName: r.recipientName || "담당자",
+        brandName: r.brandName || "K-Select",
+        customMessage: r.customMessageOverride || existing.campaign.customMessage || undefined,
+      }
+    );
+
+    const unsubUrl = buildUnsubscribeUrl(r.recipientEmail, campaignId);
+    const assembledHtml = assembleEmailWithMarketingFooter(personalized.html, {
+      footerSettings,
+      language: existing.campaign.language || "ko",
+      unsubscribeUrl: unsubUrl,
+      previewText: existing.campaign.previewText || "",
+      landingPageUrl: existing.campaign.landingPageUrl || "https://www.kselectnetwork.com",
+      footerStyle: existing.campaign.footerStyle || "classic",
+    });
+
+    // Preflight validation on final assembled HTML
+    const preflight = validateSendReadyHtml(assembledHtml, personalized.subject, { isTestSend: false });
+    if (!preflight.isValid) {
+      failedCount++;
+      try {
+        await supabase
+          .from("marketing_campaign_recipients")
+          .update({
+            status: "FAILED",
+            error_message: "Preflight HTML validation failed",
+            updated_at: nowIso,
+          })
+          .eq("id", r.id);
+      } catch {}
+      continue;
+    }
+
+    // Provider Dispatch via Central Email Gateway
+    const sendRes = await sendEmail({
+      to: r.recipientEmail,
+      subject: personalized.subject,
+      text: personalized.plainText || "K SELECT Marketing",
+      html: assembledHtml,
+    });
+
+    if (sendRes.success && sendRes.messageId) {
+      sentCount++;
+      try {
+        await supabase
+          .from("marketing_campaign_recipients")
+          .update({
+            status: "SENT",
+            provider_message_id: sendRes.messageId,
+            sent_at: nowIso,
+            error_message: null,
+            updated_at: nowIso,
+          })
+          .eq("id", r.id);
+      } catch {}
+    } else {
+      failedCount++;
+      try {
+        await supabase
+          .from("marketing_campaign_recipients")
+          .update({
+            status: "FAILED",
+            error_message: sendRes.error || "Email provider rejected send",
+            updated_at: nowIso,
+          })
+          .eq("id", r.id);
+      } catch {}
+    }
+  }
+
+  // 6. Post-Dispatch State Resolution
+  let finalStatus: CampaignStatus = "SENT";
+  if (failedCount > 0 && sentCount > 0) finalStatus = "PARTIAL";
+  else if (failedCount > 0 && sentCount === 0) finalStatus = "FAILED";
+
+  const updatedStats: CampaignStats = {
+    ...(existing.campaign.stats || {
+      totalRecipients: 0,
+      sendableCount: 0,
+      excludedCount: 0,
+      testSendsCount: 0,
+      sentCount: 0,
+      deliveredCount: 0,
+      failedCount: 0,
+    }),
+    sentCount: (existing.campaign.stats?.sentCount || 0) + sentCount,
+    deliveredCount: existing.campaign.stats?.deliveredCount || 0, // Delivered remains 0 until delivery event confirmed
+    failedCount: (existing.campaign.stats?.failedCount || 0) + failedCount,
+  };
+
+  await supabase
+    .from("marketing_campaigns")
+    .update({
+      status: finalStatus,
+      scheduled_at: null,
+      stats: updatedStats,
+      updated_at: nowIso,
+    })
+    .eq("id", campaignId);
+
+  // In-memory cache
+  memoryCampaigns.set(campaignId, {
+    ...existing.campaign,
+    status: finalStatus,
+    scheduledAt: null,
+    stats: updatedStats,
+    updatedAt: nowIso,
+  });
+
+  // Record Audit Log
+  recordCampaignAuditLog(campaignId, "CAMPAIGN_DISPATCH_COMPLETED", true, {
+    mode: "LIVE",
+    internalTestOnly: Boolean(options?.internalTestOnly),
+    totalEvaluated: targets.length,
+    sentCount,
+    failedCount,
+    blockedSuppressed,
+    performedBy: adminEmail,
+  });
+
+  return {
+    success: true,
+    campaignId,
+    status: finalStatus,
+    totalEvaluated: targets.length,
+    totalSent: sentCount,
+    totalDelivered: 0,
+    totalBlockedSuppressed: blockedSuppressed,
+    totalFailed: failedCount,
+    isSimulated: false,
+    message: `실제 발송 완료: 총 ${sentCount}건 전송 접수 완료 (실패: ${failedCount}건, 수신거부 차단: ${blockedSuppressed}건). 전달(Delivered)은 프로바이더 웹훅 확인 후 갱신됩니다.`,
   };
 }
 
@@ -2235,12 +2609,26 @@ export async function processScheduledCampaigns(
     return { processedCount: 0, results: [] };
   }
 
+  // CRITICAL REQUIREMENT (ADM-EMAIL-APP-004):
+  // Check whether live sending is authorized.
+  // If LIVE_MODE is disabled, do NOT execute simulation and mark completed!
+  // Instead, record warning log and leave scheduled without unauthorized dispatch.
+  const isLiveGloballyEnabled = process.env.ENABLE_LIVE_MARKETING_CAMPAIGN_DISPATCH === "true";
+  if (!isLiveGloballyEnabled) {
+    console.warn(
+      "[campaigns:scheduler] Live delivery is not activated (ENABLE_LIVE_MARKETING_CAMPAIGN_DISPATCH !== 'true'). " +
+      "Skipping automatic dispatch of scheduled campaigns to preserve safety lock."
+    );
+    return { processedCount: 0, results: [] };
+  }
+
   const results: CampaignDeliveryExecutionResult[] = [];
   for (const c of dueCampaigns) {
     try {
-      const res = await executeCampaignDeliverySimulation(
+      const res = await executeCampaignRealDelivery(
         c.id,
         "system-scheduler@kselectnetwork.com",
+        { mode: "LIVE" },
         customClient
       );
       results.push(res);

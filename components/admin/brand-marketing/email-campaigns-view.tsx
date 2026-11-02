@@ -37,6 +37,8 @@ import {
   scheduleMarketingCampaignAction,
   cancelCampaignScheduleAction,
   executeCampaignDeliveryAction,
+  executeCampaignDryRunAction,
+  executeCampaignLiveDeliveryAction,
 } from "@/lib/brand-marketing/campaign-actions";
 import {
   parseAndValidateTestRecipients,
@@ -325,7 +327,9 @@ export function EmailCampaignsView({
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleInputValue, setScheduleInputValue] = useState("");
   const [isScheduling, setIsScheduling] = useState(false);
+  const [showSimulationModal, setShowSimulationModal] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(false);
   const [deliveryResult, setDeliveryResult] = useState<any>(null);
 
   // Notification Toast
@@ -1799,10 +1803,10 @@ export function EmailCampaignsView({
     setIsDispatching(true);
     setDeliveryResult(null);
     try {
-      const res = await executeCampaignDeliveryAction(editingCampaign.id, { mode: "SIMULATE" });
+      const res = await executeCampaignLiveDeliveryAction(editingCampaign.id);
       if (res.success && res.result) {
         setDeliveryResult(res.result);
-        showNotification("success", res.result.message || "캠페인 안전 발송 시뮬레이션이 완료되었습니다.");
+        showNotification("success", res.result.message || "캠페인 실제 발송이 완료되었습니다.");
         const updated = await getMarketingCampaignByIdAction(editingCampaign.id);
         if (updated.success && updated.campaign) {
           setEditingCampaign(updated.campaign);
@@ -1816,6 +1820,31 @@ export function EmailCampaignsView({
       showNotification("error", err.message || "발송 실행 중 오류가 발생했습니다.");
     } finally {
       setIsDispatching(false);
+    }
+  };
+
+  const handleExecuteSimulation = async () => {
+    if (!editingCampaign?.id) return;
+    setIsSimulating(true);
+    setDeliveryResult(null);
+    try {
+      const res = await executeCampaignDryRunAction(editingCampaign.id);
+      if (res.success && res.result) {
+        setDeliveryResult(res.result);
+        showNotification("success", res.result.message || "캠페인 안전 발송 시뮬레이션(Dry Run)이 완료되었습니다.");
+        const updated = await getMarketingCampaignByIdAction(editingCampaign.id);
+        if (updated.success && updated.campaign) {
+          setEditingCampaign(updated.campaign);
+          if (updated.logs) setCampaignLogs(updated.logs);
+        }
+        refreshCampaignsAndTemplates();
+      } else {
+        showNotification("error", res.error || "시뮬레이션 실행 실패");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message || "시뮬레이션 실행 중 오류가 발생했습니다.");
+    } finally {
+      setIsSimulating(false);
     }
   };
 
@@ -1995,7 +2024,15 @@ export function EmailCampaignsView({
                         {c.subjectOverride || <span className="text-zinc-400 italic">Template Default</span>}
                       </td>
                       <td className="p-3">
-                        <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200">
+                        <span
+                          className={`font-mono text-[11px] px-2 py-0.5 rounded font-bold ${
+                            c.status === "SIMULATED"
+                              ? "bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-800"
+                              : c.status === "COMPLETED" || c.status === "SENT"
+                              ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300"
+                              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
+                          }`}
+                        >
                           {c.status}
                         </span>
                       </td>
@@ -2011,7 +2048,14 @@ export function EmailCampaignsView({
                         </span>
                       </td>
                       <td className="p-3 font-mono">{c.stats?.totalRecipients || 0}</td>
-                      <td className="p-3 font-mono text-blue-600 dark:text-blue-400">{c.stats?.sentCount || 0}</td>
+                      <td className="p-3 font-mono text-blue-600 dark:text-blue-400">
+                        <div>{c.stats?.sentCount || 0}</div>
+                        {c.stats?.simulationStats?.simulatedCount ? (
+                          <div className="text-[10px] text-purple-600 dark:text-purple-400 font-sans font-semibold">
+                            Sim: {c.stats.simulationStats.simulatedCount}
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="p-3 font-mono text-emerald-600 dark:text-emerald-400">{c.stats?.deliveredCount || 0}</td>
                       <td className="p-3 text-zinc-400 text-[11px] whitespace-nowrap">
                         {new Date(c.createdAt).toLocaleDateString()}
@@ -3902,10 +3946,12 @@ export function EmailCampaignsView({
                     </div>
                     <span
                       className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                        editingCampaign.status === "COMPLETED"
+                        editingCampaign.status === "COMPLETED" || editingCampaign.status === "SENT"
                           ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
                           : editingCampaign.status === "SCHEDULED"
                           ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+                          : editingCampaign.status === "SIMULATED"
+                          ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 border border-purple-300 dark:border-purple-700"
                           : editingCampaign.status === "SENDING"
                           ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 animate-pulse"
                           : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
@@ -4007,15 +4053,24 @@ export function EmailCampaignsView({
 
                   {/* Action Buttons */}
                   <div className="flex flex-wrap items-center gap-3 pt-1">
-                    {editingCampaign.status !== "COMPLETED" && (
+                    {editingCampaign.status !== "COMPLETED" && editingCampaign.status !== "SENT" && (
                       <>
                         <button
                           type="button"
                           onClick={() => setShowSendNowModal(true)}
-                          disabled={isDispatching}
+                          disabled={isDispatching || isSimulating}
                           className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
                         >
-                          <span>🚀</span> Send Now
+                          <span>🚀</span> Send Now (실제 발송)
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowSimulationModal(true)}
+                          disabled={isDispatching || isSimulating}
+                          className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                          <span>🔬</span> 안전 시뮬레이션 (Dry Run)
                         </button>
 
                         <button
@@ -5044,7 +5099,7 @@ export function EmailCampaignsView({
   };
 
   // --------------------------------------------------------------------------
-  // RENDER: SEND NOW FINAL CONFIRMATION MODAL (ADM-EMAIL-APP-002)
+  // RENDER: SEND NOW CONFIRMATION MODAL (ADM-EMAIL-APP-004)
   // --------------------------------------------------------------------------
   const renderSendNowModal = () => {
     if (!showSendNowModal || !editingCampaign) return null;
@@ -5058,7 +5113,7 @@ export function EmailCampaignsView({
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-lg w-full p-5 space-y-4 shadow-2xl">
           <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-              <span>🚀</span> Confirm Campaign Send Now
+              <span>🚀</span> Confirm Campaign Live Send (실제 발송)
             </h3>
             <button
               type="button"
@@ -5070,14 +5125,13 @@ export function EmailCampaignsView({
           </div>
 
           <div className="space-y-3 text-xs">
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+            <div className="p-3 bg-red-50 dark:bg-red-950/40 rounded border border-red-200 dark:border-red-800 text-red-900 dark:text-red-200">
               <div className="font-bold flex items-center gap-1 mb-1 text-xs">
-                <span>🛡️</span> LIVE_MODE OFF — SIMULATION ONLY (Safety Lock Active)
+                <span>⚠️</span> ATTENTION: LIVE CAMPAIGN DELIVERY ATTEMPT
               </div>
               <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">
-                현재 시스템 정책상 실제 고객 대상 외부 메일 발송이 안전하게 차단되어 있습니다.
-                실행 시 발송 전 수신적격 및 수신거부 사전 필터링 시뮬레이션만 수행되며,
-                <strong>실제 고객 메일 발송 및 실제 발송 카운트(Sent / Delivered)는 0으로 유지됩니다.</strong>
+                실제 수신자에게 이메일을 전송합니다. LIVE_MODE 안전 잠금이 활성화되어 있는 경우,
+                <strong>본 작업은 시뮬레이션으로 대체 실행되지 않으며 서버 안전 잠금에 의해 즉시 차단 처리됩니다.</strong>
               </p>
             </div>
 
@@ -5107,14 +5161,14 @@ export function EmailCampaignsView({
                   <strong className="font-mono text-rose-600 dark:text-rose-400">{excluded}건</strong>
                 </div>
                 <div>
-                  <span className="text-zinc-500">발송 방식:</span>{" "}
-                  <strong className="font-mono text-blue-600 dark:text-blue-400">SIMULATE</strong>
+                  <span className="text-zinc-500">발송 모드:</span>{" "}
+                  <strong className="font-mono text-red-600 dark:text-red-400">LIVE (실제 발송)</strong>
                 </div>
               </div>
             </div>
 
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              * 발송 직전 마케팅 수신거부 목록(Suppression List)을 즉시 재검증하여, 승인 이후 수신거부된 주소는 발송에서 자동 차단됩니다.
+              * 안전 시뮬레이션을 실행하려면 &apos;닫기&apos; 후 &apos;안전 시뮬레이션 (Dry Run)&apos; 버튼을 이용하세요.
             </p>
           </div>
 
@@ -5125,7 +5179,7 @@ export function EmailCampaignsView({
               disabled={isDispatching}
               className="px-3 py-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 cursor-pointer"
             >
-              취소
+              닫기
             </button>
             <button
               type="button"
@@ -5136,7 +5190,92 @@ export function EmailCampaignsView({
               disabled={isDispatching}
               className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1"
             >
-              {isDispatching ? "발송 시뮬레이션 실행 중..." : "Confirm & Execute Send Now 🚀"}
+              {isDispatching ? "발송 시도 중..." : "Confirm & Attempt Live Send 🚀"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // --------------------------------------------------------------------------
+  // RENDER: DRY RUN / SIMULATION CONFIRMATION MODAL (ADM-EMAIL-APP-004)
+  // --------------------------------------------------------------------------
+  const renderSimulationModal = () => {
+    if (!showSimulationModal || !editingCampaign) return null;
+
+    const eligible = editingCampaign.approvalSnapshot?.sendableCount ?? consentEligibilityEstimate.eligible;
+    const totalRecipients = editingCampaign.stats?.totalRecipients ?? selectedRecipientItems.length;
+
+    return (
+      <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-lg w-full p-5 space-y-4 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+              <span>🔬</span> Confirm Campaign Safety Simulation (Dry Run)
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowSimulationModal(false)}
+              className="text-zinc-400 hover:text-zinc-600 text-sm font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-3 text-xs">
+            <div className="p-3 bg-purple-50 dark:bg-purple-950/40 rounded border border-purple-200 dark:border-purple-800 text-purple-900 dark:text-purple-200">
+              <div className="font-bold flex items-center gap-1 mb-1 text-xs">
+                <span>🛡️</span> SAFE DRY RUN — ZERO EXTERNAL DISPATCHES
+              </div>
+              <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+                승인된 전체 대상을 대상으로 실시간 수신거부 목록(Suppression List) 대조, 이메일 주소 유효성 및 템플릿 변수를 사전 검증합니다.
+                <strong>외부 고객 이메일 발송은 전혀 발생하지 않으며, 실제 발송 원장 기록(Sent / Delivered)은 0으로 안전하게 유지됩니다.</strong>
+              </p>
+            </div>
+
+            <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded border border-zinc-200 dark:border-zinc-700 space-y-2 text-xs">
+              <div className="font-bold text-zinc-900 dark:text-zinc-100">시뮬레이션 요약:</div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div>
+                  <span className="text-zinc-500">캠페인명:</span>{" "}
+                  <strong className="text-zinc-900 dark:text-zinc-100 truncate block">{editingCampaign.name}</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">검증 대상 수:</span>{" "}
+                  <strong className="font-mono text-zinc-900 dark:text-zinc-100">{totalRecipients}건</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">예상 적격 대상:</span>{" "}
+                  <strong className="font-mono text-emerald-600 dark:text-emerald-400">{eligible}건</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">발송 모드:</span>{" "}
+                  <strong className="font-mono text-purple-600 dark:text-purple-400">SIMULATE (Dry Run)</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setShowSimulationModal(false)}
+              disabled={isSimulating}
+              className="px-3 py-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 cursor-pointer"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                await handleExecuteSimulation();
+                setShowSimulationModal(false);
+              }}
+              disabled={isSimulating}
+              className="px-4 py-2 rounded bg-purple-600 text-white hover:bg-purple-700 cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1"
+            >
+              {isSimulating ? "시뮬레이션 실행 중..." : "Execute Simulation (Dry Run) 🔬"}
             </button>
           </div>
         </div>
@@ -5186,6 +5325,7 @@ export function EmailCampaignsView({
       {renderUnsavedChangesModal()}
       {renderScheduleModal()}
       {renderSendNowModal()}
+      {renderSimulationModal()}
       <DesignerGuideModal isOpen={showGuideModal} onClose={() => setShowGuideModal(false)} />
     </div>
   );

@@ -203,7 +203,8 @@ describe("ADM-EMAIL-APP-003: Simulated vs Actual Campaign Delivery Integrity", (
     expect(res.simulatedEligible).toBe(2);
 
     // Requirement 11: Campaign status remains APPROVED (never COMPLETED by simulation)
-    expect(mockCampaignRecord.status).toBe("APPROVED");
+    expect(mockCampaignRecord.status).toBe("SIMULATED");
+    expect(mockCampaignRecord.approval_status).toBe("APPROVED");
     expect(mockCampaignRecord.stats.sentCount).toBe(0);
     expect(mockCampaignRecord.stats.deliveredCount).toBe(0);
     expect(mockCampaignRecord.stats.simulationStats).toBeDefined();
@@ -332,7 +333,8 @@ describe("ADM-EMAIL-APP-003: Simulated vs Actual Campaign Delivery Integrity", (
     expect(run2.success).toBe(true);
     expect(run1.totalSent).toBe(0);
     expect(run2.totalSent).toBe(0);
-    expect(mockCampaignRecord.status).toBe("APPROVED");
+    expect(mockCampaignRecord.status).toBe("SIMULATED");
+    expect(mockCampaignRecord.approval_status).toBe("APPROVED");
     expect(mockCampaignRecord.stats.sentCount).toBe(0);
   });
 });

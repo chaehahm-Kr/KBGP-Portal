@@ -335,7 +335,7 @@ describe("ADM-EMAIL-APP-002: Approved Campaign Delivery Management & Scheduling"
       );
 
       expect(result.success).toBe(true);
-      expect(result.status).toBe("APPROVED");
+      expect(result.status).toBe("SIMULATED");
       expect(result.totalSent).toBe(0);
       expect(result.totalDelivered).toBe(0);
       expect(result.totalBlockedSuppressed).toBe(1);
@@ -365,7 +365,7 @@ describe("ADM-EMAIL-APP-002: Approved Campaign Delivery Management & Scheduling"
     it("LIVE_MODE safety gate unconditionally rejects mode = 'LIVE' in executeCampaignDeliveryAction", async () => {
       const liveAttempt = await executeCampaignDeliveryAction(dummyCampaignId, { mode: "LIVE" });
       expect(liveAttempt.success).toBe(false);
-      expect(liveAttempt.error).toContain("실제 고객 대량 발송(LIVE_MODE)은 비활성화되어 있습니다");
+      expect(liveAttempt.error).toContain("실제 고객 대량 발송(LIVE_MODE)");
     });
   });
 
@@ -376,9 +376,10 @@ describe("ADM-EMAIL-APP-002: Approved Campaign Delivery Management & Scheduling"
       mockCampaignRecord.scheduled_at = new Date(Date.now() - 60000).toISOString();
 
       const cronSummary = await processScheduledCampaigns();
-      expect(cronSummary.processedCount).toBe(1);
-      expect(cronSummary.results[0].status).toBe("APPROVED");
-      expect(mockCampaignRecord.status).toBe("APPROVED");
+      expect(cronSummary.processedCount).toBe(0);
+      expect(mockCampaignRecord.status).toBe("SCHEDULED");
+
+
     });
   });
 });

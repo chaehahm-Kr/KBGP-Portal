@@ -28,6 +28,7 @@ import {
   syncCampaignRecipients,
   updateCampaignSchedule,
   executeCampaignDeliverySimulation,
+  executeCampaignRealDelivery,
   getMarketingFooterSettings,
   saveMarketingFooterSettings,
   recordCampaignAuditLog,
@@ -1216,29 +1217,68 @@ export async function cancelCampaignScheduleAction(
 }
 
 /**
- * Executes delivery for an approved marketing campaign.
- * Enforces LIVE_MODE: FALSE safety gate, rejecting real customer dispatches.
- * Executes simulated delivery, ledger tracking, and state progression.
+ * Explicit Dry-Run / Simulation Action (ADM-EMAIL-APP-004 Requirement 2)
+ * Zero provider calls, zero real Sent / Delivered, no production ledger mutation.
+ */
+export async function executeCampaignDryRunAction(
+  campaignId: string
+): Promise<{ success: boolean; result?: CampaignDeliveryExecutionResult; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const result = await executeCampaignDeliverySimulation(campaignId, admin.email);
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+    return { success: true, result };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to execute simulation dry run" };
+  }
+}
+
+/**
+ * Actual Campaign Delivery Action (ADM-EMAIL-APP-004 Requirement 2 & 3)
+ * Never silently simulates. If live mode is disabled, unconditionally returns clear blocker.
+ */
+export async function executeCampaignLiveDeliveryAction(
+  campaignId: string,
+  options?: { internalTestOnly?: boolean; approvedInternalRecipient?: string }
+): Promise<{ success: boolean; result?: CampaignDeliveryExecutionResult; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+
+    const isLiveGloballyEnabled = process.env.ENABLE_LIVE_MARKETING_CAMPAIGN_DISPATCH === "true";
+    if (!isLiveGloballyEnabled && !options?.internalTestOnly) {
+      return {
+        success: false,
+        error: "Live delivery is not activated. (실제 고객 대량 발송(LIVE_MODE)이 비활성화되어 있습니다. 별도의 소유자(Owner) 승인 및 활성화가 필요합니다.)",
+      };
+    }
+
+    const result = await executeCampaignRealDelivery(campaignId, admin.email, {
+      mode: "LIVE",
+      internalTestOnly: options?.internalTestOnly,
+      approvedInternalRecipient: options?.approvedInternalRecipient,
+    });
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+    return { success: true, result };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to execute live campaign delivery" };
+  }
+}
+
+/**
+ * Dispatches campaign with strictly separated send modes (SIMULATE vs LIVE).
  */
 export async function executeCampaignDeliveryAction(
   campaignId: string,
   options?: { mode?: "SIMULATE" | "LIVE" }
 ): Promise<{ success: boolean; result?: CampaignDeliveryExecutionResult; error?: string }> {
-  try {
-    const admin = await requireCampaignAdmin();
-
-    // LIVE_MODE SAFETY GATE (Rule 7 Invariant)
-    if (options?.mode === "LIVE") {
-      return {
-        success: false,
-        error: "실제 고객 대량 발송(LIVE_MODE)은 비활성화되어 있습니다 (정책 및 DB 안전 잠금). 소유자의 별도 승인 및 라이브 발송 인프라 활성화 후 사용 가능합니다.",
-      };
-    }
-
-    const result = await executeCampaignDeliverySimulation(campaignId, admin.email);
-    try { revalidatePath("/admin/brand-marketing"); } catch {}
-    return { success: true, result };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to execute campaign delivery" };
+  if (options?.mode === "LIVE") {
+    return executeCampaignLiveDeliveryAction(campaignId);
   }
+  if (options?.mode === "SIMULATE") {
+    return executeCampaignDryRunAction(campaignId);
+  }
+  return {
+    success: false,
+    error: "발송 모드를 명시해야 합니다: 'SIMULATE' (안전 시뮬레이션) 또는 'LIVE' (실제 발송)",
+  };
 }

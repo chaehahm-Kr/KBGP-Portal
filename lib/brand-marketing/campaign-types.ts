@@ -11,10 +11,14 @@ export type CampaignStatus =
   | "TESTING"
   | "READY_FOR_APPROVAL"
   | "APPROVED"
+  | "SIMULATED"
   | "SCHEDULED"
   | "SENDING"
+  | "SENT"
   | "PAUSED"
   | "COMPLETED"
+  | "PARTIAL"
+  | "FAILED"
   | "CANCELLED";
 
 export type CampaignApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "INVALIDATED";
