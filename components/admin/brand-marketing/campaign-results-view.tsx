@@ -13,6 +13,7 @@ interface CampaignOption {
   status: string;
   language: "ko" | "en";
   createdAt: string;
+  isLiveModeEnabled?: boolean;
 }
 
 interface CampaignResultsViewProps {

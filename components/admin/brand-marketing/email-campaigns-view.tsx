@@ -40,6 +40,8 @@ import {
   executeCampaignDryRunAction,
   executeCampaignLiveDeliveryAction,
   unlockCampaignSendAction,
+  activateCampaignLiveModeAction,
+  deactivateCampaignLiveModeAction,
 } from "@/lib/brand-marketing/campaign-actions";
 import {
   parseAndValidateTestRecipients,
@@ -338,9 +340,21 @@ export function EmailCampaignsView({
   const [unlockReason, setUnlockReason] = useState("");
   const [isUnlocking, setIsUnlocking] = useState(false);
 
-  // Controlled Internal Test Send Selection (ADM-EMAIL-APP-007)
-  const [sendNowTargetMode, setSendNowTargetMode] = useState<"FULL" | "INTERNAL_TEST">("FULL");
-  const [selectedInternalRecipient, setSelectedInternalRecipient] = useState<string>("");
+  // Two-Mode Campaign Delivery (ADM-EMAIL-APP-008)
+  const [deliveryModeTab, setDeliveryModeTab] = useState<"SIMULATION" | "LIVE">("SIMULATION");
+  const [showLiveActivationModal, setShowLiveActivationModal] = useState(false);
+  const [liveActivationPhrase, setLiveActivationPhrase] = useState("");
+  const [liveActivationReason, setLiveActivationReason] = useState("");
+  const [isActivatingLive, setIsActivatingLive] = useState(false);
+
+  useEffect(() => {
+    if (editingCampaign) {
+      const isLive = Boolean(
+        editingCampaign.isLiveModeEnabled || editingCampaign.stats?.isLiveModeEnabled
+      );
+      setDeliveryModeTab(isLive ? "LIVE" : "SIMULATION");
+    }
+  }, [editingCampaign?.id, editingCampaign?.isLiveModeEnabled, editingCampaign?.stats?.isLiveModeEnabled]);
 
   // Notification Toast
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -1808,12 +1822,12 @@ export function EmailCampaignsView({
     }
   };
 
-  const handleExecuteSendNow = async (options?: { internalTestOnly?: boolean; approvedInternalRecipient?: string }) => {
+  const handleExecuteSendNow = async () => {
     if (!editingCampaign?.id) return;
     setIsDispatching(true);
     setDeliveryResult(null);
     try {
-      const res = await executeCampaignLiveDeliveryAction(editingCampaign.id, options);
+      const res = await executeCampaignLiveDeliveryAction(editingCampaign.id);
       if (res.success && res.result) {
         setDeliveryResult(res.result);
         showNotification("success", res.result.message || "캠페인 실제 발송이 완료되었습니다.");
@@ -1830,6 +1844,65 @@ export function EmailCampaignsView({
       showNotification("error", err.message || "발송 실행 중 오류가 발생했습니다.");
     } finally {
       setIsDispatching(false);
+    }
+  };
+
+  const handleActivateLiveMode = async () => {
+    if (!editingCampaign?.id) return;
+    if (liveActivationPhrase.trim() !== "ACTIVATE LIVE") {
+      showNotification("error", "확인 문구 'ACTIVATE LIVE'를 정확히 입력해야 합니다.");
+      return;
+    }
+    setIsActivatingLive(true);
+    try {
+      const res = await activateCampaignLiveModeAction(editingCampaign.id, {
+        confirmationPhrase: liveActivationPhrase.trim(),
+        reason: liveActivationReason.trim() || undefined,
+      });
+      if (res.success && res.result) {
+        showNotification(
+          "success",
+          `LIVE 모드가 활성화되었습니다. (${res.result.eligibleRecipients}명 실제 발송 준비 완료)`
+        );
+        setShowLiveActivationModal(false);
+        setLiveActivationPhrase("");
+        setLiveActivationReason("");
+        setDeliveryModeTab("LIVE");
+        const updated = await getMarketingCampaignByIdAction(editingCampaign.id);
+        if (updated.success && updated.campaign) {
+          setEditingCampaign(updated.campaign);
+          if (updated.logs) setCampaignLogs(updated.logs);
+        }
+        refreshCampaignsAndTemplates();
+      } else {
+        showNotification("error", res.error || "LIVE 모드 활성화 실패");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message || "LIVE 모드 활성화 중 오류가 발생했습니다.");
+    } finally {
+      setIsActivatingLive(false);
+    }
+  };
+
+  const handleDeactivateLiveMode = async () => {
+    if (!editingCampaign?.id) return;
+    if (!confirm("LIVE 모드를 비활성화하고 안전 시뮬레이션 모드로 전환하시겠습니까?")) return;
+    try {
+      const res = await deactivateCampaignLiveModeAction(editingCampaign.id);
+      if (res.success) {
+        showNotification("success", "LIVE 모드가 비활성화되었습니다. (시뮬레이션 모드로 전환)");
+        setDeliveryModeTab("SIMULATION");
+        const updated = await getMarketingCampaignByIdAction(editingCampaign.id);
+        if (updated.success && updated.campaign) {
+          setEditingCampaign(updated.campaign);
+          if (updated.logs) setCampaignLogs(updated.logs);
+        }
+        refreshCampaignsAndTemplates();
+      } else {
+        showNotification("error", res.error || "LIVE 모드 비활성화 실패");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message || "LIVE 모드 비활성화 중 오류 발생");
     }
   };
 
@@ -3958,38 +4031,21 @@ export function EmailCampaignsView({
                 </div>
               </div>
 
-              {/* Delivery Management Card (ADM-EMAIL-APP-002 / ADM-EMAIL-APP-007) */}
+              {/* Delivery Management Card (ADM-EMAIL-APP-002 / ADM-EMAIL-APP-008) */}
               {(editingCampaign.approvalStatus === "APPROVED" ||
                 editingCampaign.status === "SENDING" ||
                 editingCampaign.status === "SIMULATED" ||
                 editingCampaign.status === "SENT" ||
                 editingCampaign.status === "COMPLETED") && (
                 <div className="p-4 rounded-lg bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 space-y-4 text-xs">
-                  {/* Prominent Safety Banner (ADM-EMAIL-APP-003) */}
-                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base shrink-0">🛡️</span>
-                      <div>
-                        <span className="font-bold text-amber-800 dark:text-amber-200">
-                          LIVE_MODE OFF — SIMULATION ONLY
-                        </span>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                          실제 고객 메일 발송이 안전하게 차단되어 있습니다. 시뮬레이션 실행은 실제 Sent / Delivered 지표를 증가시키지 않습니다.
-                        </p>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800 shrink-0">
-                      SAFETY LOCK ACTIVE
-                    </span>
-                  </div>
-
+                  {/* Delivery Header */}
                   <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-900 pb-2">
                     <div>
                       <h4 className="font-bold text-blue-950 dark:text-blue-200 text-sm">
                         Delivery Management &amp; Scheduling
                       </h4>
                       <p className="text-[11px] text-blue-700 dark:text-blue-300">
-                        승인된 캠페인의 안전 발송 및 예약 스케줄을 관리합니다.
+                        승인된 캠페인의 안전 발송 모드(시뮬레이션 / LIVE) 및 스케줄을 관리합니다.
                       </p>
                     </div>
                     <span
@@ -4009,300 +4065,422 @@ export function EmailCampaignsView({
                     </span>
                   </div>
 
-                  {/* Actual Real Delivery Metrics (ADM-EMAIL-APP-003) */}
-                  <div>
-                    <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
-                      Actual Live Delivery Ledger (실제 발송 원장 기록)
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
-                        <div className="text-[10px] text-zinc-500 uppercase font-semibold">Approved Recipients</div>
-                        <div className="text-base font-bold font-mono text-zinc-900 dark:text-zinc-100 mt-0.5">
-                          {editingCampaign.approvalSnapshot?.sendableCount ?? editingCampaign.stats?.sendableCount ?? 0}
-                        </div>
-                      </div>
-                      <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
-                        <div className="text-[10px] text-zinc-500 uppercase font-semibold">Real Sent (Live)</div>
-                        <div className="text-base font-bold font-mono text-blue-600 dark:text-blue-400 mt-0.5">
-                          {editingCampaign.stats?.sentCount ?? 0}
-                        </div>
-                      </div>
-                      <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
-                        <div className="text-[10px] text-zinc-500 uppercase font-semibold">Real Delivered (Live)</div>
-                        <div className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-                          {editingCampaign.stats?.deliveredCount ?? 0}
-                        </div>
-                      </div>
-                      <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
-                        <div className="text-[10px] text-zinc-500 uppercase font-semibold">Real Failed (Live)</div>
-                        <div className="text-base font-bold font-mono text-rose-600 dark:text-rose-400 mt-0.5">
-                          {editingCampaign.stats?.failedCount ?? 0}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Simulation Status Breakdown (if simulated) */}
-                  {editingCampaign.stats?.simulationStats && (
-                    <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded border border-zinc-200 dark:border-zinc-800 space-y-1.5 text-xs">
-                      <div className="font-bold text-zinc-900 dark:text-zinc-100 flex items-center justify-between">
-                        <span className="flex items-center gap-1.5">
-                          <span>🔬</span> Simulation Evidence (사전 안전 시뮬레이션 결과):
-                        </span>
-                        <span className="text-[10px] font-mono text-zinc-500">
-                          {editingCampaign.stats.simulationStats.lastSimulatedAt
-                            ? new Date(editingCampaign.stats.simulationStats.lastSimulatedAt).toLocaleString()
-                            : "N/A"}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-[11px] pt-1">
-                        <div className="p-2 bg-white dark:bg-zinc-800 rounded border border-zinc-100 dark:border-zinc-700">
-                          <span className="text-zinc-500 block text-[10px]">Evaluated:</span>
-                          <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100">
-                            {editingCampaign.stats.simulationStats.simulatedCount}건
-                          </span>
-                        </div>
-                        <div className="p-2 bg-white dark:bg-zinc-800 rounded border border-zinc-100 dark:border-zinc-700">
-                          <span className="text-zinc-500 block text-[10px]">Pre-dispatch Eligible:</span>
-                          <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                            {editingCampaign.stats.simulationStats.simulatedEligible}건
-                          </span>
-                        </div>
-                        <div className="p-2 bg-white dark:bg-zinc-800 rounded border border-zinc-100 dark:border-zinc-700">
-                          <span className="text-zinc-500 block text-[10px]">Suppression Filtered:</span>
-                          <span className="font-bold font-mono text-amber-600 dark:text-amber-400">
-                            {editingCampaign.stats.simulationStats.simulatedSuppressed}건
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Scheduled Info if SCHEDULED */}
-                  {editingCampaign.scheduledAt && (
-                    <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-purple-200 dark:border-purple-800 text-[11px] space-y-1">
-                      <div className="font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
-                        <span>⏰</span> Scheduled Send Information:
-                      </div>
-                      <div className="text-zinc-700 dark:text-zinc-300">
-                        • Local Time:{" "}
-                        <span className="font-mono font-semibold">
-                          {new Date(editingCampaign.scheduledAt).toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="text-zinc-700 dark:text-zinc-300">
-                        • KST Time:{" "}
-                        <span className="font-mono font-semibold">
-                          {new Date(editingCampaign.scheduledAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Send Lock & Safe Unlock Status (ADM-EMAIL-APP-006 / ADM-EMAIL-APP-007) */}
+                  {/* TWO-MODE SELECTOR TABS (ADM-EMAIL-APP-008) */}
                   {(() => {
-                    const isStaleSending =
-                      editingCampaign.status === "SENDING" &&
-                      (!isDispatching &&
-                        Boolean(editingCampaign.updatedAt) &&
-                        Date.now() - new Date(editingCampaign.updatedAt).getTime() >= 5 * 60 * 1000);
-
-                    const isActivelyDispatching =
-                      isDispatching ||
-                      (editingCampaign.status === "SENDING" && !isStaleSending);
-
-                    const isSendLocked =
-                      editingCampaign.status === "SENT" ||
-                      editingCampaign.status === "COMPLETED" ||
-                      editingCampaign.status === "PARTIAL" ||
-                      editingCampaign.status === "SENDING" ||
-                      editingCampaign.status === "SIMULATED" ||
-                      Boolean(editingCampaign.stats?.isSendLocked);
-
-                    const latestUnlock = editingCampaign.stats?.unlockHistory?.slice(-1)[0];
-                    const isCurrentlyUnlocked = editingCampaign.status === "APPROVED" && Boolean(latestUnlock);
-
-                    const totalSendable =
-                      editingCampaign.approvalSnapshot?.sendableCount ??
-                      editingCampaign.stats?.sendableCount ??
-                      selectedRecipientItems.filter((r) => r.isSendable).length;
-                    const alreadySent = editingCampaign.stats?.sentCount ?? 0;
-                    const unsentCount = Math.max(0, totalSendable - alreadySent);
+                    const isLiveActive = Boolean(
+                      editingCampaign.isLiveModeEnabled || editingCampaign.stats?.isLiveModeEnabled
+                    );
 
                     return (
                       <div className="space-y-3">
-                        {/* ⚠️ Stale Sending Recovery Notice (ADM-EMAIL-APP-007) */}
-                        {isStaleSending && (
-                          <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 rounded-lg border border-rose-300 dark:border-rose-800 text-xs space-y-1.5">
-                            <div className="font-bold text-rose-800 dark:text-rose-200 flex items-center gap-1.5">
-                              <span>⚠️</span> 비정상 발송 중단 감지 (Stale SENDING State)
-                            </div>
-                            <p className="text-[11px] text-rose-700 dark:text-rose-300 leading-relaxed">
-                              이전 발송 프로세스가 정상 완료되지 못하고 중단되었습니다 (최종 갱신:{" "}
-                              {editingCampaign.updatedAt ? new Date(editingCampaign.updatedAt).toLocaleString() : "N/A"}).
-                              현재 실행 중인 백그라운드 작업이 없으므로, 관리자 잠금 해제(Unlock Send)를 실행하여 캠페인을 안전한 승인 상태(APPROVED)로 복구하고 미발송 적격 대상({unsentCount}명)에게 발송할 수 있습니다.
-                            </p>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                          <button
+                            type="button"
+                            onClick={() => setDeliveryModeTab("SIMULATION")}
+                            className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
+                              deliveryModeTab === "SIMULATION"
+                                ? "bg-purple-600 text-white shadow-xs"
+                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200"
+                            }`}
+                          >
+                            <span>🔬</span> 1. SIMULATION Mode (안전 시뮬레이션)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeliveryModeTab("LIVE")}
+                            className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
+                              deliveryModeTab === "LIVE"
+                                ? "bg-red-600 text-white shadow-xs"
+                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200"
+                            }`}
+                          >
+                            <span>🚀</span> 2. LIVE Mode (실제 고객 발송)
+                            {isLiveActive ? (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            ) : (
+                              <span className="text-[10px] px-1 py-0.2 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 font-mono">
+                                Inactive
+                              </span>
+                            )}
+                          </button>
+                        </div>
 
-                        {/* 🔒 Send Locked Banner */}
-                        {isSendLocked && (
-                          <div className="p-4 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800 space-y-2.5">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                              <div className="flex items-start gap-2.5">
-                                <span className="text-xl">🔒</span>
+                        {/* MODE 1: SIMULATION TAB CONTENT */}
+                        {deliveryModeTab === "SIMULATION" && (
+                          <div className="space-y-3">
+                            <div className="p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="text-base shrink-0">🔬</span>
                                 <div>
-                                  <div className="text-xs font-bold text-amber-900 dark:text-amber-100 flex items-center gap-2">
-                                    <span>Send Locked (발송 잠금 — 중복 발송 방지 활성)</span>
-                                    <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200 font-bold">
-                                      STATUS: {editingCampaign.status}
-                                    </span>
-                                  </div>
-                                  <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
-                                    {isStaleSending
-                                      ? "발송 프로세스가 중단된 상태입니다. 아래 'Unlock Send (비정상 중단 복구)'를 실행하여 안전하게 복구할 수 있습니다."
-                                      : "본 캠페인은 이미 발송 처리되었거나 완료 상태입니다. 동일 수신자에 대한 실수나 중복 발송을 방지하기 위해 Send Now가 자동으로 잠겨 있습니다."}
+                                  <span className="font-bold text-purple-900 dark:text-purple-200">
+                                    SIMULATION MODE (Dry Run)
+                                  </span>
+                                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
+                                    실제 고객에게 이메일이 전송되지 않는 무위험 사전 검증 모드입니다. 수신자 자격, 필터링, 푸터 주입을 안전하게 검증합니다.
                                   </p>
                                 </div>
                               </div>
-                              {/* Admin Unlock Send Button */}
-                              <button
-                                type="button"
-                                onClick={() => setShowUnlockModal(true)}
-                                disabled={isActivelyDispatching}
-                                className={'px-3.5 py-2 rounded font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5 shrink-0 self-start sm:self-auto ' + (isStaleSending ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse' : 'bg-amber-600 hover:bg-amber-700 text-white')}
-                                title={
-                                  isStaleSending
-                                    ? "비정상 중단된 발송 상태를 복구하고 미발송 대상 발송을 허용합니다."
-                                    : "관리자 권한 및 사유 입력을 통해 미발송 대상에 대한 발송 잠금을 해제합니다."
-                                }
-                              >
-                                <span>🔓</span> {isStaleSending ? "Unlock Send (비정상 중단 복구)" : "Unlock Send (미발송 대상 잠금 해제)"}
-                              </button>
+                              <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border border-purple-300 dark:border-purple-700 shrink-0">
+                                ZERO EMAILS DISPATCHED
+                              </span>
                             </div>
 
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-2 border-t border-amber-200/70 dark:border-amber-800/60 text-amber-900 dark:text-amber-200">
-                              <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
-                                <span className="text-zinc-500 block text-[10px]">발송 완료 (보호 대상):</span>
-                                <span className="font-bold font-mono text-emerald-700 dark:text-emerald-400">
-                                  {editingCampaign.stats?.sentCount ?? 0}건 (재발송 불가)
-                                </span>
+                            {/* Simulation Evidence */}
+                            {editingCampaign.stats?.simulationStats && (
+                              <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded border border-zinc-200 dark:border-zinc-800 space-y-1.5 text-xs">
+                                <div className="font-bold text-zinc-900 dark:text-zinc-100 flex items-center justify-between">
+                                  <span className="flex items-center gap-1.5">
+                                    <span>🔬</span> Simulation Evidence (사전 안전 시뮬레이션 결과):
+                                  </span>
+                                  <span className="text-[10px] font-mono text-zinc-500">
+                                    {editingCampaign.stats.simulationStats.lastSimulatedAt
+                                      ? new Date(editingCampaign.stats.simulationStats.lastSimulatedAt).toLocaleString()
+                                      : "N/A"}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 text-[11px] pt-1">
+                                  <div className="p-2 bg-white dark:bg-zinc-800 rounded border border-zinc-100 dark:border-zinc-700">
+                                    <span className="text-zinc-500 block text-[10px]">Evaluated:</span>
+                                    <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100">
+                                      {editingCampaign.stats.simulationStats.simulatedCount}건
+                                    </span>
+                                  </div>
+                                  <div className="p-2 bg-white dark:bg-zinc-800 rounded border border-zinc-100 dark:border-zinc-700">
+                                    <span className="text-zinc-500 block text-[10px]">Pre-dispatch Eligible:</span>
+                                    <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                                      {editingCampaign.stats.simulationStats.simulatedEligible}건
+                                    </span>
+                                  </div>
+                                  <div className="p-2 bg-white dark:bg-zinc-800 rounded border border-zinc-100 dark:border-zinc-700">
+                                    <span className="text-zinc-500 block text-[10px]">Suppression Filtered:</span>
+                                    <span className="font-bold font-mono text-amber-600 dark:text-amber-400">
+                                      {editingCampaign.stats.simulationStats.simulatedSuppressed}건
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
-                                <span className="text-zinc-500 block text-[10px]">미발송 적격 대상:</span>
-                                <span className="font-bold font-mono text-blue-700 dark:text-blue-400">
-                                  {unsentCount}건 (해제 시 발송 가능)
-                                </span>
-                              </div>
-                              <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
-                                <span className="text-zinc-500 block text-[10px]">중복 발송 방지 보장:</span>
-                                <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                                  STRICT FAIL-SAFE
-                                </span>
-                              </div>
-                              <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
-                                <span className="text-zinc-500 block text-[10px]">잠금 해제 요건:</span>
-                                <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                                  관리자 권한 + 사유
-                                </span>
-                              </div>
+                            )}
+
+                            <div className="flex flex-wrap items-center gap-3 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setShowSimulationModal(true)}
+                                disabled={isDispatching || isSimulating}
+                                className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                              >
+                                <span>🔬</span> 안전 시뮬레이션 (Dry Run)
+                              </button>
                             </div>
                           </div>
                         )}
 
-                        {/* 🔓 Send Unlocked Confirmation Banner */}
-                        {isCurrentlyUnlocked && (
-                          <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 rounded-lg border border-blue-200 dark:border-blue-800 space-y-1.5 text-xs text-blue-900 dark:text-blue-200">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="text-base">🔓</span>
-                                <div>
-                                  <span className="font-bold text-xs">Send Unlocked (관리자 발송 잠금 해제됨)</span>
-                                  <span className="text-[11px] text-blue-700 dark:text-blue-300 block">
-                                    관리자({latestUnlock?.unlockedBy})에 의해 잠금 해제되었습니다. 이미 발송된 수신자({editingCampaign.stats?.sentCount ?? 0}명)는 완전히 건너뛰며, 오직 미발송 대상({unsentCount}명)에게만 발송됩니다.
+                        {/* MODE 2: LIVE TAB CONTENT */}
+                        {deliveryModeTab === "LIVE" && (
+                          <div className="space-y-3">
+                            {/* Live Active vs Inactive Banner */}
+                            {isLiveActive ? (
+                              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-base shrink-0">🔴</span>
+                                  <div>
+                                    <div className="font-bold text-red-900 dark:text-red-200 flex items-center gap-2">
+                                      <span>LIVE MODE ACTIVE — REAL DISPATCH AUTHORIZED</span>
+                                      <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300 font-bold">
+                                        LIVE READY
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
+                                      관리자({editingCampaign.stats?.liveActivatedBy || "Admin"})에 의해 실제 발송이 승인되었습니다
+                                      {editingCampaign.stats?.liveActivatedAt ? ` (${new Date(editingCampaign.stats.liveActivatedAt).toLocaleString()})` : ""}.
+                                      Send Now 실행 시 실제 수신자에게 이메일이 발송됩니다.
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleDeactivateLiveMode}
+                                  className="px-2.5 py-1 text-[11px] font-semibold rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 shrink-0 self-start sm:self-auto cursor-pointer"
+                                >
+                                  LIVE 모드 해제
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-lg space-y-2 text-xs">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-lg shrink-0">🛡️</span>
+                                    <div>
+                                      <span className="font-bold text-amber-900 dark:text-amber-100">
+                                        LIVE Mode Is Inactive / Not Authorized
+                                      </span>
+                                      <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
+                                        본 캠페인의 실제 메일 발송(LIVE Mode)이 아직 승인되지 않았습니다.
+                                        실제 발송을 실행하거나 예약하려면 관리자 LIVE 모드 활성화가 필요합니다.
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowLiveActivationModal(true)}
+                                    className="px-3.5 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-bold text-xs cursor-pointer shadow-xs shrink-0 self-start sm:self-auto flex items-center gap-1.5"
+                                  >
+                                    <span>⚡</span> LIVE 모드 활성화 (관리자 승인)
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Actual Real Delivery Metrics */}
+                            <div>
+                              <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                                Actual Live Delivery Ledger (실제 발송 원장 기록)
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                                  <div className="text-[10px] text-zinc-500 uppercase font-semibold">Approved Recipients</div>
+                                  <div className="text-base font-bold font-mono text-zinc-900 dark:text-zinc-100 mt-0.5">
+                                    {editingCampaign.approvalSnapshot?.sendableCount ?? editingCampaign.stats?.sendableCount ?? 0}
+                                  </div>
+                                </div>
+                                <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                                  <div className="text-[10px] text-zinc-500 uppercase font-semibold">Real Sent (Live)</div>
+                                  <div className="text-base font-bold font-mono text-blue-600 dark:text-blue-400 mt-0.5">
+                                    {editingCampaign.stats?.sentCount ?? 0}
+                                  </div>
+                                </div>
+                                <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                                  <div className="text-[10px] text-zinc-500 uppercase font-semibold">Real Delivered (Live)</div>
+                                  <div className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                    {editingCampaign.stats?.deliveredCount ?? 0}
+                                  </div>
+                                </div>
+                                <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                                  <div className="text-[10px] text-zinc-500 uppercase font-semibold">Real Failed (Live)</div>
+                                  <div className="text-base font-bold font-mono text-rose-600 dark:text-rose-400 mt-0.5">
+                                    {editingCampaign.stats?.failedCount ?? 0}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Scheduled Info if SCHEDULED */}
+                            {editingCampaign.scheduledAt && (
+                              <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-purple-200 dark:border-purple-800 text-[11px] space-y-1">
+                                <div className="font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                                  <span>⏰</span> Scheduled Send Information:
+                                </div>
+                                <div className="text-zinc-700 dark:text-zinc-300">
+                                  • Local Time:{" "}
+                                  <span className="font-mono font-semibold">
+                                    {new Date(editingCampaign.scheduledAt).toLocaleString()}
+                                  </span>
+                                </div>
+                                <div className="text-zinc-700 dark:text-zinc-300">
+                                  • KST Time:{" "}
+                                  <span className="font-mono font-semibold">
+                                    {new Date(editingCampaign.scheduledAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
                                   </span>
                                 </div>
                               </div>
-                              <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400">
-                                {latestUnlock?.unlockedAt ? new Date(latestUnlock.unlockedAt).toLocaleString() : ""}
-                              </span>
-                            </div>
-                            {latestUnlock?.reason && (
-                              <div className="text-[11px] font-mono bg-white dark:bg-zinc-900 p-2 rounded border border-blue-100 dark:border-blue-900">
-                                잠금 해제 사유: &quot;{latestUnlock.reason}&quot;
-                              </div>
                             )}
+
+                            {/* Send Lock & Safe Unlock Status */}
+                            {(() => {
+                              const isStaleSending =
+                                editingCampaign.status === "SENDING" &&
+                                (!isDispatching &&
+                                  Boolean(editingCampaign.updatedAt) &&
+                                  Date.now() - new Date(editingCampaign.updatedAt).getTime() >= 5 * 60 * 1000);
+
+                              const isActivelyDispatching =
+                                isDispatching ||
+                                (editingCampaign.status === "SENDING" && !isStaleSending);
+
+                              const isSendLocked =
+                                editingCampaign.status === "SENT" ||
+                                editingCampaign.status === "COMPLETED" ||
+                                editingCampaign.status === "PARTIAL" ||
+                                editingCampaign.status === "SENDING" ||
+                                Boolean(editingCampaign.stats?.isSendLocked);
+
+                              const latestUnlock = editingCampaign.stats?.unlockHistory?.slice(-1)[0];
+                              const isCurrentlyUnlocked = editingCampaign.status === "APPROVED" && Boolean(latestUnlock);
+
+                              const totalSendable =
+                                editingCampaign.approvalSnapshot?.sendableCount ??
+                                editingCampaign.stats?.sendableCount ??
+                                selectedRecipientItems.filter((r) => r.isSendable).length;
+                              const alreadySent = editingCampaign.stats?.sentCount ?? 0;
+                              const unsentCount = Math.max(0, totalSendable - alreadySent);
+
+                              return (
+                                <div className="space-y-3">
+                                  {isStaleSending && (
+                                    <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 rounded-lg border border-rose-300 dark:border-rose-800 text-xs space-y-1.5">
+                                      <div className="font-bold text-rose-800 dark:text-rose-200 flex items-center gap-1.5">
+                                        <span>⚠️</span> 비정상 발송 중단 감지 (Stale SENDING State)
+                                      </div>
+                                      <p className="text-[11px] text-rose-700 dark:text-rose-300 leading-relaxed">
+                                        이전 발송 프로세스가 정상 완료되지 못하고 중단되었습니다 (최종 갱신:{" "}
+                                        {editingCampaign.updatedAt ? new Date(editingCampaign.updatedAt).toLocaleString() : "N/A"}).
+                                        현재 실행 중인 백그라운드 작업이 없으므로, 관리자 잠금 해제(Unlock Send)를 실행하여 캠페인을 안전한 승인 상태(APPROVED)로 복구하고 미발송 적격 대상({unsentCount}명)에게 발송할 수 있습니다.
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {isSendLocked && (
+                                    <div className="p-4 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800 space-y-2.5">
+                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                        <div className="flex items-start gap-2.5">
+                                          <span className="text-xl">🔒</span>
+                                          <div>
+                                            <div className="text-xs font-bold text-amber-900 dark:text-amber-100 flex items-center gap-2">
+                                              <span>Send Locked (발송 잠금 — 중복 발송 방지 활성)</span>
+                                              <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200 font-bold">
+                                                STATUS: {editingCampaign.status}
+                                              </span>
+                                            </div>
+                                            <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
+                                              {isStaleSending
+                                                ? "발송 프로세스가 중단된 상태입니다. 아래 'Unlock Send (비정상 중단 복구)'를 실행하여 안전하게 복구할 수 있습니다."
+                                                : "본 캠페인은 이미 발송 처리되었거나 완료 상태입니다. 동일 수신자에 대한 실수나 중복 발송을 방지하기 위해 Send Now가 자동으로 잠겨 있습니다."}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => setShowUnlockModal(true)}
+                                          disabled={isActivelyDispatching}
+                                          className={'px-3.5 py-2 rounded font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5 shrink-0 self-start sm:self-auto ' + (isStaleSending ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse' : 'bg-amber-600 hover:bg-amber-700 text-white')}
+                                          title={
+                                            isStaleSending
+                                              ? "비정상 중단된 발송 상태를 복구하고 미발송 대상 발송을 허용합니다."
+                                              : "관리자 권한 및 사유 입력을 통해 미발송 대상에 대한 발송 잠금을 해제합니다."
+                                          }
+                                        >
+                                          <span>🔓</span> {isStaleSending ? "Unlock Send (비정상 중단 복구)" : "Unlock Send (미발송 대상 잠금 해제)"}
+                                        </button>
+                                      </div>
+
+                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-2 border-t border-amber-200/70 dark:border-amber-800/60 text-amber-900 dark:text-amber-200">
+                                        <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
+                                          <span className="text-zinc-500 block text-[10px]">발송 완료 (보호 대상):</span>
+                                          <span className="font-bold font-mono text-emerald-700 dark:text-emerald-400">
+                                            {editingCampaign.stats?.sentCount ?? 0}건 (재발송 불가)
+                                          </span>
+                                        </div>
+                                        <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
+                                          <span className="text-zinc-500 block text-[10px]">미발송 적격 대상:</span>
+                                          <span className="font-bold font-mono text-blue-700 dark:text-blue-400">
+                                            {unsentCount}건 (해제 시 발송 가능)
+                                          </span>
+                                        </div>
+                                        <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
+                                          <span className="text-zinc-500 block text-[10px]">중복 발송 방지 보장:</span>
+                                          <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                                            STRICT FAIL-SAFE
+                                          </span>
+                                        </div>
+                                        <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
+                                          <span className="text-zinc-500 block text-[10px]">잠금 해제 요건:</span>
+                                          <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                                            관리자 권한 + 사유
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {isCurrentlyUnlocked && (
+                                    <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 rounded-lg border border-blue-200 dark:border-blue-800 space-y-1.5 text-xs text-blue-900 dark:text-blue-200">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-base">🔓</span>
+                                          <div>
+                                            <span className="font-bold text-xs">Send Unlocked (관리자 발송 잠금 해제됨)</span>
+                                            <span className="text-[11px] text-blue-700 dark:text-blue-300 block">
+                                              관리자({latestUnlock?.unlockedBy})에 의해 잠금 해제되었습니다. 이미 발송된 수신자({editingCampaign.stats?.sentCount ?? 0}명)는 완전히 건너뛰며, 오직 미발송 대상({unsentCount}명)에게만 발송됩니다.
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400">
+                                          {latestUnlock?.unlockedAt ? new Date(latestUnlock.unlockedAt).toLocaleString() : ""}
+                                        </span>
+                                      </div>
+                                      {latestUnlock?.reason && (
+                                        <div className="text-[11px] font-mono bg-white dark:bg-zinc-900 p-2 rounded border border-blue-100 dark:border-blue-900">
+                                          잠금 해제 사유: &quot;{latestUnlock.reason}&quot;
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* LIVE Action Buttons */}
+                                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowSendNowModal(true)}
+                                      disabled={isDispatching || isSimulating || isSendLocked || !isLiveActive}
+                                      className={`px-4 py-2 rounded font-bold text-xs shadow-xs flex items-center gap-1.5 ${
+                                        !isLiveActive || isSendLocked
+                                          ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-300 dark:border-zinc-700"
+                                          : "bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+                                      }`}
+                                      title={
+                                        !isLiveActive
+                                          ? "LIVE 모드가 비활성화되어 있습니다. 먼저 'LIVE 모드 활성화'를 진행하세요."
+                                          : isSendLocked
+                                          ? "중복 발송 방지를 위해 발송이 잠겨 있습니다. 미발송 대상 추가 발송은 'Unlock Send'를 먼저 실행하세요."
+                                          : "실제 고객 대상 캠페인 발송을 실행합니다."
+                                      }
+                                    >
+                                      <span>{isSendLocked ? "🔒" : "🚀"}</span>{" "}
+                                      {isSendLocked ? "Send Now (Locked)" : "Send Now (실제 발송)"}
+                                    </button>
+
+                                    {!isSendLocked && isLiveActive && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (editingCampaign.scheduledAt) {
+                                            const d = new Date(editingCampaign.scheduledAt);
+                                            const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                                              .toISOString()
+                                              .slice(0, 16);
+                                            setScheduleInputValue(localIso);
+                                          } else {
+                                            const d = new Date(Date.now() + 3600000);
+                                            const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                                              .toISOString()
+                                              .slice(0, 16);
+                                            setScheduleInputValue(localIso);
+                                          }
+                                          setShowScheduleModal(true);
+                                        }}
+                                        disabled={isScheduling}
+                                        className="px-4 py-2 rounded border border-red-300 dark:border-red-700 bg-white dark:bg-zinc-900 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40 font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                                      >
+                                        <span>⏰</span>{" "}
+                                        {editingCampaign.status === "SCHEDULED" ? "Reschedule Send (LIVE)" : "Schedule Send (LIVE)"}
+                                      </button>
+                                    )}
+
+                                    {editingCampaign.status === "SCHEDULED" && (
+                                      <button
+                                        type="button"
+                                        onClick={handleCancelSchedule}
+                                        disabled={isScheduling}
+                                        className="px-3 py-2 rounded border border-rose-300 dark:border-rose-800 bg-white dark:bg-zinc-900 text-rose-700 dark:text-rose-300 hover:bg-rose-50 text-xs font-semibold cursor-pointer shadow-xs"
+                                      >
+                                        Cancel Schedule
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
-
-                        {/* Action Buttons */}
-                        <div className="flex flex-wrap items-center gap-3 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => setShowSendNowModal(true)}
-                            disabled={isDispatching || isSimulating || isSendLocked}
-                            className={`px-4 py-2 rounded font-bold text-xs shadow-xs flex items-center gap-1.5 ${
-                              isSendLocked
-                                ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-300 dark:border-zinc-700"
-                                : "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
-                            }`}
-                            title={
-                              isSendLocked
-                                ? "중복 발송 방지를 위해 발송이 잠겨 있습니다. 미발송 대상 추가 발송은 'Unlock Send'를 먼저 실행하세요."
-                                : "실제 고객 또는 지정된 대상에게 캠페인 발송을 실행합니다."
-                            }
-                          >
-                            <span>{isSendLocked ? "🔒" : "🚀"}</span>{" "}
-                            {isSendLocked ? "Send Now (Locked)" : "Send Now (실제 발송)"}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setShowSimulationModal(true)}
-                            disabled={isDispatching || isSimulating}
-                            className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
-                          >
-                            <span>🔬</span> 안전 시뮬레이션 (Dry Run)
-                          </button>
-
-                          {!isSendLocked && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (editingCampaign.scheduledAt) {
-                                  const d = new Date(editingCampaign.scheduledAt);
-                                  const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-                                    .toISOString()
-                                    .slice(0, 16);
-                                  setScheduleInputValue(localIso);
-                                } else {
-                                  const d = new Date(Date.now() + 3600000);
-                                  const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-                                    .toISOString()
-                                    .slice(0, 16);
-                                  setScheduleInputValue(localIso);
-                                }
-                                setShowScheduleModal(true);
-                              }}
-                              disabled={isScheduling}
-                              className="px-4 py-2 rounded border border-purple-300 dark:border-purple-700 bg-white dark:bg-zinc-900 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
-                            >
-                              <span>⏰</span>{" "}
-                              {editingCampaign.status === "SCHEDULED" ? "Modify Schedule" : "Schedule Send"}
-                            </button>
-                          )}
-
-                          {editingCampaign.status === "SCHEDULED" && (
-                            <button
-                              type="button"
-                              onClick={handleCancelSchedule}
-                              disabled={isScheduling}
-                              className="px-3 py-2 rounded border border-rose-300 dark:border-rose-700 bg-white dark:bg-zinc-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-xs cursor-pointer disabled:opacity-50"
-                            >
-                              Cancel Schedule
-                            </button>
-                          )}
-                        </div>
                       </div>
                     );
                   })()}
@@ -5294,26 +5472,34 @@ export function EmailCampaignsView({
   };
 
   // --------------------------------------------------------------------------
-  // RENDER: SEND NOW CONFIRMATION MODAL (ADM-EMAIL-APP-004)
+  // RENDER: SEND NOW (LIVE) CONFIRMATION MODAL (ADM-EMAIL-APP-008)
   // --------------------------------------------------------------------------
   const renderSendNowModal = () => {
     if (!showSendNowModal || !editingCampaign) return null;
 
-    const eligible = editingCampaign.approvalSnapshot?.sendableCount ?? consentEligibilityEstimate.eligible;
-    const totalRecipients = editingCampaign.stats?.totalRecipients ?? selectedRecipientItems.length;
-    const excluded = totalRecipients - eligible > 0 ? totalRecipients - eligible : consentEligibilityEstimate.excluded;
+    const totalSendable =
+      editingCampaign.approvalSnapshot?.sendableCount ??
+      editingCampaign.stats?.sendableCount ??
+      selectedRecipientItems.filter((r) => r.isSendable).length;
+    const alreadySent = editingCampaign.stats?.sentCount ?? 0;
+    const unsentCount = Math.max(0, totalSendable - alreadySent);
+    const excluded = selectedRecipientItems.filter((r) => !r.isSendable).length;
+
+    const isLiveActive = Boolean(
+      editingCampaign.isLiveModeEnabled || editingCampaign.stats?.isLiveModeEnabled
+    );
 
     return (
-      <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-lg w-full p-5 space-y-4 shadow-2xl">
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl max-w-lg w-full p-5 border border-zinc-200 dark:border-zinc-800 space-y-4">
           <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-              <span>🚀</span> Confirm Campaign Live Send (실제 발송)
+            <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <span className="text-xl">🚀</span> Live Campaign Email Delivery (실제 대량 발송)
             </h3>
             <button
               type="button"
               onClick={() => setShowSendNowModal(false)}
-              className="text-zinc-400 hover:text-zinc-600 text-sm font-bold cursor-pointer"
+              className="text-zinc-400 hover:text-zinc-600 cursor-pointer"
             >
               ✕
             </button>
@@ -5321,12 +5507,11 @@ export function EmailCampaignsView({
 
           <div className="space-y-3 text-xs">
             <div className="p-3 bg-red-50 dark:bg-red-950/40 rounded border border-red-200 dark:border-red-800 text-red-900 dark:text-red-200">
-              <div className="font-bold flex items-center gap-1 mb-1 text-xs">
-                <span>⚠️</span> ATTENTION: LIVE CAMPAIGN DELIVERY ATTEMPT
+              <div className="font-bold flex items-center gap-1.5 mb-1 text-xs">
+                <span>⚠️</span> ATTENTION: LIVE CAMPAIGN DELIVERY EXECUTION
               </div>
-              <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">
-                실제 수신자에게 이메일을 전송합니다. LIVE_MODE 안전 잠금이 활성화되어 있는 경우,
-                <strong>본 작업은 시뮬레이션으로 대체 실행되지 않으며 서버 안전 잠금에 의해 즉시 차단 처리됩니다.</strong>
+              <p className="text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-300">
+                실제 수신자에게 이메일을 즉시 전송합니다. 본 작업은 시뮬레이션이 아니며, 외부 메일 프로바이더(Resend)를 통해 실제 고객사 메일함으로 발송됩니다. 발송된 이메일은 취소할 수 없습니다.
               </p>
             </div>
 
@@ -5340,16 +5525,18 @@ export function EmailCampaignsView({
                 <div>
                   <span className="text-zinc-500">템플릿 버전:</span>{" "}
                   <strong className="font-mono text-zinc-900 dark:text-zinc-100">
-                    {editingCampaign.approvalSnapshot?.templateVersion || "1.0.0"}
+                    {editingCampaign.approvalSnapshot?.templateVersion || editingCampaign.templateVersion || "1.0.0"}
                   </strong>
                 </div>
                 <div>
-                  <span className="text-zinc-500">총 대상 수:</span>{" "}
-                  <strong className="font-mono text-zinc-900 dark:text-zinc-100">{totalRecipients}건</strong>
+                  <span className="text-zinc-500">승인된 수신자:</span>{" "}
+                  <strong className="font-mono text-zinc-900 dark:text-zinc-100">{totalSendable}건</strong>
                 </div>
                 <div>
-                  <span className="text-zinc-500">발송 적격 대상:</span>{" "}
-                  <strong className="font-mono text-emerald-600 dark:text-emerald-400">{eligible}건</strong>
+                  <span className="text-zinc-500">실제 발송 대상:</span>{" "}
+                  <strong className="font-mono text-red-600 dark:text-red-400">
+                    {alreadySent > 0 ? `${unsentCount}건 (기발송 ${alreadySent}건 제외)` : `${totalSendable}건`}
+                  </strong>
                 </div>
                 <div>
                   <span className="text-zinc-500">수신거부/제외 대상:</span>{" "}
@@ -5357,98 +5544,15 @@ export function EmailCampaignsView({
                 </div>
                 <div>
                   <span className="text-zinc-500">발송 모드:</span>{" "}
-                  <strong className="font-mono text-red-600 dark:text-red-400">LIVE (실제 발송)</strong>
+                  <strong className="font-mono text-red-600 dark:text-red-400">
+                    {isLiveActive ? "LIVE (실제 발송 승인됨)" : "LIVE (승인 필요)"}
+                  </strong>
                 </div>
               </div>
             </div>
 
-            {/* Delivery Target Selector: Full vs Controlled Internal Live Test (ADM-EMAIL-APP-007) */}
-            {(() => {
-              const internalEligibleRecipients = selectedRecipientItems.filter(
-                (r) =>
-                  r.isSendable &&
-                  (r.email.endsWith("@letusto.com") ||
-                    r.email.endsWith("@kselectnetwork.com") ||
-                    r.email === "tammyhahm@gmail.com")
-              );
-
-              return (
-                <div className="space-y-2 pt-1 border-t border-zinc-100 dark:border-zinc-800">
-                  <div className="font-bold text-zinc-900 dark:text-zinc-100 text-[11px]">발송 대상 선택:</div>
-                  <div className="space-y-1.5">
-                    <label className="flex items-start gap-2 p-2 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/80 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="sendTargetMode"
-                        checked={sendNowTargetMode === "FULL"}
-                        onChange={() => setSendNowTargetMode("FULL")}
-                        className="mt-0.5"
-                      />
-                      <div>
-                        <div className="font-bold text-zinc-900 dark:text-zinc-100 text-xs flex items-center gap-1.5">
-                          <span>전체 적격 대상 대량 발송 ({eligible}건)</span>
-                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 font-mono">
-                            LIVE_MODE 필요
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-zinc-500 mt-0.5">
-                          전체 고객사 대상 실제 발송을 시도합니다. 글로벌 LIVE_MODE가 활성화되어 있어야 합니다.
-                        </div>
-                      </div>
-                    </label>
-
-                    <label className="flex items-start gap-2 p-2 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/80 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="sendTargetMode"
-                        checked={sendNowTargetMode === "INTERNAL_TEST"}
-                        onChange={() => setSendNowTargetMode("INTERNAL_TEST")}
-                        className="mt-0.5"
-                      />
-                      <div>
-                        <div className="font-bold text-zinc-900 dark:text-zinc-100 text-xs flex items-center gap-1.5">
-                          <span>내부 승인 메일함 실제 테스트 발송 (Controlled Internal Test)</span>
-                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-mono font-bold">
-                            SAFE INTERNAL MODE
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-zinc-500 mt-0.5">
-                          소유자/관리자 허용 도메인 메일함으로만 실제 발송을 전송하여 외부 고객사 노출 없이 프로바이더 발송을 안전하게 검증합니다.
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-
-                  {sendNowTargetMode === "INTERNAL_TEST" && (
-                    <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 rounded border border-blue-200 dark:border-blue-800 space-y-1.5">
-                      <div className="text-[11px] font-bold text-blue-900 dark:text-blue-200">
-                        테스트 수신자 선택 (캠페인 적격 대상 중 내부 허용 메일):
-                      </div>
-                      {internalEligibleRecipients.length > 0 ? (
-                        <select
-                          value={selectedInternalRecipient || internalEligibleRecipients[0]?.email || ""}
-                          onChange={(e) => setSelectedInternalRecipient(e.target.value)}
-                          className="w-full text-xs p-1.5 rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-zinc-900 font-mono text-zinc-800 dark:text-zinc-200"
-                        >
-                          {internalEligibleRecipients.map((r) => (
-                            <option key={r.email} value={r.email}>
-                              {r.email} ({r.contactName || r.companyNameKr || "내부"})
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div className="text-[10px] text-rose-600 dark:text-rose-400">
-                          캠페인 적격 대상 중 내부 허용 도메인(@letusto.com, @kselectnetwork.com) 메일함이 없습니다. Step 3에서 내부 메일함을 수신자로 포함해주세요.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              * 안전 시뮬레이션을 실행하려면 &apos;닫기&apos; 후 &apos;안전 시뮬레이션 (Dry Run)&apos; 버튼을 이용하세요.
+              * 안전 시뮬레이션을 실행하려면 &apos;닫기&apos; 후 SIMULATION 탭의 &apos;안전 시뮬레이션 (Dry Run)&apos; 버튼을 이용하세요.
             </p>
           </div>
 
@@ -5464,37 +5568,140 @@ export function EmailCampaignsView({
             <button
               type="button"
               onClick={async () => {
-                if (sendNowTargetMode === "INTERNAL_TEST") {
-                  const internalEligibleRecipients = selectedRecipientItems.filter(
-                    (r) =>
-                      r.isSendable &&
-                      (r.email.endsWith("@letusto.com") ||
-                        r.email.endsWith("@kselectnetwork.com") ||
-                        r.email === "tammyhahm@gmail.com")
-                  );
-                  const targetEmail =
-                    selectedInternalRecipient || internalEligibleRecipients[0]?.email;
-                  if (!targetEmail) {
-                    showNotification("error", "내부 테스트 수신자를 선택하세요.");
-                    return;
-                  }
-                  await handleExecuteSendNow({
-                    internalTestOnly: true,
-                    approvedInternalRecipient: targetEmail,
-                  });
-                } else {
-                  await handleExecuteSendNow();
-                }
+                await handleExecuteSendNow();
                 setShowSendNowModal(false);
               }}
-              disabled={isDispatching}
-              className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1 font-bold text-xs"
+              disabled={isDispatching || (alreadySent > 0 && unsentCount === 0)}
+              className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1 font-bold text-xs"
             >
-              {isDispatching
-                ? "발송 시도 중..."
-                : sendNowTargetMode === "INTERNAL_TEST"
-                ? "Confirm & Send to Internal Mailbox 🚀"
-                : "Confirm & Attempt Live Send 🚀"}
+              {isDispatching ? "발송 시도 중..." : "Confirm & Attempt Live Send 🚀"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // --------------------------------------------------------------------------
+  // RENDER: LIVE MODE ACTIVATION MODAL (ADM-EMAIL-APP-008)
+  // --------------------------------------------------------------------------
+  const renderLiveActivationModal = () => {
+    if (!showLiveActivationModal || !editingCampaign) return null;
+
+    const totalSendable =
+      editingCampaign.approvalSnapshot?.sendableCount ??
+      editingCampaign.stats?.sendableCount ??
+      selectedRecipientItems.filter((r) => r.isSendable).length;
+    const alreadySent = editingCampaign.stats?.sentCount ?? 0;
+    const unsentCount = Math.max(0, totalSendable - alreadySent);
+
+    return (
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl max-w-lg w-full p-5 border border-zinc-200 dark:border-zinc-800 space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <span className="text-xl">⚡</span> Authorize LIVE Email Campaign Delivery
+            </h3>
+            <button
+              type="button"
+              onClick={() => {
+                setShowLiveActivationModal(false);
+                setLiveActivationPhrase("");
+                setLiveActivationReason("");
+              }}
+              className="text-zinc-400 hover:text-zinc-600 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-3 text-xs">
+            <div className="p-3 bg-red-50 dark:bg-red-950/40 rounded-lg border border-red-200 dark:border-red-800 text-red-900 dark:text-red-200 space-y-1.5">
+              <div className="font-bold flex items-center gap-1.5">
+                <span>⚠️</span> 주의: 실제 외부 고객사 대량 메일 발송 권한 부여
+              </div>
+              <p className="text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-300">
+                본 작업을 확인하면 캠페인의 시뮬레이션 안전 잠금이 해제되고 <strong>실제 이메일 전송(LIVE)</strong> 권한이 부여됩니다.
+                이후 Send Now를 실행하면 실제 수신자에게 이메일이 즉시 발송됩니다.
+              </p>
+            </div>
+
+            <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded border border-zinc-200 dark:border-zinc-700 space-y-1.5 text-xs">
+              <div className="font-bold text-zinc-900 dark:text-zinc-100">발송 예정 대상 요약:</div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div>
+                  <span className="text-zinc-500">캠페인:</span>{" "}
+                  <strong className="text-zinc-900 dark:text-zinc-100 truncate block">{editingCampaign.name}</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">승인 상태:</span>{" "}
+                  <strong className="text-emerald-600 dark:text-emerald-400 font-mono">
+                    {editingCampaign.approvalStatus} (Locked)
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">승인된 수신자:</span>{" "}
+                  <strong className="font-mono text-zinc-900 dark:text-zinc-100">{totalSendable}건</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">발송 대상 수:</span>{" "}
+                  <strong className="font-mono text-red-600 dark:text-red-400">
+                    {unsentCount > 0 ? unsentCount : totalSendable}건 (실제 발송 대상)
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="font-bold text-zinc-900 dark:text-zinc-100 text-[11px] block">
+                확인 문구 입력: <span className="text-red-600 font-mono">ACTIVATE LIVE</span>
+              </label>
+              <input
+                type="text"
+                placeholder="ACTIVATE LIVE"
+                value={liveActivationPhrase}
+                onChange={(e) => setLiveActivationPhrase(e.target.value)}
+                className="w-full text-xs font-mono p-2 rounded border border-red-300 dark:border-red-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+              />
+              <span className="text-[10px] text-zinc-500 block">
+                오발송을 방지하기 위해 대문자로 &apos;ACTIVATE LIVE&apos;를 정확히 입력해야 활성화 버튼이 동작합니다.
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="font-bold text-zinc-900 dark:text-zinc-100 text-[11px] block">
+                활성화 사유 (선택 사항 / 감사 로그 기록):
+              </label>
+              <input
+                type="text"
+                placeholder="예: KBGP 1차 브랜드 아웃리치 실제 발송 승인"
+                value={liveActivationReason}
+                onChange={(e) => setLiveActivationReason(e.target.value)}
+                className="w-full text-xs p-2 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => {
+                setShowLiveActivationModal(false);
+                setLiveActivationPhrase("");
+                setLiveActivationReason("");
+              }}
+              disabled={isActivatingLive}
+              className="px-3 py-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 cursor-pointer"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={handleActivateLiveMode}
+              disabled={liveActivationPhrase.trim() !== "ACTIVATE LIVE" || isActivatingLive}
+              className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 font-bold text-xs"
+            >
+              {isActivatingLive ? "활성화 처리 중..." : "Confirm & Activate LIVE Mode ⚡"}
             </button>
           </div>
         </div>
@@ -5762,6 +5969,7 @@ export function EmailCampaignsView({
       {renderUnsavedChangesModal()}
       {renderScheduleModal()}
       {renderSendNowModal()}
+      {renderLiveActivationModal()}
       {renderSimulationModal()}
       {renderUnlockModal()}
       <DesignerGuideModal isOpen={showGuideModal} onClose={() => setShowGuideModal(false)} />

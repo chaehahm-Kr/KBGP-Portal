@@ -12,6 +12,8 @@ import {
   CampaignDeliveryExecutionResult,
   UnlockCampaignSendInput,
   UnlockCampaignSendResult,
+  ActivateCampaignLiveModeInput,
+  ActivateCampaignLiveModeResult,
 } from "./campaign-types";
 import {
   listMarketingTemplates,
@@ -35,6 +37,8 @@ import {
   saveMarketingFooterSettings,
   recordCampaignAuditLog,
   unlockCampaignSend,
+  activateCampaignLiveMode,
+  deactivateCampaignLiveMode,
 } from "./campaign-data-access";
 import {
   checkEmailSuppression,
@@ -1242,25 +1246,35 @@ export async function executeCampaignDryRunAction(
  * Never silently simulates. If live mode is disabled, unconditionally returns clear blocker.
  */
 export async function executeCampaignLiveDeliveryAction(
-  campaignId: string,
-  options?: { internalTestOnly?: boolean; approvedInternalRecipient?: string }
+  campaignId: string
 ): Promise<{ success: boolean; result?: CampaignDeliveryExecutionResult; error?: string }> {
   try {
     const admin = await requireCampaignAdmin();
+    const adminClient = process.env.NODE_ENV !== "test" ? createAdminClient() : undefined;
 
+    const campRes = await getMarketingCampaignById(campaignId, adminClient);
+    if (!campRes.campaign) {
+      return { success: false, error: "Campaign not found" };
+    }
+
+    const isCampaignLiveAuthorized = Boolean(
+      campRes.campaign.isLiveModeEnabled || campRes.campaign.stats?.isLiveModeEnabled
+    );
     const isLiveGloballyEnabled = process.env.ENABLE_LIVE_MARKETING_CAMPAIGN_DISPATCH === "true";
-    if (!isLiveGloballyEnabled && !options?.internalTestOnly) {
+
+    if (!isCampaignLiveAuthorized && !isLiveGloballyEnabled) {
       return {
         success: false,
-        error: "Live delivery is not activated. (실제 고객 대량 발송(LIVE_MODE)이 비활성화되어 있습니다. 별도의 소유자(Owner) 승인 및 활성화가 필요합니다.)",
+        error: "본 캠페인의 LIVE 모드가 활성화되지 않았습니다. (실제 고객 대량 발송(LIVE_MODE) 비활성화 상태) Campaign Step 6에서 관리자 LIVE 모드 활성화를 먼저 진행하세요.",
       };
     }
 
-    const result = await executeCampaignRealDelivery(campaignId, admin.email, {
-      mode: "LIVE",
-      internalTestOnly: options?.internalTestOnly,
-      approvedInternalRecipient: options?.approvedInternalRecipient,
-    });
+    const result = await executeCampaignRealDelivery(
+      campaignId,
+      admin.email,
+      { mode: "LIVE" },
+      adminClient
+    );
     try { revalidatePath("/admin/brand-marketing"); } catch {}
     return { success: true, result };
   } catch (err: any) {
@@ -1308,6 +1322,52 @@ export async function unlockCampaignSendAction(
     return {
       success: false,
       error: err.message || "Failed to unlock campaign send",
+    };
+  }
+}
+
+/**
+ * Activates LIVE delivery mode on an approved campaign with administrative verification.
+ * Requires admin session, confirmation phrase, and immutable audit logging.
+ */
+export async function activateCampaignLiveModeAction(
+  campaignId: string,
+  input: ActivateCampaignLiveModeInput
+): Promise<{ success: boolean; result?: ActivateCampaignLiveModeResult; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const adminClient = process.env.NODE_ENV !== "test" ? createAdminClient() : undefined;
+    const result = await activateCampaignLiveMode(campaignId, admin.email, input, adminClient);
+    try {
+      revalidatePath("/admin/brand-marketing");
+    } catch {}
+    return { success: true, result };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || "Failed to activate campaign LIVE mode",
+    };
+  }
+}
+
+/**
+ * Deactivates LIVE delivery mode back to SIMULATION.
+ */
+export async function deactivateCampaignLiveModeAction(
+  campaignId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const adminClient = process.env.NODE_ENV !== "test" ? createAdminClient() : undefined;
+    await deactivateCampaignLiveMode(campaignId, admin.email, adminClient);
+    try {
+      revalidatePath("/admin/brand-marketing");
+    } catch {}
+    return { success: true };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || "Failed to deactivate campaign LIVE mode",
     };
   }
 }

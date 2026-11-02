@@ -161,6 +161,9 @@ export interface CampaignStats {
   simulationStats?: CampaignSimulationStats;
   unlockHistory?: CampaignUnlockAudit[];
   isSendLocked?: boolean;
+  isLiveModeEnabled?: boolean;
+  liveActivatedAt?: string;
+  liveActivatedBy?: string;
 }
 
 export interface CampaignApprovalSnapshot {
@@ -276,5 +279,20 @@ export interface UnlockCampaignSendResult {
   unlockedAt: string;
   reason: string;
   unsentCount: number;
+  error?: string;
+}
+
+export interface ActivateCampaignLiveModeInput {
+  confirmationPhrase: string;
+  reason?: string;
+}
+
+export interface ActivateCampaignLiveModeResult {
+  success: boolean;
+  campaignId: string;
+  isLiveModeEnabled: boolean;
+  eligibleRecipients: number;
+  activatedBy: string;
+  activatedAt: string;
   error?: string;
 }

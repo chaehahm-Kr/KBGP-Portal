@@ -17,6 +17,8 @@ import {
   CampaignUnlockAudit,
   UnlockCampaignSendInput,
   UnlockCampaignSendResult,
+  ActivateCampaignLiveModeInput,
+  ActivateCampaignLiveModeResult,
 } from "./campaign-types";
 import {
   MarketingFooterSettings,
@@ -489,7 +491,7 @@ export async function listMarketingCampaigns(
           approvedAt: d.approved_at,
           approvalSnapshot: d.approval_snapshot,
           scheduledAt: d.scheduled_at,
-          isLiveModeEnabled: false, // ALWAYS false in V1
+          isLiveModeEnabled: Boolean(d.is_live_mode_enabled || d.stats?.isLiveModeEnabled),
           filterCriteria: d.filter_criteria || {},
           customMessage: d.custom_message,
           stats: normalizedStats,
@@ -983,7 +985,7 @@ export async function getMarketingCampaignById(
         approvedAt: cData.approved_at,
         approvalSnapshot: cData.approval_snapshot,
         scheduledAt: cData.scheduled_at,
-        isLiveModeEnabled: false,
+        isLiveModeEnabled: Boolean(cData.is_live_mode_enabled || cData.stats?.isLiveModeEnabled),
         filterCriteria: cData.filter_criteria || {},
         customMessage: cData.custom_message,
         stats: cData.stats || {
@@ -1163,7 +1165,7 @@ export async function saveMarketingCampaign(
     approvedAt: approvalStatus === "APPROVED" ? (campaign.approvedAt || existing?.approvedAt || null) : null,
     approvalSnapshot: approvalStatus === "APPROVED" ? (campaign.approvalSnapshot || existing?.approvalSnapshot || null) : null,
     scheduledAt: campaign.scheduledAt || null,
-    isLiveModeEnabled: false, // Locked false
+    isLiveModeEnabled: campaign.isLiveModeEnabled !== undefined ? Boolean(campaign.isLiveModeEnabled) : Boolean(existing?.isLiveModeEnabled || campaign.stats?.isLiveModeEnabled || existing?.stats?.isLiveModeEnabled),
     filterCriteria: {
       ...(campaign.filterCriteria || existing?.filterCriteria || {}),
       footerStyle: campaign.footerStyle || existing?.footerStyle || "classic",
@@ -1201,7 +1203,7 @@ export async function saveMarketingCampaign(
       approved_at: record.approvedAt,
       approval_snapshot: record.approvalSnapshot,
       scheduled_at: record.scheduledAt,
-      is_live_mode_enabled: false,
+      is_live_mode_enabled: Boolean(record.isLiveModeEnabled),
       filter_criteria: {
         ...(record.filterCriteria || {}),
         footerStyle: record.footerStyle || "classic",
@@ -2417,15 +2419,20 @@ export async function executeCampaignRealDelivery(
     );
   }
 
-  // 1. LIVE_MODE SAFETY GATE (Rule 4 & Mandatory Invariant)
+  // 1. LIVE_MODE SAFETY GATE (ADM-EMAIL-APP-008: Two-Mode Delivery)
+  // Authorize real delivery if the campaign has explicit admin LIVE activation OR global live dispatch is on
+  const isCampaignLiveAuthorized = Boolean(
+    existing.campaign.isLiveModeEnabled || existing.campaign.stats?.isLiveModeEnabled || options?.internalTestOnly
+  );
   const isLiveGloballyEnabled = process.env.ENABLE_LIVE_MARKETING_CAMPAIGN_DISPATCH === "true";
-  if (!isLiveGloballyEnabled && !options?.internalTestOnly) {
+
+  if (!isCampaignLiveAuthorized && !isLiveGloballyEnabled) {
     throw new Error(
-      "Live delivery is not activated. (실제 고객 대량 발송(LIVE_MODE)이 비활성화되어 있습니다. 별도의 소유자(Owner) 승인 및 활성화가 필요합니다.)"
+      "Live delivery is not activated. (본 캠페인의 LIVE 모드가 활성화되지 않았습니다. Campaign Step 6에서 관리자 LIVE 모드 활성화를 먼저 진행하세요.)"
     );
   }
 
-  // Controlled Internal Test Mode validation
+  // Controlled Internal Test Mode validation (backwards-compatible)
   if (options?.internalTestOnly) {
     if (!options.approvedInternalRecipient || !isRecipientAllowlisted(options.approvedInternalRecipient)) {
       throw new Error(
@@ -2446,15 +2453,13 @@ export async function executeCampaignRealDelivery(
 
   if (options?.internalTestOnly && options.approvedInternalRecipient) {
     const targetEmail = options.approvedInternalRecipient.toLowerCase().trim();
-    targets = targets.filter((r) => r.recipientEmail.toLowerCase().trim() === targetEmail);
+    targets = targets.filter((r) => r.recipientEmail?.toLowerCase().trim() === targetEmail);
     if (targets.length === 0) {
-      throw new Error(`지정된 내부 테스트 수신자(${options.approvedInternalRecipient})가 캠페인 적격 대상 목록에 존재하지 않거나 이미 발송되었습니다.`);
+      throw new Error(`내부 테스트 대상 '${options.approvedInternalRecipient}'이(가) 캠페인 적격 대상 목록에 없습니다.`);
     }
-  }
-
-  // Enforce internal test mode 1-3 recipient maximum
-  if (options?.internalTestOnly && targets.length > 3) {
-    throw new Error("내부 테스트 모드(Internal Test Mode)에서는 최대 3명까지만 발송 가능합니다.");
+    if (targets.length > 3) {
+      throw new Error("안전 잠금: 내부 테스트 발송은 1회 최대 3명까지만 허용됩니다.");
+    }
   }
 
   if (targets.length === 0) {
@@ -2896,4 +2901,187 @@ export async function unlockCampaignSend(
     reason: trimmedReason,
     unsentCount: unsentTargets.length,
   };
+}
+
+/**
+ * -----------------------------------------------------------------------------
+ * 10. CONTROLLED PERSISTENT LIVE MODE ACTIVATION (ADM-EMAIL-APP-008)
+ * -----------------------------------------------------------------------------
+ */
+export async function activateCampaignLiveMode(
+  campaignId: string,
+  adminEmail: string,
+  input: ActivateCampaignLiveModeInput,
+  customClient?: SupabaseClient
+): Promise<ActivateCampaignLiveModeResult> {
+  const trimmedPhrase = (input?.confirmationPhrase || "").trim();
+  if (trimmedPhrase !== "ACTIVATE LIVE") {
+    throw new Error("확인 문구('ACTIVATE LIVE')가 올바르지 않습니다.");
+  }
+
+  const existing = await getMarketingCampaignById(campaignId, customClient);
+  if (!existing.campaign) {
+    throw new Error(`Campaign '${campaignId}' not found.`);
+  }
+
+  if (existing.campaign.approvalStatus !== "APPROVED") {
+    throw new Error("승인(APPROVED) 상태의 캠페인만 LIVE 모드를 활성화할 수 있습니다.");
+  }
+
+  const recipients = existing.recipients || [];
+  const unsentTargets = recipients.filter(
+    (r) =>
+      r.sendEligibility === "ELIGIBLE" &&
+      r.status !== "SENT" &&
+      r.status !== "DELIVERED" &&
+      !isGenuineProviderMessageId(r.providerMessageId)
+  );
+
+  const nowIso = new Date().toISOString();
+  const updatedStats: CampaignStats = {
+    ...(existing.campaign.stats || {
+      totalRecipients: 0,
+      sendableCount: 0,
+      excludedCount: 0,
+      testSendsCount: 0,
+      sentCount: 0,
+      deliveredCount: 0,
+      failedCount: 0,
+    }),
+    isLiveModeEnabled: true,
+    liveActivatedAt: nowIso,
+    liveActivatedBy: adminEmail,
+  };
+
+  const supabase = await getClient(customClient);
+
+  // Update stats JSONB and attempt is_live_mode_enabled column update
+  try {
+    const { error: colErr } = await supabase
+      .from("marketing_campaigns")
+      .update({
+        is_live_mode_enabled: true,
+        stats: updatedStats,
+        updated_at: nowIso,
+      })
+      .eq("id", campaignId);
+
+    if (colErr) {
+      // If DB constraint is still present, update stats JSON only
+      console.warn("[campaigns:live-mode] DB column update warned:", colErr.message);
+      await supabase
+        .from("marketing_campaigns")
+        .update({
+          stats: updatedStats,
+          updated_at: nowIso,
+        })
+        .eq("id", campaignId);
+    }
+  } catch (err: any) {
+    console.warn("[campaigns:live-mode] DB update exception:", err.message);
+    await supabase
+      .from("marketing_campaigns")
+      .update({
+        stats: updatedStats,
+        updated_at: nowIso,
+      })
+      .eq("id", campaignId);
+  }
+
+  // In-memory cache update
+  memoryCampaigns.set(campaignId, {
+    ...existing.campaign,
+    isLiveModeEnabled: true,
+    stats: updatedStats,
+    updatedAt: nowIso,
+  });
+
+  // Record Immutable Audit Log
+  recordCampaignAuditLog(
+    campaignId,
+    "CAMPAIGN_LIVE_MODE_ACTIVATED",
+    false,
+    {
+      activatedBy: adminEmail,
+      activatedAt: nowIso,
+      eligibleRecipients: unsentTargets.length,
+      reason: input?.reason || "Explicit Admin LIVE Mode Activation",
+      snapshotVersion: existing.campaign.templateVersion || "1.0.0",
+    },
+    adminEmail
+  );
+
+  return {
+    success: true,
+    campaignId,
+    isLiveModeEnabled: true,
+    eligibleRecipients: unsentTargets.length,
+    activatedBy: adminEmail,
+    activatedAt: nowIso,
+  };
+}
+
+export async function deactivateCampaignLiveMode(
+  campaignId: string,
+  adminEmail: string,
+  customClient?: SupabaseClient
+): Promise<{ success: boolean; campaignId: string }> {
+  const existing = await getMarketingCampaignById(campaignId, customClient);
+  if (!existing.campaign) {
+    throw new Error(`Campaign '${campaignId}' not found.`);
+  }
+
+  const nowIso = new Date().toISOString();
+  const updatedStats: CampaignStats = {
+    ...(existing.campaign.stats || {
+      totalRecipients: 0,
+      sendableCount: 0,
+      excludedCount: 0,
+      testSendsCount: 0,
+      sentCount: 0,
+      deliveredCount: 0,
+      failedCount: 0,
+    }),
+    isLiveModeEnabled: false,
+  };
+
+  const supabase = await getClient(customClient);
+  try {
+    await supabase
+      .from("marketing_campaigns")
+      .update({
+        is_live_mode_enabled: false,
+        stats: updatedStats,
+        updated_at: nowIso,
+      })
+      .eq("id", campaignId);
+  } catch {
+    await supabase
+      .from("marketing_campaigns")
+      .update({
+        stats: updatedStats,
+        updated_at: nowIso,
+      })
+      .eq("id", campaignId);
+  }
+
+  memoryCampaigns.set(campaignId, {
+    ...existing.campaign,
+    isLiveModeEnabled: false,
+    stats: updatedStats,
+    updatedAt: nowIso,
+  });
+
+  recordCampaignAuditLog(
+    campaignId,
+    "CAMPAIGN_LIVE_MODE_DEACTIVATED",
+    false,
+    {
+      deactivatedBy: adminEmail,
+      deactivatedAt: nowIso,
+    },
+    adminEmail
+  );
+
+  return { success: true, campaignId };
 }

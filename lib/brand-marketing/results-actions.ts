@@ -48,6 +48,7 @@ export async function listCampaignsForSelectorAction(): Promise<{
           status: c.status,
           language: c.language,
           createdAt: c.createdAt,
+          isLiveModeEnabled: Boolean(c.isLiveModeEnabled || c.stats?.isLiveModeEnabled),
         })),
       };
     }
