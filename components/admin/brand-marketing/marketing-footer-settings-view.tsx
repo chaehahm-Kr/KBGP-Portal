@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import {
   MarketingFooterSettings,
+  MarketingFooterStyle,
   DEFAULT_MARKETING_FOOTER,
   buildMarketingFooterHtml,
   validateMarketingFooterCompleteness,
@@ -18,6 +19,7 @@ export function MarketingFooterSettingsView() {
   const [isSaving, setIsSaving] = useState(false);
   const [previewViewport, setPreviewViewport] = useState<"desktop" | "mobile">("desktop");
   const [previewLang, setPreviewLang] = useState<"ko" | "en">("ko");
+  const [previewStyle, setPreviewStyle] = useState<MarketingFooterStyle>("classic");
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   useEffect(() => {
@@ -72,10 +74,11 @@ export function MarketingFooterSettingsView() {
     }
   };
 
-  // Compile live footer preview markup
+  // Compile live footer preview markup with selected style, language, and sample token
   const previewHtml = buildMarketingFooterHtml(settings, {
     language: previewLang,
     unsubscribeUrl: "https://admin.kselectnetwork.com/unsubscribe?token=sample-preview-token",
+    style: previewStyle,
   });
 
   if (isLoading) {
@@ -128,131 +131,222 @@ export function MarketingFooterSettingsView() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Settings Form */}
-        <div className="lg:col-span-6 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-          <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 border-b border-zinc-100 dark:border-zinc-800 pb-2">
-            Legal &amp; Sender Information
-          </h3>
+        {/* Left: Settings Form & Footer Design Options */}
+        <div className="lg:col-span-6 space-y-6">
+          {/* Section 1: Preserved Content Settings Form */}
+          <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 border-b border-zinc-100 dark:border-zinc-800 pb-2">
+              Legal &amp; Sender Information
+            </h3>
 
-          <form onSubmit={handleSave} className="space-y-4 text-xs">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form onSubmit={handleSave} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Brand Display Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.brandDisplayName}
+                    onChange={(e) => setSettings({ ...settings, brandDisplayName: e.target.value })}
+                    placeholder="K SELECT NETWORK"
+                    className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Legal Operating Company *
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.legalCompanyName}
+                    onChange={(e) => setSettings({ ...settings, legalCompanyName: e.target.value })}
+                    placeholder="Operated by Letusto Inc."
+                    className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Brand Display Name *
+                  Physical Mailing Address (사업장 소재지 물리적 주소) *
                 </label>
                 <input
                   type="text"
-                  value={settings.brandDisplayName}
-                  onChange={(e) => setSettings({ ...settings, brandDisplayName: e.target.value })}
-                  placeholder="K SELECT NETWORK"
-                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Legal Operating Company *
-                </label>
-                <input
-                  type="text"
-                  value={settings.legalCompanyName}
-                  onChange={(e) => setSettings({ ...settings, legalCompanyName: e.target.value })}
-                  placeholder="Operated by Letusto Inc."
+                  value={settings.physicalAddress}
+                  onChange={(e) => setSettings({ ...settings, physicalAddress: e.target.value })}
+                  placeholder="23B Roland Ave., Mount Laurel, NJ 08054, USA"
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                 />
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                Physical Mailing Address (사업장 소재지 물리적 주소) *
-              </label>
-              <input
-                type="text"
-                value={settings.physicalAddress}
-                onChange={(e) => setSettings({ ...settings, physicalAddress: e.target.value })}
-                placeholder="23B Roland Ave., Mount Laurel, NJ 08054, USA"
-                className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-              />
-              <p className="text-[11px] text-zinc-400 mt-1">
-                * CAN-SPAM 및 이메일 규정에 따라 유효한 물리적 우편 수신 주소가 필수 표기됩니다.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Official Contact Email *
-                </label>
-                <input
-                  type="email"
-                  value={settings.contactEmail}
-                  onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })}
-                  placeholder="Contact@letusto.com"
-                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono"
-                />
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  * CAN-SPAM 및 이메일 규정에 따라 유효한 물리적 우편 수신 주소가 필수 표기됩니다.
+                </p>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Official Contact Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={settings.contactEmail}
+                    onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })}
+                    placeholder="Contact@letusto.com"
+                    className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Official Website
+                  </label>
+                  <input
+                    type="url"
+                    value={settings.contactWebsite || ""}
+                    onChange={(e) => setSettings({ ...settings, contactWebsite: e.target.value })}
+                    placeholder="https://www.kselectnetwork.com"
+                    className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Disclosure Text (한국어 안내문) *
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={settings.disclosureKo}
+                    onChange={(e) => setSettings({ ...settings, disclosureKo: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Disclosure Text (English Global) *
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={settings.disclosureEn}
+                    onChange={(e) => setSettings({ ...settings, disclosureEn: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 leading-relaxed"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Official Website
+                  Default Language Mode
                 </label>
-                <input
-                  type="url"
-                  value={settings.contactWebsite || ""}
-                  onChange={(e) => setSettings({ ...settings, contactWebsite: e.target.value })}
-                  placeholder="https://www.kselectnetwork.com"
+                <select
+                  value={settings.defaultLanguage}
+                  onChange={(e) => setSettings({ ...settings, defaultLanguage: e.target.value as any })}
                   className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                />
+                >
+                  <option value="ko">한국어 (Korean)</option>
+                  <option value="en">English (글로벌)</option>
+                </select>
               </div>
+            </form>
+          </div>
+
+          {/* Section 2: Footer Design Style Options (Task ADM-EMAIL-FTR-001) */}
+          <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                  Footer Design Options (푸터 디자인 스타일)
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  미래 캠페인 및 기본 미리보기에 사용할 세 가지 사전 정의된 디자인 스타일을 선택하여 즉시 확인합니다.
+                </p>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+                Active: {previewStyle.toUpperCase()}
+              </span>
             </div>
 
-            <div className="space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-              <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Disclosure Text (한국어 안내문) *
-                </label>
-                <textarea
-                  rows={2}
-                  value={settings.disclosureKo}
-                  onChange={(e) => setSettings({ ...settings, disclosureKo: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 leading-relaxed"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Disclosure Text (English Global) *
-                </label>
-                <textarea
-                  rows={2}
-                  value={settings.disclosureEn}
-                  onChange={(e) => setSettings({ ...settings, disclosureEn: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 leading-relaxed"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                Default Language Mode
-              </label>
-              <select
-                value={settings.defaultLanguage}
-                onChange={(e) => setSettings({ ...settings, defaultLanguage: e.target.value as any })}
-                className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Classic */}
+              <div
+                onClick={() => setPreviewStyle("classic")}
+                className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                  previewStyle === "classic"
+                    ? "border-zinc-950 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/60 ring-2 ring-zinc-950/10 dark:ring-zinc-100/20"
+                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700"
+                }`}
               >
-                <option value="ko">한국어 (Korean)</option>
-                <option value="en">English (글로벌)</option>
-              </select>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">CLASSIC</span>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                    기본형
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-snug">
+                  중앙 정렬 레이아웃과 웜톤(#FBF8F5) 배경의 표준 공식 디자인입니다.
+                </p>
+                <div className="mt-2 text-[10px] font-mono text-zinc-400">
+                  Centered · Warm
+                </div>
+              </div>
+
+              {/* Minimal */}
+              <div
+                onClick={() => setPreviewStyle("minimal")}
+                className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                  previewStyle === "minimal"
+                    ? "border-zinc-950 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/60 ring-2 ring-zinc-950/10 dark:ring-zinc-100/20"
+                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">MINIMAL</span>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                    컴팩트
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-snug">
+                  좌측 정렬과 화이트(#FFFFFF) 배경의 간결하고 정돈된 비즈니스 스타일입니다.
+                </p>
+                <div className="mt-2 text-[10px] font-mono text-zinc-400">
+                  Left · Compact
+                </div>
+              </div>
+
+              {/* Dark */}
+              <div
+                onClick={() => setPreviewStyle("dark")}
+                className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                  previewStyle === "dark"
+                    ? "border-zinc-950 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/60 ring-2 ring-zinc-950/10 dark:ring-zinc-100/20"
+                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">DARK</span>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                    프리미엄
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-snug">
+                  다크 징크(#18181B) 배경에 가독성 높은 라이트 텍스트와 고대비 수신거부 링크를 제공합니다.
+                </p>
+                <div className="mt-2 text-[10px] font-mono text-zinc-400">
+                  Dark · High Contrast
+                </div>
+              </div>
             </div>
-          </form>
+          </div>
         </div>
 
         {/* Right: Live Interactive Preview */}
         <div className="lg:col-span-6 space-y-4">
           <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3 gap-2">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                   Live Footer Preview
@@ -262,7 +356,25 @@ export function MarketingFooterSettingsView() {
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Style Selector Switch */}
+                <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-950">
+                  {(["classic", "minimal", "dark"] as MarketingFooterStyle[]).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setPreviewStyle(st)}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded cursor-pointer capitalize ${
+                        previewStyle === st
+                          ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                          : "text-zinc-500 hover:text-zinc-800"
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Language Switch */}
                 <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-950">
                   <button
@@ -333,7 +445,7 @@ export function MarketingFooterSettingsView() {
                     [Email Template Body Content Area]
                   </div>
                   <p className="text-[11px] text-zinc-400 italic">
-                    수신자별 본문 및 제안 내용이 위에 렌더링되며, 아래의 중앙 푸터가 모든 마케팅 이메일 끝에 자동으로 결합됩니다.
+                    수신자별 본문 및 제안 내용이 위에 렌더링되며, 아래의 중앙 푸터({previewStyle.toUpperCase()})가 모든 마케팅 이메일 끝에 자동으로 결합됩니다.
                   </p>
                 </div>
 
@@ -351,8 +463,9 @@ export function MarketingFooterSettingsView() {
               </div>
               <ul className="list-disc list-inside space-y-0.5 pl-1 text-[10px]">
                 <li>수신자별 암호화된 고유 토큰이 생성되어 <strong>수신거부 링크가 실제 동작</strong>합니다.</li>
+                <li>선택된 푸터 스타일(Classic, Minimal, Dark)에 맞춰 통일된 레이아웃으로 결합됩니다.</li>
                 <li>이미 푸터가 포함된 외부 HTML을 가져오는 경우, 중복 결합 없이 기존 푸터를 안전하게 감지하여 단일 푸터로 유지합니다.</li>
-                <li>승인된 캠페인은 승인 당시의 푸터 스냅샷을 영구 보존하며, 이후 푸터 수정 시 승인 재검증이 요구됩니다.</li>
+                <li>승인된 캠페인은 승인 당시의 푸터 스타일과 스냅샷을 영구 보존하며, 이후 수정 시 승인 재검증이 요구됩니다.</li>
               </ul>
             </div>
           </div>

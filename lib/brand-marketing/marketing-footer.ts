@@ -1,3 +1,5 @@
+export type MarketingFooterStyle = "classic" | "minimal" | "dark";
+
 export interface MarketingFooterSettings {
   id: string;
   brandDisplayName: string;
@@ -57,12 +59,17 @@ export function validateMarketingFooterCompleteness(settings: MarketingFooterSet
 
 /**
  * Compiles the minimal premium, email-client compatible HTML markup for the marketing footer.
+ * Supports three predefined design styles:
+ * - "classic": Existing centered layout with warm background (#FBF8F5)
+ * - "minimal": Compact, clean, left-aligned layout with crisp white background (#FFFFFF)
+ * - "dark": High-contrast dark layout (#18181B) with readable light text (#A1A1AA)
  */
 export function buildMarketingFooterHtml(
   settings: MarketingFooterSettings,
   options: {
     language: "ko" | "en";
     unsubscribeUrl: string;
+    style?: MarketingFooterStyle;
   }
 ): string {
   const isKo = options.language === "ko";
@@ -70,7 +77,109 @@ export function buildMarketingFooterHtml(
   const unsubLabel = isKo ? "수신거부 / Unsubscribe" : "Unsubscribe / Opt-out";
   const privacyLabel = isKo ? "개인정보 처리방침" : "Privacy Policy";
   const contactWebsite = settings.contactWebsite || "https://www.kselectnetwork.com";
+  const websiteDisplay = contactWebsite.replace(/^https?:\/\//, "");
+  const style = options.style || "classic";
 
+  if (style === "minimal") {
+    return `
+${FOOTER_START_MARKER}
+<table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background-color:#FFFFFF;border-top:1px solid #E4E4E7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr>
+    <td style="padding:20px 24px;text-align:left;">
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+          <td style="text-align:left;padding-bottom:8px;">
+            <span style="font-size:12px;font-weight:700;color:#18181B;letter-spacing:0.3px;text-transform:uppercase;">
+              ${escapeHtml(settings.brandDisplayName)}
+            </span>
+            <span style="font-size:11px;color:#A1A1AA;padding:0 6px;">|</span>
+            <span style="font-size:11px;color:#71717A;">
+              ${escapeHtml(settings.legalCompanyName)}
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align:left;padding-bottom:8px;font-size:11px;color:#71717A;line-height:17px;">
+            ${escapeHtml(settings.physicalAddress)} &nbsp;·&nbsp;
+            Contact: <a href="mailto:${escapeHtml(settings.contactEmail)}" style="color:#52525B;text-decoration:underline;">${escapeHtml(settings.contactEmail)}</a>
+            ${settings.contactWebsite ? ` &nbsp;·&nbsp; <a href="${escapeHtml(contactWebsite)}" target="_blank" style="color:#52525B;text-decoration:underline;">${escapeHtml(websiteDisplay)}</a>` : ""}
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align:left;padding-bottom:10px;font-size:10px;color:#A1A1AA;line-height:15px;">
+            ${escapeHtml(disclosure)}
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align:left;padding-top:8px;border-top:1px solid #F4F4F5;font-size:11px;color:#71717A;line-height:16px;">
+            <a href="${escapeHtml(options.unsubscribeUrl)}" target="_blank" style="color:#2563EB;font-weight:600;text-decoration:underline;">
+              ${unsubLabel}
+            </a>
+            &nbsp;&nbsp;·&nbsp;&nbsp;
+            <a href="https://www.kselectnetwork.com/privacy" target="_blank" style="color:#71717A;text-decoration:none;">
+              ${privacyLabel}
+            </a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+${FOOTER_END_MARKER}
+`.trim();
+  }
+
+  if (style === "dark") {
+    return `
+${FOOTER_START_MARKER}
+<table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background-color:#18181B;border-top:1px solid #27272A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr>
+    <td style="padding:28px 24px;text-align:center;">
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+          <td style="text-align:center;padding-bottom:10px;">
+            <span style="font-size:13px;font-weight:700;color:#FAFAFA;letter-spacing:0.5px;text-transform:uppercase;">
+              ${escapeHtml(settings.brandDisplayName)}
+            </span>
+            <br />
+            <span style="font-size:11px;color:#A1A1AA;line-height:16px;">
+              ${escapeHtml(settings.legalCompanyName)}
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align:center;padding-bottom:12px;font-size:11px;color:#A1A1AA;line-height:18px;">
+            ${escapeHtml(settings.physicalAddress)}
+            <br />
+            Contact: <a href="mailto:${escapeHtml(settings.contactEmail)}" style="color:#D4D4D8;text-decoration:underline;">${escapeHtml(settings.contactEmail)}</a>
+            ${settings.contactWebsite ? ` &nbsp;·&nbsp; <a href="${escapeHtml(contactWebsite)}" target="_blank" style="color:#D4D4D8;text-decoration:underline;">${escapeHtml(websiteDisplay)}</a>` : ""}
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align:center;padding-bottom:14px;font-size:11px;color:#71717A;line-height:17px;">
+            ${escapeHtml(disclosure)}
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align:center;padding-top:8px;border-top:1px solid #27272A;font-size:11px;color:#A1A1AA;line-height:16px;">
+            <a href="${escapeHtml(options.unsubscribeUrl)}" target="_blank" style="color:#818CF8;font-weight:600;text-decoration:underline;">
+              ${unsubLabel}
+            </a>
+            &nbsp;&nbsp;·&nbsp;&nbsp;
+            <a href="https://www.kselectnetwork.com/privacy" target="_blank" style="color:#A1A1AA;text-decoration:none;">
+              ${privacyLabel}
+            </a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+${FOOTER_END_MARKER}
+`.trim();
+  }
+
+  // Default: CLASSIC style (Centered layout, warm background #FBF8F5)
   return `
 ${FOOTER_START_MARKER}
 <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background-color:#FBF8F5;border-top:1px solid #ECE7DF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -93,7 +202,7 @@ ${FOOTER_START_MARKER}
             ${escapeHtml(settings.physicalAddress)}
             <br />
             Contact: <a href="mailto:${escapeHtml(settings.contactEmail)}" style="color:#71717A;text-decoration:underline;">${escapeHtml(settings.contactEmail)}</a>
-            ${settings.contactWebsite ? ` &nbsp;·&nbsp; <a href="${escapeHtml(contactWebsite)}" target="_blank" style="color:#71717A;text-decoration:underline;">${escapeHtml(contactWebsite.replace(/^https?:\/\//, ''))}</a>` : ''}
+            ${settings.contactWebsite ? ` &nbsp;·&nbsp; <a href="${escapeHtml(contactWebsite)}" target="_blank" style="color:#71717A;text-decoration:underline;">${escapeHtml(websiteDisplay)}</a>` : ""}
           </td>
         </tr>
         <tr>
@@ -180,6 +289,7 @@ export function assembleEmailWithMarketingFooter(
     unsubscribeUrl: string;
     landingPageUrl?: string;
     previewText?: string;
+    footerStyle?: MarketingFooterStyle;
   }
 ): string {
   let assembled = html || "";
@@ -208,6 +318,7 @@ export function assembleEmailWithMarketingFooter(
   const footerHtml = buildMarketingFooterHtml(options.footerSettings, {
     language: options.language,
     unsubscribeUrl: options.unsubscribeUrl,
+    style: options.footerStyle || "classic",
   });
 
   // 3. Idempotently replace or append the footer

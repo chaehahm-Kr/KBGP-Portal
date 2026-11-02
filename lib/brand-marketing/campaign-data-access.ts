@@ -16,6 +16,7 @@ import {
   DEFAULT_MARKETING_FOOTER,
   assembleEmailWithMarketingFooter,
   validateMarketingFooterCompleteness,
+  MarketingFooterStyle,
 } from "./marketing-footer";
 import {
   buildUnsubscribeUrl,
@@ -393,6 +394,7 @@ export async function listMarketingCampaigns(
         subjectOverride: d.subject_override || d.approval_snapshot?.subjectOverride || null,
         previewText: d.preview_text || d.approval_snapshot?.previewText || d.filter_criteria?.previewText || null,
         landingPageUrl: d.landing_page_url || d.approval_snapshot?.landingPageUrl || d.filter_criteria?.landingPageUrl || null,
+        footerStyle: (d.approval_snapshot?.footerStyle || d.filter_criteria?.footerStyle || "classic") as MarketingFooterStyle,
         status: d.status,
         approvalStatus: d.approval_status,
         approvedBy: d.approved_by,
@@ -454,6 +456,7 @@ export async function getMarketingCampaignById(
         subjectOverride: cData.subject_override || cData.approval_snapshot?.subjectOverride || null,
         previewText: cData.preview_text || cData.approval_snapshot?.previewText || cData.filter_criteria?.previewText || null,
         landingPageUrl: cData.landing_page_url || cData.approval_snapshot?.landingPageUrl || cData.filter_criteria?.landingPageUrl || null,
+        footerStyle: (cData.approval_snapshot?.footerStyle || cData.filter_criteria?.footerStyle || "classic") as MarketingFooterStyle,
         status: cData.status,
         approvalStatus: cData.approval_status,
         approvedBy: cData.approved_by,
@@ -555,6 +558,7 @@ export async function saveMarketingCampaign(
       (campaign.subjectOverride !== undefined && existing.subjectOverride !== campaign.subjectOverride) ||
       (campaign.previewText !== undefined && existing.previewText !== campaign.previewText) ||
       (campaign.landingPageUrl !== undefined && existing.landingPageUrl !== campaign.landingPageUrl) ||
+      (campaign.footerStyle !== undefined && existing.footerStyle !== campaign.footerStyle) ||
       existing.customMessage !== campaign.customMessage ||
       JSON.stringify(existing.filterCriteria) !== JSON.stringify(campaign.filterCriteria);
 
@@ -576,6 +580,7 @@ export async function saveMarketingCampaign(
     subjectOverride: campaign.subjectOverride !== undefined ? campaign.subjectOverride : (existing?.subjectOverride || null),
     previewText: campaign.previewText !== undefined ? campaign.previewText : (existing?.previewText || null),
     landingPageUrl: campaign.landingPageUrl !== undefined ? campaign.landingPageUrl : (existing?.landingPageUrl || null),
+    footerStyle: campaign.footerStyle || existing?.footerStyle || "classic",
     status,
     approvalStatus,
     approvedBy: approvalStatus === "APPROVED" ? (campaign.approvedBy || existing?.approvedBy || null) : null,
@@ -583,7 +588,10 @@ export async function saveMarketingCampaign(
     approvalSnapshot: approvalStatus === "APPROVED" ? (campaign.approvalSnapshot || existing?.approvalSnapshot || null) : null,
     scheduledAt: campaign.scheduledAt || null,
     isLiveModeEnabled: false, // Locked false
-    filterCriteria: campaign.filterCriteria || existing?.filterCriteria || {},
+    filterCriteria: {
+      ...(campaign.filterCriteria || existing?.filterCriteria || {}),
+      footerStyle: campaign.footerStyle || existing?.footerStyle || "classic",
+    },
     customMessage: campaign.customMessage !== undefined ? campaign.customMessage : existing?.customMessage || "",
     stats: campaign.stats || existing?.stats || {
       totalRecipients: 0,
@@ -618,7 +626,10 @@ export async function saveMarketingCampaign(
       approval_snapshot: record.approvalSnapshot,
       scheduled_at: record.scheduledAt,
       is_live_mode_enabled: false,
-      filter_criteria: record.filterCriteria,
+      filter_criteria: {
+        ...(record.filterCriteria || {}),
+        footerStyle: record.footerStyle || "classic",
+      },
       custom_message: record.customMessage,
       stats: record.stats,
       updated_by: userId || null,
@@ -975,6 +986,7 @@ export async function runCampaignDryRun(
       unsubscribeUrl: testUnsubUrl,
       previewText: camp?.previewText || "",
       landingPageUrl: camp?.landingPageUrl || "https://www.kselectnetwork.com",
+      footerStyle: camp?.footerStyle || "classic",
     });
 
     return {
@@ -1066,6 +1078,7 @@ export async function sendTestCampaignEmail(
     unsubscribeUrl: testUnsubUrl,
     previewText: camp?.previewText || "",
     landingPageUrl: camp?.landingPageUrl || "https://www.kselectnetwork.com",
+      footerStyle: camp?.footerStyle || "classic",
   });
 
   // 3.5 Preflight validation on final assembled HTML (Task ADM-EMAIL-TPL-005)
@@ -1145,7 +1158,8 @@ export async function approveMarketingCampaign(
     sendableCount: sendable.length,
     senderAddress: process.env.EMAIL_FROM_ADDRESS || "Contact@letusto.com",
     footerVersion: footerSettings.updatedAt || now,
-    footerSettingsSnapshot: footerSettings as any,
+    footerStyle: existing.campaign.footerStyle || "classic",
+    footerSettingsSnapshot: { ...(footerSettings as any), style: existing.campaign.footerStyle || "classic" },
     hash: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
   };
 

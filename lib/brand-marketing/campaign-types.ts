@@ -1,8 +1,10 @@
 /**
  * Brand Marketing Phase 2 — Email Campaigns V1 Types
- * Task ID: ADM-BSRC-006
+ * Task ID: ADM-BSRC-006 / ADM-EMAIL-FTR-001
  * Standards: DEPLOY-STD-001, DEV-SQL-MIGRATION-STD-001, AGENTS.md Rule 27
  */
+
+import type { MarketingFooterStyle } from "./marketing-footer";
 
 export type CampaignStatus =
   | "DRAFT"
@@ -105,6 +107,7 @@ export interface RecipientSelectionCriteria {
   manualEmails?: string[];
   requireConsentedOnly?: boolean;
   searchQuery?: string;
+  footerStyle?: MarketingFooterStyle;
 }
 
 export interface MarketingCampaignRecipientItem {
@@ -149,6 +152,7 @@ export interface CampaignApprovalSnapshot {
   dryRunReportId?: string;
   senderAddress: string;
   footerVersion?: string | null;
+  footerStyle?: MarketingFooterStyle;
   footerSettingsSnapshot?: Record<string, any> | null;
   hash: string;
 }
@@ -164,6 +168,7 @@ export interface MarketingCampaign {
   subjectOverride?: string | null;
   previewText?: string | null;
   landingPageUrl?: string | null;
+  footerStyle?: MarketingFooterStyle;
   status: CampaignStatus;
   approvalStatus: CampaignApprovalStatus;
   approvedBy?: string | null;

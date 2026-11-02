@@ -424,6 +424,7 @@ export function EmailCampaignsView({
       unsubscribeUrl: "https://admin.kselectnetwork.com/unsubscribe?token=sample-preview-token",
       previewText: editingCampaign?.previewText || "",
       landingPageUrl: editingCampaign?.landingPageUrl || "https://www.kselectnetwork.com",
+      footerStyle: editingCampaign?.footerStyle || "classic",
     });
   }, [activeTemplate, currentEffectiveSubject, editingCampaign, footerSettings]);
 
@@ -979,6 +980,7 @@ export function EmailCampaignsView({
       status: "DRAFT",
       approvalStatus: "PENDING",
       isLiveModeEnabled: false,
+      footerStyle: "classic",
       filterCriteria: {},
       customMessage: "귀사의 우수한 뷰티 라인업에 깊은 인상을 받아 파트너십을 제안드립니다.",
       stats: {
@@ -1007,7 +1009,7 @@ export function EmailCampaignsView({
   };
 
   const handleEditCampaign = async (c: MarketingCampaign) => {
-    setEditingCampaign(c);
+    setEditingCampaign({ ...c, footerStyle: c.footerStyle || "classic" });
     if (c.templateId) setSelectedTemplateId(c.templateId);
     if (c.filterCriteria?.grades && c.filterCriteria.grades.length > 0) {
       setSelectedGrades(c.filterCriteria.grades);
@@ -1063,6 +1065,7 @@ export function EmailCampaignsView({
         subjectOverride: currentEffectiveSubject,
         previewText: editingCampaign.previewText || "",
         landingPageUrl: editingCampaign.landingPageUrl || "https://www.kselectnetwork.com",
+        footerStyle: editingCampaign.footerStyle || "classic",
         filterCriteria: {
           grades: candidateFilterGrade !== "ALL" ? [candidateFilterGrade as any] : [],
           companyTypes: candidateFilterBusinessTypes,
@@ -2003,6 +2006,30 @@ export function EmailCampaignsView({
                 />
               </div>
 
+              {/* Footer Design Style Selection (Task ADM-EMAIL-FTR-001) */}
+              <div>
+                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Footer Design Style (푸터 디자인 스타일)
+                </label>
+                <select
+                  value={editingCampaign.footerStyle || "classic"}
+                  onChange={(e) =>
+                    setEditingCampaign({
+                      ...editingCampaign,
+                      footerStyle: e.target.value as any,
+                    })
+                  }
+                  className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="classic">Classic (클래식 · 중앙 정렬 기본형)</option>
+                  <option value="minimal">Minimal (미니멀 · 컴팩트 좌측 정렬)</option>
+                  <option value="dark">Dark (다크 · 프리미엄 다크 모드)</option>
+                </select>
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  * 캠페인 이메일 하단에 결합될 마케팅 푸터의 디자인 스타일을 선택합니다. (기본값: Classic)
+                </p>
+              </div>
+
               <div className="sm:col-span-2">
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                   Description / Internal Notes
@@ -2100,6 +2127,25 @@ export function EmailCampaignsView({
                       >
                         Mobile (375px)
                       </button>
+                    </div>
+
+                    {/* Footer Style Switcher (Task ADM-EMAIL-FTR-001) */}
+                    <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-950">
+                      <span className="px-2 py-0.5 text-[10px] text-zinc-400 font-medium self-center">Footer:</span>
+                      {(["classic", "minimal", "dark"] as const).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => setEditingCampaign({ ...editingCampaign, footerStyle: st })}
+                          className={`px-2 py-0.5 text-[10px] font-bold rounded cursor-pointer capitalize ${
+                            (editingCampaign.footerStyle || "classic") === st
+                              ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                              : "text-zinc-500 hover:text-zinc-800"
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
                     </div>
 
                     <button
