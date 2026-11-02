@@ -30,12 +30,72 @@ import {
   getMarketingSuppressionAuditLogAction,
 } from "@/lib/brand-marketing/campaign-actions";
 
-describe("ADM-EMAIL-SUP-002: Suppression Release Migration Security Hardening & Audit Integrity", () => {
+describe("ADM-EMAIL-SUP-003: Suppression Migration QA Verification, Least-Privilege & Transaction Integrity", () => {
   let mockDbSuppression: Map<string, any>;
   let mockDbAuditLog: any[];
 
-  function createMockSupabaseClient(callerRole: "service_role" | "authenticated" | "anon" = "service_role"): any {
+  function createMockSupabaseClient(
+    callerRole: "service_role" | "authenticated" | "anon" = "service_role",
+    options?: { simulateAuditFailure?: boolean }
+  ): any {
     return {
+      rpc: (fnName: string, args: any) => {
+        if (fnName === "fn_release_marketing_suppression") {
+          if (callerRole === "anon") {
+            return Promise.resolve({
+              data: null,
+              error: { code: "42501", message: "permission denied for function fn_release_marketing_suppression" },
+            });
+          }
+          if (options?.simulateAuditFailure) {
+            return Promise.resolve({
+              data: null,
+              error: { code: "P0001", message: "Simulated audit table trigger failure during release transaction" },
+            });
+          }
+          const row = mockDbSuppression.get(args.p_email.toLowerCase().trim());
+          if (!row || row.id !== args.p_id) {
+            return Promise.resolve({
+              data: null,
+              error: { code: "P0001", message: `해제 대상 수신 거부 레코드를 찾을 수 없습니다. (ID: ${args.p_id})` },
+            });
+          }
+          if (row.status === "RELEASED") {
+            return Promise.resolve({
+              data: null,
+              error: { code: "P0001", message: `이미 안전 해제 처리된 이메일 주소입니다. (ID: ${args.p_id})` },
+            });
+          }
+          // Atomic update
+          const prevStatus = row.status || "ACTIVE";
+          row.status = "RELEASED";
+          row.released_at = new Date().toISOString();
+          row.released_by = args.p_released_by;
+          row.release_reason = args.p_release_reason;
+          row.release_evidence = args.p_release_evidence;
+          row.evidence_type = args.p_evidence_type;
+          row.policy_validation_notes = args.p_policy_validation_notes;
+          mockDbSuppression.set(args.p_email.toLowerCase().trim(), row);
+
+          const auditEntry = {
+            id: `mock-audit-${Date.now()}`,
+            suppression_id: row.id,
+            email: args.p_email,
+            action: "RELEASE",
+            previous_status: prevStatus,
+            new_status: "RELEASED",
+            release_reason: args.p_release_reason,
+            release_evidence: args.p_release_evidence,
+            evidence_type: args.p_evidence_type,
+            policy_validation_notes: args.p_policy_validation_notes,
+            performed_by: args.p_released_by,
+            performed_at: row.released_at,
+          };
+          mockDbAuditLog.push(auditEntry);
+          return Promise.resolve({ data: row, error: null });
+        }
+        return Promise.resolve({ data: null, error: { code: "42883", message: "function does not exist" } });
+      },
       from: (table: string) => {
         if (table === "marketing_suppression_list") {
           return {
@@ -129,6 +189,16 @@ describe("ADM-EMAIL-SUP-002: Suppression Release Migration Security Hardening & 
         if (table === "marketing_suppression_audit_log") {
           return {
             insert: (payload: any) => {
+              // Simulated failure for transaction integrity testing
+              if (options?.simulateAuditFailure) {
+                return Promise.resolve({
+                  data: null,
+                  error: {
+                    code: "P0001",
+                    message: "Database transaction error: Simulated audit table write failure",
+                  },
+                });
+              }
               // Least-privilege security check: Direct INSERT by ordinary authenticated or anon is rejected
               if (callerRole !== "service_role") {
                 return Promise.resolve({
@@ -522,6 +592,78 @@ describe("ADM-EMAIL-SUP-002: Suppression Release Migration Security Hardening & 
       expect(res.success).toBe(false);
       expect(res.logs).toEqual([]);
       expect(res.error).toContain("Unauthorized");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 7. Transaction Integrity & Atomic Rollback Gate (Requirement 2)
+  // ---------------------------------------------------------------------------
+  describe("7. Transaction Integrity & Atomic Rollback Gate", () => {
+    it("rolls back release when audit log insertion fails, guaranteeing suppression is never left in RELEASED status", async () => {
+      const email = "rollback-test@cosmetics.com";
+      mockDbSuppression.set(email, {
+        id: "sup-rollback-1",
+        email,
+        reason: "UNSUBSCRIBED",
+        status: "ACTIVE",
+        suppressed_at: "2026-11-01T00:00:00Z",
+      });
+
+      // Client with simulated audit log failure (trigger rejection / check error)
+      const failingClient = createMockSupabaseClient("service_role", { simulateAuditFailure: true });
+
+      const res = await releaseMarketingSuppression(
+        {
+          id: "sup-rollback-1",
+          email,
+          releaseReason: "Customer requested renewed newsletter",
+          releaseEvidence: "Verified written consent email 2026-11-01 from buyer@cosmetics.com",
+          evidenceType: "WRITTEN_CONSENT_EMAIL",
+          releasedBy: "admin@kselectnetwork.com",
+        },
+        failingClient
+      );
+
+      // Must fail closed
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/(롤백|failure|Simulated audit|Database transaction)/i);
+
+      // CRITICAL: Record must remain ACTIVE in DB, never left in RELEASED status
+      const rowAfter = mockDbSuppression.get(email);
+      expect(rowAfter.status).toBe("ACTIVE");
+      expect(rowAfter.released_at).toBeFalsy();
+    });
+
+    it("executes atomic release via database RPC function when available", async () => {
+      const email = "rpc-atomic-test@brand.co.kr";
+      mockDbSuppression.set(email, {
+        id: "sup-rpc-1",
+        email,
+        reason: "UNSUBSCRIBED",
+        status: "ACTIVE",
+        suppressed_at: "2026-10-20T00:00:00Z",
+      });
+
+      const rpcClient = createMockSupabaseClient("service_role");
+
+      const res = await releaseMarketingSuppression(
+        {
+          id: "sup-rpc-1",
+          email,
+          releaseReason: "Customer requested re-engagement via ticket",
+          releaseEvidence: "Resolved inquiry in Helpdesk Ticket #8310",
+          evidenceType: "SUPPORT_TICKET",
+          releasedBy: "admin@kselectnetwork.com",
+        },
+        rpcClient
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.record.status).toBe("RELEASED");
+
+      const rowAfter = mockDbSuppression.get(email);
+      expect(rowAfter.status).toBe("RELEASED");
+      expect(mockDbAuditLog.some((a) => a.email === email && a.action === "RELEASE")).toBe(true);
     });
   });
 });

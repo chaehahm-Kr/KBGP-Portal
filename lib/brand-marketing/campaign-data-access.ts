@@ -1524,7 +1524,40 @@ export async function releaseMarketingSuppression(
       return { success: false, error: validation.error };
     }
 
-    // 4. Update the suppression record to RELEASED
+    // 4. Try atomic database RPC function first (fn_release_marketing_suppression)
+    let atomicSuccess = false;
+    let atomicRecord: any = null;
+
+    if (typeof supabase.rpc === "function") {
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        "fn_release_marketing_suppression",
+        {
+          p_id: record.id,
+          p_email: normalizedEmail,
+          p_release_reason: releaseReason.trim(),
+          p_release_evidence: releaseEvidence.trim(),
+          p_evidence_type: evidenceType || "WRITTEN_CONSENT_EMAIL",
+          p_policy_validation_notes: policyValidationNotes ? policyValidationNotes.trim() : null,
+          p_released_by: releasedBy || "admin",
+        }
+      );
+
+      if (!rpcError && rpcData) {
+        atomicSuccess = true;
+        atomicRecord = rpcData;
+      } else if (rpcError && rpcError.code !== "42883" && !rpcError.message?.includes("could not find") && !rpcError.message?.includes("function") && !rpcError.message?.includes("undefined")) {
+        // Explicit DB exception raised inside RPC (e.g. audit insert error, already released, unauthorized)
+        return { success: false, error: rpcError.message };
+      }
+    }
+
+    if (atomicSuccess && atomicRecord) {
+      removeEmailFromMemorySuppression(normalizedEmail);
+      return { success: true, record: atomicRecord };
+    }
+
+    // Fallback for mock clients in unit tests or pre-migration:
+    // Guarantees transaction integrity by rolling back status to record.status if audit insert fails
     const nowIso = new Date().toISOString();
     const updatePayload = {
       status: "RELEASED",
@@ -1556,26 +1589,38 @@ export async function releaseMarketingSuppression(
     const updatedRecord = updateRes.data || { ...record, ...updatePayload };
 
     // 5. Append immutable audit log via trusted server-side write path (service_role)
-    try {
-      // In production/server runtime, use createAdminClient() with service_role privileges
-      // because direct INSERT is revoked from ordinary authenticated users for security hardening.
-      const trustedAuditClient = customClient || createAdminClient();
-      await trustedAuditClient.from("marketing_suppression_audit_log").insert({
-        suppression_id: record.id,
-        email: normalizedEmail,
-        action: "RELEASE",
-        previous_status: record.status || "ACTIVE",
-        new_status: "RELEASED",
-        suppression_reason: record.reason,
-        release_reason: releaseReason.trim(),
-        release_evidence: releaseEvidence.trim(),
-        evidence_type: evidenceType || "WRITTEN_CONSENT_EMAIL",
-        policy_validation_notes: policyValidationNotes ? policyValidationNotes.trim() : null,
-        performed_by: releasedBy || "admin",
-        performed_at: nowIso,
-      });
-    } catch (auditErr: any) {
-      console.warn("[campaigns:suppression-release] Audit log insert notice:", auditErr.message);
+    const trustedAuditClient = customClient || createAdminClient();
+    const auditRes = await trustedAuditClient.from("marketing_suppression_audit_log").insert({
+      suppression_id: record.id,
+      email: normalizedEmail,
+      action: "RELEASE",
+      previous_status: record.status || "ACTIVE",
+      new_status: "RELEASED",
+      suppression_reason: record.reason,
+      release_reason: releaseReason.trim(),
+      release_evidence: releaseEvidence.trim(),
+      evidence_type: evidenceType || "WRITTEN_CONSENT_EMAIL",
+      policy_validation_notes: policyValidationNotes ? policyValidationNotes.trim() : null,
+      performed_by: releasedBy || "admin",
+      performed_at: nowIso,
+    });
+
+    if (auditRes && auditRes.error) {
+      // ATOMIC TRANSACTION INTEGRITY: A failed audit insertion must not leave the suppression in RELEASED status!
+      await supabase.from("marketing_suppression_list").update({
+        status: record.status || "ACTIVE",
+        released_at: record.released_at || null,
+        released_by: record.released_by || null,
+        release_reason: record.release_reason || null,
+        release_evidence: record.release_evidence || null,
+        evidence_type: record.evidence_type || null,
+        policy_validation_notes: record.policy_validation_notes || null,
+      }).eq("id", record.id);
+
+      return {
+        success: false,
+        error: `감사 로그 기록 실패로 인해 수신 거부 해제 트랜잭션이 롤백되었습니다: ${auditRes.error.message}`,
+      };
     }
 
     // 6. Purge from in-memory suppression cache

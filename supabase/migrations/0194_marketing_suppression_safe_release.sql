@@ -178,30 +178,131 @@ CREATE TRIGGER trg_protect_marketing_suppression_audit_log
 ALTER TABLE public.marketing_suppression_audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.marketing_suppression_audit_log FORCE ROW LEVEL SECURITY;
 
--- Revoke all permissions from anon and authenticated users
-REVOKE ALL ON public.marketing_suppression_audit_log FROM anon, authenticated;
+-- Revoke all permissions from anon, authenticated, and service_role to ensure clean least-privilege baseline
+REVOKE ALL ON public.marketing_suppression_audit_log FROM anon, authenticated, service_role;
 
 -- Grant SELECT only to authenticated users (filtered by RLS)
 GRANT SELECT ON public.marketing_suppression_audit_log TO authenticated;
 
--- Grant full access only to trusted server-side service_role
-GRANT ALL ON public.marketing_suppression_audit_log TO service_role;
+-- Grant minimum required privileges to trusted server-side service_role (strictly append-only: SELECT, INSERT only)
+GRANT SELECT, INSERT ON public.marketing_suppression_audit_log TO service_role;
 
--- RLS Policy: Authenticated users can only read audit logs if they are verified Admin / Super Admin
+-- RLS Policy: Authenticated users can only read audit logs if they are verified Admin
+-- Uses canonical public.auth_is_admin() from 0002_companies.sql
 DROP POLICY IF EXISTS "suppression_audit_admin_read" ON public.marketing_suppression_audit_log;
 CREATE POLICY "suppression_audit_admin_read"
   ON public.marketing_suppression_audit_log
   FOR SELECT
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.admin_users
-      WHERE admin_users.id = auth.uid()
-    )
-    OR
-    EXISTS (
-      SELECT 1 FROM public.company_users
-      WHERE company_users.user_id = auth.uid()
-        AND company_users.role = 'SUPER_ADMIN'
-    )
+  USING (public.auth_is_admin());
+
+-- ------------------------------------------------------------------------------
+-- 5. ATOMIC TRANSACTIONAL FUNCTION: fn_release_marketing_suppression
+-- Ensures suppression status release and audit log insertion execute in a single
+-- atomic PostgreSQL transaction. If audit logging fails, release is rolled back.
+-- ------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.fn_release_marketing_suppression(
+  p_id UUID,
+  p_email TEXT,
+  p_release_reason TEXT,
+  p_release_evidence TEXT,
+  p_evidence_type TEXT,
+  p_policy_validation_notes TEXT DEFAULT NULL,
+  p_released_by TEXT DEFAULT 'admin',
+  p_ip_address TEXT DEFAULT NULL,
+  p_user_agent TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_rec RECORD;
+  v_now TIMESTAMPTZ := now();
+  v_normalized_email TEXT := lower(trim(p_email));
+  v_audit_id UUID;
+BEGIN
+  -- 1. Authorization check: caller must be service_role or authenticated admin
+  IF auth.role() = 'authenticated' AND NOT public.auth_is_admin() THEN
+    RAISE EXCEPTION 'Unauthorized: Administrator privileges required to release suppression';
+  END IF;
+
+  -- 2. Lock and fetch target suppression record
+  SELECT * INTO v_rec
+  FROM public.marketing_suppression_list
+  WHERE id = p_id AND lower(email) = v_normalized_email
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION '해제 대상 수신 거부 레코드를 찾을 수 없습니다. (ID: %)', p_id;
+  END IF;
+
+  IF v_rec.status = 'RELEASED' THEN
+    RAISE EXCEPTION '이미 안전 해제 처리된 이메일 주소입니다. (ID: %)', p_id;
+  END IF;
+
+  -- 3. Update suppression record to RELEASED
+  UPDATE public.marketing_suppression_list
+  SET
+    status = 'RELEASED',
+    released_at = v_now,
+    released_by = p_released_by,
+    release_reason = p_release_reason,
+    release_evidence = p_release_evidence,
+    evidence_type = p_evidence_type,
+    policy_validation_notes = p_policy_validation_notes
+  WHERE id = p_id;
+
+  -- 4. Append immutable audit log entry in the SAME atomic transaction
+  INSERT INTO public.marketing_suppression_audit_log (
+    suppression_id,
+    email,
+    action,
+    previous_status,
+    new_status,
+    suppression_reason,
+    release_reason,
+    release_evidence,
+    evidence_type,
+    policy_validation_notes,
+    performed_by,
+    performed_at,
+    ip_address,
+    user_agent
+  ) VALUES (
+    v_rec.id,
+    v_normalized_email,
+    'RELEASE',
+    v_rec.status,
+    'RELEASED',
+    v_rec.reason,
+    p_release_reason,
+    p_release_evidence,
+    p_evidence_type,
+    p_policy_validation_notes,
+    p_released_by,
+    v_now,
+    p_ip_address,
+    p_user_agent
+  ) RETURNING id INTO v_audit_id;
+
+  -- 5. Return JSONB payload with updated data
+  RETURN jsonb_build_object(
+    'id', v_rec.id,
+    'email', v_normalized_email,
+    'status', 'RELEASED',
+    'released_at', v_now,
+    'released_by', p_released_by,
+    'release_reason', p_release_reason,
+    'release_evidence', p_release_evidence,
+    'evidence_type', p_evidence_type,
+    'policy_validation_notes', p_policy_validation_notes,
+    'audit_log_id', v_audit_id
   );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.fn_release_marketing_suppression FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.fn_release_marketing_suppression TO authenticated, service_role;
