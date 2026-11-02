@@ -3873,6 +3873,24 @@ export function EmailCampaignsView({
               {/* Delivery Management Card (ADM-EMAIL-APP-002) */}
               {editingCampaign.approvalStatus === "APPROVED" && (
                 <div className="p-4 rounded-lg bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 space-y-4 text-xs">
+                  {/* Prominent Safety Banner (ADM-EMAIL-APP-003) */}
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base shrink-0">🛡️</span>
+                      <div>
+                        <span className="font-bold text-amber-800 dark:text-amber-200">
+                          LIVE_MODE OFF — SIMULATION ONLY
+                        </span>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                          실제 고객 메일 발송이 안전하게 차단되어 있습니다. 시뮬레이션 실행은 실제 Sent / Delivered 지표를 증가시키지 않습니다.
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800 shrink-0">
+                      SAFETY LOCK ACTIVE
+                    </span>
+                  </div>
+
                   <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-900 pb-2">
                     <div>
                       <h4 className="font-bold text-blue-950 dark:text-blue-200 text-sm">
@@ -3897,33 +3915,74 @@ export function EmailCampaignsView({
                     </span>
                   </div>
 
-                  {/* Delivery Metrics */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
-                      <div className="text-[10px] text-zinc-500 uppercase font-semibold">Approved Recipients</div>
-                      <div className="text-base font-bold font-mono text-zinc-900 dark:text-zinc-100 mt-0.5">
-                        {editingCampaign.approvalSnapshot?.sendableCount ?? editingCampaign.stats?.sendableCount ?? 0}
-                      </div>
+                  {/* Actual Real Delivery Metrics (ADM-EMAIL-APP-003) */}
+                  <div>
+                    <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                      Actual Live Delivery Ledger (실제 발송 원장 기록)
                     </div>
-                    <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
-                      <div className="text-[10px] text-zinc-500 uppercase font-semibold">Sent Count</div>
-                      <div className="text-base font-bold font-mono text-blue-600 dark:text-blue-400 mt-0.5">
-                        {editingCampaign.stats?.sentCount ?? 0}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                        <div className="text-[10px] text-zinc-500 uppercase font-semibold">Approved Recipients</div>
+                        <div className="text-base font-bold font-mono text-zinc-900 dark:text-zinc-100 mt-0.5">
+                          {editingCampaign.approvalSnapshot?.sendableCount ?? editingCampaign.stats?.sendableCount ?? 0}
+                        </div>
                       </div>
-                    </div>
-                    <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
-                      <div className="text-[10px] text-zinc-500 uppercase font-semibold">Delivered Count</div>
-                      <div className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-                        {editingCampaign.stats?.deliveredCount ?? 0}
+                      <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                        <div className="text-[10px] text-zinc-500 uppercase font-semibold">Real Sent (Live)</div>
+                        <div className="text-base font-bold font-mono text-blue-600 dark:text-blue-400 mt-0.5">
+                          {editingCampaign.stats?.sentCount ?? 0}
+                        </div>
                       </div>
-                    </div>
-                    <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
-                      <div className="text-[10px] text-zinc-500 uppercase font-semibold">Failed Count</div>
-                      <div className="text-base font-bold font-mono text-rose-600 dark:text-rose-400 mt-0.5">
-                        {editingCampaign.stats?.failedCount ?? 0}
+                      <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                        <div className="text-[10px] text-zinc-500 uppercase font-semibold">Real Delivered (Live)</div>
+                        <div className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                          {editingCampaign.stats?.deliveredCount ?? 0}
+                        </div>
+                      </div>
+                      <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                        <div className="text-[10px] text-zinc-500 uppercase font-semibold">Real Failed (Live)</div>
+                        <div className="text-base font-bold font-mono text-rose-600 dark:text-rose-400 mt-0.5">
+                          {editingCampaign.stats?.failedCount ?? 0}
+                        </div>
                       </div>
                     </div>
                   </div>
+
+                  {/* Simulation Status Breakdown (if simulated) */}
+                  {editingCampaign.stats?.simulationStats && (
+                    <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded border border-zinc-200 dark:border-zinc-800 space-y-1.5 text-xs">
+                      <div className="font-bold text-zinc-900 dark:text-zinc-100 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <span>🔬</span> Simulation Evidence (사전 안전 시뮬레이션 결과):
+                        </span>
+                        <span className="text-[10px] font-mono text-zinc-500">
+                          {editingCampaign.stats.simulationStats.lastSimulatedAt
+                            ? new Date(editingCampaign.stats.simulationStats.lastSimulatedAt).toLocaleString()
+                            : "N/A"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-[11px] pt-1">
+                        <div className="p-2 bg-white dark:bg-zinc-800 rounded border border-zinc-100 dark:border-zinc-700">
+                          <span className="text-zinc-500 block text-[10px]">Evaluated:</span>
+                          <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100">
+                            {editingCampaign.stats.simulationStats.simulatedCount}건
+                          </span>
+                        </div>
+                        <div className="p-2 bg-white dark:bg-zinc-800 rounded border border-zinc-100 dark:border-zinc-700">
+                          <span className="text-zinc-500 block text-[10px]">Pre-dispatch Eligible:</span>
+                          <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                            {editingCampaign.stats.simulationStats.simulatedEligible}건
+                          </span>
+                        </div>
+                        <div className="p-2 bg-white dark:bg-zinc-800 rounded border border-zinc-100 dark:border-zinc-700">
+                          <span className="text-zinc-500 block text-[10px]">Suppression Filtered:</span>
+                          <span className="font-bold font-mono text-amber-600 dark:text-amber-400">
+                            {editingCampaign.stats.simulationStats.simulatedSuppressed}건
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Scheduled Info if SCHEDULED */}
                   {editingCampaign.scheduledAt && (
@@ -5012,12 +5071,13 @@ export function EmailCampaignsView({
 
           <div className="space-y-3 text-xs">
             <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
-              <div className="font-bold flex items-center gap-1 mb-1">
-                <span>🛡️</span> LIVE_MODE: FALSE (Safety Gate Active)
+              <div className="font-bold flex items-center gap-1 mb-1 text-xs">
+                <span>🛡️</span> LIVE_MODE OFF — SIMULATION ONLY (Safety Lock Active)
               </div>
-              <p className="text-[11px] leading-relaxed">
+              <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">
                 현재 시스템 정책상 실제 고객 대상 외부 메일 발송이 안전하게 차단되어 있습니다.
-                실행 시 발송 원장 기록 및 통계가 안전 시뮬레이션 모드로 완벽하게 처리됩니다.
+                실행 시 발송 전 수신적격 및 수신거부 사전 필터링 시뮬레이션만 수행되며,
+                <strong>실제 고객 메일 발송 및 실제 발송 카운트(Sent / Delivered)는 0으로 유지됩니다.</strong>
               </p>
             </div>
 

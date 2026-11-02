@@ -119,6 +119,8 @@ export interface CampaignSummaryMetrics {
   clickTrackingSupported: boolean;
   replyTrackingMode: "MANUAL_VERIFIED" | "PROVIDER_EVENT" | "NOT_TRACKED";
   hasTestEmailsExcluded: boolean;
+  isSimulationOnly?: boolean;
+  simulatedCount?: number;
 }
 
 export interface CompanyResultsFilterCriteria {

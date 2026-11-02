@@ -2086,12 +2086,15 @@ export async function executeCampaignDeliverySimulation(
   }
 
   if (existing.campaign.approvalStatus !== "APPROVED") {
-    throw new Error(`Cannot execute delivery: Campaign must be APPROVED first (current approval status: ${existing.campaign.approvalStatus}).`);
+    throw new Error(
+      `Cannot execute delivery: Campaign must be APPROVED first (current approval status: ${existing.campaign.approvalStatus}).`
+    );
   }
 
   if (existing.campaign.status === "SENDING") {
-    throw new Error("캠페인 발송이 이미 진행 중입니다. 중복 발송을 방지합니다.");
+    throw new Error("캠페인 발송 또는 시뮬레이션이 이미 진행 중입니다. 중복 실행을 방지합니다.");
   }
+
   if (existing.campaign.status === "COMPLETED") {
     throw new Error("이미 발송 완료된 캠페인입니다.");
   }
@@ -2109,47 +2112,37 @@ export async function executeCampaignDeliverySimulation(
   const recipients = existing.recipients || [];
   const eligibleRecipients = recipients.filter((r) => r.sendEligibility === "ELIGIBLE");
 
-  let sentCount = 0;
-  let deliveredCount = 0;
-  let failedCount = 0;
   let blockedSuppressed = 0;
+  let simulatedEligible = 0;
 
-  // 3. Re-evaluate suppression and update each recipient row
+  // 3. Pre-dispatch suppression recheck (FAIL-CLOSED)
+  // CRITICAL REQUIREMENT (ADM-EMAIL-APP-003):
+  // Simulation must NEVER set recipient status to DELIVERED or write fake sim_ provider IDs into the delivery ledger!
+  // Recipients remain PENDING in the production delivery ledger.
   for (const r of eligibleRecipients) {
     const supp = await checkEmailSuppression(r.recipientEmail, customClient);
     if (supp.isSuppressed) {
       blockedSuppressed++;
-      failedCount++;
       try {
         await supabase
           .from("marketing_campaign_recipients")
           .update({
-            status: "FAILED",
-            error_message: `Pre-dispatch suppression recheck blocked (${supp.reason || "SUPPRESSED"})`,
+            send_eligibility: "EXCLUDED_SUPPRESSED",
+            exclusion_reason: `Pre-dispatch suppression blocked (${supp.reason || "SUPPRESSED"})`,
             updated_at: nowIso,
           })
           .eq("id", r.id);
       } catch {}
     } else {
-      sentCount++;
-      deliveredCount++; // In simulation mode, simulate successful delivery
-      const simMsgId = "sim_" + (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
-      try {
-        await supabase
-          .from("marketing_campaign_recipients")
-          .update({
-            status: "DELIVERED",
-            provider_message_id: simMsgId,
-            sent_at: nowIso,
-            delivered_at: nowIso,
-            updated_at: nowIso,
-          })
-          .eq("id", r.id);
-      } catch {}
+      simulatedEligible++;
     }
   }
 
-  // 4. Update campaign stats & status to COMPLETED
+  // 4. Update campaign stats & status:
+  // - status remains APPROVED (never COMPLETED for simulations, preserving locked snapshot and real send workflow)
+  // - scheduled_at cleared to prevent cron re-triggers
+  // - sentCount, deliveredCount, failedCount remain real counts (NEVER incremented by simulation)
+  // - simulationStats records dry-run evidence separately
   const updatedStats = {
     ...(existing.campaign.stats || {
       totalRecipients: 0,
@@ -2160,28 +2153,38 @@ export async function executeCampaignDeliverySimulation(
       deliveredCount: 0,
       failedCount: 0,
     }),
-    sentCount,
-    deliveredCount,
-    failedCount,
+    sentCount: existing.campaign.stats?.sentCount || 0, // strictly 0 for simulation
+    deliveredCount: existing.campaign.stats?.deliveredCount || 0, // strictly 0 for simulation
+    failedCount: existing.campaign.stats?.failedCount || 0,
+    simulationStats: {
+      lastSimulatedAt: nowIso,
+      simulatedCount: eligibleRecipients.length,
+      simulatedEligible,
+      simulatedSuppressed: blockedSuppressed,
+      simulatedFailed: 0,
+      simulatedBy: adminEmail,
+    },
   };
 
   await supabase
     .from("marketing_campaigns")
     .update({
-      status: "COMPLETED",
+      status: "APPROVED",
+      scheduled_at: null,
       stats: updatedStats,
       updated_at: nowIso,
     })
     .eq("id", campaignId);
 
   // Update in-memory cache
-  const completedCamp: MarketingCampaign = {
+  const approvedCamp: MarketingCampaign = {
     ...existing.campaign,
-    status: "COMPLETED",
+    status: "APPROVED",
+    scheduledAt: null,
     stats: updatedStats,
     updatedAt: nowIso,
   };
-  memoryCampaigns.set(campaignId, completedCamp);
+  memoryCampaigns.set(campaignId, approvedCamp);
 
   // 5. Record immutable audit log
   recordCampaignAuditLog(
@@ -2192,10 +2195,10 @@ export async function executeCampaignDeliverySimulation(
       mode: "SIMULATE",
       liveModeEnabled: false,
       totalEvaluated: eligibleRecipients.length,
-      sentCount,
-      deliveredCount,
-      blockedSuppressed,
-      failedCount,
+      simulatedEligible,
+      simulatedSuppressed: blockedSuppressed,
+      actualSentCount: 0,
+      actualDeliveredCount: 0,
       performedBy: adminEmail,
     }
   );
@@ -2203,22 +2206,19 @@ export async function executeCampaignDeliverySimulation(
   return {
     success: true,
     campaignId,
-    status: "COMPLETED",
+    status: "APPROVED",
     totalEvaluated: eligibleRecipients.length,
-    totalSent: sentCount,
-    totalDelivered: deliveredCount,
+    totalSent: 0,
+    totalDelivered: 0,
     totalBlockedSuppressed: blockedSuppressed,
-    totalFailed: failedCount,
+    totalFailed: 0,
     isSimulated: true,
-    message: `안전 발송 시뮬레이션 완료: ${sentCount}건 전송, ${deliveredCount}건 전달 확인, ${blockedSuppressed}건 수신거부 차단.`,
+    simulatedCount: eligibleRecipients.length,
+    simulatedEligible,
+    message: `안전 시뮬레이션 완료: 총 ${eligibleRecipients.length}명 대상 사전 검증 완료 (수신적격: ${simulatedEligible}명, 수신거부 차단: ${blockedSuppressed}명). LIVE_MODE가 비활성화되어 있으므로 실제 고객 메일 발송 및 실제 발송 카운트는 발생하지 않았습니다.`,
   };
 }
 
-/**
- * Background / Cron worker procedure:
- * Evaluates campaigns with status = 'SCHEDULED' and scheduled_at <= now().
- * Idempotently processes delivery under LIVE_MODE: FALSE safety gate.
- */
 export async function processScheduledCampaigns(
   customClient?: SupabaseClient
 ): Promise<{ processedCount: number; results: CampaignDeliveryExecutionResult[] }> {

@@ -113,9 +113,13 @@ export function calculateCampaignSummaryMetrics(
     campaign.created_at ||
     new Date().toISOString();
 
-  // Filter out pure test mode messages if any
+  // Filter out pure test mode messages, pending messages, and any simulated runs (ADM-EMAIL-APP-003)
   const liveRecipients = recipients.filter(
-    (r) => r.status !== "TEST_SENT" && r.status !== "PENDING"
+    (r) =>
+      r.status !== "TEST_SENT" &&
+      r.status !== "PENDING" &&
+      !r.provider_message_id?.startsWith("sim_") &&
+      !r.providerMessageId?.startsWith("sim_")
   );
 
   const emailsSent = liveRecipients.filter(
@@ -173,7 +177,12 @@ export function calculateCampaignSummaryMetrics(
     campaignId: campaign.id,
     campaignName: campaign.name,
     campaignDate,
-    campaignStatus: campaign.status || "COMPLETED",
+    campaignStatus:
+      (campaign.status === "COMPLETED" && emailsSent === 0)
+        ? "APPROVED"
+        : (campaign.status || "APPROVED"),
+    isSimulationOnly: emailsSent === 0,
+    simulatedCount: recipients.filter((r) => r.provider_message_id?.startsWith("sim_") || r.providerMessageId?.startsWith("sim_")).length,
     language: campaign.language || "ko",
     companiesContacted,
     emailsSent,
@@ -747,8 +756,11 @@ export async function listCompanyResults(
 
       // Recipient activities
       const recipients: RecipientEmailActivity[] = recList.map((r: any) => {
-        let deliveryResult: DeliveryResultStatus = "SENT";
-        if (r.status === "DELIVERED") deliveryResult = "DELIVERED";
+        let deliveryResult: DeliveryResultStatus = "PENDING";
+        const isSimulated = r.provider_message_id?.startsWith("sim_") || r.providerMessageId?.startsWith("sim_");
+        if (isSimulated || r.status === "PENDING") {
+          deliveryResult = "PENDING";
+        } else if (r.status === "DELIVERED") deliveryResult = "DELIVERED";
         else if (r.status === "BOUNCED") deliveryResult = "BOUNCED";
         else if (r.status === "FAILED") deliveryResult = "FAILED";
         else if (r.status === "SENT") deliveryResult = "SENT";

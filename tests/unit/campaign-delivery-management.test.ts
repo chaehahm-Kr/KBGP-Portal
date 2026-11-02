@@ -320,7 +320,7 @@ describe("ADM-EMAIL-APP-002: Approved Campaign Delivery Management & Scheduling"
       mockCampaignRecord.status = "SENDING";
       await expect(
         executeCampaignDeliverySimulation(dummyCampaignId, "admin@kselectnetwork.com")
-      ).rejects.toThrow("캠페인 발송이 이미 진행 중입니다. 중복 발송을 방지합니다.");
+      ).rejects.toThrow("캠페인 발송 또는 시뮬레이션이 이미 진행 중입니다. 중복 실행을 방지합니다.");
 
       mockCampaignRecord.status = "COMPLETED";
       await expect(
@@ -335,29 +335,31 @@ describe("ADM-EMAIL-APP-002: Approved Campaign Delivery Management & Scheduling"
       );
 
       expect(result.success).toBe(true);
-      expect(result.status).toBe("COMPLETED");
-      expect(result.totalSent).toBe(1);
-      expect(result.totalDelivered).toBe(1);
+      expect(result.status).toBe("APPROVED");
+      expect(result.totalSent).toBe(0);
+      expect(result.totalDelivered).toBe(0);
       expect(result.totalBlockedSuppressed).toBe(1);
+      expect(result.simulatedCount).toBe(2);
+      expect(result.simulatedEligible).toBe(1);
 
-      // Verify recipient ledger in DB
+      // Verify recipient ledger in DB: ADM-EMAIL-APP-003 requires simulation NOT to fake delivery status
       const activeBuyer = mockRecipients.find((r) => r.recipient_email === "active.buyer@partner.com");
-      expect(activeBuyer.status).toBe("DELIVERED");
-      expect(activeBuyer.provider_message_id).toBeDefined();
-      expect(activeBuyer.sent_at).toBeDefined();
+      expect(activeBuyer.status).toBe("PENDING");
+      expect(activeBuyer.provider_message_id).toBeUndefined();
 
       const optedOutBuyer = mockRecipients.find((r) => r.recipient_email === "optout@example.com");
-      expect(optedOutBuyer.status).toBe("FAILED");
-      expect(optedOutBuyer.error_message).toContain("Pre-dispatch suppression recheck blocked");
+      expect(optedOutBuyer.send_eligibility).toBe("EXCLUDED_SUPPRESSED");
+      expect(optedOutBuyer.exclusion_reason).toContain("Pre-dispatch suppression blocked");
 
       // Verify non-eligible recipient remained uncontacted PENDING
       const unconfirmed = mockRecipients.find((r) => r.recipient_email === "excluded@partner.com");
       expect(unconfirmed.status).toBe("PENDING");
 
-      // Verify campaign stats updated
-      expect(mockCampaignRecord.stats.sentCount).toBe(1);
-      expect(mockCampaignRecord.stats.deliveredCount).toBe(1);
-      expect(mockCampaignRecord.stats.failedCount).toBe(1);
+      // Verify campaign stats updated: real sent/delivered remain 0, simulationStats updated
+      expect(mockCampaignRecord.stats.sentCount).toBe(0);
+      expect(mockCampaignRecord.stats.deliveredCount).toBe(0);
+      expect(mockCampaignRecord.stats.simulationStats?.simulatedEligible).toBe(1);
+      expect(mockCampaignRecord.stats.simulationStats?.simulatedSuppressed).toBe(1);
     });
 
     it("LIVE_MODE safety gate unconditionally rejects mode = 'LIVE' in executeCampaignDeliveryAction", async () => {
@@ -375,8 +377,8 @@ describe("ADM-EMAIL-APP-002: Approved Campaign Delivery Management & Scheduling"
 
       const cronSummary = await processScheduledCampaigns();
       expect(cronSummary.processedCount).toBe(1);
-      expect(cronSummary.results[0].status).toBe("COMPLETED");
-      expect(mockCampaignRecord.status).toBe("COMPLETED");
+      expect(cronSummary.results[0].status).toBe("APPROVED");
+      expect(mockCampaignRecord.status).toBe("APPROVED");
     });
   });
 });

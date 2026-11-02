@@ -165,6 +165,23 @@ export function CampaignResultsTab({
       {/* 2. SUMMARY METRICS GRID (9 Cards) */}
       {metrics ? (
         <div className="space-y-4">
+          {/* SIMULATION ONLY / LIVE_MODE OFF BANNER (ADM-EMAIL-APP-003) */}
+          {metrics.emailsSent === 0 && (
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-amber-900 dark:text-amber-200 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <span className="text-base shrink-0">🛡️</span>
+                <div>
+                  <span className="font-bold tracking-tight">LIVE_MODE OFF — SIMULATION ONLY</span>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed">
+                    본 캠페인은 안전 시뮬레이션 상태입니다. 실제 외부 메일 발송이 발생하지 않았으며, 실제 발송(Emails Sent) 및 전달(Delivered)은 LIVE_MODE 활성화 및 승인 발송 시에만 측정됩니다.
+                  </p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 shrink-0 self-start sm:self-auto">
+                0 ACTUAL DISPATCHES
+              </span>
+            </div>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-3">
             {/* Card 1: Companies Contacted */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-2xs">

@@ -130,6 +130,15 @@ export interface MarketingCampaignRecipientItem {
   errorMessage?: string | null;
 }
 
+export interface CampaignSimulationStats {
+  lastSimulatedAt?: string;
+  simulatedCount: number;
+  simulatedEligible: number;
+  simulatedSuppressed: number;
+  simulatedFailed: number;
+  simulatedBy?: string;
+}
+
 export interface CampaignStats {
   totalRecipients: number;
   sendableCount: number;
@@ -138,6 +147,7 @@ export interface CampaignStats {
   sentCount: number;
   deliveredCount: number;
   failedCount: number;
+  simulationStats?: CampaignSimulationStats;
 }
 
 export interface CampaignApprovalSnapshot {
@@ -231,6 +241,8 @@ export interface CampaignDeliveryExecutionResult {
   totalBlockedSuppressed: number;
   totalFailed: number;
   isSimulated: boolean;
+  simulatedCount?: number;
+  simulatedEligible?: number;
   message?: string;
   error?: string;
 }
