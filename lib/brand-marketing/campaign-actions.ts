@@ -9,6 +9,7 @@ import {
   MarketingCampaign,
   MarketingTemplatePackage,
   DryRunReport,
+  CampaignDeliveryExecutionResult,
 } from "./campaign-types";
 import {
   listMarketingTemplates,
@@ -25,6 +26,8 @@ import {
   deleteMarketingTemplate,
   deleteMarketingCampaign,
   syncCampaignRecipients,
+  updateCampaignSchedule,
+  executeCampaignDeliverySimulation,
   getMarketingFooterSettings,
   saveMarketingFooterSettings,
   recordCampaignAuditLog,
@@ -1168,5 +1171,74 @@ export async function getMarketingSuppressionAuditLogAction(email?: string): Pro
   } catch (err: any) {
     console.error("[campaign-actions:getMarketingSuppressionAuditLogAction] Exception:", err.message);
     return { success: false, logs: [], error: err.message };
+  }
+}
+
+
+/**
+ * -----------------------------------------------------------------------------
+ * DELIVERY MANAGEMENT & SCHEDULING ACTIONS (Task ID: ADM-EMAIL-APP-002)
+ * Standards: DEPLOY-STD-001, DEV-SQL-MIGRATION-STD-001, AGENTS.md Rule 27
+ * -----------------------------------------------------------------------------
+ */
+
+/**
+ * Schedules an approved campaign for future delivery without invalidating its approval snapshot.
+ */
+export async function scheduleMarketingCampaignAction(
+  campaignId: string,
+  scheduledAtIso: string
+): Promise<{ success: boolean; campaign?: MarketingCampaign; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const campaign = await updateCampaignSchedule(campaignId, scheduledAtIso, admin.email);
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+    return { success: true, campaign };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to schedule campaign" };
+  }
+}
+
+/**
+ * Cancels a campaign schedule and reverts status to APPROVED.
+ */
+export async function cancelCampaignScheduleAction(
+  campaignId: string
+): Promise<{ success: boolean; campaign?: MarketingCampaign; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const campaign = await updateCampaignSchedule(campaignId, null, admin.email);
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+    return { success: true, campaign };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to cancel campaign schedule" };
+  }
+}
+
+/**
+ * Executes delivery for an approved marketing campaign.
+ * Enforces LIVE_MODE: FALSE safety gate, rejecting real customer dispatches.
+ * Executes simulated delivery, ledger tracking, and state progression.
+ */
+export async function executeCampaignDeliveryAction(
+  campaignId: string,
+  options?: { mode?: "SIMULATE" | "LIVE" }
+): Promise<{ success: boolean; result?: CampaignDeliveryExecutionResult; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+
+    // LIVE_MODE SAFETY GATE (Rule 7 Invariant)
+    if (options?.mode === "LIVE") {
+      return {
+        success: false,
+        error: "실제 고객 대량 발송(LIVE_MODE)은 비활성화되어 있습니다 (정책 및 DB 안전 잠금). 소유자의 별도 승인 및 라이브 발송 인프라 활성화 후 사용 가능합니다.",
+      };
+    }
+
+    const result = await executeCampaignDeliverySimulation(campaignId, admin.email);
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+    return { success: true, result };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to execute campaign delivery" };
   }
 }

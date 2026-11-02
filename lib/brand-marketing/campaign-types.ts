@@ -219,3 +219,23 @@ export interface CampaignAuditLogItem {
   performedBy?: string | null;
   createdAt: string;
 }
+
+
+export interface CampaignDeliveryExecutionResult {
+  success: boolean;
+  campaignId: string;
+  status: CampaignStatus;
+  totalEvaluated: number;
+  totalSent: number;
+  totalDelivered: number;
+  totalBlockedSuppressed: number;
+  totalFailed: number;
+  isSimulated: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface ScheduleCampaignInput {
+  campaignId: string;
+  scheduledAt: string;
+}

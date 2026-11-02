@@ -11,6 +11,7 @@ import {
   CampaignApprovalSnapshot,
   SampleRecipientPreview,
   TemplateFilterOptions,
+  CampaignDeliveryExecutionResult,
 } from "./campaign-types";
 import {
   MarketingFooterSettings,
@@ -1984,4 +1985,269 @@ export async function getMarketingSuppressionAuditLog(
   } catch (err: any) {
     return { success: false, logs: [], error: err.message };
   }
+}
+
+
+/**
+ * -----------------------------------------------------------------------------
+ * 12. DELIVERY MANAGEMENT & SCHEDULING (Task ID: ADM-EMAIL-APP-002)
+ * Standards: DEPLOY-STD-001, DEV-SQL-MIGRATION-STD-001, AGENTS.md Rule 27
+ * Manages campaign scheduling, schedule cancellation, delivery simulation,
+ * and background cron processing without invalidating approved campaign snapshots.
+ * -----------------------------------------------------------------------------
+ */
+
+/**
+ * Updates campaign schedule time or cancels an existing schedule.
+ * Modifies only scheduled_at, status, and updated_at, preserving the approval snapshot.
+ */
+export async function updateCampaignSchedule(
+  campaignId: string,
+  scheduledAtIso: string | null,
+  adminEmail: string,
+  customClient?: SupabaseClient
+): Promise<MarketingCampaign> {
+  const existing = await getMarketingCampaignById(campaignId, customClient);
+  if (!existing.campaign) {
+    throw new Error(`Campaign '${campaignId}' not found.`);
+  }
+
+  if (existing.campaign.approvalStatus !== "APPROVED") {
+    throw new Error(`Cannot schedule campaign: Campaign must be APPROVED before scheduling (current status: ${existing.campaign.approvalStatus}).`);
+  }
+
+  if (scheduledAtIso) {
+    const targetMs = Date.parse(scheduledAtIso);
+    if (isNaN(targetMs)) {
+      throw new Error("유효하지 않은 예약 일시 형식입니다.");
+    }
+    if (targetMs <= Date.now() + 30000) {
+      throw new Error("예약 발송 시각은 현재 시각보다 최소 1분 이후여야 합니다 (과거 시각 불가).");
+    }
+  }
+
+  const supabase = await getClient(customClient);
+  const nowIso = new Date().toISOString();
+  const newStatus = scheduledAtIso ? "SCHEDULED" : "APPROVED";
+
+  const { data: updated, error } = await supabase
+    .from("marketing_campaigns")
+    .update({
+      scheduled_at: scheduledAtIso,
+      status: newStatus,
+      updated_at: nowIso,
+    })
+    .eq("id", campaignId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[campaigns:schedule] Failed to update campaign schedule:", error.message);
+    throw new Error(`Failed to update campaign schedule: ${error.message}`);
+  }
+
+  // Update in-memory cache
+  const updatedCamp: MarketingCampaign = {
+    ...existing.campaign,
+    scheduledAt: scheduledAtIso,
+    status: newStatus,
+    updatedAt: nowIso,
+  };
+  memoryCampaigns.set(campaignId, updatedCamp);
+
+  // Record immutable audit log
+  recordCampaignAuditLog(
+    campaignId,
+    scheduledAtIso ? "CAMPAIGN_SCHEDULED" : "CAMPAIGN_SCHEDULE_CANCELLED",
+    true,
+    {
+      scheduledAt: scheduledAtIso,
+      status: newStatus,
+      performedBy: adminEmail,
+    }
+  );
+
+  return updatedCamp;
+}
+
+/**
+ * Safely executes simulated campaign delivery.
+ * Enforces LIVE_MODE: FALSE invariant, rechecks suppression Fail-Closed,
+ * records recipient-level ledger events, and updates campaign statistics.
+ */
+export async function executeCampaignDeliverySimulation(
+  campaignId: string,
+  adminEmail: string,
+  customClient?: SupabaseClient
+): Promise<CampaignDeliveryExecutionResult> {
+  const existing = await getMarketingCampaignById(campaignId, customClient);
+  if (!existing.campaign) {
+    throw new Error(`Campaign '${campaignId}' not found.`);
+  }
+
+  if (existing.campaign.approvalStatus !== "APPROVED") {
+    throw new Error(`Cannot execute delivery: Campaign must be APPROVED first (current approval status: ${existing.campaign.approvalStatus}).`);
+  }
+
+  if (existing.campaign.status === "SENDING") {
+    throw new Error("캠페인 발송이 이미 진행 중입니다. 중복 발송을 방지합니다.");
+  }
+  if (existing.campaign.status === "COMPLETED") {
+    throw new Error("이미 발송 완료된 캠페인입니다.");
+  }
+
+  const supabase = await getClient(customClient);
+  const nowIso = new Date().toISOString();
+
+  // 1. Idempotency lock: Set campaign status to SENDING
+  await supabase
+    .from("marketing_campaigns")
+    .update({ status: "SENDING", updated_at: nowIso })
+    .eq("id", campaignId);
+
+  // 2. Fetch all frozen recipients
+  const recipients = existing.recipients || [];
+  const eligibleRecipients = recipients.filter((r) => r.sendEligibility === "ELIGIBLE");
+
+  let sentCount = 0;
+  let deliveredCount = 0;
+  let failedCount = 0;
+  let blockedSuppressed = 0;
+
+  // 3. Re-evaluate suppression and update each recipient row
+  for (const r of eligibleRecipients) {
+    const supp = await checkEmailSuppression(r.recipientEmail, customClient);
+    if (supp.isSuppressed) {
+      blockedSuppressed++;
+      failedCount++;
+      try {
+        await supabase
+          .from("marketing_campaign_recipients")
+          .update({
+            status: "FAILED",
+            error_message: `Pre-dispatch suppression recheck blocked (${supp.reason || "SUPPRESSED"})`,
+            updated_at: nowIso,
+          })
+          .eq("id", r.id);
+      } catch {}
+    } else {
+      sentCount++;
+      deliveredCount++; // In simulation mode, simulate successful delivery
+      const simMsgId = "sim_" + (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+      try {
+        await supabase
+          .from("marketing_campaign_recipients")
+          .update({
+            status: "DELIVERED",
+            provider_message_id: simMsgId,
+            sent_at: nowIso,
+            delivered_at: nowIso,
+            updated_at: nowIso,
+          })
+          .eq("id", r.id);
+      } catch {}
+    }
+  }
+
+  // 4. Update campaign stats & status to COMPLETED
+  const updatedStats = {
+    ...(existing.campaign.stats || {
+      totalRecipients: 0,
+      sendableCount: 0,
+      excludedCount: 0,
+      testSendsCount: 0,
+      sentCount: 0,
+      deliveredCount: 0,
+      failedCount: 0,
+    }),
+    sentCount,
+    deliveredCount,
+    failedCount,
+  };
+
+  await supabase
+    .from("marketing_campaigns")
+    .update({
+      status: "COMPLETED",
+      stats: updatedStats,
+      updated_at: nowIso,
+    })
+    .eq("id", campaignId);
+
+  // Update in-memory cache
+  const completedCamp: MarketingCampaign = {
+    ...existing.campaign,
+    status: "COMPLETED",
+    stats: updatedStats,
+    updatedAt: nowIso,
+  };
+  memoryCampaigns.set(campaignId, completedCamp);
+
+  // 5. Record immutable audit log
+  recordCampaignAuditLog(
+    campaignId,
+    "CAMPAIGN_DELIVERY_SIMULATED",
+    true,
+    {
+      mode: "SIMULATE",
+      liveModeEnabled: false,
+      totalEvaluated: eligibleRecipients.length,
+      sentCount,
+      deliveredCount,
+      blockedSuppressed,
+      failedCount,
+      performedBy: adminEmail,
+    }
+  );
+
+  return {
+    success: true,
+    campaignId,
+    status: "COMPLETED",
+    totalEvaluated: eligibleRecipients.length,
+    totalSent: sentCount,
+    totalDelivered: deliveredCount,
+    totalBlockedSuppressed: blockedSuppressed,
+    totalFailed: failedCount,
+    isSimulated: true,
+    message: `안전 발송 시뮬레이션 완료: ${sentCount}건 전송, ${deliveredCount}건 전달 확인, ${blockedSuppressed}건 수신거부 차단.`,
+  };
+}
+
+/**
+ * Background / Cron worker procedure:
+ * Evaluates campaigns with status = 'SCHEDULED' and scheduled_at <= now().
+ * Idempotently processes delivery under LIVE_MODE: FALSE safety gate.
+ */
+export async function processScheduledCampaigns(
+  customClient?: SupabaseClient
+): Promise<{ processedCount: number; results: CampaignDeliveryExecutionResult[] }> {
+  const supabase = await getClient(customClient);
+  const nowIso = new Date().toISOString();
+
+  const { data: dueCampaigns, error } = await supabase
+    .from("marketing_campaigns")
+    .select("id, name, scheduled_at, status")
+    .eq("status", "SCHEDULED")
+    .lte("scheduled_at", nowIso);
+
+  if (error || !dueCampaigns || dueCampaigns.length === 0) {
+    return { processedCount: 0, results: [] };
+  }
+
+  const results: CampaignDeliveryExecutionResult[] = [];
+  for (const c of dueCampaigns) {
+    try {
+      const res = await executeCampaignDeliverySimulation(
+        c.id,
+        "system-scheduler@kselectnetwork.com",
+        customClient
+      );
+      results.push(res);
+    } catch (err: any) {
+      console.error(`[campaigns:scheduler] Error processing campaign ${c.id}:`, err.message);
+    }
+  }
+
+  return { processedCount: results.length, results };
 }

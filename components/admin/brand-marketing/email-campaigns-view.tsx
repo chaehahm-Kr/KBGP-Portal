@@ -34,6 +34,9 @@ import {
   deleteMarketingTemplatesBulkAction,
   deleteMarketingCampaignAction,
   archiveMarketingCampaignAction,
+  scheduleMarketingCampaignAction,
+  cancelCampaignScheduleAction,
+  executeCampaignDeliveryAction,
 } from "@/lib/brand-marketing/campaign-actions";
 import {
   parseAndValidateTestRecipients,
@@ -316,6 +319,14 @@ export function EmailCampaignsView({
 
   // Audit Logs State
   const [campaignLogs, setCampaignLogs] = useState<any[]>([]);
+
+  // Delivery Management & Scheduling State (ADM-EMAIL-APP-002)
+  const [showSendNowModal, setShowSendNowModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleInputValue, setScheduleInputValue] = useState("");
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [isDispatching, setIsDispatching] = useState(false);
+  const [deliveryResult, setDeliveryResult] = useState<any>(null);
 
   // Notification Toast
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -1734,6 +1745,80 @@ export function EmailCampaignsView({
   };
 
   // --------------------------------------------------------------------------
+    // --------------------------------------------------------------------------
+  // DELIVERY MANAGEMENT & SCHEDULING HANDLERS (Task ID: ADM-EMAIL-APP-002)
+  // --------------------------------------------------------------------------
+  const handleScheduleCampaign = async () => {
+    if (!editingCampaign?.id || !scheduleInputValue) return;
+    setIsScheduling(true);
+    try {
+      const targetIso = new Date(scheduleInputValue).toISOString();
+      const res = await scheduleMarketingCampaignAction(editingCampaign.id, targetIso);
+      if (res.success && res.campaign) {
+        setEditingCampaign(res.campaign);
+        showNotification(
+          "success",
+          `캠페인이 ${new Date(targetIso).toLocaleString()} (KST: ${new Date(targetIso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })})로 예약되었습니다.`
+        );
+        setShowScheduleModal(false);
+        refreshCampaignsAndTemplates();
+      } else {
+        showNotification("error", res.error || "예약 설정 실패");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message || "예약 설정 중 오류가 발생했습니다.");
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  const handleCancelSchedule = async () => {
+    if (!editingCampaign?.id) return;
+    if (typeof window !== "undefined" && !window.confirm("캠페인 예약 발송을 취소하고 승인(APPROVED) 상태로 되돌리시겠습니까?")) {
+      return;
+    }
+    setIsScheduling(true);
+    try {
+      const res = await cancelCampaignScheduleAction(editingCampaign.id);
+      if (res.success && res.campaign) {
+        setEditingCampaign(res.campaign);
+        showNotification("success", "캠페인 예약이 취소되었습니다.");
+        refreshCampaignsAndTemplates();
+      } else {
+        showNotification("error", res.error || "예약 취소 실패");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message || "예약 취소 중 오류가 발생했습니다.");
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  const handleExecuteSendNow = async () => {
+    if (!editingCampaign?.id) return;
+    setIsDispatching(true);
+    setDeliveryResult(null);
+    try {
+      const res = await executeCampaignDeliveryAction(editingCampaign.id, { mode: "SIMULATE" });
+      if (res.success && res.result) {
+        setDeliveryResult(res.result);
+        showNotification("success", res.result.message || "캠페인 안전 발송 시뮬레이션이 완료되었습니다.");
+        const updated = await getMarketingCampaignByIdAction(editingCampaign.id);
+        if (updated.success && updated.campaign) {
+          setEditingCampaign(updated.campaign);
+          if (updated.logs) setCampaignLogs(updated.logs);
+        }
+        refreshCampaignsAndTemplates();
+      } else {
+        showNotification("error", res.error || "발송 실행 실패");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message || "발송 실행 중 오류가 발생했습니다.");
+    } finally {
+      setIsDispatching(false);
+    }
+  };
+
   // RENDER: TOP-LEVEL SUB-TAB BAR
   // --------------------------------------------------------------------------
   const renderSubTabBar = () => {
@@ -1877,6 +1962,8 @@ export function EmailCampaignsView({
                 <th className="p-3">Status</th>
                 <th className="p-3">Approval</th>
                 <th className="p-3">Recipients</th>
+                <th className="p-3">Sent</th>
+                <th className="p-3">Delivered</th>
                 <th
                   onClick={() => setCampaignSortDir((prev) => (prev === "desc" ? "asc" : "desc"))}
                   className="p-3 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none whitespace-nowrap"
@@ -1890,7 +1977,7 @@ export function EmailCampaignsView({
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {filteredAndSortedCampaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-zinc-500">
+                  <td colSpan={9} className="p-8 text-center text-zinc-500">
                     No marketing campaigns found. Click &quot;+ Create Campaign&quot; to begin.
                   </td>
                 </tr>
@@ -1924,6 +2011,8 @@ export function EmailCampaignsView({
                         </span>
                       </td>
                       <td className="p-3 font-mono">{c.stats?.totalRecipients || 0}</td>
+                      <td className="p-3 font-mono text-blue-600 dark:text-blue-400">{c.stats?.sentCount || 0}</td>
+                      <td className="p-3 font-mono text-emerald-600 dark:text-emerald-400">{c.stats?.deliveredCount || 0}</td>
                       <td className="p-3 text-zinc-400 text-[11px] whitespace-nowrap">
                         {new Date(c.createdAt).toLocaleDateString()}
                       </td>
