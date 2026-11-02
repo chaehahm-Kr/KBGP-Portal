@@ -1672,6 +1672,7 @@ export function EmailCampaignsView({
           success: false,
           message: batchRes.error || "테스트 발송이 거부되거나 실패했습니다.",
         });
+        showNotification("error", batchRes.error || "테스트 발송이 거부되거나 차단되었습니다.");
       }
     } catch (err: any) {
       setTestSendResult({ success: false, message: err.message });

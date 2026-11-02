@@ -4,6 +4,17 @@ import { maskEmailAddress } from "@/lib/notifications/email";
 import { getCanonicalMarketingBaseUrl } from "./marketing-url";
 
 // Fallback in-memory suppression registry for fast lookup and local testing
+export function addEmailToMemorySuppression(email: string): void {
+  const normalized = email.toLowerCase().trim();
+  if (normalized) {
+    memorySuppressionList.add(normalized);
+  }
+}
+
+export function clearMemorySuppression(): void {
+  memorySuppressionList.clear();
+}
+
 const memorySuppressionList = new Set<string>();
 
 /**
@@ -301,18 +312,59 @@ export async function recordEmailOptOut(
   }
 }
 
-/**
- * Checks whether an email address is currently actively suppressed.
- * Respects safe release status: returns false if record status is RELEASED.
- * Fail-Closed: returns true if database is unreachable and address was in memory cache.
- */
-export async function isEmailSuppressed(email: string, customClient?: any): Promise<boolean> {
-  const normalized = email.toLowerCase().trim();
-  if (!normalized) return false;
+export interface SuppressionCheckResult {
+  isSuppressed: boolean;
+  status?: "ACTIVE" | "RELEASED" | string;
+  reason?: "UNSUBSCRIBED" | "BOUNCED" | "COMPLAINT" | "MANUAL_ADMIN" | string;
+  suppressedAt?: string;
+  releasedAt?: string | null;
+  isFailClosedError?: boolean;
+  errorDetail?: string;
+}
 
-  // Fast check: if in memory cache, it's suppressed
+/**
+ * Formats a raw suppression reason code into clear Korean text for user display.
+ */
+export function formatSuppressionReasonKorean(reason?: string): string {
+  switch (reason?.toUpperCase()) {
+    case "UNSUBSCRIBED":
+      return "수신거부";
+    case "BOUNCED":
+      return "영구 반송";
+    case "COMPLAINT":
+      return "스팸 신고";
+    case "MANUAL_ADMIN":
+    case "MANUAL":
+      return "관리자 수동 제외";
+    case "SYSTEM_LOOKUP_FAILURE":
+      return "수신 거부 조회 오류(Fail-Closed)";
+    default:
+      return "수신 제외 등록";
+  }
+}
+
+/**
+ * Universally checks suppression status with full metadata and strict Fail-Closed enforcement.
+ * - ACTIVE: Suppressed (isSuppressed: true)
+ * - RELEASED: Unsuppressed (isSuppressed: false)
+ * - Error/Timeout/Exception: Treated as Suppressed (isSuppressed: true, isFailClosedError: true)
+ */
+export async function checkEmailSuppression(
+  email: string,
+  customClient?: any
+): Promise<SuppressionCheckResult> {
+  const normalized = email.toLowerCase().trim();
+  if (!normalized) {
+    return { isSuppressed: false };
+  }
+
+  // Fast check: in-memory suppression registry
   if (memorySuppressionList.has(normalized)) {
-    return true;
+    return {
+      isSuppressed: true,
+      status: "ACTIVE",
+      reason: "UNSUBSCRIBED",
+    };
   }
 
   try {
@@ -322,16 +374,15 @@ export async function isEmailSuppressed(email: string, customClient?: any): Prom
 
     const res = await admin
       .from("marketing_suppression_list")
-      .select("id, status")
+      .select("id, status, reason, suppressed_at, released_at")
       .eq("email", normalized)
       .limit(1);
 
     if (res.error) {
       if (res.error.code === "42703" || res.error.message?.includes("status")) {
-        // Fallback query without status column
         const fallback = await admin
           .from("marketing_suppression_list")
-          .select("id")
+          .select("id, reason, suppressed_at")
           .eq("email", normalized)
           .limit(1);
         data = fallback.data;
@@ -344,30 +395,60 @@ export async function isEmailSuppressed(email: string, customClient?: any): Prom
     }
 
     if (queryError) {
-      console.warn("[marketing:suppression] DB query warning:", queryError.message);
-      return memorySuppressionList.has(normalized);
+      console.error("[marketing:suppression] DB query error, enforcing FAIL-CLOSED:", queryError.message);
+      return {
+        isSuppressed: true,
+        status: "ACTIVE",
+        reason: "SYSTEM_LOOKUP_FAILURE",
+        isFailClosedError: true,
+        errorDetail: queryError.message,
+      };
     }
 
     if (data && data.length > 0) {
       const record = data[0];
-      // If safely released, the address is NOT suppressed
       if (record.status === "RELEASED") {
         memorySuppressionList.delete(normalized);
-        return false;
+        return {
+          isSuppressed: false,
+          status: "RELEASED",
+          reason: record.reason,
+          releasedAt: record.released_at,
+        };
       }
       memorySuppressionList.add(normalized);
-      return true;
+      return {
+        isSuppressed: true,
+        status: record.status || "ACTIVE",
+        reason: record.reason || "UNSUBSCRIBED",
+        suppressedAt: record.suppressed_at,
+      };
     } else {
-      // Record not present in suppression table
       memorySuppressionList.delete(normalized);
-      return false;
+      return {
+        isSuppressed: false,
+      };
     }
   } catch (err: any) {
-    console.warn("[marketing:suppression] Exception querying DB:", err.message);
+    console.error("[marketing:suppression] Exception querying DB, enforcing FAIL-CLOSED:", err.message);
+    return {
+      isSuppressed: true,
+      status: "ACTIVE",
+      reason: "SYSTEM_LOOKUP_FAILURE",
+      isFailClosedError: true,
+      errorDetail: err.message,
+    };
   }
+}
 
-  // Fail-closed fallback: if DB unreachable, check in-memory suppression registry
-  return memorySuppressionList.has(normalized);
+/**
+ * Checks whether an email address is currently actively suppressed.
+ * Respects safe release status: returns false if record status is RELEASED.
+ * Universal Fail-Closed enforcement: returns true if database is unreachable or lookup fails.
+ */
+export async function isEmailSuppressed(email: string, customClient?: any): Promise<boolean> {
+  const result = await checkEmailSuppression(email, customClient);
+  return result.isSuppressed;
 }
 
 /**

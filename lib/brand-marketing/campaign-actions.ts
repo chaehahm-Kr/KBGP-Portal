@@ -26,7 +26,13 @@ import {
   deleteMarketingCampaign,
   getMarketingFooterSettings,
   saveMarketingFooterSettings,
+  recordCampaignAuditLog,
 } from "./campaign-data-access";
+import {
+  checkEmailSuppression,
+  formatSuppressionReasonKorean,
+} from "./unsubscribe";
+import { maskEmailAddress } from "@/lib/notifications/email";
 import {
   importZipPackage,
   importRawHtmlPackage,
@@ -401,23 +407,121 @@ export async function sendTestCampaignEmailsAction(
       };
     }
 
+    // 1. Strict Allowlist Verification for All Recipients (All-or-Nothing Pre-Validation)
     const ownerAllowlist = await getMarketingTestAllowlist();
+    const disallowedRecipients: Array<{ email: string; reason: string }> = [];
+    for (const recipient of parsed.uniqueRecipients) {
+      const allowCheck = isTestRecipientAllowlisted(recipient, ownerAllowlist);
+      if (!allowCheck.isAllowed) {
+        disallowedRecipients.push({
+          email: recipient,
+          reason: allowCheck.rejectionReason || "외부 테스트 허용 목록(Allowlist)에 등록되지 않은 이메일입니다.",
+        });
+      }
+    }
+
+    if (disallowedRecipients.length > 0) {
+      const firstDisallowed = disallowedRecipients[0];
+      const errorMsg =
+        disallowedRecipients.length === 1
+          ? `보안 검증 실패: '${firstDisallowed.email}'은(는) 승인된 테스트 수신자가 아닙니다. 허용된 도메인(@letusto.com, @kselectnetwork.com) 또는 허용 목록에 등록된 주소만 가능합니다.`
+          : `보안 검증 실패: 허용 목록에 없는 주소가 포함되어 있습니다 (${disallowedRecipients.map((d) => d.email).join(", ")}).`;
+
+      recordCampaignAuditLog(campaignId, "TEST_BATCH_REJECTED_ALLOWLIST", false, {
+        totalRequested: parsed.uniqueRecipients.length,
+        disallowedRecipients: disallowedRecipients.map((d) => ({
+          email: maskEmailAddress(d.email),
+          reason: d.reason,
+        })),
+        reason: errorMsg,
+      });
+
+      return {
+        success: false,
+        totalRequested: parsed.uniqueRecipients.length,
+        totalSent: 0,
+        totalFailed: parsed.uniqueRecipients.length,
+        results: parsed.uniqueRecipients.map((r) => {
+          const disallowed = disallowedRecipients.find((d) => d.email === r);
+          return {
+            email: r,
+            success: false,
+            error: disallowed ? disallowed.reason : "허용되지 않은 수신자가 포함되어 전체 발송이 중단되었습니다.",
+          };
+        }),
+        invalidInputs: parsed.invalidInputs,
+        duplicateCount: parsed.duplicateCount,
+        error: errorMsg,
+      };
+    }
+
+    // 2. UNIVERSAL PRE-SEND SUPPRESSION CHECK (All-or-Nothing V1 Policy — Zero Exceptions)
+    const blockedRecipients: Array<{
+      email: string;
+      reason?: string;
+      status?: string;
+      reasonLabel: string;
+    }> = [];
+
+    for (const recipient of parsed.uniqueRecipients) {
+      const suppressionCheck = await checkEmailSuppression(recipient);
+      if (suppressionCheck.isSuppressed) {
+        blockedRecipients.push({
+          email: recipient,
+          reason: suppressionCheck.reason,
+          status: suppressionCheck.status,
+          reasonLabel: formatSuppressionReasonKorean(suppressionCheck.reason),
+        });
+      }
+    }
+
+    if (blockedRecipients.length > 0) {
+      const firstBlocked = blockedRecipients[0];
+      let errorMsg: string;
+      if (blockedRecipients.length === 1) {
+        errorMsg = `발송이 차단되었습니다. ${firstBlocked.email}은(는) 수신거부 목록에 등록되어 있어(${firstBlocked.reasonLabel}) 테스트 이메일을 발송할 수 없습니다. 수신자 목록에서 제외하거나 안전 해제 절차를 진행해 주세요.`;
+      } else {
+        const blockedList = blockedRecipients.map((b) => `${b.email}(${b.reasonLabel})`).join(", ");
+        errorMsg = `발송이 차단되었습니다. 수신거부 목록에 등록된 주소가 포함되어 있어(${blockedList}) 테스트 이메일을 발송할 수 없습니다. 해당 주소를 수신자 목록에서 제외하거나 안전 해제 절차를 진행해 주세요.`;
+      }
+
+      recordCampaignAuditLog(campaignId, "TEST_BATCH_BLOCKED_BY_SUPPRESSION", false, {
+        totalRequested: parsed.uniqueRecipients.length,
+        blockedRecipients: blockedRecipients.map((b) => ({
+          email: maskEmailAddress(b.email),
+          reason: b.reason,
+          status: b.status,
+        })),
+        reason: errorMsg,
+      });
+
+      return {
+        success: false,
+        totalRequested: parsed.uniqueRecipients.length,
+        totalSent: 0,
+        totalFailed: parsed.uniqueRecipients.length,
+        results: parsed.uniqueRecipients.map((r) => {
+          const isBlocked = blockedRecipients.find((b) => b.email === r);
+          return {
+            email: r,
+            success: false,
+            error: isBlocked
+              ? `수신거부 등록 (${isBlocked.reasonLabel}) — 발송 차단`
+              : "동일 배치 내 수신거부 주소 포함으로 인한 일괄 발송 차단 (All-or-Nothing Policy)",
+          };
+        }),
+        invalidInputs: parsed.invalidInputs,
+        duplicateCount: parsed.duplicateCount,
+        error: errorMsg,
+      };
+    }
+
+    // 3. Dispatch to all validated & unsuppressed test recipients
     const results: TestEmailRecipientResult[] = [];
     let sentCount = 0;
     let failedCount = 0;
 
     for (const recipient of parsed.uniqueRecipients) {
-      const allowCheck = isTestRecipientAllowlisted(recipient, ownerAllowlist);
-      if (!allowCheck.isAllowed) {
-        failedCount++;
-        results.push({
-          email: recipient,
-          success: false,
-          error: allowCheck.rejectionReason || "외부 테스트 허용 목록(Allowlist)에 등록되지 않은 이메일입니다.",
-        });
-        continue;
-      }
-
       try {
         const sendRes = await sendTestCampaignEmail(
           campaignId,
@@ -500,7 +604,7 @@ export async function sendTestCampaignEmailAction(
     return {
       success: first.success,
       messageId: first.messageId,
-      error: first.error || batchRes.error,
+      error: batchRes.error || first.error,
     };
   }
 

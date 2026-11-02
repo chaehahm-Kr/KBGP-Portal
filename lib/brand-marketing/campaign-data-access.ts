@@ -22,6 +22,8 @@ import {
 import {
   buildUnsubscribeUrl,
   isEmailSuppressed,
+  checkEmailSuppression,
+  formatSuppressionReasonKorean,
   buildOneClickUnsubscribeEndpoint,
   removeEmailFromMemorySuppression,
 } from "./unsubscribe";
@@ -847,10 +849,11 @@ export async function runCampaignDryRun(
       }
       seenEmails.add(email);
 
-      // Check Suppression List
-      const isSuppressed = memorySuppression.has(email) || (await isEmailSuppressed(email, customClient));
-      if (isSuppressed) {
+      // Check Suppression List (Universal Enforcement)
+      const suppressionCheck = await checkEmailSuppression(email, customClient || supabase);
+      if (suppressionCheck.isSuppressed) {
         suppressedCount++;
+        const reasonLabel = formatSuppressionReasonKorean(suppressionCheck.reason);
         recipientItems.push({
           id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
           campaignId,
@@ -862,7 +865,7 @@ export async function runCampaignDryRun(
           companyNameEn: comp.company_name_en,
           brandName: primaryBrand,
           sendEligibility: "EXCLUDED_SUPPRESSED",
-          exclusionReason: "Email address is on the global suppression/opt-out list",
+          exclusionReason: `Email address is on the global suppression/opt-out list (${reasonLabel})`,
           status: "PENDING",
         });
         continue;
@@ -955,10 +958,11 @@ export async function runCampaignDryRun(
       }
       seenEmails.add(email);
 
-      // Check suppression list
-      const isSuppressed = memorySuppression.has(email) || (await isEmailSuppressed(email, customClient));
-      if (isSuppressed) {
+      // Check suppression list (Universal Enforcement)
+      const suppressionCheck = await checkEmailSuppression(email, customClient || supabase);
+      if (suppressionCheck.isSuppressed) {
         suppressedCount++;
+        const reasonLabel = formatSuppressionReasonKorean(suppressionCheck.reason);
         recipientItems.push({
           id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
           campaignId,
@@ -970,7 +974,7 @@ export async function runCampaignDryRun(
           companyNameEn: "Manual Recipient",
           brandName: "Direct Outreach",
           sendEligibility: "EXCLUDED_SUPPRESSED",
-          exclusionReason: "Email address is on the global suppression/opt-out list",
+          exclusionReason: `Email address is on the global suppression/opt-out list (${reasonLabel})`,
           status: "PENDING",
         });
         continue;
@@ -1110,24 +1114,43 @@ export async function sendTestCampaignEmail(
   targetEmail: string,
   templateSubject: string,
   templateHtml: string,
-  templatePlainText?: string
+  templatePlainText?: string,
+  customClient?: any
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const normalizedEmail = (targetEmail || "").toLowerCase().trim();
+
   // 1. Strict Allowlist Verification (Internal Domains + Owner-Approved Allowlist)
   const ownerAllowlist = await getMarketingTestAllowlist();
-  const allowCheck = isTestRecipientAllowlisted(targetEmail, ownerAllowlist);
+  const allowCheck = isTestRecipientAllowlisted(normalizedEmail, ownerAllowlist);
   if (!allowCheck.isAllowed) {
     const err =
       allowCheck.rejectionReason ||
-      `Security Rejection: '${targetEmail}' is not an authorized test recipient. Only verified domains (letusto.com, kselectnetwork.com) or configured test allowlists are permitted.`;
+      `Security Rejection: '${normalizedEmail}' is not an authorized test recipient. Only verified domains (letusto.com, kselectnetwork.com) or configured test allowlists are permitted.`;
     console.error("[campaigns:test-send]", err);
     recordCampaignAuditLog(campaignId, "TEST_EMAIL_REJECTED", false, {
-      testRecipient: maskEmailAddress(targetEmail),
+      testRecipient: maskEmailAddress(normalizedEmail),
       reason: err,
     });
     return { success: false, error: err };
   }
 
-  // 2. Sample Personalization for test rendering
+  // 2. UNIVERSAL PRE-SEND SUPPRESSION ENFORCEMENT (Mandatory Policy — No Exceptions)
+  const suppressionCheck = await checkEmailSuppression(normalizedEmail, customClient);
+  if (suppressionCheck.isSuppressed) {
+    const reasonLabel = formatSuppressionReasonKorean(suppressionCheck.reason);
+    const err = `발송이 차단되었습니다. ${normalizedEmail}은(는) 수신거부 목록에 등록되어 있어(${reasonLabel}) 테스트 이메일을 발송할 수 없습니다.`;
+    console.error(`[campaigns:test-send] BLOCKED by suppression: ${maskEmailAddress(normalizedEmail)} (${suppressionCheck.reason})`);
+    recordCampaignAuditLog(campaignId, "TEST_EMAIL_SUPPRESSED", false, {
+      testRecipient: maskEmailAddress(normalizedEmail),
+      suppressionReason: suppressionCheck.reason,
+      suppressionStatus: suppressionCheck.status,
+      failClosed: suppressionCheck.isFailClosedError || false,
+      reason: err,
+    });
+    return { success: false, error: err };
+  }
+
+  // 3. Sample Personalization for test rendering
   const personalized = personalizeEmail(
     templateSubject,
     templateHtml,
@@ -1140,9 +1163,9 @@ export async function sendTestCampaignEmail(
     }
   );
 
-  // 3. Assemble with central marketing footer & real working test unsubscribe link
+  // 4. Assemble with central marketing footer & real working test unsubscribe link
   const footerSettings = await getMarketingFooterSettings();
-  const testUnsubUrl = buildUnsubscribeUrl(targetEmail, campaignId);
+  const testUnsubUrl = buildUnsubscribeUrl(normalizedEmail, campaignId);
   const existingCamp = await getMarketingCampaignById(campaignId);
   const camp = existingCamp.campaign;
 
@@ -1152,45 +1175,52 @@ export async function sendTestCampaignEmail(
     unsubscribeUrl: testUnsubUrl,
     previewText: camp?.previewText || "",
     landingPageUrl: camp?.landingPageUrl || "https://www.kselectnetwork.com",
-      footerStyle: camp?.footerStyle || "classic",
+    footerStyle: camp?.footerStyle || "classic",
   });
 
-  // 3.5 Preflight validation on final assembled HTML (Task ADM-EMAIL-TPL-005)
+  // 5. Preflight validation on final assembled HTML (Task ADM-EMAIL-TPL-005)
   const preflight = validateSendReadyHtml(assembledHtml, personalized.subject, { isTestSend: true });
   if (!preflight.isValid) {
     const blockingIssue = preflight.issues.find((i) => i.severity === "BLOCKING");
     const err = "Preflight Rejection: " + (blockingIssue ? blockingIssue.message : "Unresolved placeholders or invalid assets found.");
     console.error("[campaigns:test-send]", err);
     recordCampaignAuditLog(campaignId, "TEST_EMAIL_REJECTED", false, {
-      testRecipient: maskEmailAddress(targetEmail),
+      testRecipient: maskEmailAddress(normalizedEmail),
       reason: err,
       issues: preflight.issues,
     });
     return { success: false, error: err };
   }
 
-  // 3.6 Check suppression status (Fail-Closed awareness & explicit policy warning)
-  const isSuppressed = await isEmailSuppressed(targetEmail);
-  let suppressionWarning;
-  if (isSuppressed) {
-    suppressionWarning = "Notice: Internal test recipient is currently on the suppression list (Unsubscribed). Dispatch permitted strictly for administrative layout verification only; this recipient is excluded from normal marketing campaigns.";
-    console.warn("[campaigns:test-send] " + suppressionWarning + " (" + maskEmailAddress(targetEmail) + ")");
+  // 6. Final Defense-in-Depth Pre-dispatch Check (Immediate re-check before provider handoff)
+  const finalCheck = await checkEmailSuppression(normalizedEmail, customClient);
+  if (finalCheck.isSuppressed) {
+    const reasonLabel = formatSuppressionReasonKorean(finalCheck.reason);
+    const err = `발송이 차단되었습니다. ${normalizedEmail}은(는) 수신거부 목록에 등록되어 있어(${reasonLabel}) 테스트 이메일을 발송할 수 없습니다.`;
+    console.error(`[campaigns:test-send] Final pre-dispatch block: ${maskEmailAddress(normalizedEmail)} (${finalCheck.reason})`);
+    recordCampaignAuditLog(campaignId, "TEST_EMAIL_SUPPRESSED", false, {
+      testRecipient: maskEmailAddress(normalizedEmail),
+      suppressionReason: finalCheck.reason,
+      suppressionStatus: finalCheck.status,
+      failClosed: finalCheck.isFailClosedError || false,
+      reason: err,
+    });
+    return { success: false, error: err };
   }
 
-  // 4. Dispatch via central email gateway
+  // 7. Dispatch via central email gateway
   const res = await sendEmail({
-    to: targetEmail,
+    to: normalizedEmail,
     subject: `[TEST EMAIL] ${personalized.subject}`,
     text: personalized.plainText || "Test message body",
     html: assembledHtml,
   });
 
-  // 4. Record Audit Log
+  // 8. Record Audit Log
   recordCampaignAuditLog(campaignId, "TEST_EMAIL_SENT", true, {
-    testRecipient: maskEmailAddress(targetEmail),
+    testRecipient: maskEmailAddress(normalizedEmail),
     success: res.success,
     messageId: res.messageId,
-    suppressionWarning,
   });
 
   return res;

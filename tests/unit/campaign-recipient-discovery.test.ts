@@ -459,7 +459,7 @@ describe("ADM-BSRC-009-R5: Recipient Discovery, Persistent Selection & Manual Em
       expect(isSupp).toBe(true);
     });
 
-    it("handles DB suppression lookup failure gracefully via fallback registry", async () => {
+    it("handles DB suppression lookup failure gracefully via fallback registry (Fail-Closed)", async () => {
       const { isEmailSuppressed } = await import("../../lib/brand-marketing/unsubscribe");
       const mockFailingLookupClient = {
         from: () => ({
@@ -472,7 +472,8 @@ describe("ADM-BSRC-009-R5: Recipient Discovery, Persistent Selection & Manual Em
       };
       const unknownEmail = `never-seen-${Date.now()}@test-gate.com`;
       const isSupp = await isEmailSuppressed(unknownEmail, mockFailingLookupClient);
-      expect(isSupp).toBe(false);
+      // Under ADM-EMAIL-SUP-006 Fail-Closed Invariant: lookup failure/timeout must be treated as suppressed (true)
+      expect(isSupp).toBe(true);
     });
 
     it("returns success: true and alreadySuppressed: true for duplicate opt-out (code 23505)", async () => {
