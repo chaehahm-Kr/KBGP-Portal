@@ -21,6 +21,7 @@ import {
   buildUnsubscribeUrl,
   isEmailSuppressed,
   buildOneClickUnsubscribeEndpoint,
+  removeEmailFromMemorySuppression,
 } from "./unsubscribe";
 import { DEFAULT_MARKETING_TEMPLATES, resolveTemplateId } from "./default-templates";
 import { compileImageTemplateToHtml } from "./image-template-compiler";
@@ -1286,6 +1287,7 @@ export async function saveMarketingFooterSettings(
 
 export async function listMarketingSuppressionList(
   search?: string,
+  statusFilter?: "ALL" | "ACTIVE" | "RELEASED",
   customClient?: any
 ): Promise<{ success: boolean; suppressions: any[]; error?: string }> {
   try {
@@ -1299,15 +1301,234 @@ export async function listMarketingSuppressionList(
       query = query.ilike("email", "%" + search.trim().toLowerCase() + "%");
     }
 
-    const { data, error } = await query;
-    if (error) {
-      console.warn("[campaigns:suppression-list] DB error:", error.message);
-      return { success: false, suppressions: [], error: error.message };
+    if (statusFilter === "ACTIVE") {
+      query = query.or("status.eq.ACTIVE,status.is.null");
+    } else if (statusFilter === "RELEASED") {
+      query = query.eq("status", "RELEASED");
     }
 
-    return { success: true, suppressions: data || [] };
+    let { data, error } = await query;
+    if (error) {
+      // If error is due to missing status column, fallback to querying without status filter
+      if (error.code === "42703" || error.message?.includes("status")) {
+        let fallbackQuery = supabase
+          .from("marketing_suppression_list")
+          .select("*")
+          .order("suppressed_at", { ascending: false });
+        if (search && search.trim()) {
+          fallbackQuery = fallbackQuery.ilike("email", "%" + search.trim().toLowerCase() + "%");
+        }
+        const fallbackRes = await fallbackQuery;
+        if (fallbackRes.error) {
+          return { success: false, suppressions: [], error: fallbackRes.error.message };
+        }
+        data = fallbackRes.data || [];
+        if (statusFilter === "RELEASED") {
+          data = [];
+        }
+      } else {
+        console.warn("[campaigns:suppression-list] DB error:", error.message);
+        return { success: false, suppressions: [], error: error.message };
+      }
+    }
+
+    const mapped = (data || []).map((item: any) => ({
+      ...item,
+      status: item.status || "ACTIVE",
+    }));
+
+    return { success: true, suppressions: mapped };
   } catch (err: any) {
     console.warn("[campaigns:suppression-list] Exception:", err.message);
     return { success: false, suppressions: [], error: err.message };
+  }
+}
+
+export interface ReleaseSuppressionInput {
+  id: string;
+  email: string;
+  releaseReason: string;
+  releaseEvidence: string;
+  policyValidationNotes?: string;
+  policyValidationConfirmed?: boolean;
+  releasedBy: string;
+}
+
+export interface ReleaseSuppressionResult {
+  success: boolean;
+  record?: any;
+  error?: string;
+}
+
+/**
+ * Safely releases an actively suppressed email address with mandatory audit metadata and policy validation.
+ * Preserves original suppression record and appends an immutable entry to marketing_suppression_audit_log.
+ * Fail-Closed: ordinary release of BOUNCED or COMPLAINT records is rejected without elevated policy confirmation.
+ */
+export async function releaseMarketingSuppression(
+  input: ReleaseSuppressionInput,
+  customClient?: any
+): Promise<ReleaseSuppressionResult> {
+  try {
+    const {
+      id,
+      email,
+      releaseReason,
+      releaseEvidence,
+      policyValidationNotes,
+      policyValidationConfirmed,
+      releasedBy,
+    } = input;
+
+    if (!id || !email) {
+      return { success: false, error: "해제할 수신 거부 레코드 ID 및 이메일 주소가 필요합니다." };
+    }
+
+    if (!releaseReason || releaseReason.trim().length < 5) {
+      return { success: false, error: "해제 사유를 최소 5자 이상 상세히 입력해주세요." };
+    }
+
+    if (!releaseEvidence || releaseEvidence.trim().length < 5) {
+      return { success: false, error: "재수신 동의 근거 또는 오등록 소명 증빙을 최소 5자 이상 상세히 입력해주세요." };
+    }
+
+    const supabase = await getClient(customClient);
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1. Fetch current suppression record
+    let record: any = null;
+    const { data, error: fetchErr } = await supabase
+      .from("marketing_suppression_list")
+      .select("*")
+      .eq("id", id)
+      .limit(1);
+
+    if (fetchErr || !data || data.length === 0) {
+      // Fallback lookup by email
+      const { data: emailData } = await supabase
+        .from("marketing_suppression_list")
+        .select("*")
+        .eq("email", normalizedEmail)
+        .limit(1);
+      if (emailData && emailData.length > 0) {
+        record = emailData[0];
+      } else {
+        return { success: false, error: "수신 거부 기록을 찾을 수 없습니다." };
+      }
+    } else {
+      record = data[0];
+    }
+
+    // 2. Check if already released
+    if (record.status === "RELEASED") {
+      return { success: false, error: "이미 안전 해제 처리된 이메일 주소입니다." };
+    }
+
+    // 3. Elevated policy validation check for BOUNCED or COMPLAINT records
+    const upperReason = (record.reason || "").toUpperCase();
+    if (upperReason === "BOUNCED" || upperReason === "COMPLAINT") {
+      if (!policyValidationConfirmed) {
+        return {
+          success: false,
+          error: "영구 반송(BOUNCED) 또는 스팸 신고(COMPLAINT) 주소는 발송 평판(Reputation) 보호를 위해 정책 검증 확인(Policy Validation) 승인이 필수입니다.",
+        };
+      }
+      if (!policyValidationNotes || policyValidationNotes.trim().length < 10) {
+        return {
+          success: false,
+          error: "영구 반송/스팸 신고 해제 시 메일박스 정상화 확인 및 재발송 타당성에 관한 10자 이상의 상세 정책 소명이 필수입니다.",
+        };
+      }
+    }
+
+    // 4. Update the suppression record to RELEASED
+    const nowIso = new Date().toISOString();
+    const updatePayload = {
+      status: "RELEASED",
+      released_at: nowIso,
+      released_by: releasedBy || "admin",
+      release_reason: releaseReason.trim(),
+      release_evidence: releaseEvidence.trim(),
+      policy_validation_notes: policyValidationNotes ? policyValidationNotes.trim() : null,
+    };
+
+    let updateRes = await supabase
+      .from("marketing_suppression_list")
+      .update(updatePayload)
+      .eq("id", record.id)
+      .select()
+      .single();
+
+    if (updateRes.error) {
+      if (updateRes.error.code === "42703" || updateRes.error.message?.includes("status")) {
+        return {
+          success: false,
+          error: "데이터베이스 스키마 마이그레이션(0194) 적용이 필요합니다. 관리자 승인 후 마이그레이션을 실행하세요.",
+        };
+      }
+      return { success: false, error: updateRes.error.message };
+    }
+
+    const updatedRecord = updateRes.data || { ...record, ...updatePayload };
+
+    // 5. Append immutable audit log
+    try {
+      await supabase.from("marketing_suppression_audit_log").insert({
+        suppression_id: record.id,
+        email: normalizedEmail,
+        action: "RELEASE",
+        previous_status: record.status || "ACTIVE",
+        new_status: "RELEASED",
+        suppression_reason: record.reason,
+        release_reason: releaseReason.trim(),
+        release_evidence: releaseEvidence.trim(),
+        policy_validation_notes: policyValidationNotes ? policyValidationNotes.trim() : null,
+        performed_by: releasedBy || "admin",
+        performed_at: nowIso,
+      });
+    } catch (auditErr: any) {
+      console.warn("[campaigns:suppression-release] Audit log insert notice:", auditErr.message);
+    }
+
+    // 6. Purge from in-memory suppression cache
+    removeEmailFromMemorySuppression(normalizedEmail);
+
+    return { success: true, record: updatedRecord };
+  } catch (err: any) {
+    console.error("[campaigns:suppression-release] Exception:", err.message);
+    return { success: false, error: err.message || "해제 처리 중 예외가 발생했습니다." };
+  }
+}
+
+/**
+ * Retrieves audit log entries for marketing suppression releases.
+ */
+export async function getMarketingSuppressionAuditLog(
+  email?: string,
+  customClient?: any
+): Promise<{ success: boolean; logs: any[]; error?: string }> {
+  try {
+    const supabase = await getClient(customClient);
+    let query = supabase
+      .from("marketing_suppression_audit_log")
+      .select("*")
+      .order("performed_at", { ascending: false })
+      .limit(50);
+
+    if (email && email.trim()) {
+      query = query.eq("email", email.trim().toLowerCase());
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      if (error.code === "42P01" || error.message?.includes("does not exist")) {
+        return { success: true, logs: [] };
+      }
+      return { success: false, logs: [], error: error.message };
+    }
+
+    return { success: true, logs: data || [] };
+  } catch (err: any) {
+    return { success: false, logs: [], error: err.message };
   }
 }
