@@ -3870,6 +3870,136 @@ export function EmailCampaignsView({
                 </div>
               </div>
 
+              {/* Delivery Management Card (ADM-EMAIL-APP-002) */}
+              {editingCampaign.approvalStatus === "APPROVED" && (
+                <div className="p-4 rounded-lg bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 space-y-4 text-xs">
+                  <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-900 pb-2">
+                    <div>
+                      <h4 className="font-bold text-blue-950 dark:text-blue-200 text-sm">
+                        Delivery Management &amp; Scheduling
+                      </h4>
+                      <p className="text-[11px] text-blue-700 dark:text-blue-300">
+                        승인된 캠페인의 안전 발송 및 예약 스케줄을 관리합니다.
+                      </p>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                        editingCampaign.status === "COMPLETED"
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+                          : editingCampaign.status === "SCHEDULED"
+                          ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+                          : editingCampaign.status === "SENDING"
+                          ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 animate-pulse"
+                          : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                      }`}
+                    >
+                      Delivery Status: {editingCampaign.status}
+                    </span>
+                  </div>
+
+                  {/* Delivery Metrics */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                      <div className="text-[10px] text-zinc-500 uppercase font-semibold">Approved Recipients</div>
+                      <div className="text-base font-bold font-mono text-zinc-900 dark:text-zinc-100 mt-0.5">
+                        {editingCampaign.approvalSnapshot?.sendableCount ?? editingCampaign.stats?.sendableCount ?? 0}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                      <div className="text-[10px] text-zinc-500 uppercase font-semibold">Sent Count</div>
+                      <div className="text-base font-bold font-mono text-blue-600 dark:text-blue-400 mt-0.5">
+                        {editingCampaign.stats?.sentCount ?? 0}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                      <div className="text-[10px] text-zinc-500 uppercase font-semibold">Delivered Count</div>
+                      <div className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                        {editingCampaign.stats?.deliveredCount ?? 0}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
+                      <div className="text-[10px] text-zinc-500 uppercase font-semibold">Failed Count</div>
+                      <div className="text-base font-bold font-mono text-rose-600 dark:text-rose-400 mt-0.5">
+                        {editingCampaign.stats?.failedCount ?? 0}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Scheduled Info if SCHEDULED */}
+                  {editingCampaign.scheduledAt && (
+                    <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-purple-200 dark:border-purple-800 text-[11px] space-y-1">
+                      <div className="font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                        <span>⏰</span> Scheduled Send Information:
+                      </div>
+                      <div className="text-zinc-700 dark:text-zinc-300">
+                        • Local Time:{" "}
+                        <span className="font-mono font-semibold">
+                          {new Date(editingCampaign.scheduledAt).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="text-zinc-700 dark:text-zinc-300">
+                        • KST Time:{" "}
+                        <span className="font-mono font-semibold">
+                          {new Date(editingCampaign.scheduledAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    {editingCampaign.status !== "COMPLETED" && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowSendNowModal(true)}
+                          disabled={isDispatching}
+                          className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                          <span>🚀</span> Send Now
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editingCampaign.scheduledAt) {
+                              const d = new Date(editingCampaign.scheduledAt);
+                              const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                                .toISOString()
+                                .slice(0, 16);
+                              setScheduleInputValue(localIso);
+                            } else {
+                              const d = new Date(Date.now() + 3600000);
+                              const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                                .toISOString()
+                                .slice(0, 16);
+                              setScheduleInputValue(localIso);
+                            }
+                            setShowScheduleModal(true);
+                          }}
+                          disabled={isScheduling}
+                          className="px-4 py-2 rounded border border-purple-300 dark:border-purple-700 bg-white dark:bg-zinc-900 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                          <span>⏰</span>{" "}
+                          {editingCampaign.status === "SCHEDULED" ? "Modify Schedule" : "Schedule Send"}
+                        </button>
+
+                        {editingCampaign.status === "SCHEDULED" && (
+                          <button
+                            type="button"
+                            onClick={handleCancelSchedule}
+                            disabled={isScheduling}
+                            className="px-3 py-2 rounded border border-rose-300 dark:border-rose-700 bg-white dark:bg-zinc-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-xs cursor-pointer disabled:opacity-50"
+                          >
+                            Cancel Schedule
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Activity Audit Logs */}
               <div className="space-y-2 pt-2">
                 <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
@@ -4764,6 +4894,196 @@ export function EmailCampaignsView({
     );
   };
 
+  // --------------------------------------------------------------------------
+  // RENDER: SCHEDULE SEND MODAL (ADM-EMAIL-APP-002)
+  // --------------------------------------------------------------------------
+  const renderScheduleModal = () => {
+    if (!showScheduleModal || !editingCampaign) return null;
+
+    const selectedDate = scheduleInputValue ? new Date(scheduleInputValue) : null;
+    const isPast = selectedDate ? selectedDate.getTime() <= Date.now() : true;
+
+    return (
+      <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-md w-full p-5 space-y-4 shadow-xl">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+              <span>⏰</span> Schedule Campaign Send
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowScheduleModal(false)}
+              className="text-zinc-400 hover:text-zinc-600 text-sm font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-3 text-xs">
+            <p className="text-zinc-600 dark:text-zinc-300">
+              캠페인 <strong className="text-zinc-900 dark:text-zinc-100">&quot;{editingCampaign.name}&quot;</strong>의 자동 발송 일시를 설정합니다. 백그라운드 크론 스케줄러가 지정된 시점에 안전하게 발송을 실행합니다.
+            </p>
+
+            <div>
+              <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                Scheduled Send Time (미래 발송 일시) *
+              </label>
+              <input
+                type="datetime-local"
+                value={scheduleInputValue}
+                onChange={(e) => setScheduleInputValue(e.target.value)}
+                min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-mono"
+              />
+            </div>
+
+            {selectedDate && !isNaN(selectedDate.getTime()) && (
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded border border-zinc-200 dark:border-zinc-700 space-y-1 text-[11px]">
+                <div className="text-zinc-500 font-semibold">선택 일시 타임존 변환:</div>
+                <div className="text-zinc-700 dark:text-zinc-300">
+                  • 브라우저 로컬 시간:{" "}
+                  <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                    {selectedDate.toLocaleString()}
+                  </span>
+                </div>
+                <div className="text-zinc-700 dark:text-zinc-300">
+                  • 한국 표준시 (KST):{" "}
+                  <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                    {selectedDate.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {isPast && scheduleInputValue && (
+              <div className="p-2.5 rounded bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-xs border border-red-200">
+                ⚠️ 발송 예약 일시는 현재 시각보다 미래여야 합니다.
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setShowScheduleModal(false)}
+              className="px-3 py-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 cursor-pointer"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={handleScheduleCampaign}
+              disabled={isScheduling || isPast || !scheduleInputValue}
+              className="px-3.5 py-2 rounded bg-purple-600 text-white hover:bg-purple-700 cursor-pointer shadow-xs disabled:opacity-50"
+            >
+              {isScheduling ? "예약 설정 중..." : "Confirm Schedule ✓"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // --------------------------------------------------------------------------
+  // RENDER: SEND NOW FINAL CONFIRMATION MODAL (ADM-EMAIL-APP-002)
+  // --------------------------------------------------------------------------
+  const renderSendNowModal = () => {
+    if (!showSendNowModal || !editingCampaign) return null;
+
+    const eligible = editingCampaign.approvalSnapshot?.sendableCount ?? consentEligibilityEstimate.eligible;
+    const totalRecipients = editingCampaign.stats?.totalRecipients ?? selectedRecipientItems.length;
+    const excluded = totalRecipients - eligible > 0 ? totalRecipients - eligible : consentEligibilityEstimate.excluded;
+
+    return (
+      <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-lg w-full p-5 space-y-4 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+              <span>🚀</span> Confirm Campaign Send Now
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowSendNowModal(false)}
+              className="text-zinc-400 hover:text-zinc-600 text-sm font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-3 text-xs">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+              <div className="font-bold flex items-center gap-1 mb-1">
+                <span>🛡️</span> LIVE_MODE: FALSE (Safety Gate Active)
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                현재 시스템 정책상 실제 고객 대상 외부 메일 발송이 안전하게 차단되어 있습니다.
+                실행 시 발송 원장 기록 및 통계가 안전 시뮬레이션 모드로 완벽하게 처리됩니다.
+              </p>
+            </div>
+
+            <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded border border-zinc-200 dark:border-zinc-700 space-y-2 text-xs">
+              <div className="font-bold text-zinc-900 dark:text-zinc-100">발송 실행 요약:</div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div>
+                  <span className="text-zinc-500">캠페인명:</span>{" "}
+                  <strong className="text-zinc-900 dark:text-zinc-100 truncate block">{editingCampaign.name}</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">템플릿 버전:</span>{" "}
+                  <strong className="font-mono text-zinc-900 dark:text-zinc-100">
+                    {editingCampaign.approvalSnapshot?.templateVersion || "1.0.0"}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">총 대상 수:</span>{" "}
+                  <strong className="font-mono text-zinc-900 dark:text-zinc-100">{totalRecipients}건</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">발송 적격 대상:</span>{" "}
+                  <strong className="font-mono text-emerald-600 dark:text-emerald-400">{eligible}건</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">수신거부/제외 대상:</span>{" "}
+                  <strong className="font-mono text-rose-600 dark:text-rose-400">{excluded}건</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">발송 방식:</span>{" "}
+                  <strong className="font-mono text-blue-600 dark:text-blue-400">SIMULATE</strong>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              * 발송 직전 마케팅 수신거부 목록(Suppression List)을 즉시 재검증하여, 승인 이후 수신거부된 주소는 발송에서 자동 차단됩니다.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setShowSendNowModal(false)}
+              disabled={isDispatching}
+              className="px-3 py-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 cursor-pointer"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                await handleExecuteSendNow();
+                setShowSendNowModal(false);
+              }}
+              disabled={isDispatching}
+              className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1"
+            >
+              {isDispatching ? "발송 시뮬레이션 실행 중..." : "Confirm & Execute Send Now 🚀"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
@@ -4804,6 +5124,8 @@ export function EmailCampaignsView({
       {renderManageSelectionModal()}
       {renderCampaignDeleteModal()}
       {renderUnsavedChangesModal()}
+      {renderScheduleModal()}
+      {renderSendNowModal()}
       <DesignerGuideModal isOpen={showGuideModal} onClose={() => setShowGuideModal(false)} />
     </div>
   );
