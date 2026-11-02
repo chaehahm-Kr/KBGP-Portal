@@ -1524,12 +1524,13 @@ export async function releaseMarketingSuppression(
       return { success: false, error: validation.error };
     }
 
-    // 4. Try atomic database RPC function first (fn_release_marketing_suppression)
+    // 4. Try atomic database RPC function first via trusted server client (service_role)
     let atomicSuccess = false;
     let atomicRecord: any = null;
+    const trustedClient = customClient || createAdminClient();
 
-    if (typeof supabase.rpc === "function") {
-      const { data: rpcData, error: rpcError } = await supabase.rpc(
+    if (typeof trustedClient.rpc === "function") {
+      const { data: rpcData, error: rpcError } = await trustedClient.rpc(
         "fn_release_marketing_suppression",
         {
           p_id: record.id,

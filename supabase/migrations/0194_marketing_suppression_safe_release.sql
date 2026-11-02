@@ -199,7 +199,8 @@ CREATE POLICY "suppression_audit_admin_read"
 -- ------------------------------------------------------------------------------
 -- 5. ATOMIC TRANSACTIONAL FUNCTION: fn_release_marketing_suppression
 -- Ensures suppression status release and audit log insertion execute in a single
--- atomic PostgreSQL transaction. If audit logging fails, release is rolled back.
+-- atomic PostgreSQL transaction. Restricted strictly to trusted service_role.
+-- Direct execution by authenticated browser clients is strictly prohibited.
 -- ------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.fn_release_marketing_suppression(
@@ -223,13 +224,34 @@ DECLARE
   v_now TIMESTAMPTZ := now();
   v_normalized_email TEXT := lower(trim(p_email));
   v_audit_id UUID;
+  v_valid_types TEXT[] := ARRAY[
+    'WRITTEN_CONSENT_EMAIL',
+    'CUSTOMER_PORTAL_REQUEST',
+    'SUPPORT_TICKET',
+    'PHONE_VERIFICATION',
+    'ADMIN_ERROR_CORRECTION',
+    'INTERNAL_TESTING'
+  ];
 BEGIN
-  -- 1. Authorization check: caller must be service_role or authenticated admin
-  IF auth.role() = 'authenticated' AND NOT public.auth_is_admin() THEN
-    RAISE EXCEPTION 'Unauthorized: Administrator privileges required to release suppression';
+  -- 1. Authorization check: strictly restrict to trusted server-side execution (service_role or superuser)
+  IF current_user != 'service_role' AND current_user != 'postgres' AND auth.role() != 'service_role' THEN
+    RAISE EXCEPTION 'Unauthorized: fn_release_marketing_suppression can only be executed via trusted server-side service_role path';
   END IF;
 
-  -- 2. Lock and fetch target suppression record
+  -- 2. Input validation (defense-in-depth at DB engine level)
+  IF p_release_reason IS NULL OR length(trim(p_release_reason)) < 5 THEN
+    RAISE EXCEPTION '유효하지 않은 해제 사유입니다. 구체적인 사유를 최소 5자 이상 기술해주세요.';
+  END IF;
+
+  IF p_evidence_type IS NULL OR NOT (p_evidence_type = ANY(v_valid_types)) THEN
+    RAISE EXCEPTION '유효한 소명 증빙 유형(Evidence Type)을 지정해야 합니다.';
+  END IF;
+
+  IF p_release_evidence IS NULL OR length(trim(p_release_evidence)) < 5 THEN
+    RAISE EXCEPTION '소명 증빙 근거를 최소 5자 이상 상세히 입력해주세요.';
+  END IF;
+
+  -- 3. Lock and fetch target suppression record
   SELECT * INTO v_rec
   FROM public.marketing_suppression_list
   WHERE id = p_id AND lower(email) = v_normalized_email
@@ -243,7 +265,14 @@ BEGIN
     RAISE EXCEPTION '이미 안전 해제 처리된 이메일 주소입니다. (ID: %)', p_id;
   END IF;
 
-  -- 3. Update suppression record to RELEASED
+  -- 4. Elevated policy validation check for BOUNCED or COMPLAINT records inside DB
+  IF upper(coalesce(v_rec.reason, '')) IN ('BOUNCED', 'COMPLAINT') THEN
+    IF p_policy_validation_notes IS NULL OR length(trim(p_policy_validation_notes)) < 10 THEN
+      RAISE EXCEPTION '영구 반송/스팸 신고 해제 시 메일박스 정상화 확인 및 재발송 타당성에 관한 10자 이상의 상세 정책 소명이 필수입니다.';
+    END IF;
+  END IF;
+
+  -- 5. Update suppression record to RELEASED
   UPDATE public.marketing_suppression_list
   SET
     status = 'RELEASED',
@@ -255,7 +284,7 @@ BEGIN
     policy_validation_notes = p_policy_validation_notes
   WHERE id = p_id;
 
-  -- 4. Append immutable audit log entry in the SAME atomic transaction
+  -- 6. Append immutable audit log entry in the SAME atomic transaction
   INSERT INTO public.marketing_suppression_audit_log (
     suppression_id,
     email,
@@ -288,7 +317,7 @@ BEGIN
     p_user_agent
   ) RETURNING id INTO v_audit_id;
 
-  -- 5. Return JSONB payload with updated data
+  -- 7. Return JSONB payload with updated data
   RETURN jsonb_build_object(
     'id', v_rec.id,
     'email', v_normalized_email,
@@ -304,5 +333,6 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.fn_release_marketing_suppression FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.fn_release_marketing_suppression TO authenticated, service_role;
+-- Revoke execute from all public/client roles; grant strictly to trusted service_role
+REVOKE ALL ON FUNCTION public.fn_release_marketing_suppression FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_release_marketing_suppression TO service_role;

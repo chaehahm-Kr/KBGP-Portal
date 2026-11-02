@@ -41,10 +41,14 @@ describe("ADM-EMAIL-SUP-003: Suppression Migration QA Verification, Least-Privil
     return {
       rpc: (fnName: string, args: any) => {
         if (fnName === "fn_release_marketing_suppression") {
-          if (callerRole === "anon") {
+          // Direct client execution (anon or authenticated user) is strictly prohibited at GRANT level
+          if (callerRole === "anon" || callerRole === "authenticated") {
             return Promise.resolve({
               data: null,
-              error: { code: "42501", message: "permission denied for function fn_release_marketing_suppression" },
+              error: {
+                code: "42501",
+                message: "permission denied for function fn_release_marketing_suppression (Direct client RPC execution prohibited; service_role required)",
+              },
             });
           }
           if (options?.simulateAuditFailure) {
@@ -293,6 +297,21 @@ describe("ADM-EMAIL-SUP-003: Suppression Migration QA Verification, Least-Privil
 
       expect(res.error).toBeDefined();
       expect(res.error.message).toContain("immutable append-only audit trail");
+    });
+
+    it("rejects direct RPC invocation of fn_release_marketing_suppression by authenticated browser client", async () => {
+      const client = createMockSupabaseClient("authenticated");
+      const res = await client.rpc("fn_release_marketing_suppression", {
+        p_id: "test-id",
+        p_email: "bypass@test.com",
+        p_release_reason: "Direct bypass attempt",
+        p_release_evidence: "No proof",
+        p_evidence_type: "WRITTEN_CONSENT_EMAIL",
+      });
+
+      expect(res.error).toBeDefined();
+      expect(res.error.code).toBe("42501");
+      expect(res.error.message).toContain("permission denied for function fn_release_marketing_suppression");
     });
   });
 
