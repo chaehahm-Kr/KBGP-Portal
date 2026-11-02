@@ -48,6 +48,8 @@ export default async function BrandMarketingPage({ searchParams }: BrandMarketin
       ? "footer"
       : params.view === "templates" || params.view === "library" || params.subtab === "library"
       ? "library"
+      : params.view === "suppression"
+      ? "suppression"
       : "campaigns";
 
   // 3. Pre-fetch initial staff and initial candidates

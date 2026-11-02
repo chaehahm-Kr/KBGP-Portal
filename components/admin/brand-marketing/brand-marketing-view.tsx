@@ -64,7 +64,7 @@ interface BrandMarketingViewProps {
   initialTotal: number;
   initialTab?: "import" | "list" | "campaigns" | "results";
   initialCompanyId?: string | null;
-  initialView?: "campaigns" | "library" | "footer";
+  initialView?: "campaigns" | "library" | "footer" | "suppression";
 }
 
 function formatFileSize(bytes?: number | null): string {

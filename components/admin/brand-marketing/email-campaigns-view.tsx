@@ -83,6 +83,8 @@ export function EmailCampaignsView({
       setMainTab("footer");
     } else if (viewParam === "templates" || viewParam === "library") {
       setMainTab("library");
+    } else if (viewParam === "suppression") {
+      setMainTab("suppression");
     } else if (viewParam === "list" || viewParam === "campaigns") {
       setMainTab("campaigns");
       setViewMode("list");
@@ -209,21 +211,62 @@ export function EmailCampaignsView({
   const [step4Viewport, setStep4Viewport] = useState<"desktop" | "mobile">("desktop");
   const [tplModalViewport, setTplModalViewport] = useState<"desktop" | "mobile">("desktop");
 
-  const measureIframeHeight = (e: React.SyntheticEvent<HTMLIFrameElement>, setter: (h: number) => void) => {
+  const setupDynamicIframeHeight = (
+    e: React.SyntheticEvent<HTMLIFrameElement>,
+    setter: (h: number) => void
+  ) => {
     try {
       const iframe = e.currentTarget;
+      const win = iframe.contentWindow;
       const doc = iframe.contentDocument;
-      if (doc) {
-        const h = Math.max(
-          doc.body?.scrollHeight || 0,
-          doc.documentElement?.scrollHeight || 0,
-          doc.body?.offsetHeight || 0,
-          doc.documentElement?.offsetHeight || 0
-        );
-        if (h > 200) {
-          setter(h + 24);
+      if (!doc || !win) return;
+
+      // Ensure iframe document body and root never display internal scrollbars
+      doc.documentElement.style.overflow = "hidden";
+      doc.body.style.overflow = "hidden";
+
+      const measure = () => {
+        try {
+          const h = Math.max(
+            doc.body?.scrollHeight || 0,
+            doc.documentElement?.scrollHeight || 0,
+            doc.body?.offsetHeight || 0,
+            doc.documentElement?.offsetHeight || 0
+          );
+          if (h > 150) {
+            setter(h);
+          }
+        } catch {}
+      };
+
+      measure();
+
+      // Listen to all image load events inside the iframe
+      const images = Array.from(doc.images);
+      images.forEach((img) => {
+        if (!img.complete) {
+          img.addEventListener("load", measure, { once: true });
+          img.addEventListener("error", measure, { once: true });
         }
+      });
+
+      // Observe DOM resizing inside the iframe document
+      const ResizeObs = (win as any).ResizeObserver || (typeof window !== "undefined" ? (window as any).ResizeObserver : null);
+      if (ResizeObs && doc.body) {
+        const ro = new ResizeObs(() => measure());
+        ro.observe(doc.body);
       }
+
+      // Schedule polling for late font / stylesheet layout settlement
+      const timers = [100, 300, 600, 1200, 2500].map((t) => setTimeout(measure, t));
+
+      iframe.addEventListener(
+        "unload",
+        () => {
+          timers.forEach(clearTimeout);
+        },
+        { once: true }
+      );
     } catch {
       // sandbox fallback
     }
@@ -1398,6 +1441,18 @@ export function EmailCampaignsView({
             <span>⚖️</span>
             Marketing Footer Settings (중앙 푸터 설정)
           </Link>
+          <Link
+            href="/admin/brand-marketing?tab=campaigns&view=suppression"
+            onClick={() => setMainTab("suppression")}
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition cursor-pointer flex items-center gap-1.5 ${
+              mainTab === "suppression"
+                ? "bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950"
+                : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <span>🚫</span>
+            Suppression List (수신 거부 목록)
+          </Link>
         </div>
 
         {mainTab === "campaigns" && viewMode === "list" && (
@@ -2021,28 +2076,38 @@ export function EmailCampaignsView({
                     </span>
                   </div>
 
-                  <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-950">
+                  <div className="flex items-center gap-2">
+                    <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-950">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewViewport("desktop")}
+                        className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
+                          previewViewport === "desktop"
+                            ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                            : "text-zinc-500 hover:text-zinc-800"
+                        }`}
+                      >
+                        Desktop (680px)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewViewport("mobile")}
+                        className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
+                          previewViewport === "mobile"
+                            ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                            : "text-zinc-500 hover:text-zinc-800"
+                        }`}
+                      >
+                        Mobile (375px)
+                      </button>
+                    </div>
+
                     <button
                       type="button"
-                      onClick={() => setPreviewViewport("desktop")}
-                      className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
-                        previewViewport === "desktop"
-                          ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
-                          : "text-zinc-500 hover:text-zinc-800"
-                      }`}
+                      onClick={() => setShowFullPreviewModal(true)}
+                      className="px-2.5 py-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded bg-white dark:bg-zinc-800 hover:bg-zinc-50 flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     >
-                      Desktop (600px)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewViewport("mobile")}
-                      className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
-                        previewViewport === "mobile"
-                          ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
-                          : "text-zinc-500 hover:text-zinc-800"
-                      }`}
-                    >
-                      Mobile (375px)
+                      <span>⛶</span> 전체 화면 미리보기
                     </button>
                   </div>
                 </div>
@@ -2071,16 +2136,20 @@ export function EmailCampaignsView({
                 <div className="bg-zinc-100 dark:bg-zinc-950 p-4 rounded-lg flex justify-center overflow-x-auto min-h-[460px]">
                   <div
                     style={{
-                      width: previewViewport === "desktop" ? "600px" : "375px",
+                      width: previewViewport === "desktop" ? "680px" : "375px",
+                      minWidth: previewViewport === "desktop" ? "680px" : "375px",
                       maxWidth: "100%",
                       transition: "width 0.2s ease-in-out",
                     }}
-                    className="bg-white rounded shadow-sm border border-zinc-200 overflow-hidden"
+                    className="bg-white rounded shadow-sm border border-zinc-200 overflow-hidden self-start"
                   >
                     <iframe
                       title="Send-Ready Email Preview"
                       srcDoc={assembledPreviewHtml}
-                      className="w-full h-[540px] border-0"
+                      onLoad={(e) => setupDynamicIframeHeight(e, setStep2IframeHeight)}
+                      style={{ height: `${step2IframeHeight}px`, overflow: "hidden" }}
+                      className="w-full border-0 block"
+                      scrolling="no"
                       sandbox="allow-same-origin"
                     />
                   </div>
@@ -2957,12 +3026,68 @@ export function EmailCampaignsView({
               </p>
             </div>
 
-            <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex justify-center">
-              <div className="w-full max-w-[600px] bg-white rounded shadow-sm border border-zinc-200 overflow-hidden">
+            {/* Viewport & Full Preview Controls for Step 4 */}
+            <div className="flex items-center justify-between pb-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                  Preview Viewport:
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                  {step4Viewport === "desktop" ? "Desktop (680px)" : "Mobile (375px)"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-950">
+                  <button
+                    type="button"
+                    onClick={() => setStep4Viewport("desktop")}
+                    className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
+                      step4Viewport === "desktop"
+                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                        : "text-zinc-500 hover:text-zinc-800"
+                    }`}
+                  >
+                    Desktop (680px)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStep4Viewport("mobile")}
+                    className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
+                      step4Viewport === "mobile"
+                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                        : "text-zinc-500 hover:text-zinc-800"
+                    }`}
+                  >
+                    Mobile (375px)
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFullPreviewModal(true)}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded bg-white dark:bg-zinc-800 hover:bg-zinc-50 flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <span>⛶</span> 전체 화면 미리보기
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex justify-center overflow-x-auto">
+              <div
+                style={{
+                  width: step4Viewport === "desktop" ? "680px" : "375px",
+                  minWidth: step4Viewport === "desktop" ? "680px" : "375px",
+                  maxWidth: "100%",
+                  transition: "width 0.2s ease-in-out",
+                }}
+                className="bg-white rounded shadow-sm border border-zinc-200 overflow-hidden self-start"
+              >
                 <iframe
                   title="Sample Personalized Preview"
                   srcDoc={assembledPreviewHtml}
-                  className="w-full h-[520px] border-0"
+                  onLoad={(e) => setupDynamicIframeHeight(e, setStep4IframeHeight)}
+                  style={{ height: `${step4IframeHeight}px`, overflow: "hidden" }}
+                  className="w-full border-0 block"
+                  scrolling="no"
                   sandbox="allow-same-origin"
                 />
               </div>
@@ -3748,9 +3873,10 @@ export function EmailCampaignsView({
               <iframe
                 title="Full Screen Preview"
                 srcDoc={assembledPreviewHtml}
-                onLoad={(e) => measureIframeHeight(e, setFullPreviewHeight)}
-                style={{ height: `${fullPreviewHeight}px` }}
+                onLoad={(e) => setupDynamicIframeHeight(e, setFullPreviewHeight)}
+                style={{ height: `${fullPreviewHeight}px`, overflow: "hidden" }}
                 className="w-full border-0 block"
+                scrolling="no"
                 sandbox="allow-same-origin"
               />
             </div>
@@ -3781,21 +3907,58 @@ export function EmailCampaignsView({
                 {previewModalTemplate.subject}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setPreviewModalTemplate(null)}
-              className="text-zinc-400 hover:text-zinc-600 text-sm font-bold cursor-pointer"
-            >
-              ✕
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-950">
+                <button
+                  type="button"
+                  onClick={() => setTplModalViewport("desktop")}
+                  className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
+                    tplModalViewport === "desktop"
+                      ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                      : "text-zinc-500 hover:text-zinc-800"
+                  }`}
+                >
+                  Desktop (680px)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTplModalViewport("mobile")}
+                  className={`px-3 py-1 text-[11px] font-semibold rounded cursor-pointer ${
+                    tplModalViewport === "mobile"
+                      ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                      : "text-zinc-500 hover:text-zinc-800"
+                  }`}
+                >
+                  Mobile (375px)
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewModalTemplate(null)}
+                className="text-zinc-400 hover:text-zinc-600 text-sm font-bold cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
-          <div className="bg-zinc-100 dark:bg-zinc-950 p-4 rounded-lg flex justify-center overflow-x-auto flex-1 min-h-[420px]">
-            <div className="w-[600px] max-w-full bg-white rounded shadow-sm border border-zinc-200 overflow-hidden">
+          <div className="bg-zinc-100 dark:bg-zinc-950 p-4 rounded-lg flex justify-center overflow-x-auto flex-1 overflow-y-auto">
+            <div
+              style={{
+                width: tplModalViewport === "desktop" ? "680px" : "375px",
+                minWidth: tplModalViewport === "desktop" ? "680px" : "375px",
+                maxWidth: "100%",
+                transition: "width 0.2s ease-in-out",
+              }}
+              className="bg-white rounded shadow-sm border border-zinc-200 overflow-hidden self-start"
+            >
               <iframe
                 title="Template Preview"
                 srcDoc={modalAssembledHtml}
-                className="w-full h-[500px] border-0"
+                onLoad={(e) => setupDynamicIframeHeight(e, setTplModalIframeHeight)}
+                style={{ height: `${tplModalIframeHeight}px`, overflow: "hidden" }}
+                className="w-full border-0 block"
+                scrolling="no"
                 sandbox="allow-same-origin"
               />
             </div>
@@ -4144,7 +4307,9 @@ export function EmailCampaignsView({
       {renderSubTabBar()}
 
       {/* View Switcher based on mainTab & viewMode */}
-      {mainTab === "footer" ? (
+      {mainTab === "suppression" ? (
+        <SuppressionListView />
+      ) : mainTab === "footer" ? (
         <MarketingFooterSettingsView />
       ) : mainTab === "library" ? (
         renderTemplateLibraryStandaloneView()
