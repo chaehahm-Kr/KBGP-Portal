@@ -517,7 +517,13 @@ export function EmailCampaignsView({
   // --------------------------------------------------------------------------
   // TASK ADM-EMAIL-UX-001: UNSAVED CHANGES NAVIGATION GUARD (P0)
   // --------------------------------------------------------------------------
-  const getCampaignFormSnapshot = (c: MarketingCampaign | null, tplId?: string) => {
+  const getCampaignFormSnapshot = (
+    c: MarketingCampaign | null,
+    tplId?: string,
+    compIds?: string[],
+    contactIds?: string[],
+    manuals?: string[]
+  ) => {
     if (!c) return "";
     return JSON.stringify({
       name: c.name || "",
@@ -531,15 +537,30 @@ export function EmailCampaignsView({
       landingPageUrl: c.landingPageUrl || "",
       footerStyle: c.footerStyle || "classic",
       customMessage: c.customMessage || "",
-      filterCriteria: c.filterCriteria || {},
+      companyIds: compIds !== undefined ? compIds : (c.filterCriteria?.companyIds || []),
+      contactIds: contactIds !== undefined ? contactIds : (c.filterCriteria?.contactIds || []),
+      manualEmails: manuals !== undefined ? manuals : (c.filterCriteria?.manualEmails || []),
     });
   };
 
   const isDirty = useMemo(() => {
     if (viewMode !== "editor" || !editingCampaign) return false;
-    const currentSnapshot = getCampaignFormSnapshot(editingCampaign, selectedTemplateId);
+    const currentSnapshot = getCampaignFormSnapshot(
+      editingCampaign,
+      selectedTemplateId,
+      selectedCompanyIds,
+      selectedContactIds,
+      manualEmails
+    );
     return Boolean(initialFormSnapshotRef.current && currentSnapshot !== initialFormSnapshotRef.current);
-  }, [viewMode, editingCampaign, selectedTemplateId]);
+  }, [viewMode, editingCampaign, selectedTemplateId, selectedCompanyIds, selectedContactIds, manualEmails]);
+
+  const handleNavigateStep = async (targetStep: number) => {
+    if (editingCampaign && isDirty) {
+      await handleSaveCampaignDraft();
+    }
+    setCurrentStep(targetStep);
+  };
 
   const executeNavigation = (nav: {
     type: "url" | "action" | "back";
@@ -601,7 +622,10 @@ export function EmailCampaignsView({
         setEditingCampaign(res.campaign);
         initialFormSnapshotRef.current = getCampaignFormSnapshot(
           res.campaign,
-          res.campaign.templateId || ""
+          res.campaign.templateId || "",
+          selectedCompanyIds,
+          selectedContactIds,
+          manualEmails
         );
         showNotification("success", `Campaign "${res.campaign.name}" saved successfully.`);
         refreshCampaignsAndTemplates();
@@ -1291,7 +1315,7 @@ export function EmailCampaignsView({
     setDryRunReport(null);
     setTestSendResult(null);
     setViewMode("editor");
-    initialFormSnapshotRef.current = getCampaignFormSnapshot(newCamp, defaultTpl?.id || "");
+    initialFormSnapshotRef.current = getCampaignFormSnapshot(newCamp, defaultTpl?.id || "", [], [], []);
   };
 
   const handleEditCampaign = async (c: MarketingCampaign) => {
@@ -1305,7 +1329,13 @@ export function EmailCampaignsView({
 
     setEditingCampaign({ ...c, footerStyle: c.footerStyle || "classic" });
     if (c.templateId) setSelectedTemplateId(c.templateId);
-    initialFormSnapshotRef.current = getCampaignFormSnapshot(c, c.templateId || "");
+    initialFormSnapshotRef.current = getCampaignFormSnapshot(
+      c,
+      c.templateId || "",
+      c.filterCriteria?.companyIds || [],
+      c.filterCriteria?.contactIds || [],
+      c.filterCriteria?.manualEmails || []
+    );
     if (c.filterCriteria?.grades && c.filterCriteria.grades.length > 0) {
       setSelectedGrades(c.filterCriteria.grades);
       setCandidateFilterGrade(c.filterCriteria.grades[0]);
@@ -1379,7 +1409,13 @@ export function EmailCampaignsView({
       const res = await saveMarketingCampaignAction(payload);
       if (res.success && res.campaign) {
         setEditingCampaign(res.campaign);
-        initialFormSnapshotRef.current = getCampaignFormSnapshot(res.campaign, res.campaign.templateId || "");
+        initialFormSnapshotRef.current = getCampaignFormSnapshot(
+          res.campaign,
+          res.campaign.templateId || "",
+          selectedCompanyIds,
+          selectedContactIds,
+          manualEmails
+        );
         showNotification("success", `Campaign "${res.campaign.name}" saved to database successfully.`);
         refreshCampaignsAndTemplates();
       } else {
@@ -2024,7 +2060,7 @@ export function EmailCampaignsView({
             <button
               key={s.num}
               type="button"
-              onClick={() => setCurrentStep(s.num)}
+              onClick={() => handleNavigateStep(s.num)}
               className={`p-2.5 rounded-lg border text-left text-xs cursor-pointer transition-all ${
                 currentStep === s.num
                   ? "border-blue-600 bg-blue-50/60 dark:bg-blue-950/40 text-blue-950 dark:text-blue-200 font-bold ring-2 ring-blue-500/20"
@@ -2253,7 +2289,7 @@ export function EmailCampaignsView({
             <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-end">
               <button
                 type="button"
-                onClick={() => setCurrentStep(2)}
+                onClick={() => handleNavigateStep(2)}
                 className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer"
               >
                 Next: Select Template Package →
@@ -2404,7 +2440,7 @@ export function EmailCampaignsView({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCurrentStep(3)}
+                    onClick={() => handleNavigateStep(3)}
                     className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer"
                   >
                     Next: Recipient Selection →
@@ -3243,7 +3279,7 @@ export function EmailCampaignsView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCurrentStep(4)}
+                  onClick={() => handleNavigateStep(4)}
                   className="px-5 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer transition-colors shadow-xs"
                 >
                   Next: Sample Personalization Review ({totalUniqueRecipients.length}명 대상) →
@@ -3342,7 +3378,7 @@ export function EmailCampaignsView({
               </button>
               <button
                 type="button"
-                onClick={() => setCurrentStep(5)}
+                onClick={() => handleNavigateStep(5)}
                 className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer"
               >
                 Next: Test Send &amp; Dry Run →
@@ -3651,7 +3687,7 @@ export function EmailCampaignsView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCurrentStep(6)}
+                  onClick={() => handleNavigateStep(6)}
                   className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded hover:bg-zinc-800 cursor-pointer"
                 >
                   Next: Final Approval &amp; Activity →

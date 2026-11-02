@@ -24,6 +24,7 @@ import {
   restoreMarketingTemplate,
   deleteMarketingTemplate,
   deleteMarketingCampaign,
+  syncCampaignRecipients,
   getMarketingFooterSettings,
   saveMarketingFooterSettings,
   recordCampaignAuditLog,
@@ -243,6 +244,28 @@ export async function saveMarketingCampaignAction(
     return { success: true, campaign: saved };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to save campaign" };
+  }
+}
+
+/**
+ * Authoritatively evaluates and synchronizes campaign recipients to marketing_campaign_recipients table.
+ * Standard: DEPLOY-STD-001, Task ID: ADM-EMAIL-APP-001
+ */
+export async function syncCampaignRecipientsAction(
+  campaignId: string,
+  criteria: MarketingCampaign["filterCriteria"]
+): Promise<{
+  success: boolean;
+  recipients?: any[];
+  error?: string;
+}> {
+  try {
+    await requireCampaignAdmin();
+    const recipients = await syncCampaignRecipients(campaignId, criteria);
+    try { revalidatePath("/admin/brand-marketing"); } catch {}
+    return { success: true, recipients };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to sync campaign recipients" };
   }
 }
 
@@ -1041,12 +1064,20 @@ export async function validateCampaignPreApprovalAction(
       detail: "Hard-locked to false in DB & application runtime (Simulation and Allowlist test only)",
     });
 
-    // 10. Recipient Candidate Selection
-    const hasRecipients = (existing.recipients || []).length > 0;
+    // 10. Recipient Candidate Selection & Send Eligibility
+    const recipients = existing.recipients || [];
+    const sendable = recipients.filter((r) => r.sendEligibility === "ELIGIBLE");
+    const hasRecipients = recipients.length > 0;
+    const hasEligible = sendable.length > 0;
+
     checks.push({
       name: "Recipient Selection",
-      status: hasRecipients ? "PASS" : "FAIL",
-      detail: hasRecipients ? `${existing.recipients.length} recipients selected` : "No recipients selected for campaign",
+      status: hasRecipients && hasEligible ? "PASS" : "FAIL",
+      detail: !hasRecipients
+        ? "No recipients selected for campaign"
+        : !hasEligible
+        ? `${recipients.length} recipients selected, but 0 are send-eligible (all excluded by policy)`
+        : `${recipients.length} recipients selected (${sendable.length} send-eligible)`,
     });
 
     const allPassed = checks.every((c) => c.status === "PASS");

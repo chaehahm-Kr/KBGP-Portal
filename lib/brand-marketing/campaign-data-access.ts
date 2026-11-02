@@ -437,6 +437,445 @@ export async function listMarketingCampaigns(
   return Array.from(memoryCampaigns.values());
 }
 
+/**
+ * -----------------------------------------------------------------------------
+ * 2.1 AUTHORITATIVE RECIPIENT CANDIDATE EVALUATION & SYNCHRONIZATION
+ * Standard: DEPLOY-STD-001, Task ID: ADM-EMAIL-APP-001
+ * Evaluates candidate companies, contacts and manual entries against policy
+ * (syntax, deduplication, global suppression, and commercial consent)
+ * and synchronizes authoritative records to marketing_campaign_recipients.
+ * -----------------------------------------------------------------------------
+ */
+export interface CandidateEvaluationResult {
+  recipientItems: MarketingCampaignRecipientItem[];
+  duplicateCount: number;
+  unconfirmedConsentCount: number;
+  invalidEmailCount: number;
+  suppressedCount: number;
+  warnings: string[];
+  companyList: any[];
+}
+
+export async function evaluateCampaignRecipientCandidates(
+  campaignId: string,
+  criteria: MarketingCampaign["filterCriteria"],
+  customClient?: SupabaseClient
+): Promise<CandidateEvaluationResult> {
+  const supabase = await getClient(customClient);
+  const seenEmails = new Set<string>();
+  const recipientItems: MarketingCampaignRecipientItem[] = [];
+  const warnings: string[] = [];
+
+  let duplicateCount = 0;
+  let unconfirmedConsentCount = 0;
+  let invalidEmailCount = 0;
+  let suppressedCount = 0;
+
+  // RFC-compliant email regex
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+  // 1. Fetch Sourcing Candidates
+  let companyList: any[] = [];
+  if (criteria?.companyIds && criteria.companyIds.length === 0) {
+    // Explicitly zero companies selected
+    companyList = [];
+  } else {
+    let query = supabase
+      .from("sourcing_companies")
+      .select(`
+        id,
+        company_name_kr,
+        company_name_en,
+        business_types,
+        grade,
+        status,
+        marketing_consent_status,
+        sourcing_brands (
+          id,
+          brand_name_kr,
+          brand_name_en,
+          categories
+        ),
+        sourcing_contacts (
+          id,
+          name,
+          email,
+          is_primary
+        )
+      `);
+
+    if (criteria?.grades && criteria.grades.length > 0) {
+      query = query.in("grade", criteria.grades);
+    }
+    if (criteria?.companyIds && criteria.companyIds.length > 0) {
+      query = query.in("id", criteria.companyIds);
+    }
+
+    const { data: companies, error: compErr } = await query;
+    companyList = (!compErr && Array.isArray(companies)) ? companies : [];
+  }
+
+  for (const comp of companyList) {
+    if (criteria?.companyTypes && criteria.companyTypes.length > 0) {
+      const types = comp.business_types || [];
+      const hasMatch = criteria.companyTypes.some((t) => types.includes(t));
+      if (!hasMatch) continue;
+    }
+
+    const primaryBrand = comp.sourcing_brands?.[0]?.brand_name_kr || comp.company_name_kr;
+    const contacts = comp.sourcing_contacts || [];
+
+    if (contacts.length === 0) {
+      warnings.push(`Company '${comp.company_name_kr}' has no registered contacts.`);
+      continue;
+    }
+
+    // Sort contacts by is_primary descending so primary contact is evaluated first
+    const sortedContacts = [...contacts].sort((a: any, b: any) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+
+    for (const c of sortedContacts) {
+      if (criteria?.contactIds && criteria.contactIds.length > 0 && !criteria.contactIds.includes(c.id)) {
+        continue;
+      }
+      const rawEmail = (c.email || "").trim();
+      const email = rawEmail.toLowerCase();
+
+      // Check Email Validity
+      if (!rawEmail || !emailRegex.test(rawEmail) || rawEmail.startsWith("http://") || rawEmail.startsWith("https://")) {
+        invalidEmailCount++;
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: comp.id,
+          contactId: c.id,
+          recipientEmail: email || "invalid-email",
+          recipientName: c.name || null,
+          companyNameKr: comp.company_name_kr,
+          companyNameEn: comp.company_name_en,
+          brandName: primaryBrand,
+          sendEligibility: "EXCLUDED_INVALID_EMAIL",
+          exclusionReason: "Malformed or empty email address",
+          status: "PENDING",
+        });
+        continue;
+      }
+
+      // Check Deduplication
+      if (seenEmails.has(email)) {
+        duplicateCount++;
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: comp.id,
+          contactId: c.id,
+          recipientEmail: email,
+          recipientName: c.name || null,
+          companyNameKr: comp.company_name_kr,
+          companyNameEn: comp.company_name_en,
+          brandName: primaryBrand,
+          sendEligibility: "EXCLUDED_DUPLICATE",
+          exclusionReason: "Duplicate email address in target selection",
+          status: "PENDING",
+        });
+        continue;
+      }
+      seenEmails.add(email);
+
+      // Check Suppression List (Universal Enforcement)
+      const suppressionCheck = await checkEmailSuppression(email, customClient || supabase);
+      if (suppressionCheck.isSuppressed) {
+        suppressedCount++;
+        const reasonLabel = formatSuppressionReasonKorean(suppressionCheck.reason);
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: comp.id,
+          contactId: c.id,
+          recipientEmail: email,
+          recipientName: c.name || null,
+          companyNameKr: comp.company_name_kr,
+          companyNameEn: comp.company_name_en,
+          brandName: primaryBrand,
+          sendEligibility: "EXCLUDED_SUPPRESSED",
+          exclusionReason: `Email address is on the global suppression/opt-out list (${reasonLabel})`,
+          status: "PENDING",
+        });
+        continue;
+      }
+
+      // Check Commercial Consent Policy
+      const consentStatus = comp.marketing_consent_status || "UNCONFIRMED";
+      if (criteria?.requireConsentedOnly && consentStatus !== "CONSENTED") {
+        unconfirmedConsentCount++;
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: comp.id,
+          contactId: c.id,
+          recipientEmail: email,
+          recipientName: c.name || null,
+          companyNameKr: comp.company_name_kr,
+          companyNameEn: comp.company_name_en,
+          brandName: primaryBrand,
+          sendEligibility: "EXCLUDED_UNCONFIRMED_CONSENT",
+          exclusionReason: "Marketing consent is unconfirmed under commercial email policy",
+          status: "PENDING",
+        });
+        continue;
+      }
+
+      // Eligible
+      recipientItems.push({
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+        campaignId,
+        companyId: comp.id,
+        contactId: c.id,
+        recipientEmail: email,
+        recipientName: c.name || null,
+        companyNameKr: comp.company_name_kr,
+        companyNameEn: comp.company_name_en,
+        brandName: primaryBrand,
+        sendEligibility: "ELIGIBLE",
+        status: "PENDING",
+      });
+    }
+  }
+
+  // 2. Process Manual Emails
+  if (criteria?.manualEmails && Array.isArray(criteria.manualEmails)) {
+    for (const raw of criteria.manualEmails) {
+      const trimmed = (raw || "").trim();
+      const email = trimmed.toLowerCase();
+      if (!trimmed) continue;
+
+      if (!emailRegex.test(trimmed) || trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        invalidEmailCount++;
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: null,
+          contactId: null,
+          recipientEmail: email || "invalid-email",
+          recipientName: null,
+          companyNameKr: "수기 입력 수신자",
+          companyNameEn: "Manual Recipient",
+          brandName: "Direct Outreach",
+          sendEligibility: "EXCLUDED_INVALID_EMAIL",
+          exclusionReason: "Malformed or empty manual email address",
+          status: "PENDING",
+        });
+        continue;
+      }
+
+      if (seenEmails.has(email)) {
+        duplicateCount++;
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: null,
+          contactId: null,
+          recipientEmail: email,
+          recipientName: null,
+          companyNameKr: "수기 입력 수신자",
+          companyNameEn: "Manual Recipient",
+          brandName: "Direct Outreach",
+          sendEligibility: "EXCLUDED_DUPLICATE",
+          exclusionReason: "Duplicate email address in manual target selection",
+          status: "PENDING",
+        });
+        continue;
+      }
+      seenEmails.add(email);
+
+      const suppressionCheck = await checkEmailSuppression(email, customClient || supabase);
+      if (suppressionCheck.isSuppressed) {
+        suppressedCount++;
+        const reasonLabel = formatSuppressionReasonKorean(suppressionCheck.reason);
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: null,
+          contactId: null,
+          recipientEmail: email,
+          recipientName: null,
+          companyNameKr: "수기 입력 수신자",
+          companyNameEn: "Manual Recipient",
+          brandName: "Direct Outreach",
+          sendEligibility: "EXCLUDED_SUPPRESSED",
+          exclusionReason: `Email address is on the global suppression/opt-out list (${reasonLabel})`,
+          status: "PENDING",
+        });
+        continue;
+      }
+
+      if (criteria.requireConsentedOnly) {
+        unconfirmedConsentCount++;
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: null,
+          contactId: null,
+          recipientEmail: email,
+          recipientName: null,
+          companyNameKr: "수기 입력 수신자",
+          companyNameEn: "Manual Recipient",
+          brandName: "Direct Outreach",
+          sendEligibility: "EXCLUDED_UNCONFIRMED_CONSENT",
+          exclusionReason: "Marketing consent is unconfirmed under commercial email policy for manual entry",
+          status: "PENDING",
+        });
+        continue;
+      }
+
+      recipientItems.push({
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+        campaignId,
+        companyId: null,
+        contactId: null,
+        recipientEmail: email,
+        recipientName: null,
+        companyNameKr: "수기 입력 수신자",
+        companyNameEn: "Manual Recipient",
+        brandName: "Direct Outreach",
+        sendEligibility: "ELIGIBLE",
+        status: "PENDING",
+      });
+    }
+  }
+
+  return {
+    recipientItems,
+    duplicateCount,
+    unconfirmedConsentCount,
+    invalidEmailCount,
+    suppressedCount,
+    warnings,
+    companyList,
+  };
+}
+
+export async function syncCampaignRecipients(
+  campaignId: string,
+  criteria: MarketingCampaign["filterCriteria"],
+  customClient?: SupabaseClient
+): Promise<MarketingCampaignRecipientItem[]> {
+  const supabase = await getClient(customClient);
+  const evaluation = await evaluateCampaignRecipientCandidates(campaignId, criteria, customClient);
+  const recipientItems = evaluation.recipientItems;
+
+  // Always update in-memory cache
+  memoryRecipients.set(campaignId, recipientItems);
+
+  try {
+    // 1. Fetch existing recipient rows for this campaign
+    const { data: existingRows } = await supabase
+      .from("marketing_campaign_recipients")
+      .select("id, recipient_email")
+      .eq("campaign_id", campaignId);
+
+    const existingMap = new Map<string, string>();
+    (existingRows || []).forEach((r: any) => {
+      if (r.recipient_email) existingMap.set(r.recipient_email.toLowerCase(), r.id);
+    });
+
+    // 2. Identify rows to delete (emails that are no longer in selection)
+    // Note: Deduplicated candidates share the same email, but we only store the non-duplicate row in the table
+    // because uq_campaign_recipient_lower_email enforces 1 row per email per campaign.
+    const persistableItems = recipientItems.filter((r) => r.sendEligibility !== "EXCLUDED_DUPLICATE");
+    const currentEmails = new Set(persistableItems.map((r) => r.recipientEmail.toLowerCase()));
+    const toDeleteIds = (existingRows || [])
+      .filter((r: any) => !currentEmails.has(r.recipient_email?.toLowerCase()))
+      .map((r: any) => r.id);
+
+    if (toDeleteIds.length > 0) {
+      await supabase
+        .from("marketing_campaign_recipients")
+        .delete()
+        .in("id", toDeleteIds);
+    }
+
+    // 3. Fallback company ID for manual recipients when company_id has NOT NULL constraint
+    const verifiedCompIds = new Set((evaluation.companyList || []).map((c: any) => c.id));
+    let fallbackCompanyId: string | null = null;
+    if (criteria?.companyIds && criteria.companyIds.length > 0) {
+      const valid = criteria.companyIds.find((id) => verifiedCompIds.has(id));
+      fallbackCompanyId = valid || null;
+    }
+    if (!fallbackCompanyId) {
+      try {
+        let q = supabase.from("sourcing_companies").select("id");
+        if (typeof q?.limit === "function") q = q.limit(1);
+        const { data: firstComp } = (await (q?.maybeSingle ? q.maybeSingle() : q)) as any || {};
+        if (firstComp?.id) fallbackCompanyId = firstComp.id;
+      } catch {}
+    }
+
+    // 4. Map to database rows
+    const isUuid = (val?: string | null) =>
+      Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
+
+    const dbRows = persistableItems.map((r) => {
+      const existingId = existingMap.get(r.recipientEmail.toLowerCase());
+      const rowId = existingId || (isUuid(r.id) ? r.id : (crypto.randomUUID ? crypto.randomUUID() : undefined));
+      const companyId = (isUuid(r.companyId) && (verifiedCompIds.size === 0 || verifiedCompIds.has(r.companyId))) ? r.companyId : fallbackCompanyId;
+      const contactId = isUuid(r.contactId) ? r.contactId : null;
+
+      return {
+        id: rowId,
+        campaign_id: campaignId,
+        company_id: companyId,
+        contact_id: contactId,
+        recipient_email: r.recipientEmail.trim().toLowerCase(),
+        recipient_name: r.recipientName || null,
+        company_name_kr: r.companyNameKr || "수기 입력 수신자",
+        company_name_en: r.companyNameEn || null,
+        brand_name: r.brandName || null,
+        custom_message_override: r.customMessageOverride || null,
+        send_eligibility: r.sendEligibility,
+        exclusion_reason: r.exclusionReason || null,
+        status: r.status || "PENDING",
+        updated_at: new Date().toISOString(),
+      };
+    });
+
+    if (dbRows.length > 0) {
+      const { error: upsertErr } = await supabase
+        .from("marketing_campaign_recipients")
+        .upsert(dbRows, { onConflict: "campaign_id,recipient_email" });
+
+      if (upsertErr) {
+        console.warn("[campaigns:syncRecipients] DB upsert failed:", upsertErr.message);
+      }
+    }
+
+    // 5. Update campaign stats
+    const sendable = persistableItems.filter((r) => r.sendEligibility === "ELIGIBLE");
+    const excluded = recipientItems.filter((r) => r.sendEligibility !== "ELIGIBLE");
+
+    await supabase
+      .from("marketing_campaigns")
+      .update({
+        stats: {
+          totalRecipients: persistableItems.length,
+          sendableCount: sendable.length,
+          excludedCount: excluded.length,
+          testSendsCount: 0,
+          sentCount: 0,
+          deliveredCount: 0,
+          failedCount: 0,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", campaignId);
+  } catch (err: any) {
+    if (!err?.message?.includes("is not a function")) {
+      console.warn("[campaigns:syncRecipients] DB sync exception:", err?.message || err);
+    }
+  }
+
+  return recipientItems;
+}
+
 export async function getMarketingCampaignById(
   id: string,
   customClient?: SupabaseClient
@@ -497,7 +936,7 @@ export async function getMarketingCampaignById(
         supabase.from("marketing_campaign_logs").select("*").eq("campaign_id", id).order("created_at", { ascending: false }),
       ]);
 
-      if (rRes.data) {
+      if (rRes.data && rRes.data.length > 0) {
         recipients = rRes.data.map((r: any) => ({
           id: r.id,
           campaignId: r.campaign_id,
@@ -517,6 +956,21 @@ export async function getMarketingCampaignById(
           deliveredAt: r.delivered_at,
           errorMessage: r.error_message,
         }));
+      } else if (
+        campaign &&
+        campaign.status !== "APPROVED" &&
+        campaign.filterCriteria &&
+        (
+          (campaign.filterCriteria.companyIds && campaign.filterCriteria.companyIds.length > 0) ||
+          (campaign.filterCriteria.manualEmails && campaign.filterCriteria.manualEmails.length > 0)
+        )
+      ) {
+        try {
+          const synced = await syncCampaignRecipients(id, campaign.filterCriteria, customClient);
+          recipients = synced.filter((r) => r.sendEligibility !== "EXCLUDED_DUPLICATE");
+        } catch (syncErr: any) {
+          console.warn("[campaigns:getById] Auto-sync recipients failed:", syncErr.message);
+        }
       }
 
       if (lRes.data) {
@@ -653,6 +1107,24 @@ export async function saveMarketingCampaign(
     console.warn("[campaigns:save] DB upsert failed:", err);
   }
 
+  // Synchronize recipients to marketing_campaign_recipients table
+  // (Only for unapproved campaigns; approved campaigns have their snapshots frozen)
+  if (record.approvalStatus !== "APPROVED" && record.filterCriteria) {
+    try {
+      const synced = await syncCampaignRecipients(record.id, record.filterCriteria, customClient);
+      const sendable = synced.filter((r) => r.sendEligibility === "ELIGIBLE");
+      const excluded = synced.filter((r) => r.sendEligibility !== "ELIGIBLE");
+      record.stats = {
+        ...record.stats,
+        totalRecipients: synced.filter((r) => r.sendEligibility !== "EXCLUDED_DUPLICATE").length,
+        sendableCount: sendable.length,
+        excludedCount: excluded.length,
+      };
+    } catch (syncErr: any) {
+      console.warn("[campaigns:save] syncCampaignRecipients failed:", syncErr.message);
+    }
+  }
+
   memoryCampaigns.set(record.id, record);
   return record;
 }
@@ -733,294 +1205,17 @@ export async function runCampaignDryRun(
   const supabase = await getClient(customClient);
   const now = new Date().toISOString();
 
-  // 1. Fetch Sourcing Candidates
-  let query = supabase
-    .from("sourcing_companies")
-    .select(`
-      id,
-      company_name_kr,
-      company_name_en,
-      business_types,
-      grade,
-      status,
-      marketing_consent_status,
-      sourcing_brands (
-        id,
-        brand_name_kr,
-        brand_name_en,
-        categories
-      ),
-      sourcing_contacts (
-        id,
-        name,
-        email,
-        is_primary
-      )
-    `);
+  // Authoritatively evaluate and synchronize recipient items
+  const evaluation = await evaluateCampaignRecipientCandidates(campaignId, criteria, customClient);
+  const recipientItems = evaluation.recipientItems;
+  const duplicateCount = evaluation.duplicateCount;
+  const unconfirmedConsentCount = evaluation.unconfirmedConsentCount;
+  const invalidEmailCount = evaluation.invalidEmailCount;
+  const suppressedCount = evaluation.suppressedCount;
+  const warnings = evaluation.warnings;
 
-  let companyList: any[] = [];
-  if (criteria.companyIds && criteria.companyIds.length === 0) {
-    // Zero companies explicitly selected
-    companyList = [];
-  } else {
-    // Apply filters
-    if (criteria.grades && criteria.grades.length > 0) {
-      query = query.in("grade", criteria.grades);
-    }
-    if (criteria.companyIds && criteria.companyIds.length > 0) {
-      query = query.in("id", criteria.companyIds);
-    }
-
-    const { data: companies, error: compErr } = await query;
-    companyList = (!compErr && Array.isArray(companies)) ? companies : [];
-  }
-
-  const seenEmails = new Set<string>();
-  const recipientItems: MarketingCampaignRecipientItem[] = [];
-  const warnings: string[] = [];
-
-  let duplicateCount = 0;
-  let unconfirmedConsentCount = 0;
-  let invalidEmailCount = 0;
-  let suppressedCount = 0;
-
-  for (const comp of companyList) {
-    // Check Company Type filter
-    if (criteria.companyTypes && criteria.companyTypes.length > 0) {
-      const types = comp.business_types || [];
-      const hasMatch = criteria.companyTypes.some((t) => types.includes(t));
-      if (!hasMatch) continue;
-    }
-
-    const primaryBrand = comp.sourcing_brands?.[0]?.brand_name_kr || comp.company_name_kr;
-    const contacts = comp.sourcing_contacts || [];
-
-    if (contacts.length === 0) {
-      warnings.push(`Company '${comp.company_name_kr}' has no registered contacts.`);
-      continue;
-    }
-
-    for (const c of contacts) {
-      // If specific contacts are selected, filter to only selected contacts
-      if (criteria.contactIds && criteria.contactIds.length > 0 && !criteria.contactIds.includes(c.id)) {
-        continue;
-      }
-      const email = (c.email || "").trim().toLowerCase();
-
-      // Check Email Validity
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!email || !emailRegex.test(email)) {
-        invalidEmailCount++;
-        recipientItems.push({
-          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-          campaignId,
-          companyId: comp.id,
-          contactId: c.id,
-          recipientEmail: email || "invalid-email",
-          recipientName: c.name || null,
-          companyNameKr: comp.company_name_kr,
-          companyNameEn: comp.company_name_en,
-          brandName: primaryBrand,
-          sendEligibility: "EXCLUDED_INVALID_EMAIL",
-          exclusionReason: "Malformed or empty email address",
-          status: "PENDING",
-        });
-        continue;
-      }
-
-      // Check Deduplication
-      if (seenEmails.has(email)) {
-        duplicateCount++;
-        recipientItems.push({
-          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-          campaignId,
-          companyId: comp.id,
-          contactId: c.id,
-          recipientEmail: email,
-          recipientName: c.name || null,
-          companyNameKr: comp.company_name_kr,
-          companyNameEn: comp.company_name_en,
-          brandName: primaryBrand,
-          sendEligibility: "EXCLUDED_DUPLICATE",
-          exclusionReason: "Duplicate email address in target selection",
-          status: "PENDING",
-        });
-        continue;
-      }
-      seenEmails.add(email);
-
-      // Check Suppression List (Universal Enforcement)
-      const suppressionCheck = await checkEmailSuppression(email, customClient || supabase);
-      if (suppressionCheck.isSuppressed) {
-        suppressedCount++;
-        const reasonLabel = formatSuppressionReasonKorean(suppressionCheck.reason);
-        recipientItems.push({
-          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-          campaignId,
-          companyId: comp.id,
-          contactId: c.id,
-          recipientEmail: email,
-          recipientName: c.name || null,
-          companyNameKr: comp.company_name_kr,
-          companyNameEn: comp.company_name_en,
-          brandName: primaryBrand,
-          sendEligibility: "EXCLUDED_SUPPRESSED",
-          exclusionReason: `Email address is on the global suppression/opt-out list (${reasonLabel})`,
-          status: "PENDING",
-        });
-        continue;
-      }
-
-      // Check Commercial Consent Policy (Mandatory requirement 3: Do not assume UNCONFIRMED consent means approved)
-      // When strict consent is required, flag UNCONFIRMED as excluded
-      const consentStatus = comp.marketing_consent_status || "UNCONFIRMED";
-      if (criteria.requireConsentedOnly && consentStatus !== "CONSENTED") {
-        unconfirmedConsentCount++;
-        recipientItems.push({
-          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-          campaignId,
-          companyId: comp.id,
-          contactId: c.id,
-          recipientEmail: email,
-          recipientName: c.name || null,
-          companyNameKr: comp.company_name_kr,
-          companyNameEn: comp.company_name_en,
-          brandName: primaryBrand,
-          sendEligibility: "EXCLUDED_UNCONFIRMED_CONSENT",
-          exclusionReason: "Marketing consent is unconfirmed under commercial email policy",
-          status: "PENDING",
-        });
-        continue;
-      }
-
-      // Eligible
-      recipientItems.push({
-        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-        campaignId,
-        companyId: comp.id,
-        contactId: c.id,
-        recipientEmail: email,
-        recipientName: c.name || null,
-        companyNameKr: comp.company_name_kr,
-        companyNameEn: comp.company_name_en,
-        brandName: primaryBrand,
-        sendEligibility: "ELIGIBLE",
-        status: "PENDING",
-      });
-    }
-  }
-
-  // 2. Evaluate Standalone Manual Email Recipients
-  if (criteria.manualEmails && Array.isArray(criteria.manualEmails)) {
-    for (const rawEmail of criteria.manualEmails) {
-      const email = (rawEmail || "").trim().toLowerCase();
-      if (!email) continue;
-
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        invalidEmailCount++;
-        recipientItems.push({
-          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-          campaignId,
-          companyId: null,
-          contactId: null,
-          recipientEmail: email,
-          recipientName: null,
-          companyNameKr: "수기 입력 수신자",
-          companyNameEn: "Manual Recipient",
-          brandName: "Direct Outreach",
-          sendEligibility: "EXCLUDED_INVALID_EMAIL",
-          exclusionReason: "Malformed or invalid email address",
-          status: "PENDING",
-        });
-        continue;
-      }
-
-      // Check deduplication
-      if (seenEmails.has(email)) {
-        duplicateCount++;
-        recipientItems.push({
-          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-          campaignId,
-          companyId: null,
-          contactId: null,
-          recipientEmail: email,
-          recipientName: null,
-          companyNameKr: "수기 입력 수신자",
-          companyNameEn: "Manual Recipient",
-          brandName: "Direct Outreach",
-          sendEligibility: "EXCLUDED_DUPLICATE",
-          exclusionReason: "Duplicate email address in target selection",
-          status: "PENDING",
-        });
-        continue;
-      }
-      seenEmails.add(email);
-
-      // Check suppression list (Universal Enforcement)
-      const suppressionCheck = await checkEmailSuppression(email, customClient || supabase);
-      if (suppressionCheck.isSuppressed) {
-        suppressedCount++;
-        const reasonLabel = formatSuppressionReasonKorean(suppressionCheck.reason);
-        recipientItems.push({
-          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-          campaignId,
-          companyId: null,
-          contactId: null,
-          recipientEmail: email,
-          recipientName: null,
-          companyNameKr: "수기 입력 수신자",
-          companyNameEn: "Manual Recipient",
-          brandName: "Direct Outreach",
-          sendEligibility: "EXCLUDED_SUPPRESSED",
-          exclusionReason: `Email address is on the global suppression/opt-out list (${reasonLabel})`,
-          status: "PENDING",
-        });
-        continue;
-      }
-
-      // Check commercial consent policy:
-      // Standalone manual entries do not have prior confirmed consent.
-      // Under requireConsentedOnly, flag them as EXCLUDED_UNCONFIRMED_CONSENT.
-      if (criteria.requireConsentedOnly) {
-        unconfirmedConsentCount++;
-        recipientItems.push({
-          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-          campaignId,
-          companyId: null,
-          contactId: null,
-          recipientEmail: email,
-          recipientName: null,
-          companyNameKr: "수기 입력 수신자",
-          companyNameEn: "Manual Recipient",
-          brandName: "Direct Outreach",
-          sendEligibility: "EXCLUDED_UNCONFIRMED_CONSENT",
-          exclusionReason: "Marketing consent is unconfirmed under commercial email policy for manual entry",
-          status: "PENDING",
-        });
-        continue;
-      }
-
-      // Eligible
-      recipientItems.push({
-        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-        campaignId,
-        companyId: null,
-        contactId: null,
-        recipientEmail: email,
-        recipientName: null,
-        companyNameKr: "수기 입력 수신자",
-        companyNameEn: "Manual Recipient",
-        brandName: "Direct Outreach",
-        sendEligibility: "ELIGIBLE",
-        status: "PENDING",
-      });
-    }
-  }
-
-  // Freeze recipients in memory store
-  memoryRecipients.set(campaignId, recipientItems);
+  // Synchronize authoritative recipients to marketing_campaign_recipients table
+  await syncCampaignRecipients(campaignId, criteria, customClient);
 
   const sendable = recipientItems.filter((r) => r.sendEligibility === "ELIGIBLE");
   const excluded = recipientItems.filter((r) => r.sendEligibility !== "ELIGIBLE");
@@ -1244,6 +1439,14 @@ export async function approveMarketingCampaign(
   const now = new Date().toISOString();
   const recipients = existing.recipients || [];
   const sendable = recipients.filter((r) => r.sendEligibility === "ELIGIBLE");
+
+  if (recipients.length === 0) {
+    throw new Error(`Cannot approve campaign: No recipients selected for campaign. Please select recipients in Step 3.`);
+  }
+
+  if (sendable.length === 0) {
+    throw new Error(`Cannot approve campaign: No send-eligible recipients available (${recipients.length} selected, but all are excluded by policy).`);
+  }
 
   const footerSettings = await getMarketingFooterSettings();
   const footerCheck = validateMarketingFooterCompleteness(footerSettings);
