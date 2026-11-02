@@ -943,17 +943,78 @@ export async function validateCampaignPreApprovalAction(
  * Lists authoritative suppressed marketing email addresses with optional search filter.
  * Task ID: ADM-EMAIL-TPL-005 (Suppression List Admin Access)
  */
-export async function listMarketingSuppressionListAction(search?: string): Promise<{
+export async function listMarketingSuppressionListAction(
+  search?: string,
+  statusFilter?: "ALL" | "ACTIVE" | "RELEASED"
+): Promise<{
   success: boolean;
   suppressions?: any[];
   error?: string;
 }> {
   try {
-    await verifyAdminSession();
+    await requireCampaignAdmin();
     const { listMarketingSuppressionList } = await import("./campaign-data-access");
-    return await listMarketingSuppressionList(search);
+    return await listMarketingSuppressionList(search, statusFilter);
   } catch (err: any) {
     console.error("[campaign-actions:listMarketingSuppressionListAction] Exception:", err.message);
     return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Safely releases an actively suppressed email address.
+ * Task ID: ADM-EMAIL-SUP-001 (Safe Admin Release)
+ * - Server-side, authorized, auditable and fail-closed.
+ * - Requires reason and evidence.
+ * - Prohibits ordinary release of BOUNCED or COMPLAINT records without elevated policy confirmation.
+ */
+export async function releaseMarketingSuppressionAction(input: {
+  id: string;
+  email: string;
+  releaseReason: string;
+  releaseEvidence: string;
+  evidenceType: import("./campaign-data-access").SuppressionEvidenceType;
+  policyValidationNotes?: string;
+  policyValidationConfirmed?: boolean;
+}): Promise<{
+  success: boolean;
+  record?: any;
+  error?: string;
+}> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const { releaseMarketingSuppression } = await import("./campaign-data-access");
+    const result = await releaseMarketingSuppression({
+      ...input,
+      releasedBy: admin.email || admin.userId || "admin",
+    });
+    if (result.success) {
+      try {
+        revalidatePath("/admin/brand-marketing");
+      } catch {}
+    }
+    return result;
+  } catch (err: any) {
+    console.error("[campaign-actions:releaseMarketingSuppressionAction] Exception:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Retrieves audit log entries for marketing suppression releases.
+ * Task ID: ADM-EMAIL-SUP-001
+ */
+export async function getMarketingSuppressionAuditLogAction(email?: string): Promise<{
+  success: boolean;
+  logs?: any[];
+  error?: string;
+}> {
+  try {
+    await requireCampaignAdmin();
+    const { getMarketingSuppressionAuditLog } = await import("./campaign-data-access");
+    return await getMarketingSuppressionAuditLog(email);
+  } catch (err: any) {
+    console.error("[campaign-actions:getMarketingSuppressionAuditLogAction] Exception:", err.message);
+    return { success: false, logs: [], error: err.message };
   }
 }

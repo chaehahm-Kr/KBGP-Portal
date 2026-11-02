@@ -1,6 +1,7 @@
 import "server-only";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   MarketingCampaign,
   MarketingTemplatePackage,
@@ -22,6 +23,7 @@ import {
   buildUnsubscribeUrl,
   isEmailSuppressed,
   buildOneClickUnsubscribeEndpoint,
+  removeEmailFromMemorySuppression,
 } from "./unsubscribe";
 import { DEFAULT_MARKETING_TEMPLATES, resolveTemplateId } from "./default-templates";
 import { compileImageTemplateToHtml } from "./image-template-compiler";
@@ -1300,6 +1302,7 @@ export async function saveMarketingFooterSettings(
 
 export async function listMarketingSuppressionList(
   search?: string,
+  statusFilter?: "ALL" | "ACTIVE" | "RELEASED",
   customClient?: any
 ): Promise<{ success: boolean; suppressions: any[]; error?: string }> {
   try {
@@ -1313,15 +1316,367 @@ export async function listMarketingSuppressionList(
       query = query.ilike("email", "%" + search.trim().toLowerCase() + "%");
     }
 
-    const { data, error } = await query;
-    if (error) {
-      console.warn("[campaigns:suppression-list] DB error:", error.message);
-      return { success: false, suppressions: [], error: error.message };
+    if (statusFilter === "ACTIVE") {
+      query = query.or("status.eq.ACTIVE,status.is.null");
+    } else if (statusFilter === "RELEASED") {
+      query = query.eq("status", "RELEASED");
     }
 
-    return { success: true, suppressions: data || [] };
+    let { data, error } = await query;
+    if (error) {
+      // If error is due to missing status column, fallback to querying without status filter
+      if (error.code === "42703" || error.message?.includes("status")) {
+        let fallbackQuery = supabase
+          .from("marketing_suppression_list")
+          .select("*")
+          .order("suppressed_at", { ascending: false });
+        if (search && search.trim()) {
+          fallbackQuery = fallbackQuery.ilike("email", "%" + search.trim().toLowerCase() + "%");
+        }
+        const fallbackRes = await fallbackQuery;
+        if (fallbackRes.error) {
+          return { success: false, suppressions: [], error: fallbackRes.error.message };
+        }
+        data = fallbackRes.data || [];
+        if (statusFilter === "RELEASED") {
+          data = [];
+        }
+      } else {
+        console.warn("[campaigns:suppression-list] DB error:", error.message);
+        return { success: false, suppressions: [], error: error.message };
+      }
+    }
+
+    const mapped = (data || []).map((item: any) => ({
+      ...item,
+      status: item.status || "ACTIVE",
+    }));
+
+    return { success: true, suppressions: mapped };
   } catch (err: any) {
     console.warn("[campaigns:suppression-list] Exception:", err.message);
     return { success: false, suppressions: [], error: err.message };
+  }
+}
+
+export type SuppressionEvidenceType =
+  | "WRITTEN_CONSENT_EMAIL"
+  | "CUSTOMER_PORTAL_REQUEST"
+  | "SUPPORT_TICKET"
+  | "PHONE_VERIFICATION"
+  | "ADMIN_ERROR_CORRECTION"
+  | "INTERNAL_TESTING";
+
+export interface ReleaseSuppressionInput {
+  id: string;
+  email: string;
+  releaseReason: string;
+  releaseEvidence: string;
+  evidenceType: SuppressionEvidenceType;
+  policyValidationNotes?: string;
+  policyValidationConfirmed?: boolean;
+  releasedBy: string;
+}
+
+export interface ReleaseSuppressionResult {
+  success: boolean;
+  record?: any;
+  error?: string;
+}
+
+const VALID_EVIDENCE_TYPES: readonly string[] = [
+  "WRITTEN_CONSENT_EMAIL",
+  "CUSTOMER_PORTAL_REQUEST",
+  "SUPPORT_TICKET",
+  "PHONE_VERIFICATION",
+  "ADMIN_ERROR_CORRECTION",
+  "INTERNAL_TESTING",
+];
+
+const DUMMY_TEXT_PATTERN = /^(none|test|testing|asdf|12345|dummy|n\/a|null|undefined|ㅇㅇ|테스트|몰라|그냥)$/i;
+
+/**
+ * Validates verifiable proof of renewed consent or documented erroneous suppression.
+ * Text length alone is not proof of renewed consent (Security Hardening ADM-EMAIL-SUP-002).
+ */
+export function validateSuppressionReleaseEvidence(input: {
+  releaseReason: string;
+  releaseEvidence: string;
+  evidenceType: SuppressionEvidenceType;
+  suppressionReason: string;
+  policyValidationNotes?: string;
+  policyValidationConfirmed?: boolean;
+}): { valid: boolean; error?: string } {
+  const reason = (input.releaseReason || "").trim();
+  const evidence = (input.releaseEvidence || "").trim();
+  const type = input.evidenceType;
+
+  if (!reason || DUMMY_TEXT_PATTERN.test(reason) || reason.length < 5) {
+    return { valid: false, error: "유효하지 않은 해제 사유입니다. 구체적인 사유를 최소 5자 이상 기술해주세요." };
+  }
+
+  if (!type || !VALID_EVIDENCE_TYPES.includes(type)) {
+    return {
+      valid: false,
+      error: "유효한 증빙 유형(Evidence Type)을 선택해주세요. (서면 이메일, 티켓, 포털 요청 등)",
+    };
+  }
+
+  if (!evidence || DUMMY_TEXT_PATTERN.test(evidence) || evidence.length < 5) {
+    return { valid: false, error: "단순 무의미한 텍스트는 증빙으로 인정되지 않습니다. 실제 검증 가능한 근거를 최소 5자 이상 입력해주세요." };
+  }
+
+  // Evidence validation by specific source
+  if (type === "SUPPORT_TICKET") {
+    const hasTicketRef = /#\d+/.test(evidence) || /\b(ticket|tkt|case|inquiry|상담|티켓|접수번호)\b/i.test(evidence);
+    if (!hasTicketRef) {
+      return {
+        valid: false,
+        error: "지원 티켓 증빙 선택 시 관련 티켓 번호(예: #1234) 또는 접수 식별자를 명시해야 합니다.",
+      };
+    }
+  }
+
+  if (type === "WRITTEN_CONSENT_EMAIL") {
+    const hasEmailRef = /\d{4}[-./]\d{1,2}[-./]\d{1,2}/.test(evidence) || /@|발송|수신|동의|요청|opt-in|re-opt/i.test(evidence);
+    if (!hasEmailRef) {
+      return {
+        valid: false,
+        error: "서면 이메일 증빙 선택 시 수신 일자, 발송인 정보 또는 재수신 동의 내역을 명시해야 합니다.",
+      };
+    }
+  }
+
+  // Elevated Policy Gate for BOUNCED or COMPLAINT records
+  const suppReasonUpper = (input.suppressionReason || "").toUpperCase();
+  if (suppReasonUpper === "BOUNCED" || suppReasonUpper === "COMPLAINT") {
+    if (!input.policyValidationConfirmed) {
+      return {
+        valid: false,
+        error: "영구 반송(BOUNCED) 또는 스팸 신고(COMPLAINT) 주소는 발송 평판(Reputation) 보호를 위해 정책 검증 확인(Policy Validation) 승인이 필수입니다.",
+      };
+    }
+    const policyNotes = (input.policyValidationNotes || "").trim();
+    if (!policyNotes || policyNotes.length < 10 || DUMMY_TEXT_PATTERN.test(policyNotes)) {
+      return {
+        valid: false,
+        error: "영구 반송/스팸 신고 해제 시 메일박스 정상화 확인 및 재발송 타당성에 관한 10자 이상의 상세 정책 소명이 필수입니다.",
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Safely releases an actively suppressed email address with mandatory audit metadata and policy validation.
+ * Preserves original suppression record and appends an immutable entry to marketing_suppression_audit_log.
+ * Uses trusted server-side execution path (service_role) to enforce strict append-only audit log integrity.
+ */
+export async function releaseMarketingSuppression(
+  input: ReleaseSuppressionInput,
+  customClient?: any
+): Promise<ReleaseSuppressionResult> {
+  try {
+    const {
+      id,
+      email,
+      releaseReason,
+      releaseEvidence,
+      evidenceType,
+      policyValidationNotes,
+      policyValidationConfirmed,
+      releasedBy,
+    } = input;
+
+    if (!id || !email) {
+      return { success: false, error: "해제할 수신 거부 레코드 ID 및 이메일 주소가 필요합니다." };
+    }
+
+    const supabase = await getClient(customClient);
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1. Fetch current suppression record
+    let record: any = null;
+    const { data, error: fetchErr } = await supabase
+      .from("marketing_suppression_list")
+      .select("*")
+      .eq("id", id)
+      .limit(1);
+
+    if (fetchErr || !data || data.length === 0) {
+      // Fallback lookup by email
+      const { data: emailData } = await supabase
+        .from("marketing_suppression_list")
+        .select("*")
+        .eq("email", normalizedEmail)
+        .limit(1);
+      if (emailData && emailData.length > 0) {
+        record = emailData[0];
+      } else {
+        return { success: false, error: "수신 거부 기록을 찾을 수 없습니다." };
+      }
+    } else {
+      record = data[0];
+    }
+
+    // 2. Check if already released
+    if (record.status === "RELEASED") {
+      return { success: false, error: "이미 안전 해제 처리된 이메일 주소입니다." };
+    }
+
+    // 3. Verifiable Evidence & Policy Gate Validation
+    const validation = validateSuppressionReleaseEvidence({
+      releaseReason,
+      releaseEvidence,
+      evidenceType: evidenceType || "WRITTEN_CONSENT_EMAIL",
+      suppressionReason: record.reason,
+      policyValidationNotes,
+      policyValidationConfirmed,
+    });
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+
+    // 4. Try atomic database RPC function first via trusted server client (service_role)
+    let atomicSuccess = false;
+    let atomicRecord: any = null;
+    const trustedClient = customClient || createAdminClient();
+
+    if (typeof trustedClient.rpc === "function") {
+      const { data: rpcData, error: rpcError } = await trustedClient.rpc(
+        "fn_release_marketing_suppression",
+        {
+          p_id: record.id,
+          p_email: normalizedEmail,
+          p_release_reason: releaseReason.trim(),
+          p_release_evidence: releaseEvidence.trim(),
+          p_evidence_type: evidenceType || "WRITTEN_CONSENT_EMAIL",
+          p_policy_validation_notes: policyValidationNotes ? policyValidationNotes.trim() : null,
+          p_released_by: releasedBy || "admin",
+        }
+      );
+
+      if (!rpcError && rpcData) {
+        atomicSuccess = true;
+        atomicRecord = rpcData;
+      } else if (rpcError && rpcError.code !== "42883" && !rpcError.message?.includes("could not find") && !rpcError.message?.includes("function") && !rpcError.message?.includes("undefined")) {
+        // Explicit DB exception raised inside RPC (e.g. audit insert error, already released, unauthorized)
+        return { success: false, error: rpcError.message };
+      }
+    }
+
+    if (atomicSuccess && atomicRecord) {
+      removeEmailFromMemorySuppression(normalizedEmail);
+      return { success: true, record: atomicRecord };
+    }
+
+    // Fallback for mock clients in unit tests or pre-migration:
+    // Guarantees transaction integrity by rolling back status to record.status if audit insert fails
+    const nowIso = new Date().toISOString();
+    const updatePayload = {
+      status: "RELEASED",
+      released_at: nowIso,
+      released_by: releasedBy || "admin",
+      release_reason: releaseReason.trim(),
+      release_evidence: releaseEvidence.trim(),
+      evidence_type: evidenceType || "WRITTEN_CONSENT_EMAIL",
+      policy_validation_notes: policyValidationNotes ? policyValidationNotes.trim() : null,
+    };
+
+    let updateRes = await supabase
+      .from("marketing_suppression_list")
+      .update(updatePayload)
+      .eq("id", record.id)
+      .select()
+      .single();
+
+    if (updateRes.error) {
+      if (updateRes.error.code === "42703" || updateRes.error.message?.includes("status") || updateRes.error.message?.includes("column")) {
+        return {
+          success: false,
+          error: "데이터베이스 스키마 마이그레이션(0194) 적용이 필요합니다. 관리자 승인 후 마이그레이션을 실행하세요.",
+        };
+      }
+      return { success: false, error: updateRes.error.message };
+    }
+
+    const updatedRecord = updateRes.data || { ...record, ...updatePayload };
+
+    // 5. Append immutable audit log via trusted server-side write path (service_role)
+    const trustedAuditClient = customClient || createAdminClient();
+    const auditRes = await trustedAuditClient.from("marketing_suppression_audit_log").insert({
+      suppression_id: record.id,
+      email: normalizedEmail,
+      action: "RELEASE",
+      previous_status: record.status || "ACTIVE",
+      new_status: "RELEASED",
+      suppression_reason: record.reason,
+      release_reason: releaseReason.trim(),
+      release_evidence: releaseEvidence.trim(),
+      evidence_type: evidenceType || "WRITTEN_CONSENT_EMAIL",
+      policy_validation_notes: policyValidationNotes ? policyValidationNotes.trim() : null,
+      performed_by: releasedBy || "admin",
+      performed_at: nowIso,
+    });
+
+    if (auditRes && auditRes.error) {
+      // ATOMIC TRANSACTION INTEGRITY: A failed audit insertion must not leave the suppression in RELEASED status!
+      await supabase.from("marketing_suppression_list").update({
+        status: record.status || "ACTIVE",
+        released_at: record.released_at || null,
+        released_by: record.released_by || null,
+        release_reason: record.release_reason || null,
+        release_evidence: record.release_evidence || null,
+        evidence_type: record.evidence_type || null,
+        policy_validation_notes: record.policy_validation_notes || null,
+      }).eq("id", record.id);
+
+      return {
+        success: false,
+        error: `감사 로그 기록 실패로 인해 수신 거부 해제 트랜잭션이 롤백되었습니다: ${auditRes.error.message}`,
+      };
+    }
+
+    // 6. Purge from in-memory suppression cache
+    removeEmailFromMemorySuppression(normalizedEmail);
+
+    return { success: true, record: updatedRecord };
+  } catch (err: any) {
+    console.error("[campaigns:suppression-release] Exception:", err.message);
+    return { success: false, error: err.message || "해제 처리 중 예외가 발생했습니다." };
+  }
+}
+
+/**
+ * Retrieves audit log entries for marketing suppression releases.
+ */
+export async function getMarketingSuppressionAuditLog(
+  email?: string,
+  customClient?: any
+): Promise<{ success: boolean; logs: any[]; error?: string }> {
+  try {
+    const supabase = await getClient(customClient);
+    let query = supabase
+      .from("marketing_suppression_audit_log")
+      .select("*")
+      .order("performed_at", { ascending: false })
+      .limit(50);
+
+    if (email && email.trim()) {
+      query = query.eq("email", email.trim().toLowerCase());
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      if (error.code === "42P01" || error.message?.includes("does not exist")) {
+        return { success: true, logs: [] };
+      }
+      return { success: false, logs: [], error: error.message };
+    }
+
+    return { success: true, logs: data || [] };
+  } catch (err: any) {
+    return { success: false, logs: [], error: err.message };
   }
 }
