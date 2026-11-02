@@ -1,6 +1,7 @@
 import "server-only";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   MarketingCampaign,
   MarketingTemplatePackage,
@@ -1344,11 +1345,20 @@ export async function listMarketingSuppressionList(
   }
 }
 
+export type SuppressionEvidenceType =
+  | "WRITTEN_CONSENT_EMAIL"
+  | "CUSTOMER_PORTAL_REQUEST"
+  | "SUPPORT_TICKET"
+  | "PHONE_VERIFICATION"
+  | "ADMIN_ERROR_CORRECTION"
+  | "INTERNAL_TESTING";
+
 export interface ReleaseSuppressionInput {
   id: string;
   email: string;
   releaseReason: string;
   releaseEvidence: string;
+  evidenceType: SuppressionEvidenceType;
   policyValidationNotes?: string;
   policyValidationConfirmed?: boolean;
   releasedBy: string;
@@ -1360,10 +1370,94 @@ export interface ReleaseSuppressionResult {
   error?: string;
 }
 
+const VALID_EVIDENCE_TYPES: readonly string[] = [
+  "WRITTEN_CONSENT_EMAIL",
+  "CUSTOMER_PORTAL_REQUEST",
+  "SUPPORT_TICKET",
+  "PHONE_VERIFICATION",
+  "ADMIN_ERROR_CORRECTION",
+  "INTERNAL_TESTING",
+];
+
+const DUMMY_TEXT_PATTERN = /^(none|test|testing|asdf|12345|dummy|n\/a|null|undefined|ㅇㅇ|테스트|몰라|그냥)$/i;
+
+/**
+ * Validates verifiable proof of renewed consent or documented erroneous suppression.
+ * Text length alone is not proof of renewed consent (Security Hardening ADM-EMAIL-SUP-002).
+ */
+export function validateSuppressionReleaseEvidence(input: {
+  releaseReason: string;
+  releaseEvidence: string;
+  evidenceType: SuppressionEvidenceType;
+  suppressionReason: string;
+  policyValidationNotes?: string;
+  policyValidationConfirmed?: boolean;
+}): { valid: boolean; error?: string } {
+  const reason = (input.releaseReason || "").trim();
+  const evidence = (input.releaseEvidence || "").trim();
+  const type = input.evidenceType;
+
+  if (!reason || DUMMY_TEXT_PATTERN.test(reason) || reason.length < 5) {
+    return { valid: false, error: "유효하지 않은 해제 사유입니다. 구체적인 사유를 최소 5자 이상 기술해주세요." };
+  }
+
+  if (!type || !VALID_EVIDENCE_TYPES.includes(type)) {
+    return {
+      valid: false,
+      error: "유효한 증빙 유형(Evidence Type)을 선택해주세요. (서면 이메일, 티켓, 포털 요청 등)",
+    };
+  }
+
+  if (!evidence || DUMMY_TEXT_PATTERN.test(evidence) || evidence.length < 5) {
+    return { valid: false, error: "단순 무의미한 텍스트는 증빙으로 인정되지 않습니다. 실제 검증 가능한 근거를 최소 5자 이상 입력해주세요." };
+  }
+
+  // Evidence validation by specific source
+  if (type === "SUPPORT_TICKET") {
+    const hasTicketRef = /#\d+/.test(evidence) || /\b(ticket|tkt|case|inquiry|상담|티켓|접수번호)\b/i.test(evidence);
+    if (!hasTicketRef) {
+      return {
+        valid: false,
+        error: "지원 티켓 증빙 선택 시 관련 티켓 번호(예: #1234) 또는 접수 식별자를 명시해야 합니다.",
+      };
+    }
+  }
+
+  if (type === "WRITTEN_CONSENT_EMAIL") {
+    const hasEmailRef = /\d{4}[-./]\d{1,2}[-./]\d{1,2}/.test(evidence) || /@|발송|수신|동의|요청|opt-in|re-opt/i.test(evidence);
+    if (!hasEmailRef) {
+      return {
+        valid: false,
+        error: "서면 이메일 증빙 선택 시 수신 일자, 발송인 정보 또는 재수신 동의 내역을 명시해야 합니다.",
+      };
+    }
+  }
+
+  // Elevated Policy Gate for BOUNCED or COMPLAINT records
+  const suppReasonUpper = (input.suppressionReason || "").toUpperCase();
+  if (suppReasonUpper === "BOUNCED" || suppReasonUpper === "COMPLAINT") {
+    if (!input.policyValidationConfirmed) {
+      return {
+        valid: false,
+        error: "영구 반송(BOUNCED) 또는 스팸 신고(COMPLAINT) 주소는 발송 평판(Reputation) 보호를 위해 정책 검증 확인(Policy Validation) 승인이 필수입니다.",
+      };
+    }
+    const policyNotes = (input.policyValidationNotes || "").trim();
+    if (!policyNotes || policyNotes.length < 10 || DUMMY_TEXT_PATTERN.test(policyNotes)) {
+      return {
+        valid: false,
+        error: "영구 반송/스팸 신고 해제 시 메일박스 정상화 확인 및 재발송 타당성에 관한 10자 이상의 상세 정책 소명이 필수입니다.",
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
 /**
  * Safely releases an actively suppressed email address with mandatory audit metadata and policy validation.
  * Preserves original suppression record and appends an immutable entry to marketing_suppression_audit_log.
- * Fail-Closed: ordinary release of BOUNCED or COMPLAINT records is rejected without elevated policy confirmation.
+ * Uses trusted server-side execution path (service_role) to enforce strict append-only audit log integrity.
  */
 export async function releaseMarketingSuppression(
   input: ReleaseSuppressionInput,
@@ -1375,6 +1469,7 @@ export async function releaseMarketingSuppression(
       email,
       releaseReason,
       releaseEvidence,
+      evidenceType,
       policyValidationNotes,
       policyValidationConfirmed,
       releasedBy,
@@ -1382,14 +1477,6 @@ export async function releaseMarketingSuppression(
 
     if (!id || !email) {
       return { success: false, error: "해제할 수신 거부 레코드 ID 및 이메일 주소가 필요합니다." };
-    }
-
-    if (!releaseReason || releaseReason.trim().length < 5) {
-      return { success: false, error: "해제 사유를 최소 5자 이상 상세히 입력해주세요." };
-    }
-
-    if (!releaseEvidence || releaseEvidence.trim().length < 5) {
-      return { success: false, error: "재수신 동의 근거 또는 오등록 소명 증빙을 최소 5자 이상 상세히 입력해주세요." };
     }
 
     const supabase = await getClient(customClient);
@@ -1424,21 +1511,17 @@ export async function releaseMarketingSuppression(
       return { success: false, error: "이미 안전 해제 처리된 이메일 주소입니다." };
     }
 
-    // 3. Elevated policy validation check for BOUNCED or COMPLAINT records
-    const upperReason = (record.reason || "").toUpperCase();
-    if (upperReason === "BOUNCED" || upperReason === "COMPLAINT") {
-      if (!policyValidationConfirmed) {
-        return {
-          success: false,
-          error: "영구 반송(BOUNCED) 또는 스팸 신고(COMPLAINT) 주소는 발송 평판(Reputation) 보호를 위해 정책 검증 확인(Policy Validation) 승인이 필수입니다.",
-        };
-      }
-      if (!policyValidationNotes || policyValidationNotes.trim().length < 10) {
-        return {
-          success: false,
-          error: "영구 반송/스팸 신고 해제 시 메일박스 정상화 확인 및 재발송 타당성에 관한 10자 이상의 상세 정책 소명이 필수입니다.",
-        };
-      }
+    // 3. Verifiable Evidence & Policy Gate Validation
+    const validation = validateSuppressionReleaseEvidence({
+      releaseReason,
+      releaseEvidence,
+      evidenceType: evidenceType || "WRITTEN_CONSENT_EMAIL",
+      suppressionReason: record.reason,
+      policyValidationNotes,
+      policyValidationConfirmed,
+    });
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
     }
 
     // 4. Update the suppression record to RELEASED
@@ -1449,6 +1532,7 @@ export async function releaseMarketingSuppression(
       released_by: releasedBy || "admin",
       release_reason: releaseReason.trim(),
       release_evidence: releaseEvidence.trim(),
+      evidence_type: evidenceType || "WRITTEN_CONSENT_EMAIL",
       policy_validation_notes: policyValidationNotes ? policyValidationNotes.trim() : null,
     };
 
@@ -1460,7 +1544,7 @@ export async function releaseMarketingSuppression(
       .single();
 
     if (updateRes.error) {
-      if (updateRes.error.code === "42703" || updateRes.error.message?.includes("status")) {
+      if (updateRes.error.code === "42703" || updateRes.error.message?.includes("status") || updateRes.error.message?.includes("column")) {
         return {
           success: false,
           error: "데이터베이스 스키마 마이그레이션(0194) 적용이 필요합니다. 관리자 승인 후 마이그레이션을 실행하세요.",
@@ -1471,9 +1555,12 @@ export async function releaseMarketingSuppression(
 
     const updatedRecord = updateRes.data || { ...record, ...updatePayload };
 
-    // 5. Append immutable audit log
+    // 5. Append immutable audit log via trusted server-side write path (service_role)
     try {
-      await supabase.from("marketing_suppression_audit_log").insert({
+      // In production/server runtime, use createAdminClient() with service_role privileges
+      // because direct INSERT is revoked from ordinary authenticated users for security hardening.
+      const trustedAuditClient = customClient || createAdminClient();
+      await trustedAuditClient.from("marketing_suppression_audit_log").insert({
         suppression_id: record.id,
         email: normalizedEmail,
         action: "RELEASE",
@@ -1482,6 +1569,7 @@ export async function releaseMarketingSuppression(
         suppression_reason: record.reason,
         release_reason: releaseReason.trim(),
         release_evidence: releaseEvidence.trim(),
+        evidence_type: evidenceType || "WRITTEN_CONSENT_EMAIL",
         policy_validation_notes: policyValidationNotes ? policyValidationNotes.trim() : null,
         performed_by: releasedBy || "admin",
         performed_at: nowIso,

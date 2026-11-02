@@ -18,6 +18,7 @@ export interface SuppressionEntry {
   released_by?: string | null;
   release_reason?: string | null;
   release_evidence?: string | null;
+  evidence_type?: string | null;
   policy_validation_notes?: string | null;
 }
 
@@ -418,6 +419,14 @@ interface SafeReleaseModalProps {
 
 function SafeReleaseModal({ record, onClose, onSuccess }: SafeReleaseModalProps) {
   const [releaseReason, setReleaseReason] = useState("");
+  const [evidenceType, setEvidenceType] = useState<
+    | "WRITTEN_CONSENT_EMAIL"
+    | "CUSTOMER_PORTAL_REQUEST"
+    | "SUPPORT_TICKET"
+    | "PHONE_VERIFICATION"
+    | "ADMIN_ERROR_CORRECTION"
+    | "INTERNAL_TESTING"
+  >("WRITTEN_CONSENT_EMAIL");
   const [releaseEvidence, setReleaseEvidence] = useState("");
   const [policyValidationNotes, setPolicyValidationNotes] = useState("");
   const [policyValidationConfirmed, setPolicyValidationConfirmed] = useState(false);
@@ -469,6 +478,7 @@ function SafeReleaseModal({ record, onClose, onSuccess }: SafeReleaseModalProps)
         email: record.email,
         releaseReason: releaseReason.trim(),
         releaseEvidence: releaseEvidence.trim(),
+        evidenceType,
         policyValidationNotes: isHighRisk ? policyValidationNotes.trim() : undefined,
         policyValidationConfirmed: isHighRisk ? policyValidationConfirmed : undefined,
       });
@@ -567,6 +577,25 @@ function SafeReleaseModal({ record, onClose, onSuccess }: SafeReleaseModalProps)
               className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-500"
               required
             />
+          </div>
+
+          {/* Evidence Type Selection */}
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+              소명 증빙 유형 (Evidence Source Type) *
+            </label>
+            <select
+              value={evidenceType}
+              onChange={(e: any) => setEvidenceType(e.target.value)}
+              className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-500 cursor-pointer"
+            >
+              <option value="WRITTEN_CONSENT_EMAIL">수신자 서면 이메일 재수신 요청 (Written Consent Email)</option>
+              <option value="SUPPORT_TICKET">고객센터 지원 티켓 확인 (Support Ticket #)</option>
+              <option value="CUSTOMER_PORTAL_REQUEST">고객사 포털 직접 요청 (Customer Portal Request)</option>
+              <option value="PHONE_VERIFICATION">유선 통화 확인 (Phone Verification)</option>
+              <option value="ADMIN_ERROR_CORRECTION">관리자 오등록 정정 소명 (Admin Error Correction)</option>
+              <option value="INTERNAL_TESTING">내부 테스트/스테이징 검증 (Internal Testing)</option>
+            </select>
           </div>
 
           {/* Evidence Input */}
@@ -741,7 +770,13 @@ function AuditDetailModal({ record, onClose, formatDate }: AuditDetailModalProps
             </div>
             {record.release_evidence && (
               <div className="text-zinc-700 dark:text-zinc-300">
-                <div className="text-zinc-500 font-medium">소명 증빙:</div>
+                <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
+              <span className="text-zinc-500">증빙 유형:</span>
+              <span className="font-mono text-[11px] font-semibold text-zinc-800 dark:text-zinc-200">
+                {record.evidence_type || "WRITTEN_CONSENT_EMAIL"}
+              </span>
+            </div>
+            <div className="text-zinc-500 font-medium">소명 증빙:</div>
                 <div className="mt-0.5 p-2 bg-white dark:bg-zinc-800 rounded border border-emerald-100 dark:border-emerald-900/40 font-mono text-[11px]">
                   {record.release_evidence}
                 </div>

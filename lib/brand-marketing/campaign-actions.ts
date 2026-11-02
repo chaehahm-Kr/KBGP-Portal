@@ -973,6 +973,7 @@ export async function releaseMarketingSuppressionAction(input: {
   email: string;
   releaseReason: string;
   releaseEvidence: string;
+  evidenceType: import("./campaign-data-access").SuppressionEvidenceType;
   policyValidationNotes?: string;
   policyValidationConfirmed?: boolean;
 }): Promise<{
