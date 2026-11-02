@@ -52,7 +52,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
     }
 
-    const result = await processResendWebhookEvent(event);
+    const result = await processResendWebhookEvent(event, {
+      svixId: svixId || undefined,
+      svixTimestamp: svixTimestamp || undefined,
+    });
 
     return NextResponse.json({
       success: true,

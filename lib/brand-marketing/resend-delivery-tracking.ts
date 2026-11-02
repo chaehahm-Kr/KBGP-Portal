@@ -2,11 +2,18 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { getClient } from "@/lib/brand-marketing/campaign-data-access";
 import { serverEnv } from "@/lib/env/server";
 
+export interface ProcessWebhookOptions {
+  svixId?: string;
+  svixTimestamp?: string;
+  customClient?: SupabaseClient;
+}
+
 export interface WebhookProcessingResult {
   success: boolean;
   status: "processed" | "idempotent_duplicate" | "ignored" | "error";
   eventType?: string;
   emailId?: string;
+  providerEventId?: string;
   reason?: string;
   recipientEmail?: string;
   campaignId?: string;
@@ -22,20 +29,46 @@ export interface ReconciliationResult {
   message?: string;
 }
 
+export interface RecordDeliveryEventParams {
+  supabase: SupabaseClient;
+  eventType: string;
+  providerEventId: string;
+  providerMessageId: string;
+  recipientEmail: string;
+  campaignId?: string;
+  recipientId?: string;
+  occurredAt?: string;
+  payload?: any;
+}
+
+export interface RecordDeliveryEventResult {
+  isDuplicate: boolean;
+  inserted: boolean;
+}
+
 /**
  * Persists an event to the immutable delivery event ledger.
  * Writes to marketing_delivery_events if table exists, and always writes to marketing_campaign_logs.
+ * Safely and atomically identifies duplicate provider events via unique constraint violations.
  */
-async function recordDeliveryEvent(
-  supabase: SupabaseClient,
-  eventType: string,
-  providerMessageId: string,
-  recipientEmail: string,
-  campaignId?: string,
-  recipientId?: string,
-  payload?: any
-): Promise<void> {
+export async function recordDeliveryEvent(
+  params: RecordDeliveryEventParams
+): Promise<RecordDeliveryEventResult> {
+  const {
+    supabase,
+    eventType,
+    providerEventId,
+    providerMessageId,
+    recipientEmail,
+    campaignId,
+    recipientId,
+    occurredAt,
+    payload,
+  } = params;
+
   const nowIso = new Date().toISOString();
+  let isDuplicate = false;
+  let inserted = false;
 
   // 1. Try writing to marketing_delivery_events (Migration 0197)
   try {
@@ -43,24 +76,39 @@ async function recordDeliveryEvent(
       .from("marketing_delivery_events")
       .insert({
         provider: "resend",
+        provider_event_id: providerEventId,
         provider_message_id: providerMessageId,
         event_type: eventType,
         recipient_email: recipientEmail,
         campaign_id: campaignId || null,
         recipient_id: recipientId || null,
+        occurred_at: occurredAt || nowIso,
         payload: payload || {},
         created_at: nowIso,
       });
 
-    if (ledgerErr && !ledgerErr.message.includes("does not exist")) {
-      console.warn("[delivery-ledger] Error inserting to marketing_delivery_events:", ledgerErr.message);
+    if (ledgerErr) {
+      if (
+        ledgerErr.code === "23505" ||
+        ledgerErr.message.includes("duplicate key") ||
+        ledgerErr.message.includes("unique constraint") ||
+        ledgerErr.message.includes("uq_marketing_delivery_events_provider_event")
+      ) {
+        isDuplicate = true;
+      } else if (!ledgerErr.message.includes("does not exist")) {
+        console.warn("[delivery-ledger] Error inserting to marketing_delivery_events:", ledgerErr.message);
+      }
+    } else {
+      inserted = true;
     }
-  } catch {
-    // Migration 0197 may be pending Owner approval in Production
+  } catch (err: any) {
+    if (err?.code === "23505" || err?.message?.includes("duplicate key")) {
+      isDuplicate = true;
+    }
   }
 
-  // 2. Always persist to marketing_campaign_logs (Authoritative existing table)
-  if (campaignId) {
+  // 2. Always persist to marketing_campaign_logs (Authoritative existing table) if not duplicate
+  if (campaignId && !isDuplicate) {
     try {
       await supabase
         .from("marketing_campaign_logs")
@@ -71,8 +119,10 @@ async function recordDeliveryEvent(
           is_test_mode: false,
           details: {
             provider: "resend",
+            providerEventId,
             providerMessageId,
             recipientEmail,
+            occurredAt: occurredAt || nowIso,
             payload: payload || {},
           },
           performed_by: "resend_webhook",
@@ -82,6 +132,8 @@ async function recordDeliveryEvent(
       console.warn("[delivery-ledger] Error inserting to marketing_campaign_logs:", logErr.message);
     }
   }
+
+  return { isDuplicate, inserted };
 }
 
 /**
@@ -114,17 +166,66 @@ async function recordSuppression(
 }
 
 /**
+ * Recounts delivered count from database and updates campaign stats atomically.
+ */
+async function syncCampaignDeliveredStats(
+  supabase: SupabaseClient,
+  campaignId: string
+): Promise<number> {
+  const { count: realDeliveredCount } = await supabase
+    .from("marketing_campaign_recipients")
+    .select("*", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .eq("status", "DELIVERED");
+
+  const { data: camp } = await supabase
+    .from("marketing_campaigns")
+    .select("stats")
+    .eq("id", campaignId)
+    .single();
+
+  const currentStats = camp?.stats || {};
+  const sentCount = currentStats.sentCount || 0;
+  const finalDelivered = realDeliveredCount || 0;
+  const nowIso = new Date().toISOString();
+
+  await supabase
+    .from("marketing_campaigns")
+    .update({
+      stats: {
+        ...currentStats,
+        deliveredCount: finalDelivered,
+        deliveryStatus: finalDelivered >= sentCount && sentCount > 0 ? "DELIVERED" : currentStats.deliveryStatus || "SENT",
+      },
+      updated_at: nowIso,
+    })
+    .eq("id", campaignId);
+
+  return finalDelivered;
+}
+
+/**
  * Processes an authenticated Resend webhook event.
- * Enforces state-machine transitions, idempotency, suppression updates, and metrics alignment.
+ * Enforces state-machine transitions, idempotency, suppression updates, out-of-order protection, and metrics alignment.
  */
 export async function processResendWebhookEvent(
   event: any,
-  customClient?: SupabaseClient
+  options?: ProcessWebhookOptions | SupabaseClient
 ): Promise<WebhookProcessingResult> {
+  // Support either options object or direct SupabaseClient (backward compatibility)
+  const isDirectClient = options && typeof (options as any).from === "function";
+  const customClient = isDirectClient ? (options as SupabaseClient) : (options as ProcessWebhookOptions)?.customClient;
+  const svixId = !isDirectClient ? (options as ProcessWebhookOptions)?.svixId : undefined;
+
   const eventType: string = event?.type || "";
   const emailId: string = event?.data?.email_id || "";
   const toList: string[] = event?.data?.to || [];
   const recipientEmail = toList[0]?.toLowerCase().trim() || "";
+  const nowIso = new Date().toISOString();
+  const eventTimestamp = event?.data?.created_at || event?.created_at || nowIso;
+
+  // Authoritative unique provider event ID
+  const providerEventId = svixId || event?.id || `resend:${emailId}:${eventType}:${eventTimestamp}`;
 
   if (!emailId) {
     return {
@@ -132,6 +233,7 @@ export async function processResendWebhookEvent(
       status: "ignored",
       reason: "Missing email_id in event payload",
       eventType,
+      providerEventId,
     };
   }
 
@@ -146,20 +248,21 @@ export async function processResendWebhookEvent(
 
   if (findErr || !recipients || recipients.length === 0) {
     // Unmapped message ID (e.g. transactional email or external test)
-    await recordDeliveryEvent(
+    const ledgerResult = await recordDeliveryEvent({
       supabase,
       eventType,
-      emailId,
-      recipientEmail || "unknown",
-      undefined,
-      undefined,
-      event
-    );
+      providerEventId,
+      providerMessageId: emailId,
+      recipientEmail: recipientEmail || "unknown",
+      occurredAt: eventTimestamp,
+      payload: event,
+    });
 
     return {
       success: true,
-      status: "ignored",
+      status: ledgerResult.isDuplicate ? "idempotent_duplicate" : "ignored",
       emailId,
+      providerEventId,
       eventType,
       reason: "No campaign recipient matched provider message ID",
     };
@@ -167,31 +270,62 @@ export async function processResendWebhookEvent(
 
   const recipient = recipients[0];
   const campaignId = recipient.campaign_id;
-  const nowIso = new Date().toISOString();
-  const eventTimestamp = event?.data?.created_at || event?.created_at || nowIso;
 
-  // 2. Authoritative ledger logging
-  await recordDeliveryEvent(
+  // 2. Authoritative ledger logging with atomic deduplication
+  const ledgerResult = await recordDeliveryEvent({
     supabase,
     eventType,
-    emailId,
-    recipient.recipient_email,
+    providerEventId,
+    providerMessageId: emailId,
+    recipientEmail: recipient.recipient_email,
     campaignId,
-    recipient.id,
-    event
-  );
+    recipientId: recipient.id,
+    occurredAt: eventTimestamp,
+    payload: event,
+  });
+
+  if (ledgerResult.isDuplicate) {
+    return {
+      success: true,
+      status: "idempotent_duplicate",
+      emailId,
+      providerEventId,
+      eventType,
+      campaignId,
+      recipientEmail: recipient.recipient_email,
+      reason: `Duplicate provider event rejected: ${providerEventId}`,
+    };
+  }
 
   // 3. State Machine & Event Processing
   if (eventType === "email.delivered") {
-    // Idempotency check: duplicate event protection
+    // Idempotency check: already delivered
     if (recipient.status === "DELIVERED") {
       return {
         success: true,
         status: "idempotent_duplicate",
         emailId,
+        providerEventId,
         eventType,
         campaignId,
         recipientEmail: recipient.recipient_email,
+      };
+    }
+
+    // Out-of-order check: do not overwrite terminal suppression states with delayed delivered event
+    if (recipient.status === "BOUNCED" || recipient.status === "COMPLAINED") {
+      console.warn(
+        `[delivery] Ignoring out-of-order delivered event for suppressed recipient ${recipient.recipient_email} (status: ${recipient.status})`
+      );
+      return {
+        success: true,
+        status: "ignored",
+        emailId,
+        providerEventId,
+        eventType,
+        campaignId,
+        recipientEmail: recipient.recipient_email,
+        reason: `Recipient already in terminal state: ${recipient.status}`,
       };
     }
 
@@ -205,40 +339,14 @@ export async function processResendWebhookEvent(
       })
       .eq("id", recipient.id);
 
-    // Recompute real delivered count from authoritative DB
-    const { count: realDeliveredCount } = await supabase
-      .from("marketing_campaign_recipients")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", campaignId)
-      .eq("status", "DELIVERED");
-
-    // Fetch existing campaign stats to preserve counts
-    const { data: camp } = await supabase
-      .from("marketing_campaigns")
-      .select("stats")
-      .eq("id", campaignId)
-      .single();
-
-    const currentStats = camp?.stats || {};
-    const sentCount = currentStats.sentCount || 0;
-    const finalDelivered = realDeliveredCount || (currentStats.deliveredCount || 0) + 1;
-
-    await supabase
-      .from("marketing_campaigns")
-      .update({
-        stats: {
-          ...currentStats,
-          deliveredCount: finalDelivered,
-          deliveryStatus: finalDelivered >= sentCount && sentCount > 0 ? "DELIVERED" : currentStats.deliveryStatus,
-        },
-        updated_at: nowIso,
-      })
-      .eq("id", campaignId);
+    // Recompute real delivered count and update campaign stats
+    await syncCampaignDeliveredStats(supabase, campaignId);
 
     return {
       success: true,
       status: "processed",
       emailId,
+      providerEventId,
       eventType,
       campaignId,
       recipientEmail: recipient.recipient_email,
@@ -246,8 +354,20 @@ export async function processResendWebhookEvent(
   }
 
   if (eventType === "email.bounced") {
-    // Prevent downgrading if already verified delivered
-    if (recipient.status === "DELIVERED") {
+    if (recipient.status === "BOUNCED") {
+      return {
+        success: true,
+        status: "idempotent_duplicate",
+        emailId,
+        providerEventId,
+        eventType,
+        campaignId,
+        recipientEmail: recipient.recipient_email,
+      };
+    }
+
+    const wasDelivered = recipient.status === "DELIVERED";
+    if (wasDelivered) {
       console.warn(`[delivery] Retroactive bounce received for delivered recipient ${recipient.recipient_email}`);
     }
 
@@ -263,10 +383,16 @@ export async function processResendWebhookEvent(
     // Suppression enforcement
     await recordSuppression(supabase, recipient.recipient_email, "BOUNCED", "resend_webhook");
 
+    // If it was previously DELIVERED, synchronize stats to decrement delivered count
+    if (wasDelivered) {
+      await syncCampaignDeliveredStats(supabase, campaignId);
+    }
+
     return {
       success: true,
       status: "processed",
       emailId,
+      providerEventId,
       eventType,
       campaignId,
       recipientEmail: recipient.recipient_email,
@@ -274,6 +400,26 @@ export async function processResendWebhookEvent(
   }
 
   if (eventType === "email.complained") {
+    if (recipient.status === "COMPLAINED") {
+      return {
+        success: true,
+        status: "idempotent_duplicate",
+        emailId,
+        providerEventId,
+        eventType,
+        campaignId,
+        recipientEmail: recipient.recipient_email,
+      };
+    }
+
+    await supabase
+      .from("marketing_campaign_recipients")
+      .update({
+        status: "COMPLAINED",
+        updated_at: nowIso,
+      })
+      .eq("id", recipient.id);
+
     // Suppression enforcement
     await recordSuppression(supabase, recipient.recipient_email, "COMPLAINT", "resend_webhook");
 
@@ -281,17 +427,19 @@ export async function processResendWebhookEvent(
       success: true,
       status: "processed",
       emailId,
+      providerEventId,
       eventType,
       campaignId,
       recipientEmail: recipient.recipient_email,
     };
   }
 
-  // Other telemetry events (delayed, opened, clicked)
+  // Other telemetry events (delayed, opened, clicked) - do not modify delivery status
   return {
     success: true,
     status: "processed",
     emailId,
+    providerEventId,
     eventType,
     campaignId,
     recipientEmail: recipient.recipient_email,
@@ -365,6 +513,7 @@ export async function reconcileCampaignDelivery(
 
       const data = await res.json();
       const lastEvent: string = (data.last_event || "").toLowerCase();
+      const providerEventId = `reconcile:${r.provider_message_id}:${lastEvent}`;
 
       if (lastEvent === "delivered") {
         await supabase
@@ -376,15 +525,17 @@ export async function reconcileCampaignDelivery(
           })
           .eq("id", r.id);
 
-        await recordDeliveryEvent(
+        await recordDeliveryEvent({
           supabase,
-          "RECONCILIATION_DELIVERED",
-          r.provider_message_id,
-          r.recipient_email,
+          eventType: "RECONCILIATION_DELIVERED",
+          providerEventId,
+          providerMessageId: r.provider_message_id,
+          recipientEmail: r.recipient_email,
           campaignId,
-          r.id,
-          { provider: "resend", apiData: data }
-        );
+          recipientId: r.id,
+          occurredAt: data.created_at || nowIso,
+          payload: { provider: "resend", apiData: data },
+        });
 
         reconciledDelivered++;
       } else if (lastEvent === "bounced") {
@@ -397,6 +548,19 @@ export async function reconcileCampaignDelivery(
           .eq("id", r.id);
 
         await recordSuppression(supabase, r.recipient_email, "BOUNCED", "resend_reconciliation");
+
+        await recordDeliveryEvent({
+          supabase,
+          eventType: "RECONCILIATION_BOUNCED",
+          providerEventId,
+          providerMessageId: r.provider_message_id,
+          recipientEmail: r.recipient_email,
+          campaignId,
+          recipientId: r.id,
+          occurredAt: data.created_at || nowIso,
+          payload: { provider: "resend", apiData: data },
+        });
+
         reconciledBounced++;
       }
 
@@ -407,7 +571,7 @@ export async function reconcileCampaignDelivery(
     }
   }
 
-  // 4. Recount total delivered from authoritative table
+  // 4. Recount total delivered and sent from authoritative table
   const { count: realDeliveredCount } = await supabase
     .from("marketing_campaign_recipients")
     .select("*", { count: "exact", head: true })

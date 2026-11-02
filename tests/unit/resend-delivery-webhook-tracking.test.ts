@@ -15,7 +15,7 @@ import {
 } from "@/lib/brand-marketing/resend-delivery-tracking";
 import { calculateCampaignSummaryMetrics } from "@/lib/brand-marketing/results-data-access";
 
-describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe Reconciliation", () => {
+describe("ADM-EMAIL-APP-012-R1: Resend Delivery Ledger Security Hardening & Tracking", () => {
   const testSecret = "whsec_" + Buffer.from("test_secret_key_12345678901234567890").toString("base64");
   const rawKey = Buffer.from(testSecret.slice(6), "base64");
 
@@ -28,7 +28,7 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
     return { id, timestamp, signature };
   }
 
-  describe("1. Svix Webhook Signature Verification", () => {
+  describe("1. Svix Webhook Signature Verification & Forgery Defense", () => {
     const payload = JSON.stringify({ type: "email.delivered", data: { email_id: "01a19d0f" } });
 
     it("verifies a valid signature with whsec_ prefix successfully", () => {
@@ -50,13 +50,13 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
       };
       const res = verifyResendWebhookSignature({
         payload,
-        headers: multiSigHeaders,
+        headers,
         secret: testSecret,
       });
       expect(res.isValid).toBe(true);
     });
 
-    it("rejects an invalid signature hash", () => {
+    it("rejects forged or corrupted signature hash", () => {
       const headers = generateValidSvixHeaders(payload);
       const res = verifyResendWebhookSignature({
         payload,
@@ -95,11 +95,12 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
     });
   });
 
-  describe("2. Webhook Event Processing & State Machine", () => {
+  describe("2. Webhook Event Processing, Deduplication & Immutability", () => {
     let mockRecipients: any[] = [];
     let mockCampaigns: any[] = [];
     let mockLogs: any[] = [];
     let mockSuppressions: any[] = [];
+    let mockDeliveryLedger: any[] = [];
 
     function createMockSupabase() {
       return {
@@ -169,7 +170,28 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
             };
           }
 
-          if (table === "marketing_campaign_logs" || table === "marketing_delivery_events") {
+          if (table === "marketing_delivery_events") {
+            return {
+              insert: (record: any) => {
+                const existing = mockDeliveryLedger.find(
+                  (r) => r.provider === record.provider && r.provider_event_id === record.provider_event_id
+                );
+                if (existing) {
+                  return Promise.resolve({
+                    data: null,
+                    error: {
+                      code: "23505",
+                      message: "duplicate key value violates unique constraint uq_marketing_delivery_events_provider_event",
+                    },
+                  });
+                }
+                mockDeliveryLedger.push(record);
+                return Promise.resolve({ data: null, error: null });
+              },
+            };
+          }
+
+          if (table === "marketing_campaign_logs") {
             return {
               insert: (record: any) => {
                 mockLogs.push(record);
@@ -212,6 +234,7 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
       ];
       mockLogs = [];
       mockSuppressions = [];
+      mockDeliveryLedger = [];
     });
 
     it("processes email.delivered, updates recipient status and campaign deliveredCount", async () => {
@@ -225,9 +248,13 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
         },
       };
 
-      const result = await processResendWebhookEvent(event, mockDb);
+      const result = await processResendWebhookEvent(event, {
+        svixId: "msg_svix_delivered_001",
+        customClient: mockDb,
+      });
       expect(result.success).toBe(true);
       expect(result.status).toBe("processed");
+      expect(result.providerEventId).toBe("msg_svix_delivered_001");
 
       // Recipient updated
       const alice = mockRecipients.find((r) => r.id === "rec-001");
@@ -238,13 +265,12 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
       const camp = mockCampaigns.find((c) => c.id === "camp-001");
       expect(camp.stats.deliveredCount).toBe(1);
 
-      // Audit log inserted
-      expect(mockLogs.some((l) => l.event_type === "email.delivered" || l.event_type === "WEBHOOK_DELIVERED")).toBe(true);
+      // Ledger inserted
+      expect(mockDeliveryLedger.some((r) => r.provider_event_id === "msg_svix_delivered_001")).toBe(true);
     });
 
-    it("enforces idempotency on duplicate email.delivered events without double counting", async () => {
+    it("atomically catches and rejects duplicate provider events via unique constraint", async () => {
       const mockDb = createMockSupabase();
-      // First delivery event
       const event = {
         type: "email.delivered",
         created_at: "2026-11-02T16:20:00.000Z",
@@ -253,52 +279,107 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
           to: ["alice@test.com"],
         },
       };
-      await processResendWebhookEvent(event, mockDb);
 
-      const countAfterFirst = mockCampaigns[0].stats.deliveredCount;
-      expect(countAfterFirst).toBe(1);
+      // First webhook
+      const res1 = await processResendWebhookEvent(event, {
+        svixId: "msg_svix_dup_001",
+        customClient: mockDb,
+      });
+      expect(res1.status).toBe("processed");
 
-      // Duplicate delivery event
-      const dupResult = await processResendWebhookEvent(event, mockDb);
-      expect(dupResult.status).toBe("idempotent_duplicate");
-      expect(mockCampaigns[0].stats.deliveredCount).toBe(1); // not incremented twice
+      // Duplicate webhook retry with exact same svix-id
+      const res2 = await processResendWebhookEvent(event, {
+        svixId: "msg_svix_dup_001",
+        customClient: mockDb,
+      });
+      expect(res2.status).toBe("idempotent_duplicate");
+      expect(res2.reason).toContain("Duplicate provider event rejected");
+      expect(mockCampaigns[0].stats.deliveredCount).toBe(1);
     });
 
-    it("processes email.bounced, updates recipient status and suppresses email address", async () => {
+    it("permits different legitimate events for the same provider_message_id", async () => {
       const mockDb = createMockSupabase();
-      const event = {
-        type: "email.bounced",
-        created_at: "2026-11-02T16:25:00.000Z",
-        data: {
-          email_id: "resend_msg_002",
-          to: ["bob@test.com"],
-          message: "Mailbox does not exist",
+
+      // Event 1: Delivered
+      await processResendWebhookEvent(
+        {
+          type: "email.delivered",
+          created_at: "2026-11-02T16:20:00.000Z",
+          data: { email_id: "resend_msg_001", to: ["alice@test.com"] },
         },
-      };
+        { svixId: "msg_evt_del_01", customClient: mockDb }
+      );
 
-      const result = await processResendWebhookEvent(event, mockDb);
-      expect(result.success).toBe(true);
-
-      const bob = mockRecipients.find((r) => r.id === "rec-002");
-      expect(bob.status).toBe("BOUNCED");
-
-      // Automatic suppression
-      expect(mockSuppressions.some((s) => s.email === "bob@test.com" && s.reason === "BOUNCED")).toBe(true);
-    });
-
-    it("processes email.complained and automatically suppresses recipient", async () => {
-      const mockDb = createMockSupabase();
-      const event = {
-        type: "email.complained",
-        data: {
-          email_id: "resend_msg_001",
-          to: ["alice@test.com"],
+      // Event 2: Complaint for the same message
+      const compRes = await processResendWebhookEvent(
+        {
+          type: "email.complained",
+          created_at: "2026-11-02T16:25:00.000Z",
+          data: { email_id: "resend_msg_001", to: ["alice@test.com"] },
         },
-      };
+        { svixId: "msg_evt_comp_02", customClient: mockDb }
+      );
 
-      const result = await processResendWebhookEvent(event, mockDb);
-      expect(result.success).toBe(true);
+      expect(compRes.status).toBe("processed");
+      // Both events present in immutable ledger
+      expect(mockDeliveryLedger.length).toBe(2);
+      expect(mockDeliveryLedger.map((r) => r.provider_event_id)).toEqual(["msg_evt_del_01", "msg_evt_comp_02"]);
       expect(mockSuppressions.some((s) => s.email === "alice@test.com" && s.reason === "COMPLAINT")).toBe(true);
+    });
+
+    it("protects against out-of-order delayed delivered events overwriting terminal suppression states", async () => {
+      const mockDb = createMockSupabase();
+
+      // Recipient is already bounced
+      mockRecipients[0].status = "BOUNCED";
+
+      // Delayed delivered event arrives
+      const outOfOrderEvent = {
+        type: "email.delivered",
+        created_at: "2026-11-02T16:10:00.000Z",
+        data: { email_id: "resend_msg_001", to: ["alice@test.com"] },
+      };
+
+      const res = await processResendWebhookEvent(outOfOrderEvent, {
+        svixId: "msg_delayed_del_01",
+        customClient: mockDb,
+      });
+
+      expect(res.status).toBe("ignored");
+      expect(res.reason).toContain("terminal state: BOUNCED");
+      // Status must NOT be reverted to DELIVERED
+      expect(mockRecipients[0].status).toBe("BOUNCED");
+    });
+
+    it("handles retroactive bounce after delivery and recalibrates delivered count", async () => {
+      const mockDb = createMockSupabase();
+
+      // 1. Initial delivery
+      await processResendWebhookEvent(
+        {
+          type: "email.delivered",
+          created_at: "2026-11-02T16:20:00.000Z",
+          data: { email_id: "resend_msg_001", to: ["alice@test.com"] },
+        },
+        { svixId: "msg_d1", customClient: mockDb }
+      );
+      expect(mockCampaigns[0].stats.deliveredCount).toBe(1);
+
+      // 2. Retroactive bounce arrives
+      const bounceRes = await processResendWebhookEvent(
+        {
+          type: "email.bounced",
+          created_at: "2026-11-02T16:30:00.000Z",
+          data: { email_id: "resend_msg_001", to: ["alice@test.com"], message: "Mailbox full" },
+        },
+        { svixId: "msg_b1", customClient: mockDb }
+      );
+
+      expect(bounceRes.status).toBe("processed");
+      expect(mockRecipients[0].status).toBe("BOUNCED");
+      // Recalibrated deliveredCount
+      expect(mockCampaigns[0].stats.deliveredCount).toBe(0);
+      expect(mockSuppressions.some((s) => s.email === "alice@test.com" && s.reason === "BOUNCED")).toBe(true);
     });
 
     it("safely handles unknown message IDs without throwing", async () => {
@@ -311,7 +392,10 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
         },
       };
 
-      const result = await processResendWebhookEvent(event, mockDb);
+      const result = await processResendWebhookEvent(event, {
+        svixId: "msg_unknown_1",
+        customClient: mockDb,
+      });
       expect(result.success).toBe(true);
       expect(result.status).toBe("ignored");
     });
@@ -360,7 +444,7 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
     });
   });
 
-  describe("4. Historical Reconciliation Action", () => {
+  describe("4. Historical Reconciliation Action & Safety", () => {
     let mockRecipients: any[] = [];
     let mockCampaigns: any[] = [];
     let mockLogs: any[] = [];
@@ -432,6 +516,12 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
             };
           }
 
+          if (table === "marketing_suppression_list") {
+            return {
+              upsert: () => Promise.resolve({ data: null, error: null }),
+            };
+          }
+
           return {
             select: () => Promise.resolve({ data: [], error: null }),
           };
@@ -469,7 +559,6 @@ describe("ADM-EMAIL-APP-012: Resend Delivery Webhook, Delivered Metrics & Safe R
     it("reconciles SENT records using Resend API response without resending emails", async () => {
       process.env.RESEND_API_KEY = "re_test_mock_api_key";
 
-      // Mock global fetch for Resend GET /emails/:id
       const originalFetch = global.fetch;
       global.fetch = vi.fn().mockImplementation((url: string) => {
         if (url.includes("01a19d0f-hist-1")) {
