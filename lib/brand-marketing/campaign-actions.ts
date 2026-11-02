@@ -222,7 +222,8 @@ export async function getMarketingCampaignByIdAction(id: string): Promise<{
 }> {
   try {
     await requireCampaignAdmin();
-    const result = await getMarketingCampaignById(id);
+    const adminClient = process.env.NODE_ENV !== "test" ? createAdminClient() : undefined;
+    const result = await getMarketingCampaignById(id, adminClient);
     return {
       success: true,
       campaign: result.campaign,
@@ -1297,7 +1298,8 @@ export async function unlockCampaignSendAction(
 ): Promise<{ success: boolean; result?: UnlockCampaignSendResult; error?: string }> {
   try {
     const admin = await requireCampaignAdmin();
-    const result = await unlockCampaignSend(campaignId, admin.email, input);
+    const adminClient = process.env.NODE_ENV !== "test" ? createAdminClient() : undefined;
+    const result = await unlockCampaignSend(campaignId, admin.email, input, adminClient);
     try {
       revalidatePath("/admin/brand-marketing");
     } catch {}

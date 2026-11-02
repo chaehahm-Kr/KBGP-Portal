@@ -65,6 +65,11 @@ async function getClient(customClient?: SupabaseClient): Promise<SupabaseClient>
       });
     }
   }
+  if (process.env.NODE_ENV !== "test") {
+    try {
+      return createAdminClient();
+    } catch {}
+  }
   try {
     return await createClient();
   } catch (err: any) {
@@ -2830,12 +2835,33 @@ export async function unlockCampaignSend(
   // recover approvalStatus back to APPROVED so the campaign can be sent immediately
   if (existing.campaign.approvalStatus !== "APPROVED") {
     updatePayload.approval_status = "APPROVED";
+    updatePayload.approved_by = existing.campaign.approvedBy || adminEmail;
+    updatePayload.approved_at = existing.campaign.approvedAt || nowIso;
+    updatePayload.approval_snapshot = existing.campaign.approvalSnapshot || {
+      approvedAt: nowIso,
+      approvedBy: adminEmail,
+      templateVersion: existing.campaign.templateVersion || "1.0.0",
+      templateSubject: existing.campaign.name,
+      subjectOverride: existing.campaign.subjectOverride || null,
+      resolvedSubject: existing.campaign.subjectOverride || existing.campaign.name,
+      frozenRecipientsCount: recipients.length,
+      sendableCount: unsentTargets.length,
+      senderAddress: process.env.EMAIL_FROM_ADDRESS || "Contact@letusto.com",
+      footerVersion: nowIso,
+      footerStyle: existing.campaign.footerStyle || "classic",
+      footerSettingsSnapshot: { style: existing.campaign.footerStyle || "classic" },
+      hash: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    };
   }
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("marketing_campaigns")
     .update(updatePayload)
     .eq("id", campaignId);
+
+  if (updateError) {
+    throw new Error(`Failed to update campaign state in database: ${updateError.message}`);
+  }
 
   // In-memory cache update
   memoryCampaigns.set(campaignId, {
