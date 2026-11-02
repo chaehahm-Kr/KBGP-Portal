@@ -5,6 +5,7 @@ export * from "./duplicate-detector";
 export * from "./category-classifier";
 export * from "./source-registry";
 export * from "./manual-entry";
+export * from "./naver-seller-parser";
 export * from "./adapters";
 export * from "./enrichment/website-enricher";
 export * from "./service";

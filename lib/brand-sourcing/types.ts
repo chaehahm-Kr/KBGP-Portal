@@ -6,7 +6,7 @@
  * and UI view components (Phase 1 / ADM-BSRC-004).
  */
 
-export type SourcingProvider = "INTERCHARM" | "COSMOPROF" | "INDIE_BEAUTY_SHOW" | "MANUAL" | "OTHER";
+export type SourcingProvider = "INTERCHARM" | "COSMOPROF" | "INDIE_BEAUTY_SHOW" | "NAVER_SMARTSTORE" | "MANUAL" | "OTHER";
 
 export type FieldOrigin =
   | "SOURCE_EXHIBITION"
@@ -232,8 +232,10 @@ export type DuplicateMatchType =
   | "COMPANY_NAME"
   | "COMPANY_NAME_KR"
   | "COMPANY_NAME_EN"
+  | "BUSINESS_REGISTRATION_NUMBER"
   | "BRAND_NAME"
   | "EMAIL"
+  | "PHONE"
   | "SOURCE_URL"
   | "SOURCE_IDENTIFIER"
   | "DOMAIN"
@@ -244,7 +246,7 @@ export type DuplicateSeverity = "STRONG" | "POSSIBLE";
 export interface DuplicateMatchItem {
   matchType: DuplicateMatchType;
   severity: DuplicateSeverity;
-  matchedField?: "회사명" | "브랜드명" | "담당자 이메일";
+  matchedField?: "회사명" | "브랜드명" | "담당자 이메일" | "사업자등록번호" | "전화번호" | "스토어/웹사이트 URL";
   matchedValue: string;
   entityType: "SOURCING_CANDIDATE" | "PARTNER_COMPANY";
   entityId: string;
@@ -285,6 +287,8 @@ export interface DuplicateCheckCriteria {
   sourceIdentifier?: string | null;
   companyNameKr?: string | null;
   companyNameEn?: string | null;
+  businessRegistrationNumber?: string | null;
+  phone?: string | null;
   websiteUrl?: string | null;
   domains?: string[];
   emails?: string[];
@@ -355,4 +359,3 @@ export interface DuplicateAuditReport {
   }>;
   remediationRecommendation: string;
 }
-

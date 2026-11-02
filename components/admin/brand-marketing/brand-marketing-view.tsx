@@ -31,6 +31,7 @@ import type {
 } from "@/lib/brand-sourcing/types";
 import {
   extractSourcingDraftAction,
+  parseNaverSellerDraftAction,
   checkDuplicatesAction,
   saveSourcingCandidateAction,
   linkSourcingSourceAction,
@@ -186,6 +187,10 @@ export default function BrandMarketingView({
 
   // Company-level category input for Import & Review
   const [newCompanyCategoryInput, setNewCompanyCategoryInput] = useState<string>("");
+
+  // ADM-BSRC-NAVER-001: Naver Smart Store Seller Import states
+  const [naverSellerText, setNaverSellerText] = useState("");
+  const [isParsingNaver, setIsParsingNaver] = useState(false);
 
   // Duplicate candidate alert state
   const [duplicateCheck, setDuplicateCheck] = useState<DuplicateMatchResult | null>(null);
@@ -416,6 +421,58 @@ export default function BrandMarketingView({
     }
   };
 
+  // ADM-BSRC-NAVER-001: Parse Naver Smart Store Seller Info
+  const handleParseNaverSeller = async () => {
+    if (!naverSellerText.trim()) {
+      setExtractError("판매자 정보 텍스트를 입력해 주세요.");
+      return;
+    }
+
+    setIsParsingNaver(true);
+    setIsExtracting(true);
+    setExtractError(null);
+    setSaveSuccessMessage(null);
+
+    try {
+      const res = await parseNaverSellerDraftAction(naverSellerText.trim(), sourceUrl.trim() || undefined);
+
+      if (!res.success || !res.draft) {
+        setExtractError(res.error || "네이버 판매자 정보 파싱에 실패했습니다.");
+        return;
+      }
+
+      setReviewedDraft(res.draft);
+      setDuplicateCheck(res.duplicateCheck || null);
+
+      // Preserve confirmed categories if re-parsing an already confirmed candidate
+      const confirmedCandidateMatch = res.duplicateCheck?.matches?.find(
+        (m) => m.entityType === "SOURCING_CANDIDATE" && m.primaryCategoriesConfirmed
+      );
+
+      // Reset evaluation fields to clean state (Default to REVIEWED, Grade required explicitly)
+      setGrade(null);
+      setGradeValidationError(null);
+      setStatus("REVIEWED");
+      setInternalNotes("");
+      setSelectedBusinessTypes(res.draft.company.businessTypes || []);
+      setBusinessTypeEvidence(res.draft.company.businessTypeEvidence || []);
+      if (confirmedCandidateMatch && confirmedCandidateMatch.primaryCategoriesConfirmed) {
+        setSelectedPrimaryCategories(confirmedCandidateMatch.primaryProductCategories || []);
+        setPrimaryCategoriesConfirmed(true);
+      } else {
+        setSelectedPrimaryCategories(res.draft.company.primaryProductCategories || []);
+        setPrimaryCategoriesConfirmed(false);
+      }
+      setCompanyDocuments(res.draft.companyDocuments || []);
+      setCompanyTypeOtherExplanation("");
+    } catch (err: any) {
+      setExtractError(err.message || "네이버 판매자 정보 파싱 중 오류가 발생했습니다.");
+    } finally {
+      setIsParsingNaver(false);
+      setIsExtracting(false);
+    }
+  };
+
   // --------------------------------------------------------------------------
   // SAVE HANDLER
   // --------------------------------------------------------------------------
@@ -429,6 +486,8 @@ export default function BrandMarketingView({
         sourceIdentifier: draftToCheck.source.sourceIdentifier,
         companyNameKr: draftToCheck.company.nameKr,
         companyNameEn: draftToCheck.company.nameEn || undefined,
+        businessRegistrationNumber: draftToCheck.company.businessRegistrationNumber || undefined,
+        phone: draftToCheck.company.telephone || undefined,
         brands: draftBrands,
         emails: draftEmails,
       });
@@ -1417,6 +1476,13 @@ export default function BrandMarketingView({
             onEnrichWebsiteChange={setEnrichWebsite}
             isExtracting={isExtracting}
             onExtract={handleExtract}
+            naverSellerText={naverSellerText}
+            onNaverSellerTextChange={(text) => {
+              setNaverSellerText(text);
+              if (extractError) setExtractError(null);
+            }}
+            onParseNaverSeller={handleParseNaverSeller}
+            isParsingNaver={isParsingNaver}
             onStartManualEntry={handleStartManualEntry}
             hasActiveManualDraft={reviewedDraft?.source.provider === "MANUAL"}
             extractError={extractError}

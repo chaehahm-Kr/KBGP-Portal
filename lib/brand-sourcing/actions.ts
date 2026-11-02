@@ -29,6 +29,9 @@ import {
   restoreSourcingCandidate,
   bulkRestoreSourcingCompanies,
   getClient,
+  parseNaverSellerInfo,
+  convertNaverSellerInfoToDraft,
+  ParsedNaverSellerInfo,
 } from "./index";
 import { validateSafeExternalUrl } from "./security";
 
@@ -108,6 +111,66 @@ export async function extractSourcingDraftAction(
 /**
  * Runs duplicate candidate detection based on criteria.
  */
+
+/**
+ * ADM-BSRC-NAVER-001: Parses Naver Smart Store copied seller information,
+ * constructs a NormalizedCompanyDraft, and runs multi-vector duplicate detection.
+ */
+export async function parseNaverSellerDraftAction(
+  rawText: string,
+  storeUrl?: string
+): Promise<{
+  success: boolean;
+  draft?: NormalizedCompanyDraft;
+  duplicateCheck?: DuplicateMatchResult;
+  parsedInfo?: ParsedNaverSellerInfo;
+  error?: string;
+}> {
+  try {
+    await requireBrandStaffPermission("view");
+
+    if (!rawText || !rawText.trim()) {
+      return { success: false, error: "복사된 네이버 판매자 정보를 입력해 주세요." };
+    }
+
+    // 1. Parse copied seller text & optional store URL
+    const parsed = parseNaverSellerInfo(rawText, storeUrl);
+
+    // 2. Convert to authoritative NormalizedCompanyDraft
+    const draft = convertNaverSellerInfoToDraft(parsed);
+
+    // 3. Pre-check for duplicate candidate records across all signals:
+    // Primary: Normalized Business Registration Number
+    // Secondary: Company Name, Brands, Emails, Phone, Store URL
+    const primaryEmails = draft.contacts.map((c) => c.email).filter(Boolean);
+    const draftBrands = (draft.brands || []).map((b) => ({ nameKr: b.nameKr, nameEn: b.nameEn }));
+
+    const duplicateCheck = await findDuplicateCandidates({
+      sourceUrl: draft.source.sourceUrl,
+      sourceIdentifier: draft.source.sourceIdentifier,
+      companyNameKr: draft.company.nameKr,
+      companyNameEn: draft.company.nameEn || undefined,
+      businessRegistrationNumber: parsed.businessRegistrationNumber,
+      phone: parsed.phone,
+      brands: draftBrands,
+      emails: primaryEmails,
+    });
+
+    return {
+      success: true,
+      draft,
+      duplicateCheck,
+      parsedInfo: parsed,
+    };
+  } catch (err: any) {
+    console.error("[parseNaverSellerDraftAction] Parsing failed:", err);
+    return {
+      success: false,
+      error: err.message || "Failed to parse Naver Smart Store seller info",
+    };
+  }
+}
+
 export async function checkDuplicatesAction(
   criteria: DuplicateCheckCriteria
 ): Promise<{

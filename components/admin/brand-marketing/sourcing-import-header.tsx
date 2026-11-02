@@ -18,6 +18,12 @@ export interface SourcingImportHeaderProps {
   isExtracting: boolean;
   onExtract: (e?: React.FormEvent) => void;
 
+  // Naver Smart Store specific props (ADM-BSRC-NAVER-001)
+  naverSellerText?: string;
+  onNaverSellerTextChange?: (text: string) => void;
+  onParseNaverSeller?: () => void;
+  isParsingNaver?: boolean;
+
   onStartManualEntry: () => void;
   hasActiveManualDraft?: boolean;
 
@@ -38,6 +44,10 @@ export function SourcingImportHeader({
   onEnrichWebsiteChange,
   isExtracting,
   onExtract,
+  naverSellerText,
+  onNaverSellerTextChange,
+  onParseNaverSeller,
+  isParsingNaver = false,
   onStartManualEntry,
   hasActiveManualDraft = false,
   extractError,
@@ -147,7 +157,8 @@ export function SourcingImportHeader({
               </div>
             </div>
 
-            {/* Official Website Enrichment Toggle */}
+            {/* Official Website Enrichment Toggle (Hidden for Naver Smart Store) */}
+            {selectedProvider !== "NAVER_SMARTSTORE" && (
             <label className="flex items-center gap-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer select-none bg-zinc-50 dark:bg-zinc-800/60 px-3 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-750">
               <input
                 type="checkbox"
@@ -157,57 +168,147 @@ export function SourcingImportHeader({
               />
               <span>Official Website Enrichment (공식 웹사이트 연계 분석)</span>
             </label>
+            )}
           </div>
 
-          {/* URL Form */}
-          <form onSubmit={onExtract} className="flex flex-col sm:flex-row gap-2">
-            <input
-              type="url"
-              required
-              value={sourceUrl}
-              onChange={(e) => handleUrlChange(e.target.value)}
-              placeholder={activeSourceDef?.urlPlaceholder || "https://..."}
-              className="flex-1 px-3 py-2 text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-400 font-mono text-[11px]"
-            />
-            <button
-              type="submit"
-              disabled={isExtracting}
-              className="px-5 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-white/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-            >
-              {isExtracting ? (
-                <>
-                  <svg className="animate-spin h-3.5 w-3.5 text-current" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                  <span>Extracting...</span>
-                </>
-              ) : (
-                <span>Extract Exhibitor Info</span>
-              )}
-            </button>
-          </form>
+          {/* ADM-BSRC-NAVER-001: Conditional Form for Naver Smart Store vs Standard Exhibition */}
+          {selectedProvider === "NAVER_SMARTSTORE" ? (
+            <div className="space-y-3 bg-zinc-50/70 dark:bg-zinc-850/40 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800">
+              {/* Separate Store URL Input */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                  네이버 스토어 URL (Store URL) <span className="text-zinc-400 font-normal">(선택 — 스토어명 분리 및 브랜드 추출)</span>
+                </label>
+                <input
+                  type="url"
+                  value={sourceUrl}
+                  onChange={(e) => handleUrlChange(e.target.value)}
+                  placeholder="https://smartstore.naver.com/wizardjoseon"
+                  className="w-full px-3 py-2 text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-400 font-mono text-[11px]"
+                />
+              </div>
 
-          {/* Quick Test Samples */}
-          {activeSourceDef?.sampleUrls && activeSourceDef.sampleUrls.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-850 text-xs text-zinc-500">
-              <span className="font-semibold text-zinc-600 dark:text-zinc-400">
-                {activeSourceDef.shortName} Quick Samples:
-              </span>
-              {activeSourceDef.sampleUrls.map((sample) => (
+              {/* Multiline Paste Seller Info Area */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                    판매자 정보 붙여넣기 (Paste Seller Info) <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-zinc-500">
+                    스마트스토어 하단 판매자 정보 전체 복사 후 붙여넣기
+                  </span>
+                </div>
+                <textarea
+                  rows={5}
+                  value={naverSellerText || ""}
+                  onChange={(e) => onNaverSellerTextChange && onNaverSellerTextChange(e.target.value)}
+                  placeholder={`상호명 주식회사 앨리스루움\n대표자 함채형\n사업자등록번호 123-45-67890\n통신판매업번호 2024-서울강남-1234\n사업장 소재지 서울특별시 강남구 테헤란로 123 (우 : 47306)\n고객센터 02-1234-5678\ne-mail contact@alice-room.com`}
+                  className="w-full px-3 py-2 text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-400 font-mono text-[11px] leading-relaxed"
+                />
+              </div>
+
+              {/* Action Button & Sample Fill */}
+              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2 pt-1">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onSourceUrlChange) onSourceUrlChange("https://smartstore.naver.com/wizardjoseon");
+                      if (onNaverSellerTextChange) {
+                        onNaverSellerTextChange(
+                          "상호명 주식회사 앨리스루움\n" +
+                          "대표자 함채형\n" +
+                          "사업자등록번호 123-45-67890\n" +
+                          "통신판매업번호 2024-부산연제-0123\n" +
+                          "사업장 소재지 부산광역시 연제구 연산동 123-45 (우 : 47306)\n" +
+                          "고객센터 051-868-1234\n" +
+                          "e-mail alice@wizardjoseon.com"
+                        );
+                      }
+                      if (onClearError) onClearError();
+                    }}
+                    className="text-[11px] px-2.5 py-1.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 cursor-pointer font-medium transition-colors"
+                  >
+                    🪄 Quick Sample (WIZARD JOSEON)
+                  </button>
+                  <span className="text-[10px] text-zinc-500">
+                    공개 판매자 정보 자동 구조화 (노이즈 필터링 적용)
+                  </span>
+                </div>
+
                 <button
-                  key={sample.name}
                   type="button"
-                  onClick={() => {
-                    handleUrlChange(sample.url);
-                    if (onClearError) onClearError();
-                  }}
-                  className="px-2 py-1 text-[11px] rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                  disabled={!naverSellerText?.trim() || isExtracting || isParsingNaver}
+                  onClick={onParseNaverSeller}
+                  className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-md transition-colors flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-xs"
                 >
-                  {sample.name}
+                  {(isExtracting || isParsingNaver) ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-current" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Parsing Seller Info...</span>
+                    </>
+                  ) : (
+                    <span>Parse Seller Info</span>
+                  )}
                 </button>
-              ))}
+              </div>
             </div>
+          ) : (
+            <>
+              {/* URL Form for Standard Exhibition */}
+              <form onSubmit={onExtract} className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="url"
+                  required
+                  value={sourceUrl}
+                  onChange={(e) => handleUrlChange(e.target.value)}
+                  placeholder={activeSourceDef?.urlPlaceholder || "https://..."}
+                  className="flex-1 px-3 py-2 text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-400 font-mono text-[11px]"
+                />
+                <button
+                  type="submit"
+                  disabled={isExtracting}
+                  className="px-5 py-2 text-xs font-bold text-white bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-white/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                >
+                  {isExtracting ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-current" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Extracting...</span>
+                    </>
+                  ) : (
+                    <span>Extract Exhibitor Info</span>
+                  )}
+                </button>
+              </form>
+
+              {/* Quick Test Samples */}
+              {activeSourceDef?.sampleUrls && activeSourceDef.sampleUrls.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-850 text-xs text-zinc-500">
+                  <span className="font-semibold text-zinc-600 dark:text-zinc-400">
+                    {activeSourceDef.shortName} Quick Samples:
+                  </span>
+                  {activeSourceDef.sampleUrls.map((sample) => (
+                    <button
+                      key={sample.name}
+                      type="button"
+                      onClick={() => {
+                        handleUrlChange(sample.url);
+                        if (onClearError) onClearError();
+                      }}
+                      className="px-2 py-1 text-[11px] rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                    >
+                      {sample.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

@@ -2,6 +2,7 @@ import { SourcingProvider } from "./types";
 import { SourceAdapter } from "./adapters/base.adapter";
 import { IntercharmAdapter } from "./adapters/intercharm.adapter";
 import { IndieBeautyShowAdapter } from "./adapters/indie-beauty-show.adapter";
+import { NaverSmartstoreAdapter } from "./adapters/naver-smartstore.adapter";
 import { AdapterNotFoundError } from "./errors";
 
 export interface SourcingSourceSampleUrl {
@@ -128,6 +129,35 @@ class SourcingRegistry {
         }
       },
       getAdapter: () => new IndieBeautyShowAdapter(),
+    });
+
+    // 3. Naver Smart Store (ADM-BSRC-NAVER-001)
+    this.register({
+      id: "NAVER_SMARTSTORE",
+      displayName: "Naver Smart Store (네이버 스마트스토어)",
+      shortName: "Naver Smart Store",
+      baseWebsiteUrl: "https://smartstore.naver.com",
+      urlPlaceholder: "https://smartstore.naver.com/wizardjoseon",
+      supportedUrlPatterns: [
+        /smartstore\.naver\.com/i,
+        /brand\.naver\.com/i,
+      ],
+      sampleUrls: [
+        {
+          name: "SAMPLE: WIZARD JOSEON (앨리스루움)",
+          url: "https://smartstore.naver.com/wizardjoseon",
+        },
+      ],
+      canHandle: (url: string) => {
+        try {
+          const parsed = new URL(url);
+          const host = parsed.hostname.toLowerCase();
+          return host === "smartstore.naver.com" || host === "brand.naver.com" || host.endsWith(".smartstore.naver.com");
+        } catch {
+          return false;
+        }
+      },
+      getAdapter: () => new NaverSmartstoreAdapter(),
     });
   }
 

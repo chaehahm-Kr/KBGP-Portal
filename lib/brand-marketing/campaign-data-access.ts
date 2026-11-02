@@ -560,6 +560,7 @@ export async function evaluateCampaignRecipientCandidates(
         grade,
         status,
         marketing_consent_status,
+        raw_payload_snapshot,
         sourcing_brands (
           id,
           brand_name_kr,
@@ -570,7 +571,15 @@ export async function evaluateCampaignRecipientCandidates(
           id,
           name,
           email,
-          is_primary
+          is_primary,
+          source,
+          source_url
+        ),
+        sourcing_sources (
+          id,
+          provider,
+          source_url,
+          raw_payload
         )
       `);
 
@@ -668,6 +677,37 @@ export async function evaluateCampaignRecipientCandidates(
           brandName: primaryBrand,
           sendEligibility: "EXCLUDED_SUPPRESSED",
           exclusionReason: `Email address is on the global suppression/opt-out list (${reasonLabel})`,
+          status: "PENDING",
+        });
+        continue;
+      }
+
+      // Check Naver Smart Store Exemption / Exclusion (Section 10 Marketing Safety)
+      // Contacts derived from Naver Smart Store are strictly excluded from automated outreach campaigns
+      // because seller info is publicly scraped/copied for sourcing curation only, not consented for commercial advertising.
+      const isNaverSource =
+        comp.sourcing_sources?.some((s: any) =>
+          s.provider === "NAVER_SMARTSTORE" ||
+          (s.provider === "OTHER" && s.raw_payload?.specificProvider === "NAVER_SMARTSTORE") ||
+          (s.source_url && s.source_url.toLowerCase().includes("smartstore.naver.com"))
+        ) ||
+        comp.raw_payload_snapshot?.provenance === "NAVER_SMARTSTORE_SELLER_INFO" ||
+        (c.source_url && c.source_url.toLowerCase().includes("smartstore.naver.com"));
+
+      if (isNaverSource) {
+        unconfirmedConsentCount++;
+        recipientItems.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+          campaignId,
+          companyId: comp.id,
+          contactId: c.id,
+          recipientEmail: email,
+          recipientName: c.name || null,
+          companyNameKr: comp.company_name_kr,
+          companyNameEn: comp.company_name_en,
+          brandName: primaryBrand,
+          sendEligibility: "EXCLUDED_UNCONFIRMED_CONSENT",
+          exclusionReason: "네이버 스마트스토어 출처 판매자 정보는 영리성 광고 수신 미동의 상태로 발송 대상에서 제외됩니다 (Use Restricted).",
           status: "PENDING",
         });
         continue;

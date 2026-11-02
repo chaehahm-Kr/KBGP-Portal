@@ -98,6 +98,46 @@ export async function findDuplicateCandidates(
   const normKr = criteria.companyNameKr ? normalizeKoreanCompanyName(criteria.companyNameKr) : "";
   const normEn = criteria.companyNameEn ? normalizeEnglishCompanyName(criteria.companyNameEn) : "";
 
+
+  // -------------------------------------------------------------
+  // CRITERIA 0. BUSINESS REGISTRATION NUMBER (PRIMARY MATCHING KEY)
+  // Korean 10-digit tax registration number is globally authoritative for legal entities.
+  // -------------------------------------------------------------
+  const rawBrn = criteria.businessRegistrationNumber ? criteria.businessRegistrationNumber.replace(/\D/g, "") : "";
+  if (rawBrn && rawBrn.length === 10) {
+    const { data: brnMatches } = await supabase
+      .from("sourcing_companies")
+      .select("id, company_name_kr, company_name_en, business_registration_number, status, grade, updated_at, primary_product_categories, primary_categories_confirmed")
+      .not("business_registration_number", "is", null)
+      .limit(300);
+
+    if (brnMatches) {
+      for (const c of brnMatches) {
+        const exBrn = c.business_registration_number ? c.business_registration_number.replace(/\D/g, "") : "";
+        if (exBrn && exBrn === rawBrn) {
+          if (!matches.some((m) => m.entityId === c.id && m.matchedField === "사업자등록번호")) {
+            matches.push({
+              matchType: "BUSINESS_REGISTRATION_NUMBER",
+              severity: "STRONG",
+              matchedField: "사업자등록번호",
+              matchedValue: c.business_registration_number || rawBrn,
+              entityType: "SOURCING_CANDIDATE",
+              entityId: c.id,
+              entityName: c.company_name_kr,
+              entityNameEn: c.company_name_en,
+              reason: `기존 등록 사업자등록번호 일치 (${c.business_registration_number})`,
+              status: c.status,
+              grade: c.grade,
+              lastActivityDate: c.updated_at,
+              primaryProductCategories: c.primary_product_categories,
+              primaryCategoriesConfirmed: c.primary_categories_confirmed,
+            });
+          }
+        }
+      }
+    }
+  }
+
   // -------------------------------------------------------------
   // CRITERIA 1. COMPANY NAME (Korean OR English Normalized Exact Match)
   // -------------------------------------------------------------
@@ -285,6 +325,78 @@ export async function findDuplicateCandidates(
     }
   }
 
+
+  // -------------------------------------------------------------
+  // CRITERIA 4. COMPANY TELEPHONE & CONTACT PHONE
+  // -------------------------------------------------------------
+  const cleanPhoneDigits = criteria.phone ? criteria.phone.replace(/\D/g, "") : "";
+  if (cleanPhoneDigits && cleanPhoneDigits.length >= 8) {
+    const { data: phoneMatches } = await supabase
+      .from("sourcing_companies")
+      .select("id, company_name_kr, company_name_en, company_phone, status, grade, updated_at")
+      .not("company_phone", "is", null)
+      .limit(300);
+
+    if (phoneMatches) {
+      for (const c of phoneMatches) {
+        const exPhoneDigits = c.company_phone ? c.company_phone.replace(/\D/g, "") : "";
+        if (exPhoneDigits && exPhoneDigits === cleanPhoneDigits) {
+          if (!matches.some((m) => m.entityId === c.id && m.matchedField === "전화번호")) {
+            matches.push({
+              matchType: "PHONE",
+              severity: "POSSIBLE",
+              matchedField: "전화번호",
+              matchedValue: c.company_phone,
+              entityType: "SOURCING_CANDIDATE",
+              entityId: c.id,
+              entityName: c.company_name_kr,
+              entityNameEn: c.company_name_en,
+              reason: `기존 등록 대표/고객센터 전화번호 일치 (${c.company_phone})`,
+              status: c.status,
+              grade: c.grade,
+              lastActivityDate: c.updated_at,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // -------------------------------------------------------------
+  // CRITERIA 5. STORE URL / WEBSITE DOMAIN MATCH
+  // -------------------------------------------------------------
+  if (rawSourceUrl && (rawSourceUrl.includes("smartstore.naver.com") || rawSourceUrl.includes("brand.naver.com"))) {
+    const cleanStoreUrl = rawSourceUrl.split("?")[0].replace(/\/+$/, "");
+    const { data: urlMatches } = await supabase
+      .from("sourcing_sources")
+      .select("company_id, source_url, sourcing_companies(id, company_name_kr, company_name_en, status, grade, updated_at)")
+      .ilike("source_url", `%${cleanStoreUrl}%`)
+      .limit(10);
+
+    if (urlMatches) {
+      for (const um of urlMatches) {
+        const comp = um.sourcing_companies as any;
+        if (!comp) continue;
+        if (!matches.some((m) => m.entityId === um.company_id && m.matchedField === "스토어/웹사이트 URL")) {
+          matches.push({
+            matchType: "SOURCE_URL",
+            severity: "STRONG",
+            matchedField: "스토어/웹사이트 URL",
+            matchedValue: um.source_url,
+            entityType: "SOURCING_CANDIDATE",
+            entityId: um.company_id,
+            entityName: comp.company_name_kr,
+            entityNameEn: comp.company_name_en,
+            reason: `기존 등록 네이버 스토어 URL 일치 (${um.source_url})`,
+            status: comp.status,
+            grade: comp.grade,
+            lastActivityDate: comp.updated_at,
+          });
+        }
+      }
+    }
+  }
+
   // -------------------------------------------------------------
   // SOURCE URL COLLISION (Handled independently as data-integrity check)
   // NOT a company duplicate match!
@@ -332,7 +444,7 @@ export async function findDuplicateCandidates(
 
   return {
     isDuplicate: matches.length > 0,
-    hasStrongDuplicate: false,
+    hasStrongDuplicate: matches.some((m) => m.severity === "STRONG"),
     hasPossibleDuplicate: matches.length > 0,
     isExistingPartner: matches.some((m) => m.entityType === "PARTNER_COMPANY"),
     matches,
@@ -394,6 +506,9 @@ export async function saveSourcingDraft(
       {
         companyNameKr: draft.company.nameKr,
         companyNameEn: draft.company.nameEn,
+        businessRegistrationNumber: draft.company.businessRegistrationNumber,
+        phone: draft.company.companyPhone || draft.company.telephone,
+        sourceUrl: draft.source?.sourceUrl,
         brands: draft.brands.map((b) => ({ nameKr: b.nameKr, nameEn: b.nameEn })),
         emails: draft.contacts.map((c) => c.email),
       },
@@ -650,17 +765,41 @@ export async function saveSourcingDraft(
   // 9. Insert Source Provenance (ONLY if sourceUrl is provided and no conflict)
   // If Manual Entry or no exhibition source URL, skip sourcing_sources insertion safely.
   if (!isManual && !hasSourceConflict && draft.source?.sourceUrl?.trim()) {
-    const { error: sourceErr } = await supabase.from("sourcing_sources").insert({
+    let providerToInsert = draft.source.provider;
+    let rawPayload = draft.source.rawPayloadSnapshot || null;
+
+    let { error: sourceErr } = await supabase.from("sourcing_sources").insert({
       company_id: companyId,
-      provider: draft.source.provider,
+      provider: providerToInsert,
       source_url: draft.source.sourceUrl,
       canonical_source_url: canonicalSourceUrl,
       source_identifier: draft.source.sourceIdentifier,
       event_edition_id: draft.source.eventEditionId,
       stand_location: draft.source.standLocation,
-      raw_payload: draft.source.rawPayloadSnapshot || null,
+      raw_payload: rawPayload,
       collected_at: draft.source.collectedAt,
     });
+
+    if (sourceErr && (sourceErr.code === "23514" || sourceErr.message.includes("sourcing_sources_provider_check"))) {
+      console.warn("sourcing_sources_provider_check fallback triggered, inserting provider: 'OTHER'");
+      const fallbackPayload = {
+        ...(typeof rawPayload === "object" && rawPayload !== null ? rawPayload : {}),
+        originalProvider: draft.source.provider,
+        specificProvider: "NAVER_SMARTSTORE",
+      };
+      const retryRes = await supabase.from("sourcing_sources").insert({
+        company_id: companyId,
+        provider: "OTHER",
+        source_url: draft.source.sourceUrl,
+        canonical_source_url: canonicalSourceUrl,
+        source_identifier: draft.source.sourceIdentifier,
+        event_edition_id: draft.source.eventEditionId,
+        stand_location: draft.source.standLocation,
+        raw_payload: fallbackPayload,
+        collected_at: draft.source.collectedAt,
+      });
+      sourceErr = retryRes.error;
+    }
 
     if (sourceErr) {
       await supabase.from("sourcing_companies").delete().eq("id", companyId);
@@ -717,17 +856,41 @@ export async function linkSourcingSource(
 
   let sourcesAdded = 0;
   if (!alreadyHasSource) {
-    const { error: srcErr } = await supabase.from("sourcing_sources").insert({
+    let providerToInsert = draft.source.provider;
+    let rawPayload = draft.source.rawPayloadSnapshot || null;
+
+    let { error: srcErr } = await supabase.from("sourcing_sources").insert({
       company_id: targetCompanyId,
-      provider: draft.source.provider,
+      provider: providerToInsert,
       source_url: draft.source.sourceUrl,
       canonical_source_url: canonicalUrl,
       source_identifier: draft.source.sourceIdentifier,
       event_edition_id: draft.source.eventEditionId,
       stand_location: draft.source.standLocation,
-      raw_payload: draft.source.rawPayloadSnapshot || null,
+      raw_payload: rawPayload,
       collected_at: draft.source.collectedAt,
     });
+
+    if (srcErr && (srcErr.code === "23514" || srcErr.message.includes("sourcing_sources_provider_check"))) {
+      console.warn("linkSourcingSource fallback triggered, inserting provider: 'OTHER'");
+      const fallbackPayload = {
+        ...(typeof rawPayload === "object" && rawPayload !== null ? rawPayload : {}),
+        originalProvider: draft.source.provider,
+        specificProvider: "NAVER_SMARTSTORE",
+      };
+      const retryRes = await supabase.from("sourcing_sources").insert({
+        company_id: targetCompanyId,
+        provider: "OTHER",
+        source_url: draft.source.sourceUrl,
+        canonical_source_url: canonicalUrl,
+        source_identifier: draft.source.sourceIdentifier,
+        event_edition_id: draft.source.eventEditionId,
+        stand_location: draft.source.standLocation,
+        raw_payload: fallbackPayload,
+        collected_at: draft.source.collectedAt,
+      });
+      srcErr = retryRes.error;
+    }
     if (srcErr) {
       console.warn("Failed to link sourcing source:", srcErr.message);
     } else {
