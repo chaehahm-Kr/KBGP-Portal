@@ -39,6 +39,7 @@ import {
   executeCampaignDeliveryAction,
   executeCampaignDryRunAction,
   executeCampaignLiveDeliveryAction,
+  unlockCampaignSendAction,
 } from "@/lib/brand-marketing/campaign-actions";
 import {
   parseAndValidateTestRecipients,
@@ -331,6 +332,11 @@ export function EmailCampaignsView({
   const [isDispatching, setIsDispatching] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   const [deliveryResult, setDeliveryResult] = useState<any>(null);
+
+  // Admin Unlock Send State (ADM-EMAIL-APP-006)
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [unlockReason, setUnlockReason] = useState("");
+  const [isUnlocking, setIsUnlocking] = useState(false);
 
   // Notification Toast
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -1820,6 +1826,40 @@ export function EmailCampaignsView({
       showNotification("error", err.message || "발송 실행 중 오류가 발생했습니다.");
     } finally {
       setIsDispatching(false);
+    }
+  };
+
+  const handleExecuteUnlockSend = async () => {
+    if (!editingCampaign?.id) return;
+    if (!unlockReason.trim() || unlockReason.trim().length < 5) {
+      showNotification("error", "잠금 해제 사유(최소 5자 이상)를 반드시 입력해야 합니다.");
+      return;
+    }
+    setIsUnlocking(true);
+    try {
+      const res = await unlockCampaignSendAction(editingCampaign.id, {
+        reason: unlockReason.trim(),
+      });
+      if (res.success && res.result) {
+        showNotification(
+          "success",
+          `발송 잠금이 해제되었습니다. 미발송 적격 대상(${res.result.unsentCount}명)에게 발송할 수 있습니다.`
+        );
+        setShowUnlockModal(false);
+        setUnlockReason("");
+        const updated = await getMarketingCampaignByIdAction(editingCampaign.id);
+        if (updated.success && updated.campaign) {
+          setEditingCampaign(updated.campaign);
+          if (updated.logs) setCampaignLogs(updated.logs);
+        }
+        refreshCampaignsAndTemplates();
+      } else {
+        showNotification("error", res.error || "발송 잠금 해제 실패");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message || "잠금 해제 중 오류가 발생했습니다.");
+    } finally {
+      setIsUnlocking(false);
     }
   };
 
@@ -4051,66 +4091,181 @@ export function EmailCampaignsView({
                     </div>
                   )}
 
-                  {/* Action Buttons */}
-                  <div className="flex flex-wrap items-center gap-3 pt-1">
-                    {editingCampaign.status !== "COMPLETED" && editingCampaign.status !== "SENT" && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setShowSendNowModal(true)}
-                          disabled={isDispatching || isSimulating}
-                          className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
-                        >
-                          <span>🚀</span> Send Now (실제 발송)
-                        </button>
+                  {/* Send Lock & Safe Unlock Status (ADM-EMAIL-APP-006) */}
+                  {(() => {
+                    const isSendLocked =
+                      editingCampaign.status === "SENT" ||
+                      editingCampaign.status === "COMPLETED" ||
+                      editingCampaign.status === "PARTIAL" ||
+                      editingCampaign.status === "SENDING";
 
-                        <button
-                          type="button"
-                          onClick={() => setShowSimulationModal(true)}
-                          disabled={isDispatching || isSimulating}
-                          className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
-                        >
-                          <span>🔬</span> 안전 시뮬레이션 (Dry Run)
-                        </button>
+                    const latestUnlock = editingCampaign.stats?.unlockHistory?.slice(-1)[0];
+                    const isCurrentlyUnlocked = editingCampaign.status === "APPROVED" && Boolean(latestUnlock);
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (editingCampaign.scheduledAt) {
-                              const d = new Date(editingCampaign.scheduledAt);
-                              const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-                                .toISOString()
-                                .slice(0, 16);
-                              setScheduleInputValue(localIso);
-                            } else {
-                              const d = new Date(Date.now() + 3600000);
-                              const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-                                .toISOString()
-                                .slice(0, 16);
-                              setScheduleInputValue(localIso);
-                            }
-                            setShowScheduleModal(true);
-                          }}
-                          disabled={isScheduling}
-                          className="px-4 py-2 rounded border border-purple-300 dark:border-purple-700 bg-white dark:bg-zinc-900 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
-                        >
-                          <span>⏰</span>{" "}
-                          {editingCampaign.status === "SCHEDULED" ? "Modify Schedule" : "Schedule Send"}
-                        </button>
+                    const totalSendable =
+                      editingCampaign.approvalSnapshot?.sendableCount ??
+                      editingCampaign.stats?.sendableCount ??
+                      selectedRecipientItems.filter((r) => r.isSendable).length;
+                    const alreadySent = editingCampaign.stats?.sentCount ?? 0;
+                    const unsentCount = Math.max(0, totalSendable - alreadySent);
 
-                        {editingCampaign.status === "SCHEDULED" && (
+                    return (
+                      <div className="space-y-3">
+                        {/* 🔒 Send Locked Banner */}
+                        {isSendLocked && (
+                          <div className="p-4 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800 space-y-2.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-start gap-2.5">
+                                <span className="text-xl">🔒</span>
+                                <div>
+                                  <div className="text-xs font-bold text-amber-900 dark:text-amber-100 flex items-center gap-2">
+                                    <span>Send Locked (발송 잠금 — 중복 발송 방지 활성)</span>
+                                    <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200 font-bold">
+                                      STATUS: {editingCampaign.status}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
+                                    본 캠페인은 이미 발송 처리되었거나 완료 상태입니다. 동일 수신자에 대한 실수나 중복 발송을 방지하기 위해 Send Now가 자동으로 잠겨 있습니다.
+                                  </p>
+                                </div>
+                              </div>
+                              {/* Admin Unlock Send Button */}
+                              <button
+                                type="button"
+                                onClick={() => setShowUnlockModal(true)}
+                                disabled={isDispatching || editingCampaign.status === "SENDING"}
+                                className="px-3.5 py-2 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+                                title="관리자 권한 및 사유 입력을 통해 미발송 대상에 대한 발송 잠금을 해제합니다."
+                              >
+                                <span>🔓</span> Unlock Send (미발송 대상 잠금 해제)
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-2 border-t border-amber-200/70 dark:border-amber-800/60 text-amber-900 dark:text-amber-200">
+                              <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
+                                <span className="text-zinc-500 block text-[10px]">발송 완료 (보호 대상):</span>
+                                <span className="font-bold font-mono text-emerald-700 dark:text-emerald-400">
+                                  {editingCampaign.stats?.sentCount ?? 0}건 (재발송 불가)
+                                </span>
+                              </div>
+                              <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
+                                <span className="text-zinc-500 block text-[10px]">미발송 적격 대상:</span>
+                                <span className="font-bold font-mono text-blue-700 dark:text-blue-400">
+                                  {unsentCount}건 (해제 시 발송 가능)
+                                </span>
+                              </div>
+                              <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
+                                <span className="text-zinc-500 block text-[10px]">중복 발송 방지 보장:</span>
+                                <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                                  STRICT FAIL-SAFE
+                                </span>
+                              </div>
+                              <div className="bg-white/70 dark:bg-zinc-900/60 p-2 rounded border border-amber-100 dark:border-amber-900">
+                                <span className="text-zinc-500 block text-[10px]">잠금 해제 요건:</span>
+                                <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                                  관리자 권한 + 사유
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 🔓 Send Unlocked Confirmation Banner */}
+                        {isCurrentlyUnlocked && (
+                          <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 rounded-lg border border-blue-200 dark:border-blue-800 space-y-1.5 text-xs text-blue-900 dark:text-blue-200">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-base">🔓</span>
+                                <div>
+                                  <span className="font-bold text-xs">Send Unlocked (관리자 발송 잠금 해제됨)</span>
+                                  <span className="text-[11px] text-blue-700 dark:text-blue-300 block">
+                                    관리자({latestUnlock?.unlockedBy})에 의해 잠금 해제되었습니다. 이미 발송된 수신자({editingCampaign.stats?.sentCount ?? 0}명)는 완전히 건너뛰며, 오직 미발송 대상({unsentCount}명)에게만 발송됩니다.
+                                  </span>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400">
+                                {latestUnlock?.unlockedAt ? new Date(latestUnlock.unlockedAt).toLocaleString() : ""}
+                              </span>
+                            </div>
+                            {latestUnlock?.reason && (
+                              <div className="text-[11px] font-mono bg-white dark:bg-zinc-900 p-2 rounded border border-blue-100 dark:border-blue-900">
+                                잠금 해제 사유: &quot;{latestUnlock.reason}&quot;
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="flex flex-wrap items-center gap-3 pt-1">
                           <button
                             type="button"
-                            onClick={handleCancelSchedule}
-                            disabled={isScheduling}
-                            className="px-3 py-2 rounded border border-rose-300 dark:border-rose-700 bg-white dark:bg-zinc-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-xs cursor-pointer disabled:opacity-50"
+                            onClick={() => setShowSendNowModal(true)}
+                            disabled={isDispatching || isSimulating || isSendLocked}
+                            className={`px-4 py-2 rounded font-bold text-xs shadow-xs flex items-center gap-1.5 ${
+                              isSendLocked
+                                ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-300 dark:border-zinc-700"
+                                : "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+                            }`}
+                            title={
+                              isSendLocked
+                                ? "중복 발송 방지를 위해 발송이 잠겨 있습니다. 미발송 대상 추가 발송은 'Unlock Send'를 먼저 실행하세요."
+                                : "실제 고객 또는 지정된 대상에게 캠페인 발송을 실행합니다."
+                            }
                           >
-                            Cancel Schedule
+                            <span>{isSendLocked ? "🔒" : "🚀"}</span>{" "}
+                            {isSendLocked ? "Send Now (Locked)" : "Send Now (실제 발송)"}
                           </button>
-                        )}
-                      </>
-                    )}
-                  </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setShowSimulationModal(true)}
+                            disabled={isDispatching || isSimulating}
+                            className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            <span>🔬</span> 안전 시뮬레이션 (Dry Run)
+                          </button>
+
+                          {!isSendLocked && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (editingCampaign.scheduledAt) {
+                                  const d = new Date(editingCampaign.scheduledAt);
+                                  const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                                    .toISOString()
+                                    .slice(0, 16);
+                                  setScheduleInputValue(localIso);
+                                } else {
+                                  const d = new Date(Date.now() + 3600000);
+                                  const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                                    .toISOString()
+                                    .slice(0, 16);
+                                  setScheduleInputValue(localIso);
+                                }
+                                setShowScheduleModal(true);
+                              }}
+                              disabled={isScheduling}
+                              className="px-4 py-2 rounded border border-purple-300 dark:border-purple-700 bg-white dark:bg-zinc-900 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                              <span>⏰</span>{" "}
+                              {editingCampaign.status === "SCHEDULED" ? "Modify Schedule" : "Schedule Send"}
+                            </button>
+                          )}
+
+                          {editingCampaign.status === "SCHEDULED" && (
+                            <button
+                              type="button"
+                              onClick={handleCancelSchedule}
+                              disabled={isScheduling}
+                              className="px-3 py-2 rounded border border-rose-300 dark:border-rose-700 bg-white dark:bg-zinc-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-xs cursor-pointer disabled:opacity-50"
+                            >
+                              Cancel Schedule
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -5198,6 +5353,126 @@ export function EmailCampaignsView({
     );
   };
 
+
+  // --------------------------------------------------------------------------
+  // RENDER: UNLOCK SEND CONFIRMATION MODAL (ADM-EMAIL-APP-006)
+  // --------------------------------------------------------------------------
+  const renderUnlockModal = () => {
+    if (!showUnlockModal || !editingCampaign) return null;
+
+    const sentCount = editingCampaign.stats?.sentCount ?? 0;
+    const totalSendable =
+      editingCampaign.approvalSnapshot?.sendableCount ??
+      editingCampaign.stats?.sendableCount ??
+      selectedRecipientItems.filter((r) => r.isSendable).length;
+    const alreadySent = editingCampaign.stats?.sentCount ?? 0;
+    const unsentCount = Math.max(0, totalSendable - alreadySent);
+
+    return (
+      <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-lg w-full p-5 space-y-4 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+              <span>🔓</span> Unlock Campaign Send (관리자 발송 잠금 해제)
+            </h3>
+            <button
+              type="button"
+              onClick={() => {
+                setShowUnlockModal(false);
+                setUnlockReason("");
+              }}
+              className="text-zinc-400 hover:text-zinc-600 text-sm font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-3 text-xs">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+              <div className="font-bold flex items-center gap-1 mb-1 text-xs">
+                <span>🛡️</span> STRICT RECIPIENT DEDUPLICATION GUARANTEE
+              </div>
+              <p className="text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-300">
+                잠금을 해제하더라도, <strong>이미 발송 성공 또는 전달 완료된 수신자({sentCount}명)에게는 절대로 재발송되지 않습니다.</strong>
+                <br />
+                오직 <strong>아직 발송되지 않은 적격 대상({unsentCount}명)</strong>에게만 추가 발송 권한이 부여됩니다.
+              </p>
+            </div>
+
+            <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded border border-zinc-200 dark:border-zinc-700 space-y-2 text-xs">
+              <div className="font-bold text-zinc-900 dark:text-zinc-100">수신자 대상 분석:</div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div>
+                  <span className="text-zinc-500">캠페인명:</span>{" "}
+                  <strong className="text-zinc-900 dark:text-zinc-100 truncate block">{editingCampaign.name}</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">현재 상태:</span>{" "}
+                  <strong className="font-mono text-zinc-900 dark:text-zinc-100">{editingCampaign.status}</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">이미 발송 완료 (보호):</span>{" "}
+                  <strong className="font-mono text-emerald-600 dark:text-emerald-400">{sentCount}건</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500">해제 후 발송 가능 대상:</span>{" "}
+                  <strong className="font-mono text-blue-600 dark:text-blue-400">{unsentCount}건</strong>
+                </div>
+              </div>
+            </div>
+
+            {unsentCount === 0 && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 rounded border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-[11px]">
+                ⚠️ 모든 적격 수신자에게 이미 발송이 완료되어 잠금 해제할 대상이 없습니다.
+              </div>
+            )}
+
+            <div>
+              <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                관리자 잠금 해제 사유 (Mandatory Justification) *
+              </label>
+              <textarea
+                rows={3}
+                placeholder="잠금 해제 사유를 최소 5자 이상 상세히 입력하세요 (예: 추가 수신자 등록에 따른 순차 발송, 타임아웃 미발송 대상 재시도 등)"
+                value={unlockReason}
+                onChange={(e) => setUnlockReason(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 leading-relaxed font-sans"
+              />
+              <div className="flex justify-between text-[10px] text-zinc-400 mt-1">
+                <span>* 사유는 마케팅 감사 로그(Audit Log)에 영구 기록됩니다.</span>
+                <span className={unlockReason.trim().length < 5 ? "text-rose-500 font-semibold" : "text-emerald-500 font-semibold"}>
+                  {unlockReason.trim().length} / 5자 이상
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => {
+                setShowUnlockModal(false);
+                setUnlockReason("");
+              }}
+              disabled={isUnlocking}
+              className="px-3 py-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 cursor-pointer"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={handleExecuteUnlockSend}
+              disabled={isUnlocking || unlockReason.trim().length < 5 || unsentCount === 0}
+              className="px-4 py-2 rounded bg-amber-600 text-white hover:bg-amber-700 cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {isUnlocking ? "잠금 해제 처리 중..." : "Confirm & Unlock Send 🔓"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // --------------------------------------------------------------------------
   // RENDER: DRY RUN / SIMULATION CONFIRMATION MODAL (ADM-EMAIL-APP-004)
   // --------------------------------------------------------------------------
@@ -5326,6 +5601,7 @@ export function EmailCampaignsView({
       {renderScheduleModal()}
       {renderSendNowModal()}
       {renderSimulationModal()}
+      {renderUnlockModal()}
       <DesignerGuideModal isOpen={showGuideModal} onClose={() => setShowGuideModal(false)} />
     </div>
   );

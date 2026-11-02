@@ -143,6 +143,13 @@ export interface CampaignSimulationStats {
   simulatedBy?: string;
 }
 
+export interface CampaignUnlockAudit {
+  unlockedAt: string;
+  unlockedBy: string;
+  reason: string;
+  eligibleUnsentCount: number;
+}
+
 export interface CampaignStats {
   totalRecipients: number;
   sendableCount: number;
@@ -152,6 +159,8 @@ export interface CampaignStats {
   deliveredCount: number;
   failedCount: number;
   simulationStats?: CampaignSimulationStats;
+  unlockHistory?: CampaignUnlockAudit[];
+  isSendLocked?: boolean;
 }
 
 export interface CampaignApprovalSnapshot {
@@ -254,4 +263,18 @@ export interface CampaignDeliveryExecutionResult {
 export interface ScheduleCampaignInput {
   campaignId: string;
   scheduledAt: string;
+}
+
+export interface UnlockCampaignSendInput {
+  reason: string;
+}
+
+export interface UnlockCampaignSendResult {
+  success: boolean;
+  campaignId: string;
+  unlockedBy: string;
+  unlockedAt: string;
+  reason: string;
+  unsentCount: number;
+  error?: string;
 }
