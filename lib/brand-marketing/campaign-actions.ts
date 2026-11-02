@@ -40,6 +40,7 @@ import {
   activateCampaignLiveMode,
   deactivateCampaignLiveMode,
 } from "./campaign-data-access";
+import { reconcileCampaignDelivery } from "./resend-delivery-tracking";
 import {
   checkEmailSuppression,
   formatSuppressionReasonKorean,
@@ -1368,6 +1369,33 @@ export async function deactivateCampaignLiveModeAction(
     return {
       success: false,
       error: err.message || "Failed to deactivate campaign LIVE mode",
+    };
+  }
+}
+
+
+/**
+ * Admin action to reconcile delivery status from Resend API (GET /emails/:id).
+ * Reconciles status to DELIVERED or BOUNCED without dispatching any emails.
+ */
+export async function reconcileCampaignDeliveryAction(
+  campaignId: string
+): Promise<{ success: boolean; result?: any; error?: string }> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const adminClient = process.env.NODE_ENV !== "test" ? createAdminClient() : undefined;
+    const result = await reconcileCampaignDelivery(campaignId, admin.email, adminClient);
+    try {
+      revalidatePath("/admin/brand-marketing");
+      revalidatePath("/admin/marketing/results");
+      revalidatePath("/marketing/campaigns");
+      revalidatePath("/marketing/results");
+    } catch {}
+    return { success: true, result };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || "Failed to reconcile campaign delivery",
     };
   }
 }

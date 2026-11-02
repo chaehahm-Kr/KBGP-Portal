@@ -226,11 +226,21 @@ export function CampaignResultsTab({
                 Delivered
               </span>
               <p className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
-                {metrics.delivered}
+                {metrics.delivered > 0 ? (
+                  metrics.delivered
+                ) : metrics.emailsSent > 0 ? (
+                  <span className="text-sm font-semibold text-zinc-400 dark:text-zinc-500">
+                    Pending
+                  </span>
+                ) : (
+                  0
+                )}
               </p>
               <span className="text-[10px] text-zinc-400">
                 {metrics.deliveryRate !== null
                   ? `${formatRate(metrics.deliveryRate)} rate`
+                  : metrics.emailsSent > 0
+                  ? "Not Verified / Pending Telemetry"
                   : "No emails"}
               </span>
             </div>

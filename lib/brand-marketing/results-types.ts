@@ -121,6 +121,7 @@ export interface CampaignSummaryMetrics {
   hasTestEmailsExcluded: boolean;
   isSimulationOnly?: boolean;
   simulatedCount?: number;
+  deliveryTrackingStatus?: "VERIFIED" | "PENDING_TELEMETRY" | "NO_EMAILS";
 }
 
 export interface CompanyResultsFilterCriteria {

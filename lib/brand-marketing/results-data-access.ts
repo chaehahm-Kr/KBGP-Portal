@@ -164,7 +164,20 @@ export function calculateCampaignSummaryMetrics(
   ).length;
 
   // Rates (Return null when denominator is 0 to distinguish "No Data" from "Measured Zero")
-  const deliveryRate = emailsSent > 0 ? Number((delivered / emailsSent).toFixed(4)) : null;
+  const hasPendingDeliveryTelemetry =
+    emailsSent > 0 && delivered === 0 && liveRecipients.some((r) => r.status === "SENT");
+  const deliveryRate =
+    emailsSent > 0
+      ? hasPendingDeliveryTelemetry
+        ? null
+        : Number((delivered / emailsSent).toFixed(4))
+      : null;
+  const deliveryTrackingStatus: "VERIFIED" | "PENDING_TELEMETRY" | "NO_EMAILS" =
+    emailsSent === 0
+      ? "NO_EMAILS"
+      : hasPendingDeliveryTelemetry
+      ? "PENDING_TELEMETRY"
+      : "VERIFIED";
   const replyRate = companiesContacted > 0 ? Number((replied / companiesContacted).toFixed(4)) : null;
   const interestRate =
     companiesContacted > 0 ? Number((interestedCount / companiesContacted).toFixed(4)) : null;
@@ -202,6 +215,7 @@ export function calculateCampaignSummaryMetrics(
     clickTrackingSupported: false,
     replyTrackingMode: "MANUAL_VERIFIED",
     hasTestEmailsExcluded: true,
+    deliveryTrackingStatus,
   };
 }
 
@@ -233,6 +247,7 @@ function getFallbackCampaignSummary(): CampaignSummaryMetrics {
     clickTrackingSupported: false,
     replyTrackingMode: "MANUAL_VERIFIED",
     hasTestEmailsExcluded: true,
+    deliveryTrackingStatus: "VERIFIED",
   };
 }
 

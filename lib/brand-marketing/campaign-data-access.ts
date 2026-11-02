@@ -53,7 +53,7 @@ const memoryRecipients = new Map<string, MarketingCampaignRecipientItem[]>();
 const memoryLogs = new Map<string, CampaignAuditLogItem[]>();
 const memorySuppression = new Set<string>();
 
-async function getClient(customClient?: SupabaseClient): Promise<SupabaseClient> {
+export async function getClient(customClient?: SupabaseClient): Promise<SupabaseClient> {
   if (customClient) return customClient;
   if (process.env.ENABLE_QA_ENVIRONMENT === "true" && process.env.QA_SUPABASE_URL) {
     const { createClient: createSupabaseClient } = await import("@supabase/supabase-js");

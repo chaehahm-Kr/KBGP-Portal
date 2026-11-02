@@ -14,6 +14,7 @@ const serverEnvSchema = z.object({
   // 콘솔에 로그만 남긴다 — 이메일 서비스(Resend 등) 연동 전에도 개발을 막지 않기 위함.
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM_ADDRESS: z.string().optional(),
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
   // Vercel Cron이 /api/cron/* 라우트를 호출할 때 Authorization 헤더로 보내는 값과
   // 대조한다. 운영 배포에서는 반드시 설정해야 한다 — 없으면 해당 라우트가 요청을
   // 전부 거부한다(로컬 개발에서만 헤더 없이도 통과시킨다, lib/env/server.ts 하단 참고).
@@ -28,6 +29,7 @@ const parsed = serverEnvSchema.safeParse({
   SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   EMAIL_FROM_ADDRESS: process.env.EMAIL_FROM_ADDRESS,
+  RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET,
   CRON_SECRET: process.env.CRON_SECRET,
   INQUIRY_INTAKE_SECRET: process.env.INQUIRY_INTAKE_SECRET,
 });
@@ -49,6 +51,7 @@ export const serverEnv = parsed.data || {
   SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY || "dummy-secret-key",
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   EMAIL_FROM_ADDRESS: process.env.EMAIL_FROM_ADDRESS,
+  RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET,
   CRON_SECRET: process.env.CRON_SECRET,
   INQUIRY_INTAKE_SECRET: process.env.INQUIRY_INTAKE_SECRET,
 };

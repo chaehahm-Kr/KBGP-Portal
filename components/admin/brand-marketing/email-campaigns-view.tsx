@@ -42,6 +42,7 @@ import {
   unlockCampaignSendAction,
   activateCampaignLiveModeAction,
   deactivateCampaignLiveModeAction,
+  reconcileCampaignDeliveryAction,
 } from "@/lib/brand-marketing/campaign-actions";
 import {
   parseAndValidateTestRecipients,
@@ -339,6 +340,7 @@ export function EmailCampaignsView({
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [unlockReason, setUnlockReason] = useState("");
   const [isUnlocking, setIsUnlocking] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
 
   // Two-Mode Campaign Delivery (ADM-EMAIL-APP-008)
   const [deliveryModeTab, setDeliveryModeTab] = useState<"SIMULATION" | "LIVE">("SIMULATION");
@@ -1940,6 +1942,32 @@ export function EmailCampaignsView({
     }
   };
 
+  const handleReconcileDelivery = async () => {
+    if (!editingCampaign?.id || isReconciling) return;
+    setIsReconciling(true);
+    try {
+      const res = await reconcileCampaignDeliveryAction(editingCampaign.id);
+      if (res.success && res.result) {
+        showNotification(
+          "success",
+          res.result.message || `Resend 배달 결과 동기화 완료: ${res.result.totalDelivered}건 배달 확인`
+        );
+        const updated = await getMarketingCampaignByIdAction(editingCampaign.id);
+        if (updated.success && updated.campaign) {
+          setEditingCampaign(updated.campaign);
+          if (updated.logs) setCampaignLogs(updated.logs);
+        }
+        refreshCampaignsAndTemplates();
+      } else {
+        showNotification("error", res.error || "배달 결과 동기화 실패");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message || "동기화 중 오류가 발생했습니다.");
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
   const handleExecuteSimulation = async () => {
     if (!editingCampaign?.id) return;
     setIsSimulating(true);
@@ -2173,7 +2201,17 @@ export function EmailCampaignsView({
                           </div>
                         ) : null}
                       </td>
-                      <td className="p-3 font-mono text-emerald-600 dark:text-emerald-400">{c.stats?.deliveredCount || 0}</td>
+                      <td className="p-3 font-mono text-emerald-600 dark:text-emerald-400">
+                        {(c.stats?.deliveredCount || 0) > 0 ? (
+                          c.stats?.deliveredCount
+                        ) : (c.stats?.sentCount || 0) > 0 ? (
+                          <span className="text-[11px] text-zinc-400 font-sans italic" title="Delivery confirmation pending from provider webhook/telemetry">
+                            Pending
+                          </span>
+                        ) : (
+                          0
+                        )}
+                      </td>
                       <td className="p-3 text-zinc-400 text-[11px] whitespace-nowrap">
                         {new Date(c.createdAt).toLocaleDateString()}
                       </td>
@@ -4251,7 +4289,11 @@ export function EmailCampaignsView({
                                 <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
                                   <div className="text-[10px] text-zinc-500 uppercase font-semibold">Real Delivered (Live)</div>
                                   <div className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-                                    {editingCampaign.stats?.deliveredCount ?? 0}
+                                    {(editingCampaign.stats?.deliveredCount ?? 0) > 0
+                                      ? (editingCampaign.stats?.deliveredCount ?? 0)
+                                      : (editingCampaign.stats?.sentCount ?? 0) > 0
+                                      ? "0 (Pending Telemetry)"
+                                      : 0}
                                   </div>
                                 </div>
                                 <div className="p-3 bg-white dark:bg-zinc-900 rounded border border-blue-100 dark:border-blue-900">
@@ -4347,7 +4389,19 @@ export function EmailCampaignsView({
                                             </p>
                                           </div>
                                         </div>
-                                        <button
+                                        <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                                          {(editingCampaign.stats?.sentCount ?? 0) > 0 && (
+                                            <button
+                                              type="button"
+                                              onClick={handleReconcileDelivery}
+                                              disabled={isReconciling || isActivelyDispatching}
+                                              className="px-3.5 py-2 rounded font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                                              title="Resend API에서 실제 배달(delivered) 및 반송(bounced) 상태를 최신으로 조회하여 동기화합니다."
+                                            >
+                                              <span>🔄</span> {isReconciling ? "동기화 중..." : "Reconcile Delivery (Resend 동기화)"}
+                                            </button>
+                                          )}
+                                          <button
                                           type="button"
                                           onClick={() => setShowUnlockModal(true)}
                                           disabled={isActivelyDispatching}
@@ -4359,7 +4413,8 @@ export function EmailCampaignsView({
                                           }
                                         >
                                           <span>🔓</span> {isStaleSending ? "Unlock Send (비정상 중단 복구)" : "Unlock Send (미발송 대상 잠금 해제)"}
-                                        </button>
+                                          </button>
+                                        </div>
                                       </div>
 
                                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-2 border-t border-amber-200/70 dark:border-amber-800/60 text-amber-900 dark:text-amber-200">
