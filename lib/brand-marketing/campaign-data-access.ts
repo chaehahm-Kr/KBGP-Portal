@@ -2373,12 +2373,6 @@ export async function executeCampaignRealDelivery(
     throw new Error("캠페인 발송이 이미 진행 중입니다. 중복 발송을 방지합니다.");
   }
 
-  if (existing.campaign.status === "SENT" || existing.campaign.status === "COMPLETED") {
-    throw new Error(
-      "이미 발송 완료된 캠페인입니다. 미발송 대상에게 추가 발송하려면 먼저 관리자 잠금 해제(Unlock Send)를 완료해야 합니다."
-    );
-  }
-
   // Preflight Simulation Contamination Guard (Requirement 1 & Safety Gate)
   const hasUnreconciledSimulations = (existing.recipients || []).some(
     (r) => r.providerMessageId && r.providerMessageId.startsWith("sim_") && r.status === "SENT"
@@ -2386,6 +2380,12 @@ export async function executeCampaignRealDelivery(
   if (hasUnreconciledSimulations && !options?.internalTestOnly) {
     throw new Error(
       "과거 시뮬레이션 이력이 존재하는 캠페인입니다. 실제 고객 발송 전 데이터 정합성 보정(APP-005 Reconciliation) 승인 및 적용이 필요합니다."
+    );
+  }
+
+  if (existing.campaign.status === "SENT" || existing.campaign.status === "COMPLETED" || existing.campaign.status === "SIMULATED") {
+    throw new Error(
+      "이미 발송 완료된 캠페인입니다. 미발송 대상에게 추가 발송하려면 먼저 관리자 잠금 해제(Unlock Send)를 완료해야 합니다."
     );
   }
 

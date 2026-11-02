@@ -4097,7 +4097,9 @@ export function EmailCampaignsView({
                       editingCampaign.status === "SENT" ||
                       editingCampaign.status === "COMPLETED" ||
                       editingCampaign.status === "PARTIAL" ||
-                      editingCampaign.status === "SENDING";
+                      editingCampaign.status === "SENDING" ||
+                      editingCampaign.status === "SIMULATED" ||
+                      Boolean(editingCampaign.stats?.isSendLocked);
 
                     const latestUnlock = editingCampaign.stats?.unlockHistory?.slice(-1)[0];
                     const isCurrentlyUnlocked = editingCampaign.status === "APPROVED" && Boolean(latestUnlock);
