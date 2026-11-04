@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { CampaignIssueRecipientItem } from "@/lib/brand-marketing/results-types";
 import { addMarketingSuppressionAction } from "@/lib/brand-marketing/campaign-actions";
 
@@ -23,6 +24,7 @@ export function CampaignIssueRecipientsModal({
   recipients: initialRecipients,
   onRefreshRecipients,
 }: CampaignIssueRecipientsModalProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"ALL" | "BOUNCED" | "SUPPRESSED_FAILED">(initialFilter);
   const [searchQuery, setSearchQuery] = useState("");
   const [recipients, setRecipients] = useState<CampaignIssueRecipientItem[]>(initialRecipients);
@@ -48,7 +50,7 @@ export function CampaignIssueRecipientsModal({
     setActiveTab(initialFilter);
   }, [initialFilter]);
 
-  // Filtered recipients based on tab and search
+  // Filtered recipients based on tab and search query
   const filteredRecipients = useMemo(() => {
     return (recipients || []).filter((r) => {
       // Tab filter
@@ -69,19 +71,84 @@ export function CampaignIssueRecipientsModal({
     });
   }, [recipients, activeTab, searchQuery]);
 
+  const totalCount = (recipients || []).length;
   const bouncedCount = (recipients || []).filter((r) => r.status === "BOUNCED").length;
   const failedCount = (recipients || []).filter((r) => r.status === "FAILED").length;
 
-  // Eligible for permanent suppression: verified hard bounces or provider suppressions that are not yet suppressed
-  const eligibleUnsuppressed = useMemo(() => {
-    return (recipients || []).filter((r) => !r.isSuppressed && r.isEligibleForSuppression);
-  }, [recipients]);
+  // 1. Tab-Specific Scoped Recipients (ADM-EMAIL-ANALYTICS-001-R2)
+  // Ensures bulk actions operate strictly within the active tab's category.
+  const tabScopedRecipients = useMemo(() => {
+    const list = recipients || [];
+    if (activeTab === "BOUNCED") {
+      return list.filter((r) => r.status === "BOUNCED");
+    }
+    if (activeTab === "SUPPRESSED_FAILED") {
+      return list.filter((r) => r.status === "FAILED");
+    }
+    return list;
+  }, [recipients, activeTab]);
 
-  // Open single confirmation modal
+  // 2. Tab-Specific Metrics Breakdown
+  const tabMetrics = useMemo(() => {
+    const total = tabScopedRecipients.length;
+    const alreadySuppressed = tabScopedRecipients.filter((r) => r.isSuppressed).length;
+    const eligibleUnsuppressed = tabScopedRecipients.filter((r) => !r.isSuppressed && r.isEligibleForSuppression);
+    const newCount = eligibleUnsuppressed.length;
+    const ineligibleOrProtected = tabScopedRecipients.filter((r) => !r.isSuppressed && !r.isEligibleForSuppression).length;
+
+    return {
+      total,
+      alreadySuppressed,
+      eligibleUnsuppressed,
+      newCount,
+      ineligibleOrProtected,
+    };
+  }, [tabScopedRecipients]);
+
+  // 3. Tab-Specific Labels & Metadata
+  const tabBulkMeta = useMemo(() => {
+    if (activeTab === "SUPPRESSED_FAILED") {
+      return {
+        label: `사전 차단 일괄 등록 (${tabMetrics.newCount})`,
+        title: `프로바이더(Resend)에서 사전 차단된 미등록 대상자 ${tabMetrics.newCount}명을 일괄 수신 거부 등록합니다.`,
+        modalTitle: "🛡️ 프로바이더 사전 차단 일괄 등록",
+        categoryName: "사전 차단 / 발송 실패 (Preflight Suppressed / Failed)",
+        reason: "BOUNCED" as const,
+        source: "RESEND",
+        defaultNotesPrefix: "Resend 사전 차단 수신자 일괄 등록 (Prior bounce or suppression)",
+      };
+    }
+    if (activeTab === "BOUNCED") {
+      return {
+        label: `반송 일괄 등록 (${tabMetrics.newCount})`,
+        title: `영구 반송(Hard Bounce)된 미등록 대상자 ${tabMetrics.newCount}명을 일괄 수신 거부 등록합니다.`,
+        modalTitle: "🛡️ 영구 반송 일괄 등록",
+        categoryName: "영구 반송 (Hard Bounce / Remote MTA Rejection)",
+        reason: "BOUNCED" as const,
+        source: "RESEND",
+        defaultNotesPrefix: "Resend 영구 반송 수신자 일괄 등록 (Hard Bounce)",
+      };
+    }
+    return {
+      label: `일괄 수신 거부 등록 (${tabMetrics.newCount})`,
+      title: `검증된 영구 반송 및 사전 차단 미등록 대상자 ${tabMetrics.newCount}명을 일괄 수신 거부 등록합니다.`,
+      modalTitle: "🛡️ 전체 검증 대상 일괄 수신 거부 등록",
+      categoryName: "전체 배송 이슈 (All Issues)",
+      reason: "BOUNCED" as const,
+      source: "RESEND",
+      defaultNotesPrefix: "Resend 배송 이슈 일괄 등록 (Campaign verified failures)",
+    };
+  }, [activeTab, tabMetrics.newCount]);
+
+  // Open single confirmation modal (preserves provider evidence, no MANUAL_ADMIN overwrite)
   const handleOpenSingleConfirm = (item: CampaignIssueRecipientItem) => {
     setConfirmRecipient(item);
-    setConfirmReason(item.status === "BOUNCED" ? "BOUNCED" : "MANUAL_ADMIN");
-    setConfirmNotes(item.errorMessage || `Registered from campaign: ${campaignName}`);
+    // Preserve provider evidence: bounce or preflight suppression from Resend
+    setConfirmReason("BOUNCED");
+    const notesText = item.status === "FAILED"
+      ? `[RESEND Preflight Suppressed] MsgID: ${item.providerMessageId || "N/A"}, Error: ${item.errorMessage || "Prior bounce or suppression"}, Campaign: ${campaignName}`
+      : `[RESEND Hard Bounce] MsgID: ${item.providerMessageId || "N/A"}, Error: ${item.errorMessage || "Remote MTA Rejection"}, Campaign: ${campaignName}`;
+    setConfirmNotes(notesText);
     setSingleActionError(null);
   };
 
@@ -94,12 +161,12 @@ export function CampaignIssueRecipientsModal({
         const res = await addMarketingSuppressionAction({
           email: confirmRecipient.recipientEmail,
           reason: confirmReason,
-          notes: `${confirmNotes} (Campaign: ${campaignName})`,
-          source: `Campaign: ${campaignName}`,
+          notes: `${confirmNotes}`,
+          source: "RESEND",
         });
 
         if (res.success) {
-          // Update local state
+          // Update local state immediately
           setRecipients((prev) =>
             prev.map((r) =>
               r.recipientEmail.toLowerCase() === confirmRecipient.recipientEmail.toLowerCase()
@@ -109,6 +176,9 @@ export function CampaignIssueRecipientsModal({
           );
           setConfirmRecipient(null);
           if (onRefreshRecipients) await onRefreshRecipients();
+          try {
+            router.refresh();
+          } catch {}
         } else {
           setSingleActionError(res.error || "수신 거부 등록에 실패했습니다.");
         }
@@ -118,24 +188,31 @@ export function CampaignIssueRecipientsModal({
     });
   };
 
-  // Execute bulk suppression of eligible unsuppressed recipients
+  // Execute tab-specific bulk suppression of eligible unsuppressed recipients
   const handleExecuteBulkSuppression = async () => {
-    if (eligibleUnsuppressed.length === 0) return;
+    const targets = tabMetrics.eligibleUnsuppressed;
+    if (targets.length === 0) return;
 
     setBulkError(null);
-    setBulkProgress({ total: eligibleUnsuppressed.length, current: 0, success: 0 });
+    setBulkProgress({ total: targets.length, current: 0, success: 0 });
 
     let successCount = 0;
     const newlySuppressed = new Set<string>();
 
-    for (let i = 0; i < eligibleUnsuppressed.length; i++) {
-      const item = eligibleUnsuppressed[i];
+    for (let i = 0; i < targets.length; i++) {
+      const item = targets[i];
       try {
+        const isFailed = item.status === "FAILED";
+        const reason = "BOUNCED";
+        const notes = isFailed
+          ? `[RESEND Preflight Suppressed] MsgID: ${item.providerMessageId || "N/A"}, Error: ${item.errorMessage || "Prior bounce or suppression"}, Campaign: ${campaignName}`
+          : `[RESEND Hard Bounce] MsgID: ${item.providerMessageId || "N/A"}, Error: ${item.errorMessage || "Remote MTA Rejection"}, Campaign: ${campaignName}`;
+
         const res = await addMarketingSuppressionAction({
           email: item.recipientEmail,
-          reason: item.status === "BOUNCED" ? "BOUNCED" : "MANUAL_ADMIN",
-          notes: `일괄 등록: ${item.errorMessage || "Verified permanent delivery failure"} (Campaign: ${campaignName})`,
-          source: `Bulk Campaign Action: ${campaignName}`,
+          reason,
+          notes,
+          source: "RESEND",
         });
 
         if (res.success) {
@@ -147,7 +224,7 @@ export function CampaignIssueRecipientsModal({
       }
 
       setBulkProgress({
-        total: eligibleUnsuppressed.length,
+        total: targets.length,
         current: i + 1,
         success: successCount,
       });
@@ -157,7 +234,7 @@ export function CampaignIssueRecipientsModal({
     setRecipients((prev) =>
       prev.map((r) =>
         newlySuppressed.has(r.recipientEmail.toLowerCase())
-          ? { ...r, isSuppressed: true, suppressionReason: r.status === "BOUNCED" ? "BOUNCED" : "MANUAL_ADMIN" }
+          ? { ...r, isSuppressed: true, suppressionReason: "BOUNCED" }
           : r
       )
     );
@@ -166,6 +243,9 @@ export function CampaignIssueRecipientsModal({
       setShowBulkModal(false);
       setBulkProgress(null);
       if (onRefreshRecipients) onRefreshRecipients();
+      try {
+        router.refresh();
+      } catch {}
     }, 1200);
   };
 
@@ -186,11 +266,11 @@ export function CampaignIssueRecipientsModal({
                 Campaign: {campaignName}
               </span>
             </div>
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              <span>⚠️</span> 반송 및 발송 실패 대상자 관리 (Delivery Issues & Suppression)
+            <h2 className="text-xl font-extrabold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <span>⚠️ 배송 이슈 수신자 목록 &amp; 안전 수신 거부 관리</span>
             </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              발송 중 반송(Bounce)되거나 사전 차단(Suppressed/Failed)된 수신자 목록을 조회하고, 영구 반송 대상자를 수신 거부 목록에 등록합니다.
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+              반송(Bounced) 또는 프로바이더 사전 차단(Suppressed/Failed)된 수신자 내역을 조회하고, 영구 차단 대상자를 수신 거부 목록에 안전하게 등록합니다.
             </p>
           </div>
 
@@ -204,7 +284,7 @@ export function CampaignIssueRecipientsModal({
           </button>
         </div>
 
-        {/* CONTROLS BAR: TABS, SEARCH, BULK ACTION */}
+        {/* CONTROLS BAR: TABS, SEARCH, TAB-SPECIFIC BULK ACTION */}
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-zinc-900">
           {/* Tabs */}
           <div className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-xl text-xs">
@@ -217,7 +297,7 @@ export function CampaignIssueRecipientsModal({
                   : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900"
               }`}
             >
-              전체 ({recipients.length})
+              전체 ({totalCount})
             </button>
             <button
               type="button"
@@ -243,7 +323,7 @@ export function CampaignIssueRecipientsModal({
             </button>
           </div>
 
-          {/* Search & Bulk Action */}
+          {/* Search & Tab-Specific Bulk Action */}
           <div className="flex items-center gap-2 flex-wrap">
             <input
               type="text"
@@ -256,15 +336,15 @@ export function CampaignIssueRecipientsModal({
             <button
               type="button"
               onClick={() => setShowBulkModal(true)}
-              disabled={eligibleUnsuppressed.length === 0}
+              disabled={tabMetrics.newCount === 0}
               className={`px-3 py-1.5 text-xs font-bold rounded-lg border flex items-center gap-1.5 transition-colors cursor-pointer ${
-                eligibleUnsuppressed.length > 0
+                tabMetrics.newCount > 0
                   ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-700 shadow-2xs"
                   : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 border-zinc-200 dark:border-zinc-700 cursor-not-allowed"
               }`}
-              title="검증된 영구 반송 대상자만 일괄 수신 거부 목록에 등록합니다."
+              title={tabBulkMeta.title}
             >
-              <span>🛡️</span> 검증 대상 일괄 등록 ({eligibleUnsuppressed.length}건)
+              <span>🛡️</span> {tabBulkMeta.label}
             </button>
           </div>
         </div>
@@ -279,7 +359,7 @@ export function CampaignIssueRecipientsModal({
             </span>
           </div>
           <span className="font-mono text-[10px] shrink-0 font-bold px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-300">
-            미등록 대상: {eligibleUnsuppressed.length}건
+            미등록 대상: {tabMetrics.newCount}건 ({tabMetrics.total}건 중)
           </span>
         </div>
 
@@ -298,85 +378,107 @@ export function CampaignIssueRecipientsModal({
                   <th className="py-2.5 px-3 text-center">프로바이더 상태</th>
                   <th className="py-2.5 px-3">반송/실패 사유</th>
                   <th className="py-2.5 px-3">메시지 ID</th>
-                  <th className="py-2.5 px-3 text-center">수신 거부 상태</th>
-                  <th className="py-2.5 px-4 text-right">조치 (Action)</th>
+                  <th className="py-2.5 px-3 text-center">수신 거부 등록 여부</th>
+                  <th className="py-2.5 px-4 text-right">조치</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                {filteredRecipients.map((r) => {
+                {filteredRecipients.map((item) => {
                   return (
                     <tr
-                      key={r.id}
-                      className="hover:bg-zinc-50/70 dark:hover:bg-zinc-900/60 transition-colors"
+                      key={item.id}
+                      className="hover:bg-zinc-50/80 dark:hover:bg-zinc-850/40 transition-colors"
                     >
+                      {/* Email */}
                       <td className="py-3 px-4">
                         <div className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                          {r.recipientEmail}
+                          {item.recipientEmail}
                         </div>
-                        {r.recipientName && (
-                          <div className="text-[11px] text-zinc-400">
-                            {r.recipientName}
-                          </div>
+                        {item.recipientName && (
+                          <div className="text-[11px] text-zinc-500">{item.recipientName}</div>
                         )}
                       </td>
+
+                      {/* Company & Brand */}
                       <td className="py-3 px-3">
-                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                          {r.companyNameKr}
+                        <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                          {item.companyNameKr}
                         </div>
-                        {r.brandName && (
-                          <div className="text-[11px] text-zinc-500 truncate max-w-[160px]">
-                            {r.brandName}
-                          </div>
-                        )}
+                        <div className="text-[11px] text-zinc-400 flex items-center gap-1.5">
+                          {item.companyNameEn && <span>{item.companyNameEn}</span>}
+                          {item.brandName && (
+                            <span className="px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                              {item.brandName}
+                            </span>
+                          )}
+                        </div>
                       </td>
+
+                      {/* Provider Status */}
                       <td className="py-3 px-3 text-center">
                         <span
-                          className={`inline-block px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase ${
-                            r.status === "BOUNCED"
-                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-                              : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-800"
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                            item.status === "BOUNCED"
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                              : "bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300 border border-red-200 dark:border-red-800"
                           }`}
                         >
-                          {r.status}
+                          {item.status === "BOUNCED" ? "BOUNCED" : "FAILED / SUPPRESSED"}
                         </span>
                       </td>
-                      <td className="py-3 px-3">
-                        <span
-                          className="text-[11px] text-zinc-700 dark:text-zinc-300 line-clamp-2 max-w-xs"
-                          title={r.errorMessage || undefined}
+
+                      {/* Error Message */}
+                      <td className="py-3 px-3 max-w-xs">
+                        <div
+                          className="text-[11px] text-zinc-600 dark:text-zinc-300 truncate"
+                          title={item.errorMessage || "사유 미기재"}
                         >
-                          {r.errorMessage || "—"}
-                        </span>
+                          {item.errorMessage || "—"}
+                        </div>
+                        {item.isEligibleForSuppression ? (
+                          <span className="inline-block mt-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400">
+                            🛡️ 영구 차단 권장 (Permanent failure)
+                          </span>
+                        ) : (
+                          <span className="inline-block mt-0.5 text-[9px] text-zinc-400">
+                            소프트 바운스 / 임시 오류
+                          </span>
+                        )}
                       </td>
+
+                      {/* Provider Message ID */}
                       <td className="py-3 px-3 font-mono text-[10px] text-zinc-500">
-                        {r.providerMessageId ? (
-                          <span title={r.providerMessageId}>
-                            {r.providerMessageId.slice(0, 12)}...
+                        {item.providerMessageId ? (
+                          <span title={item.providerMessageId}>
+                            {item.providerMessageId.slice(0, 16)}...
                           </span>
                         ) : (
-                          "—"
+                          <span className="text-zinc-400 italic">미기재</span>
                         )}
                       </td>
+
+                      {/* Current Suppression Status */}
                       <td className="py-3 px-3 text-center">
-                        {r.isSuppressed ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-                            🛡️ 등록됨 ({r.suppressionReason || "ACTIVE"})
+                        {item.isSuppressed ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                            title={`등록 사유: ${item.suppressionReason || "UNKNOWN"}`}
+                          >
+                            🛡️ 등록됨 ({item.suppressionReason || "ACTIVE"})
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
-                            미등록
-                          </span>
+                          <span className="text-[11px] text-zinc-400">미등록</span>
                         )}
                       </td>
+
+                      {/* Action Button */}
                       <td className="py-3 px-4 text-right">
-                        {r.isSuppressed ? (
-                          <span className="text-[11px] font-semibold text-zinc-400">
-                            수신 차단 활성
-                          </span>
+                        {item.isSuppressed ? (
+                          <span className="text-[11px] text-zinc-400 italic">차단 유지 중</span>
                         ) : (
                           <button
                             type="button"
-                            onClick={() => handleOpenSingleConfirm(r)}
+                            onClick={() => handleOpenSingleConfirm(item)}
                             className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors cursor-pointer"
                           >
                             + 수신 거부 등록
@@ -391,11 +493,11 @@ export function CampaignIssueRecipientsModal({
           )}
         </div>
 
-        {/* FOOTER */}
-        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs bg-zinc-50 dark:bg-zinc-950/40">
-          <span className="text-zinc-500">
-            총 <strong>{filteredRecipients.length}</strong>명 표시 중 (반송 {bouncedCount}명, 사전 차단 {failedCount}명)
-          </span>
+        {/* MODAL FOOTER */}
+        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-950/60 text-xs">
+          <div className="text-zinc-500">
+            표시 중: <strong>{filteredRecipients.length}건</strong> (전체 {totalCount}건)
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -468,7 +570,7 @@ export function CampaignIssueRecipientsModal({
                     onChange={(e) => setConfirmReason(e.target.value)}
                     className="w-full px-3 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
                   >
-                    <option value="BOUNCED">BOUNCED (메일함 반송)</option>
+                    <option value="BOUNCED">BOUNCED (메일함 반송 / 프로바이더 차단)</option>
                     <option value="UNSUBSCRIBED">UNSUBSCRIBED (수신 거부 요청)</option>
                     <option value="COMPLAINT">COMPLAINT (스팸 신고)</option>
                     <option value="MANUAL_ADMIN">MANUAL_ADMIN (관리자 직접 등록)</option>
@@ -492,6 +594,10 @@ export function CampaignIssueRecipientsModal({
               <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg text-[11px] text-zinc-600 dark:text-zinc-400 space-y-1">
                 <div>• 캠페인: <strong>{campaignName}</strong></div>
                 <div>• 발송 프로바이더: <strong>Resend</strong></div>
+                {confirmRecipient.providerMessageId && (
+                  <div>• 프로바이더 메시지 ID: <strong className="font-mono">{confirmRecipient.providerMessageId}</strong></div>
+                )}
+                <div>• 출처(Source): <strong>RESEND</strong></div>
                 <div>• 감사 로그 기록: <strong>marketing_suppression_audit_log</strong>에 자동 기록됩니다.</div>
               </div>
             </div>
@@ -518,12 +624,12 @@ export function CampaignIssueRecipientsModal({
         </div>
       )}
 
-      {/* BULK SUPPRESSION CONFIRMATION MODAL */}
+      {/* BULK SUPPRESSION CONFIRMATION MODAL (ADM-EMAIL-ANALYTICS-001-R2) */}
       {showBulkModal && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-5 space-y-4">
+          <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-5 space-y-4">
             <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              <span>🛡️</span> 검증 대상 일괄 수신 거부 등록
+              <span>🛡️</span> {tabBulkMeta.modalTitle}
             </h3>
 
             {bulkError && (
@@ -532,17 +638,39 @@ export function CampaignIssueRecipientsModal({
               </div>
             )}
 
-            <div className="space-y-2 text-xs text-zinc-600 dark:text-zinc-400">
+            <div className="space-y-3 text-xs text-zinc-600 dark:text-zinc-400">
               <p>
-                현재 캠페인에서 확인된 영구 반송(Hard Bounce) 및 프로바이더 사전 차단 대상자 중 미등록된{" "}
-                <strong className="text-amber-600 dark:text-amber-400 font-bold">{eligibleUnsuppressed.length}명</strong>
+                선택된 <strong>{tabBulkMeta.categoryName}</strong> 카테고리 내에서 확인된 프로바이더 검증 대상자 중 미등록된{" "}
+                <strong className="text-amber-600 dark:text-amber-400 font-bold">{tabMetrics.newCount}명</strong>
                 을 수신 거부 목록에 일괄 등록합니다.
               </p>
 
+              {/* 4-Stat Breakdown Grid (ADM-EMAIL-ANALYTICS-001-R2) */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 bg-zinc-50 dark:bg-zinc-800/60 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                  <div className="text-[11px] text-zinc-500">카테고리 전체 (Total)</div>
+                  <div className="text-base font-extrabold text-zinc-900 dark:text-zinc-100">{tabMetrics.total}건</div>
+                </div>
+                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <div className="text-[11px] text-amber-700 dark:text-amber-300 font-bold">신규 등록 예정 (New)</div>
+                  <div className="text-base font-extrabold text-amber-600 dark:text-amber-400">{tabMetrics.newCount}건</div>
+                </div>
+                <div className="p-2.5 bg-zinc-50 dark:bg-zinc-800/60 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                  <div className="text-[11px] text-zinc-500">이미 등록됨 (Already Suppressed)</div>
+                  <div className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">{tabMetrics.alreadySuppressed}건</div>
+                </div>
+                <div className="p-2.5 bg-zinc-50 dark:bg-zinc-800/60 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                  <div className="text-[11px] text-zinc-500">보호/제외 대상 (Skipped / Ineligible)</div>
+                  <div className="text-base font-extrabold text-zinc-500">{tabMetrics.ineligibleOrProtected}건</div>
+                </div>
+              </div>
+
+              {/* Scope & Provider Evidence Guarantee */}
               <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg space-y-1 text-[11px]">
-                <div>• 등록 대상 건수: <strong>{eligibleUnsuppressed.length}건</strong></div>
-                <div>• 소프트 바운스/미확인 오류: <strong>자동 제외 (보호됨)</strong></div>
-                <div>• 등록 출처: <strong>Campaign: {campaignName}</strong></div>
+                <div>• 등록 대상: <strong>{tabBulkMeta.categoryName} (타 탭 수신자 제외 보장)</strong></div>
+                <div>• 출처(Source): <strong>RESEND (Campaign: {campaignName})</strong></div>
+                <div>• 사유 보존: <strong>프로바이더 원인(Bounce/Preflight) 보존 (MANUAL_ADMIN 덮어쓰기 금지)</strong></div>
+                <div>• 감사 기록: <strong>marketing_suppression_audit_log</strong>에 자동 기록</div>
               </div>
 
               {bulkProgress && (
@@ -577,10 +705,10 @@ export function CampaignIssueRecipientsModal({
               <button
                 type="button"
                 onClick={handleExecuteBulkSuppression}
-                disabled={Boolean(bulkProgress) || eligibleUnsuppressed.length === 0}
+                disabled={Boolean(bulkProgress) || tabMetrics.newCount === 0}
                 className="px-4 py-1.5 text-xs font-bold rounded bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
               >
-                {bulkProgress ? "일괄 등록 처리 중..." : "일괄 등록 실행"}
+                {bulkProgress ? "일괄 등록 처리 중..." : `${tabBulkMeta.label} 실행`}
               </button>
             </div>
           </div>
