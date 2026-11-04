@@ -2696,7 +2696,14 @@ export async function executeCampaignRealDelivery(
       recipientDbUpdates.push({
         id: item.recipient.id,
         campaign_id: campaignId,
+        company_id: item.recipient.companyId,
+        contact_id: item.recipient.contactId || null,
         recipient_email: item.recipient.recipientEmail,
+        recipient_name: item.recipient.recipientName || null,
+        company_name_kr: item.recipient.companyNameKr || "미지정",
+        company_name_en: item.recipient.companyNameEn || null,
+        brand_name: item.recipient.brandName || null,
+        custom_message_override: item.recipient.customMessageOverride || null,
         send_eligibility: "EXCLUDED_SUPPRESSED",
         exclusion_reason: item.exclusionReason,
         status: "FAILED",
@@ -2707,7 +2714,16 @@ export async function executeCampaignRealDelivery(
       recipientDbUpdates.push({
         id: item.recipient.id,
         campaign_id: campaignId,
+        company_id: item.recipient.companyId,
+        contact_id: item.recipient.contactId || null,
         recipient_email: item.recipient.recipientEmail,
+        recipient_name: item.recipient.recipientName || null,
+        company_name_kr: item.recipient.companyNameKr || "미지정",
+        company_name_en: item.recipient.companyNameEn || null,
+        brand_name: item.recipient.brandName || null,
+        custom_message_override: item.recipient.customMessageOverride || null,
+        send_eligibility: item.recipient.sendEligibility || "ELIGIBLE",
+        exclusion_reason: item.recipient.exclusionReason || null,
         status: "FAILED",
         error_message: item.errorMessage,
         updated_at: nowIso,
@@ -2725,7 +2741,16 @@ export async function executeCampaignRealDelivery(
       recipientDbUpdates.push({
         id: item.recipient.id,
         campaign_id: campaignId,
+        company_id: item.recipient.companyId,
+        contact_id: item.recipient.contactId || null,
         recipient_email: item.recipient.recipientEmail,
+        recipient_name: item.recipient.recipientName || null,
+        company_name_kr: item.recipient.companyNameKr || "미지정",
+        company_name_en: item.recipient.companyNameEn || null,
+        brand_name: item.recipient.brandName || null,
+        custom_message_override: item.recipient.customMessageOverride || null,
+        send_eligibility: item.recipient.sendEligibility || "ELIGIBLE",
+        exclusion_reason: item.recipient.exclusionReason || null,
         status: "SENT",
         provider_message_id: res.messageId,
         sent_at: nowIso,
@@ -2737,7 +2762,16 @@ export async function executeCampaignRealDelivery(
       recipientDbUpdates.push({
         id: item.recipient.id,
         campaign_id: campaignId,
+        company_id: item.recipient.companyId,
+        contact_id: item.recipient.contactId || null,
         recipient_email: item.recipient.recipientEmail,
+        recipient_name: item.recipient.recipientName || null,
+        company_name_kr: item.recipient.companyNameKr || "미지정",
+        company_name_en: item.recipient.companyNameEn || null,
+        brand_name: item.recipient.brandName || null,
+        custom_message_override: item.recipient.customMessageOverride || null,
+        send_eligibility: item.recipient.sendEligibility || "ELIGIBLE",
+        exclusion_reason: item.recipient.exclusionReason || null,
         status: "FAILED",
         error_message: res?.error || "Email provider rejected send",
         updated_at: nowIso,
@@ -2745,18 +2779,62 @@ export async function executeCampaignRealDelivery(
     }
   }
 
-  // Upsert recipient status in chunks of 100 (with fallback to update for unit test mocks)
+  // Upsert recipient status in chunks of 100 (with fallback to update on error or for unit test mocks)
   const recipientTable = supabase.from("marketing_campaign_recipients");
   if (typeof recipientTable?.upsert === "function") {
     const UPSERT_CHUNK_SIZE = 100;
     for (let i = 0; i < recipientDbUpdates.length; i += UPSERT_CHUNK_SIZE) {
       const chunk = recipientDbUpdates.slice(i, i + UPSERT_CHUNK_SIZE);
       try {
-        await supabase
+        const { error: upsertErr } = await supabase
           .from("marketing_campaign_recipients")
           .upsert(chunk, { onConflict: "id" });
+
+        if (upsertErr) {
+          console.error(
+            "[campaigns:dispatch] Recipient status batch upsert error, falling back to individual updates:",
+            upsertErr.message
+          );
+          for (const rUp of chunk) {
+            try {
+              await supabase
+                .from("marketing_campaign_recipients")
+                .update({
+                  status: rUp.status,
+                  provider_message_id: rUp.provider_message_id,
+                  sent_at: rUp.sent_at,
+                  error_message: rUp.error_message,
+                  send_eligibility: rUp.send_eligibility,
+                  exclusion_reason: rUp.exclusion_reason,
+                  updated_at: rUp.updated_at,
+                })
+                .eq("id", rUp.id);
+            } catch (indivErr: any) {
+              console.error(
+                `[campaigns:dispatch] Fallback update failed for recipient ${rUp.id}:`,
+                indivErr?.message
+              );
+            }
+          }
+        }
       } catch (e: any) {
-        console.warn("[campaigns:dispatch] Recipient status batch upsert warning:", e.message);
+        console.warn("[campaigns:dispatch] Recipient status batch upsert exception:", e.message);
+        for (const rUp of chunk) {
+          try {
+            await supabase
+              .from("marketing_campaign_recipients")
+              .update({
+                status: rUp.status,
+                provider_message_id: rUp.provider_message_id,
+                sent_at: rUp.sent_at,
+                error_message: rUp.error_message,
+                send_eligibility: rUp.send_eligibility,
+                exclusion_reason: rUp.exclusion_reason,
+                updated_at: rUp.updated_at,
+              })
+              .eq("id", rUp.id);
+          } catch {}
+        }
       }
     }
   } else {

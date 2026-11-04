@@ -270,6 +270,11 @@ export async function sendEmailBatch(
           };
         }
       }
+
+      // Safe throttle delay between consecutive batch chunks (600ms) to respect Resend rate limits
+      if (c + BATCH_CHUNK_SIZE < realSendIndices.length) {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
     } catch (err: any) {
       console.error("[email:batch] 발송 예외 발생:", err?.message || err);
       for (const idx of chunkIndices) {

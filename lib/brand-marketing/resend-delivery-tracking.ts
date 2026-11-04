@@ -240,13 +240,46 @@ export async function processResendWebhookEvent(
   const supabase = await getClient(customClient);
 
   // 1. Locate recipient by provider message ID
-  const { data: recipients, error: findErr } = await supabase
+  const { data: recipients } = await supabase
     .from("marketing_campaign_recipients")
     .select("id, campaign_id, recipient_email, status, provider_message_id, sent_at, delivered_at")
     .eq("provider_message_id", emailId)
     .limit(1);
 
-  if (findErr || !recipients || recipients.length === 0) {
+  let recipient = recipients && recipients.length > 0 ? recipients[0] : null;
+
+  // Fallback lookup: if not matched by provider_message_id and recipientEmail is present, match by email
+  if (!recipient && recipientEmail) {
+    const q = supabase
+      .from("marketing_campaign_recipients")
+      .select("id, campaign_id, recipient_email, status, provider_message_id, sent_at, delivered_at")
+      .eq("recipient_email", recipientEmail);
+
+    const { data: fallbackRecipients } = typeof (q as any)?.order === "function"
+      ? await (q as any).order("updated_at", { ascending: false }).limit(1)
+      : typeof (q as any)?.limit === "function"
+      ? await (q as any).limit(1)
+      : await q;
+
+    if (fallbackRecipients && fallbackRecipients.length > 0) {
+      const fallback = fallbackRecipients[0];
+      recipient = fallback;
+      // Backfill provider_message_id if missing
+      if (fallback && !fallback.provider_message_id) {
+        try {
+          await supabase
+            .from("marketing_campaign_recipients")
+            .update({ provider_message_id: emailId, updated_at: nowIso })
+            .eq("id", fallback.id);
+          fallback.provider_message_id = emailId;
+        } catch (backfillErr: any) {
+          console.warn(`[delivery] Warning backfilling provider_message_id for ${recipientEmail}:`, backfillErr?.message);
+        }
+      }
+    }
+  }
+
+  if (!recipient) {
     // Unmapped message ID (e.g. transactional email or external test)
     const ledgerResult = await recordDeliveryEvent({
       supabase,
@@ -264,11 +297,10 @@ export async function processResendWebhookEvent(
       emailId,
       providerEventId,
       eventType,
-      reason: "No campaign recipient matched provider message ID",
+      reason: "No campaign recipient matched provider message ID or recipient email",
     };
   }
 
-  const recipient = recipients[0];
   const campaignId = recipient.campaign_id;
 
   // 2. Authoritative ledger logging with atomic deduplication
