@@ -48,11 +48,9 @@ export function CampaignIssueRecipientsModal({
     setActiveTab(initialFilter);
   }, [initialFilter]);
 
-  if (!isOpen) return null;
-
   // Filtered recipients based on tab and search
   const filteredRecipients = useMemo(() => {
-    return recipients.filter((r) => {
+    return (recipients || []).filter((r) => {
       // Tab filter
       if (activeTab === "BOUNCED" && r.status !== "BOUNCED") return false;
       if (activeTab === "SUPPRESSED_FAILED" && r.status !== "FAILED") return false;
@@ -71,12 +69,12 @@ export function CampaignIssueRecipientsModal({
     });
   }, [recipients, activeTab, searchQuery]);
 
-  const bouncedCount = recipients.filter((r) => r.status === "BOUNCED").length;
-  const failedCount = recipients.filter((r) => r.status === "FAILED").length;
+  const bouncedCount = (recipients || []).filter((r) => r.status === "BOUNCED").length;
+  const failedCount = (recipients || []).filter((r) => r.status === "FAILED").length;
 
   // Eligible for permanent suppression: verified hard bounces or provider suppressions that are not yet suppressed
   const eligibleUnsuppressed = useMemo(() => {
-    return recipients.filter((r) => !r.isSuppressed && r.isEligibleForSuppression);
+    return (recipients || []).filter((r) => !r.isSuppressed && r.isEligibleForSuppression);
   }, [recipients]);
 
   // Open single confirmation modal
@@ -170,6 +168,8 @@ export function CampaignIssueRecipientsModal({
       if (onRefreshRecipients) onRefreshRecipients();
     }, 1200);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
