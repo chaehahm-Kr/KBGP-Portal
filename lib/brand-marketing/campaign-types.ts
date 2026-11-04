@@ -158,6 +158,11 @@ export interface CampaignStats {
   sentCount: number;
   deliveredCount: number;
   failedCount: number;
+  bouncedCount?: number;
+  suppressedCount?: number;
+  reconciledAt?: string;
+  reconciledBy?: string;
+  reconciliationNote?: string;
   simulationStats?: CampaignSimulationStats;
   unlockHistory?: CampaignUnlockAudit[];
   isSendLocked?: boolean;

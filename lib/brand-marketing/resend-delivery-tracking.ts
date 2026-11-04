@@ -614,10 +614,24 @@ export async function reconcileCampaignDelivery(
     .from("marketing_campaign_recipients")
     .select("*", { count: "exact", head: true })
     .eq("campaign_id", campaignId)
-    .in("status", ["SENT", "DELIVERED"]);
+    .in("status", ["SENT", "DELIVERED", "BOUNCED", "FAILED"]);
+
+  const { count: realBouncedCount } = await supabase
+    .from("marketing_campaign_recipients")
+    .select("*", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .eq("status", "BOUNCED");
+
+  const { count: realFailedCount } = await supabase
+    .from("marketing_campaign_recipients")
+    .select("*", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .in("status", ["FAILED", "BOUNCED"]);
 
   const totalDelivered = realDeliveredCount || 0;
   const totalSent = realSentCount || 0;
+  const totalBounced = realBouncedCount || 0;
+  const totalFailed = realFailedCount || 0;
 
   // 5. Update campaign stats
   const currentStats = campaign.stats || {};
@@ -630,6 +644,8 @@ export async function reconcileCampaignDelivery(
         ...currentStats,
         deliveredCount: totalDelivered,
         sentCount: totalSent,
+        bouncedCount: totalBounced,
+        failedCount: totalFailed,
         deliveryStatus: isAllDelivered ? "DELIVERED" : currentStats.deliveryStatus || "SENT",
       },
       updated_at: nowIso,

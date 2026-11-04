@@ -417,22 +417,28 @@ export async function listMarketingCampaigns(
 
       const deliveryMap: Record<
         string,
-        { realSent: number; realDelivered: number; realFailed: number; simCount: number }
+        { realSent: number; realDelivered: number; realFailed: number; realBounced: number; realSuppressed: number; simCount: number }
       > = {};
 
       (recipientRows || []).forEach((r: any) => {
         if (!deliveryMap[r.campaign_id]) {
-          deliveryMap[r.campaign_id] = { realSent: 0, realDelivered: 0, realFailed: 0, simCount: 0 };
+          deliveryMap[r.campaign_id] = { realSent: 0, realDelivered: 0, realFailed: 0, realBounced: 0, realSuppressed: 0, simCount: 0 };
         }
         const isReal = r.provider_message_id && !r.provider_message_id.startsWith("sim_");
-        if (isReal && (r.status === "SENT" || r.status === "DELIVERED")) {
+        if (isReal && (r.status === "SENT" || r.status === "DELIVERED" || r.status === "BOUNCED" || r.status === "FAILED")) {
           deliveryMap[r.campaign_id].realSent++;
         }
         if (isReal && r.status === "DELIVERED") {
           deliveryMap[r.campaign_id].realDelivered++;
         }
-        if (r.status === "FAILED") {
+        if (isReal && r.status === "BOUNCED") {
+          deliveryMap[r.campaign_id].realBounced++;
+        }
+        if (isReal && (r.status === "FAILED" || r.status === "BOUNCED")) {
           deliveryMap[r.campaign_id].realFailed++;
+        }
+        if (isReal && r.status === "FAILED") {
+          deliveryMap[r.campaign_id].realSuppressed++;
         }
         if (r.provider_message_id && r.provider_message_id.startsWith("sim_")) {
           deliveryMap[r.campaign_id].simCount++;
@@ -472,6 +478,8 @@ export async function listMarketingCampaigns(
           sentCount: realSentCount,
           deliveredCount: realDeliveredCount,
           failedCount: realFailedCount,
+          bouncedCount: isActuallySent ? deliv.realBounced : (d.stats?.bouncedCount || 0),
+          suppressedCount: isActuallySent ? deliv.realSuppressed : (d.stats?.suppressedCount || 0),
           isSendLocked: isActuallySent || Boolean(d.stats?.isSendLocked),
           deliveryStatus: d.stats?.deliveryStatus || (isActuallySent ? "SENT" : undefined),
           simulationStats: d.stats?.simulationStats || (deliv.simCount > 0 ? {
@@ -1126,13 +1134,17 @@ export async function getMarketingCampaignById(
     let realSent = 0;
     let realDelivered = 0;
     let realFailed = 0;
+    let realBounced = 0;
+    let realSuppressed = 0;
     let simCount = 0;
 
     recipients.forEach((r) => {
       const isReal = r.providerMessageId && !r.providerMessageId.startsWith("sim_");
-      if (isReal && (r.status === "SENT" || r.status === "DELIVERED")) realSent++;
+      if (isReal && (r.status === "SENT" || r.status === "DELIVERED" || r.status === "BOUNCED" || r.status === "FAILED")) realSent++;
       if (isReal && r.status === "DELIVERED") realDelivered++;
-      if (r.status === "FAILED") realFailed++;
+      if (isReal && r.status === "BOUNCED") realBounced++;
+      if (isReal && (r.status === "FAILED" || r.status === "BOUNCED")) realFailed++;
+      if (isReal && r.status === "FAILED") realSuppressed++;
       if (r.providerMessageId && r.providerMessageId.startsWith("sim_")) simCount++;
     });
 
@@ -1156,9 +1168,11 @@ export async function getMarketingCampaignById(
       sendableCount: campaign.stats?.sendableCount || recipients.filter((r) => r.sendEligibility === "ELIGIBLE").length,
       excludedCount: campaign.stats?.excludedCount || recipients.filter((r) => r.sendEligibility !== "ELIGIBLE").length,
       testSendsCount: campaign.stats?.testSendsCount || 0,
-      sentCount: isActuallySent ? realSent : 0,
-      deliveredCount: isActuallySent ? realDelivered : 0,
-      failedCount: isActuallySent ? realFailed : 0,
+      sentCount: isActuallySent ? realSent : (campaign.stats?.sentCount || 0),
+      deliveredCount: isActuallySent ? realDelivered : (campaign.stats?.deliveredCount || 0),
+      failedCount: isActuallySent ? realFailed : (campaign.stats?.failedCount || 0),
+      bouncedCount: isActuallySent ? realBounced : (campaign.stats?.bouncedCount || 0),
+      suppressedCount: isActuallySent ? realSuppressed : (campaign.stats?.suppressedCount || 0),
       simulationStats: campaign.stats?.simulationStats || (simCount > 0 ? {
         lastSimulatedAt: campaign.updatedAt,
         simulatedCount: simCount,
