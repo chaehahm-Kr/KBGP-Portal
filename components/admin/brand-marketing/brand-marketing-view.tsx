@@ -3487,6 +3487,11 @@ export default function BrandMarketingView({
                                   label: "Pending",
                                   icon: "⏳",
                                 },
+                                MIXED: {
+                                  bg: "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-800",
+                                  label: "Mixed",
+                                  icon: "🔀",
+                                },
                                 NOT_CONTACTED: {
                                   bg: "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700",
                                   label: "Not Contacted",
@@ -4727,6 +4732,40 @@ export default function BrandMarketingView({
                                   </a>
                                 )}
                               </div>
+                              {c.email && (
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  {c.emailStatus === "DELIVERED" ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                      ✓ 수신 완료 (Delivered)
+                                    </span>
+                                  ) : c.emailStatus === "BOUNCED" ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800" title={c.errorMessage || "Mailbox delivery bounced"}>
+                                      ⚠️ 반송됨 (Bounced)
+                                    </span>
+                                  ) : c.emailStatus === "SUPPRESSED" ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" title="수신 거부 목록에 등록된 이메일">
+                                      🛡️ 수신 거부 (Suppressed)
+                                    </span>
+                                  ) : c.emailStatus === "FAILED" ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800" title={c.errorMessage || "발송 실패"}>
+                                      ✕ 발송 실패 (Failed)
+                                    </span>
+                                  ) : c.emailStatus === "PENDING" ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                      ⏳ 발송 대기 (Pending)
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+                                      미발송 (Not Contacted)
+                                    </span>
+                                  )}
+                                  {c.errorMessage && (
+                                    <span className="text-[10px] text-zinc-500 truncate max-w-[240px]" title={c.errorMessage}>
+                                      ({c.errorMessage})
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                             <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
                               {!isPrimary && (

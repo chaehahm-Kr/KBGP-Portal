@@ -5,11 +5,14 @@ import {
   CampaignSummaryMetrics,
   CompanyResultItem,
   CompanyInterestStatus,
+  CampaignIssueRecipientItem,
 } from "@/lib/brand-marketing/results-types";
 import {
   getCampaignResultsSummaryAction,
   listCompanyResultsAction,
+  getCampaignIssueRecipientsAction,
 } from "@/lib/brand-marketing/results-actions";
+import { CampaignIssueRecipientsModal } from "./campaign-issue-recipients-modal";
 
 interface CampaignOption {
   id: string;
@@ -26,9 +29,10 @@ interface CampaignResultsTabProps {
   onNavigateToBrandList?: (companyId: string) => void;
 }
 
-function formatRate(val: number | null | undefined): string {
-  if (val === null || val === undefined) return "N/A";
-  return `${(val * 100).toFixed(1)}%`;
+export function formatPercentage(val: number | null | undefined, decimals = 2): string {
+  if (val === null || val === undefined || isNaN(val)) return "N/A";
+  const pct = val <= 1 && val >= 0 ? val * 100 : val;
+  return `${pct.toFixed(decimals)}%`;
 }
 
 export function CampaignResultsTab({
@@ -48,6 +52,33 @@ export function CampaignResultsTab({
   }, [campaigns, selectedCampaignId]);
   const [metrics, setMetrics] = useState<CampaignSummaryMetrics | null>(null);
   const [companyResults, setCompanyResults] = useState<CompanyResultItem[]>([]);
+  const [showIssueModal, setShowIssueModal] = useState(false);
+  const [issueFilter, setIssueFilter] = useState<"ALL" | "BOUNCED" | "SUPPRESSED_FAILED">("ALL");
+  const [issueRecipients, setIssueRecipients] = useState<CampaignIssueRecipientItem[]>([]);
+
+  const handleOpenIssues = async (filter: "ALL" | "BOUNCED" | "SUPPRESSED_FAILED") => {
+    setIssueFilter(filter);
+    setShowIssueModal(true);
+    if (selectedCampaignId) {
+      try {
+        const res = await getCampaignIssueRecipientsAction(selectedCampaignId);
+        if (res.success && res.recipients) {
+          setIssueRecipients(res.recipients);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch issue recipients:", err);
+      }
+    }
+  };
+
+  const handleRefreshIssues = async () => {
+    if (selectedCampaignId) {
+      const res = await getCampaignIssueRecipientsAction(selectedCampaignId);
+      if (res.success && res.recipients) {
+        setIssueRecipients(res.recipients);
+      }
+    }
+  };
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -288,7 +319,7 @@ export function CampaignResultsTab({
                 Delivery Rate
               </span>
               <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
-                {metrics.deliveryRate !== null ? formatRate(metrics.deliveryRate * 100) : "N/A"}
+                {metrics.deliveryRate !== null ? formatPercentage(metrics.deliveryRate) : "N/A"}
               </p>
               <span className="text-[10px] text-zinc-400">Delivered / Emails Sent</span>
             </div>
@@ -339,7 +370,7 @@ export function CampaignResultsTab({
               <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                 <span className="text-[10px] text-zinc-500 font-semibold block">Delivery Rate</span>
                 <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                  {metrics.deliveryRate !== null ? formatRate(metrics.deliveryRate * 100) : "N/A"}
+                  {metrics.deliveryRate !== null ? formatPercentage(metrics.deliveryRate) : "N/A"}
                 </span>
                 <p className="text-[10px] text-zinc-400 mt-0.5">Delivered / Emails Sent</p>
               </div>
@@ -347,7 +378,7 @@ export function CampaignResultsTab({
               <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                 <span className="text-[10px] text-zinc-500 font-semibold block">Bounce Rate</span>
                 <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
-                  {metrics.emailsSent > 0 ? formatRate(((metrics.bounced || 0) / metrics.emailsSent) * 100) : "0%"}
+                  {metrics.bounceRate !== null ? formatPercentage(metrics.bounceRate) : (metrics.emailsSent > 0 ? formatPercentage((metrics.bounced || 0) / metrics.emailsSent) : "0.00%")}
                 </span>
                 <p className="text-[10px] text-zinc-400 mt-0.5">Bounced / Emails Sent</p>
               </div>
@@ -355,7 +386,7 @@ export function CampaignResultsTab({
               <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                 <span className="text-[10px] text-zinc-500 font-semibold block">Suppression Rate</span>
                 <span className="text-sm font-bold text-red-600 dark:text-red-400">
-                  {metrics.emailsSent > 0 ? formatRate((((metrics.suppressed || 0) + (metrics.failed || 0)) / metrics.emailsSent) * 100) : "0%"}
+                  {metrics.suppressionRate !== null ? formatPercentage(metrics.suppressionRate) : (metrics.emailsSent > 0 ? formatPercentage(((metrics.suppressed || 0) + (metrics.failed || 0)) / metrics.emailsSent) : "0.00%")}
                 </span>
                 <p className="text-[10px] text-zinc-400 mt-0.5">Suppressed / Emails Sent</p>
               </div>
@@ -497,6 +528,16 @@ export function CampaignResultsTab({
           </div>
         )}
       </div>
+      {/* 5. ISSUE RECIPIENTS & SUPPRESSION MANAGEMENT MODAL */}
+      <CampaignIssueRecipientsModal
+        isOpen={showIssueModal}
+        onClose={() => setShowIssueModal(false)}
+        campaignId={selectedCampaignId}
+        campaignName={selectedCampaign?.name || "Campaign Outreach"}
+        initialFilter={issueFilter}
+        recipients={issueRecipients}
+        onRefreshRecipients={handleRefreshIssues}
+      />
     </div>
   );
 }

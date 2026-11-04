@@ -1155,8 +1155,83 @@ export async function getSourcingCompanyById(id: string, customClient?: Supabase
 
   const companyDocuments: any[] = Array.isArray(rawSnapshot.documents) ? rawSnapshot.documents : [];
 
+    // Enrich contacts with email delivery status and suppression state
+  const contactEmails = (company.sourcing_contacts || [])
+    .map((c: any) => (c.email || "").toLowerCase().trim())
+    .filter(Boolean);
+
+  const contactEmailDeliveryMap = new Map<string, { status: string; errorMessage?: string; sentAt?: string; deliveredAt?: string }>();
+  const suppressedSet = new Set<string>();
+
+  if (contactEmails.length > 0) {
+    try {
+      const [recRes, supRes] = await Promise.all([
+        supabase
+          .from("marketing_campaign_recipients")
+          .select("recipient_email, status, error_message, sent_at, delivered_at")
+          .in("recipient_email", contactEmails)
+          .order("sent_at", { ascending: false }),
+        supabase
+          .from("marketing_suppression_list")
+          .select("email, status, reason")
+          .in("email", contactEmails),
+      ]);
+
+      if (supRes.data) {
+        supRes.data.forEach((s: any) => {
+          if (s.status === "ACTIVE" || !s.status) {
+            suppressedSet.add(s.email.toLowerCase().trim());
+          }
+        });
+      }
+
+      if (recRes.data) {
+        recRes.data.forEach((r: any) => {
+          const em = (r.recipient_email || "").toLowerCase().trim();
+          if (!contactEmailDeliveryMap.has(em)) {
+            contactEmailDeliveryMap.set(em, {
+              status: r.status,
+              errorMessage: r.error_message,
+              sentAt: r.sent_at,
+              deliveredAt: r.delivered_at,
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("[getSourcingCompanyById] Could not fetch contact email statuses:", e);
+    }
+  }
+
+  const enrichedContacts = (company.sourcing_contacts || []).map((c: any) => {
+    const email = (c.email || "").toLowerCase().trim();
+    const isSuppressed = suppressedSet.has(email);
+    const rec = contactEmailDeliveryMap.get(email);
+
+    let emailStatus: "NOT_CONTACTED" | "DELIVERED" | "BOUNCED" | "SUPPRESSED" | "FAILED" | "PENDING" = "NOT_CONTACTED";
+    if (isSuppressed) {
+      emailStatus = "SUPPRESSED";
+    } else if (rec) {
+      if (rec.status === "DELIVERED") emailStatus = "DELIVERED";
+      else if (rec.status === "BOUNCED") emailStatus = "BOUNCED";
+      else if (rec.status === "FAILED") emailStatus = "FAILED";
+      else if (rec.status === "SENT" || rec.status === "PENDING") emailStatus = "PENDING";
+    }
+
+    return {
+      ...c,
+      emailStatus,
+      isSuppressed,
+      deliveryResult: rec?.status || null,
+      errorMessage: rec?.errorMessage || null,
+      sentAt: rec?.sentAt || null,
+      deliveredAt: rec?.deliveredAt || null,
+    };
+  });
+
   return {
     ...company,
+    sourcing_contacts: enrichedContacts,
     categories: companyCategories,
     companyCategories,
     companyProducts,
@@ -1772,13 +1847,15 @@ export async function listSourcingCompanies(
           (r) => r.status === "FAILED" && !r.error_message?.toLowerCase().includes("suppress")
         ).length;
 
-        let overallStatus: "NOT_CONTACTED" | "DELIVERED" | "BOUNCED" | "SUPPRESSED" | "FAILED" | "PENDING" = "NOT_CONTACTED";
-        if (bouncedCount > 0) {
+                let overallStatus: "NOT_CONTACTED" | "DELIVERED" | "BOUNCED" | "SUPPRESSED" | "FAILED" | "PENDING" | "MIXED" = "NOT_CONTACTED";
+        if (deliveredCount > 0 && (bouncedCount > 0 || suppressedCount > 0 || hasSuppressedContact)) {
+          overallStatus = "MIXED";
+        } else if (deliveredCount > 0) {
+          overallStatus = "DELIVERED";
+        } else if (bouncedCount > 0) {
           overallStatus = "BOUNCED";
         } else if (suppressedCount > 0 || hasSuppressedContact) {
           overallStatus = "SUPPRESSED";
-        } else if (deliveredCount > 0) {
-          overallStatus = "DELIVERED";
         } else if (failedCount > 0) {
           overallStatus = "FAILED";
         } else if (companyRecs.some((r) => r.status === "PENDING")) {

@@ -120,6 +120,8 @@ export interface CampaignSummaryMetrics {
 
   // Rates (0 to 100%, or null if denominator is 0 to distinguish "No Data" from "Measured Zero")
   deliveryRate: number | null; // delivered / emailsSent
+  bounceRate: number | null; // bounced / emailsSent
+  suppressionRate: number | null; // (suppressed + failed) / emailsSent
   replyRate: number | null; // replied / companiesContacted (Company-level response rate)
   interestRate: number | null; // interestedCompanies / companiesContacted
   meetingConversionRate: number | null; // meetings / companiesContacted
@@ -158,3 +160,23 @@ export interface UpdateCompanyFollowupInput {
   markCompleted?: boolean;
   campaignId?: string;
 }
+
+export interface CampaignIssueRecipientItem {
+  id: string;
+  campaignId: string;
+  companyId: string;
+  companyNameKr: string;
+  companyNameEn?: string | null;
+  brandName?: string | null;
+  recipientEmail: string;
+  recipientName?: string | null;
+  status: "BOUNCED" | "FAILED" | string;
+  providerMessageId?: string | null;
+  errorMessage?: string | null;
+  sentAt?: string | null;
+  isSuppressed: boolean;
+  suppressionReason?: string | null;
+  suppressedAt?: string | null;
+  isEligibleForSuppression: boolean;
+}
+

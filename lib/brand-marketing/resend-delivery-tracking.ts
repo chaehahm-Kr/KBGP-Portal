@@ -146,19 +146,15 @@ async function recordSuppression(
   source: string = "resend_webhook"
 ): Promise<void> {
   try {
-    const normalized = email.toLowerCase().trim();
-    const nowIso = new Date().toISOString();
-
-    await supabase.from("marketing_suppression_list").upsert(
+    const { addMarketingSuppression } = await import("@/lib/brand-marketing/campaign-data-access");
+    await addMarketingSuppression(
       {
-        email: normalized,
+        email,
         reason,
-        source,
-        status: "ACTIVE",
-        suppressed_at: nowIso,
-        updated_at: nowIso,
+        notes: `Automatic provider suppression registered from ${source}`,
+        addedBy: source,
       },
-      { onConflict: "email" }
+      supabase
     );
   } catch (err: any) {
     console.warn(`[delivery-suppression] Error suppressing ${email}:`, err.message);

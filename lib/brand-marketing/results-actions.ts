@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { verifyAdminSession, getAdminStaffContext } from "@/lib/auth/dal";
 import {
   CampaignSummaryMetrics,
+  CampaignIssueRecipientItem,
   CompanyResultItem,
   CompanyResultsFilterCriteria,
   UpdateCompanyInterestInput,
@@ -12,6 +13,7 @@ import {
 } from "./results-types";
 import {
   getCampaignResultsSummary,
+  getCampaignIssueRecipients,
   listCompanyResults,
   updateCompanyInterestStatus,
   updateCompanyFollowup,
@@ -90,6 +92,25 @@ export async function getCampaignResultsSummaryAction(campaignId: string): Promi
 /**
  * Fetches company results list for Tab B (Company Results).
  */
+
+/**
+ * Fetches campaign recipients who encountered delivery issues (Bounced or Suppressed/Failed)
+ * for drill-down inspection and suppression management.
+ */
+export async function getCampaignIssueRecipientsAction(campaignId: string): Promise<{
+  success: boolean;
+  recipients?: CampaignIssueRecipientItem[];
+  error?: string;
+}> {
+  try {
+    await requireResultsAdmin();
+    const recipients = await getCampaignIssueRecipients(campaignId);
+    return { success: true, recipients };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to load issue recipients" };
+  }
+}
+
 export async function listCompanyResultsAction(
   filter: CompanyResultsFilterCriteria = {}
 ): Promise<{

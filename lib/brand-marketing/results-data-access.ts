@@ -5,6 +5,7 @@ import {
   CompanyInterestStatus,
   CompanyResultItem,
   CampaignSummaryMetrics,
+  CampaignIssueRecipientItem,
   RecipientEmailActivity,
   CompanyActivityItem,
   FollowupDueStatus,
@@ -201,6 +202,13 @@ export function calculateCampaignSummaryMetrics(
   const partnerConversionRate =
     companiesContacted > 0 ? Number((partners / companiesContacted).toFixed(4)) : null;
 
+  const bounceRate =
+    emailsSent > 0 ? Number((bounced / emailsSent).toFixed(4)) : null;
+  const suppressionRate =
+    emailsSent > 0
+      ? Number(((suppressed + failed) / emailsSent).toFixed(4))
+      : null;
+
   return {
     campaignId: campaign.id,
     campaignName: campaign.name,
@@ -227,6 +235,8 @@ export function calculateCampaignSummaryMetrics(
     meetings,
     partners,
     deliveryRate,
+    bounceRate,
+    suppressionRate,
     replyRate,
     interestRate,
     meetingConversionRate,
@@ -264,6 +274,8 @@ function getFallbackCampaignSummary(): CampaignSummaryMetrics {
     meetings: 2,
     partners: 1,
     deliveryRate: 0.9167,
+    bounceRate: 0.0417,
+    suppressionRate: 0.0417,
     replyRate: 0.2083,
     interestRate: 0.2222,
     meetingConversionRate: 0.1111,
@@ -655,6 +667,130 @@ export async function getCampaignResultsSummary(
   } catch (err) {
     console.warn("[results:campaignSummary] Fallback for campaignId:", campaignId, err);
     return null;
+  }
+}
+
+/**
+ * Retrieves campaign recipients who encountered delivery issues (BOUNCED or FAILED/SUPPRESSED)
+ * along with their live suppression registry status and permanent suppression eligibility.
+ * Standards: DEPLOY-STD-001, Task ID: ADM-EMAIL-ANALYTICS-001-R1
+ */
+export async function getCampaignIssueRecipients(
+  campaignId: string,
+  customClient?: SupabaseClient
+): Promise<CampaignIssueRecipientItem[]> {
+  try {
+    const supabase = await getClient(customClient);
+    if (!supabase) return [];
+
+    // 1. Fetch recipient rows with BOUNCED or FAILED status
+    const { data: rows, error: recErr } = await supabase
+      .from("marketing_campaign_recipients")
+      .select(
+        "id, campaign_id, company_id, company_name_kr, company_name_en, brand_name, recipient_email, recipient_name, status, provider_message_id, error_message, sent_at"
+      )
+      .eq("campaign_id", campaignId)
+      .in("status", ["BOUNCED", "FAILED"])
+      .order("recipient_email", { ascending: true });
+
+    if (recErr || !rows || rows.length === 0) {
+      return [];
+    }
+
+    // 2. Fetch active suppressions matching these recipient emails
+    const emails = Array.from(
+      new Set(
+        rows
+          .map((r: any) => (r.recipient_email || "").toLowerCase().trim())
+          .filter(Boolean)
+      )
+    );
+    const suppressionMap = new Map<string, { reason: string; suppressedAt: string }>();
+
+    if (emails.length > 0) {
+      // Chunk query in batches of 100
+      for (let i = 0; i < emails.length; i += 100) {
+        const chunk = emails.slice(i, i + 100);
+        try {
+          const { data: supRows } = await supabase
+            .from("marketing_suppression_list")
+            .select("email, reason, suppressed_at, status")
+            .in("email", chunk);
+
+          if (supRows) {
+            supRows.forEach((s: any) => {
+              if (s.status === "ACTIVE" || !s.status) {
+                suppressionMap.set(s.email.toLowerCase().trim(), {
+                  reason: s.reason || "SUPPRESSED",
+                  suppressedAt: s.suppressed_at || "",
+                });
+              }
+            });
+          }
+        } catch (supErr) {
+          console.warn("[getCampaignIssueRecipients] Suppression check warning:", supErr);
+        }
+      }
+    }
+
+    // 3. Map to CampaignIssueRecipientItem with eligibility classification
+    return rows.map((r: any): CampaignIssueRecipientItem => {
+      const email = (r.recipient_email || "").toLowerCase().trim();
+      const sup = suppressionMap.get(email);
+      const isSuppressed = Boolean(sup);
+      const errMsg = (r.error_message || "").toLowerCase();
+
+      // Permanent suppression eligibility determination:
+      // Hard bounces, Remote MTA rejection, 550, user unknown, mailbox not found, or explicit provider suppression.
+      // Do NOT permanently suppress transient soft bounces (e.g. 451, mailbox full, timeout) or generic unverified failures.
+      let isEligible = false;
+      if (r.status === "FAILED") {
+        isEligible =
+          errMsg.includes("suppress") ||
+          errMsg.includes("blacklist") ||
+          errMsg.includes("blocked") ||
+          errMsg.includes("opt-out");
+      } else if (r.status === "BOUNCED") {
+        const isSoftBounce =
+          errMsg.includes("quota") ||
+          errMsg.includes("full") ||
+          errMsg.includes("temporary") ||
+          errMsg.includes("try again") ||
+          errMsg.includes("451") ||
+          errMsg.includes("452");
+        const isHardBounce =
+          errMsg.includes("remote mta rejection") ||
+          errMsg.includes("bounce") ||
+          errMsg.includes("550") ||
+          errMsg.includes("unknown") ||
+          errMsg.includes("not exist") ||
+          errMsg.includes("invalid") ||
+          errMsg.includes("disabled");
+        isEligible = isHardBounce && !isSoftBounce;
+      }
+
+      return {
+        id: r.id,
+        campaignId: r.campaign_id,
+        companyId: r.company_id,
+        companyNameKr: r.company_name_kr || "미지정 기업",
+        companyNameEn: r.company_name_en || null,
+        brandName: r.brand_name || null,
+        recipientEmail: r.recipient_email,
+        recipientName: r.recipient_name || null,
+        status: r.status,
+        providerMessageId: r.provider_message_id || null,
+        errorMessage: r.error_message || null,
+        sentAt: r.sent_at || null,
+        isSuppressed,
+        suppressionReason: sup?.reason || null,
+        suppressedAt: sup?.suppressedAt || null,
+        isEligibleForSuppression: isEligible,
+      };
+    });
+  } catch (err: any) {
+    console.error("[getCampaignIssueRecipients] Exception:", err);
+    return [];
   }
 }
 
