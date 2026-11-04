@@ -289,22 +289,40 @@ export function CampaignResultsTab({
               <span className="text-[10px] text-zinc-400">Verified mailbox receipt</span>
             </div>
 
-            {/* Card 4: Bounced */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3.5 shadow-2xs">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
-                Bounced
-              </span>
+                        {/* Card 4: Bounced (Clickable to open Issue Recipients) */}
+            <div
+              onClick={() => handleOpenIssues("BOUNCED")}
+              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3.5 shadow-2xs hover:border-amber-400 dark:hover:border-amber-600 transition-all cursor-pointer group"
+              title="Click to view bounced recipients and manage suppression"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
+                  Bounced
+                </span>
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 group-hover:underline">
+                  View ↗
+                </span>
+              </div>
               <p className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
                 {metrics.bounced ?? 0}
               </p>
               <span className="text-[10px] text-zinc-400">MTA rejection / invalid</span>
             </div>
 
-            {/* Card 5: Suppressed / Failed */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3.5 shadow-2xs">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
-                Suppressed / Failed
-              </span>
+            {/* Card 5: Suppressed / Failed (Clickable to open Issue Recipients) */}
+            <div
+              onClick={() => handleOpenIssues("SUPPRESSED_FAILED")}
+              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3.5 shadow-2xs hover:border-red-400 dark:hover:border-red-600 transition-all cursor-pointer group"
+              title="Click to view suppressed/failed recipients and manage suppression"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
+                  Suppressed / Failed
+                </span>
+                <span className="text-[10px] text-red-600 dark:text-red-400 group-hover:underline">
+                  View ↗
+                </span>
+              </div>
               <p className="text-2xl font-extrabold text-red-600 dark:text-red-400 mt-1">
                 {(metrics.suppressed || 0) + (metrics.failed || 0)}
               </p>
