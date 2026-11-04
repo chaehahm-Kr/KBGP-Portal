@@ -231,7 +231,8 @@ export default function BrandMarketingView({
   const [filterBusinessTypeMatchMode, setFilterBusinessTypeMatchMode] = useState<"ANY" | "ALL">("ANY");
   const [filterPrimaryCategories, setFilterPrimaryCategories] = useState<string[]>([]);
   const [showPrimaryCatFilterDropdown, setShowPrimaryCatFilterDropdown] = useState(false);
-  const [activePopover, setActivePopover] = useState<{ rowId: string; col: "brands" | "categories" | "primary" | "contacts" } | null>(null);
+  const [activePopover, setActivePopover] = useState<{ rowId: string; col: "brands" | "categories" | "primary" | "contacts" | "email_status" } | null>(null);
+  const [filterEmailStatus, setFilterEmailStatus] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [pageSize, setPageSize] = useState<number>(20);
@@ -665,6 +666,7 @@ export default function BrandMarketingView({
         primaryCategories: filterPrimaryCategories.length > 0 ? filterPrimaryCategories : undefined,
         businessTypes: filterBusinessTypes.length > 0 ? filterBusinessTypes : undefined,
         businessTypeMatchMode: filterBusinessTypeMatchMode,
+        emailStatus: filterEmailStatus !== "ALL" ? filterEmailStatus : undefined,
         limit: size,
         offset: (page - 1) * size,
       });
@@ -1442,7 +1444,7 @@ export default function BrandMarketingView({
                 : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
             }`}
           >
-            <span>Results & Follow-up</span>
+            <span>Email Results</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-medium">
               V1
             </span>
@@ -2979,6 +2981,25 @@ export default function BrandMarketingView({
               )}
             </div>
 
+            {/* Email Status Filter (ADM-EMAIL-ANALYTICS-001) */}
+            <select
+              aria-label="Filter by email status"
+              value={filterEmailStatus}
+              onChange={(e) => {
+                setFilterEmailStatus(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-2.5 py-1.5 text-xs rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 cursor-pointer"
+            >
+              <option value="ALL">Email: All Statuses</option>
+              <option value="DELIVERED">Delivered (성공)</option>
+              <option value="BOUNCED">Bounced (반송)</option>
+              <option value="SUPPRESSED">Suppressed (수신 거부)</option>
+              <option value="FAILED">Failed (실패)</option>
+              <option value="PENDING">Pending (대기 중)</option>
+              <option value="NOT_CONTACTED">Not Contacted (미발송)</option>
+            </select>
+
             {/* Apply & Refresh Buttons */}
             <button
               type="button"
@@ -3071,6 +3092,7 @@ export default function BrandMarketingView({
                     <th className="p-3">Company Type</th>
                     <th className="p-3">Grade</th>
                     <th className="p-3">Primary Contact</th>
+                    <th className="p-3">Email Status</th>
                     <th className="p-3">Website</th>
                     <th className="p-3">Discovered</th>
                     <th className="p-3 text-right">Actions</th>
@@ -3079,13 +3101,13 @@ export default function BrandMarketingView({
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {isLoadingList ? (
                     <tr>
-                      <td colSpan={10} className="p-8 text-center text-zinc-400">
+                      <td colSpan={11} className="p-8 text-center text-zinc-400">
                         Loading candidate list...
                       </td>
                     </tr>
                   ) : candidates.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="p-12 text-center space-y-2">
+                      <td colSpan={11} className="p-12 text-center space-y-2">
                         <p className="text-zinc-500 font-medium">No sourcing candidates found.</p>
                         <Link
                           href="/admin/brand-marketing?tab=import"
@@ -3431,6 +3453,149 @@ export default function BrandMarketingView({
                             })() : (
                               <span className="text-zinc-400">-</span>
                             )}
+                          </td>
+                          {/* Email Delivery Status Column (ADM-EMAIL-ANALYTICS-001) */}
+                          <td className="p-3 relative" onClick={(e) => e.stopPropagation()}>
+                            {(() => {
+                              const summary = c.email_delivery_summary;
+                              const status = summary?.overallStatus || "NOT_CONTACTED";
+                              const contacts = summary?.contacts || [];
+
+                              const badgeConfig: Record<string, { bg: string; label: string; icon: string }> = {
+                                DELIVERED: {
+                                  bg: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800",
+                                  label: "Delivered",
+                                  icon: "✓",
+                                },
+                                BOUNCED: {
+                                  bg: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800",
+                                  label: "Bounced",
+                                  icon: "✕",
+                                },
+                                SUPPRESSED: {
+                                  bg: "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800",
+                                  label: "Suppressed",
+                                  icon: "⚠️",
+                                },
+                                FAILED: {
+                                  bg: "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800",
+                                  label: "Failed",
+                                  icon: "!",
+                                },
+                                PENDING: {
+                                  bg: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800",
+                                  label: "Pending",
+                                  icon: "⏳",
+                                },
+                                NOT_CONTACTED: {
+                                  bg: "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700",
+                                  label: "Not Contacted",
+                                  icon: "—",
+                                },
+                              };
+                              const currentBadge = badgeConfig[status] || badgeConfig.NOT_CONTACTED;
+
+                              return (
+                                <div
+                                  className="relative inline-block"
+                                  onMouseEnter={() => setActivePopover({ rowId: c.id, col: "email_status" })}
+                                  onMouseLeave={() => setActivePopover(null)}
+                                >
+                                  <button
+                                    type="button"
+                                    aria-haspopup="dialog"
+                                    aria-expanded={activePopover?.rowId === c.id && activePopover?.col === "email_status"}
+                                    onClick={() =>
+                                      setActivePopover((curr) =>
+                                        curr?.rowId === c.id && curr?.col === "email_status"
+                                          ? null
+                                          : { rowId: c.id, col: "email_status" }
+                                      )
+                                    }
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors cursor-pointer ${currentBadge.bg}`}
+                                  >
+                                    <span>{currentBadge.icon}</span>
+                                    <span>{currentBadge.label}</span>
+                                    {summary?.totalSent && summary.totalSent > 0 ? (
+                                      <span className="text-[10px] opacity-75">({summary.totalSent})</span>
+                                    ) : null}
+                                  </button>
+
+                                  {activePopover?.rowId === c.id && activePopover?.col === "email_status" && (
+                                    <div
+                                      role="dialog"
+                                      className="absolute z-50 left-0 top-full mt-1.5 w-72 rounded-lg bg-zinc-900 border border-zinc-700 shadow-2xl p-3 text-xs space-y-2 text-zinc-100 ring-1 ring-black/40"
+                                    >
+                                      <div className="flex items-center justify-between pb-1.5 border-b border-zinc-800 text-[11px] font-bold text-zinc-300">
+                                        <span>이메일 발송 현황 ({currentBadge.label})</span>
+                                        {summary?.lastSentAt && (
+                                          <span className="text-[10px] text-zinc-500 font-normal">
+                                            {new Date(summary.lastSentAt).toLocaleDateString()}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {contacts.length === 0 ? (
+                                        <p className="text-[11px] text-zinc-400 py-1">
+                                          {status === "NOT_CONTACTED"
+                                            ? "발송된 캠페인 이메일이 없습니다."
+                                            : status === "SUPPRESSED"
+                                            ? "수신 거부 목록에 등록된 주소입니다."
+                                            : "상세 발송 기록이 없습니다."}
+                                        </p>
+                                      ) : (
+                                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                          {contacts.map((ct: any, idx: number) => (
+                                            <div key={idx} className="p-1.5 rounded bg-zinc-800/80 border border-zinc-700/60 text-[11px] space-y-0.5">
+                                              <div className="flex items-center justify-between font-mono">
+                                                <span className="text-zinc-200 truncate font-semibold" title={ct.email}>
+                                                  {ct.email}
+                                                </span>
+                                                <span
+                                                  className={`text-[9px] px-1 py-0.2 rounded font-extrabold uppercase ${
+                                                    ct.status === "DELIVERED"
+                                                      ? "bg-emerald-950 text-emerald-300"
+                                                      : ct.status === "BOUNCED"
+                                                      ? "bg-red-950 text-red-300"
+                                                      : ct.status === "FAILED"
+                                                      ? "bg-amber-950 text-amber-300"
+                                                      : "bg-zinc-700 text-zinc-300"
+                                                  }`}
+                                                >
+                                                  {ct.status}
+                                                </span>
+                                              </div>
+                                              {ct.deliveredAt && (
+                                                <div className="text-[10px] text-zinc-400">
+                                                  배달 완료: {new Date(ct.deliveredAt).toLocaleTimeString()}
+                                                </div>
+                                              )}
+                                              {ct.errorMessage && (
+                                                <div className="text-[10px] text-rose-400 truncate" title={ct.errorMessage}>
+                                                  {ct.errorMessage}
+                                                </div>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      <div className="pt-1.5 border-t border-zinc-800 flex justify-between items-center text-[10px]">
+                                        <span className="text-zinc-400">
+                                          성공 {summary?.deliveredCount || 0} / 반송 {summary?.bouncedCount || 0}
+                                        </span>
+                                        <a
+                                          href="/admin/brand-marketing?tab=results"
+                                          className="text-blue-400 hover:text-blue-300 font-semibold"
+                                        >
+                                          Email Results ↗
+                                        </a>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td className="p-3 text-zinc-500">
                             {primaryWeb ? (

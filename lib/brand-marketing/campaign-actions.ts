@@ -1184,6 +1184,39 @@ export async function getMarketingSuppressionAuditLogAction(email?: string): Pro
   }
 }
 
+/**
+ * Manually adds an email address to marketing suppression list with full audit logging.
+ * Task ID: ADM-EMAIL-ANALYTICS-001
+ */
+export async function addMarketingSuppressionAction(input: {
+  email: string;
+  reason?: "UNSUBSCRIBED" | "BOUNCED" | "COMPLAINT" | "MANUAL_ADMIN" | string;
+  notes?: string;
+  source?: string;
+}): Promise<{
+  success: boolean;
+  record?: any;
+  error?: string;
+}> {
+  try {
+    const admin = await requireCampaignAdmin();
+    const { addMarketingSuppression } = await import("./campaign-data-access");
+    const result = await addMarketingSuppression({
+      ...input,
+      addedBy: admin.email || admin.userId || "admin",
+    });
+    if (result.success) {
+      try {
+        revalidatePath("/admin/brand-marketing");
+      } catch {}
+    }
+    return result;
+  } catch (err: any) {
+    console.error("[campaign-actions:addMarketingSuppressionAction] Exception:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 
 /**
  * -----------------------------------------------------------------------------

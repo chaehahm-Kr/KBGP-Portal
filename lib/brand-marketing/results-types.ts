@@ -76,6 +76,12 @@ export interface CompanyResultItem {
   campaignName: string;
   campaignDate?: string | null;
   emailsSentCount: number;
+  recipientCount?: number;
+  emailsSent?: number;
+  delivered?: number;
+  bounced?: number;
+  suppressed?: number;
+  overallEmailStatus?: "DELIVERED" | "BOUNCED" | "SUPPRESSED" | "FAILED" | "PENDING" | "MIXED";
   latestEmailResult: DeliveryResultStatus;
   latestEmailDate?: string | null;
   hasReply: boolean;
@@ -100,8 +106,13 @@ export interface CampaignSummaryMetrics {
   companiesContacted: number; // unique company IDs
   emailsSent: number; // individual messages sent
   delivered: number;
+  bounced: number;
+  suppressed: number;
+  failed: number;
   openedEstimated: number | null; // estimated, null if NOT_TRACKED
   clicked: number | null; // real click events, null if NOT_TRACKED
+  complained: number | null; // spam complaints, null if NOT_TRACKED
+  unsubscribed: number | null; // unsubscribes, null if NOT_TRACKED
   replied: number; // unique responding companies / verified replies
   interestedCompanies: number; // unique companies marked INTERESTED
   meetings: number; // unique companies with meetings

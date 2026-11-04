@@ -1,16 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useTransition, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   CompanyResultItem,
-  CompanyInterestStatus,
   DeliveryResultStatus,
-  FollowupDueStatus,
 } from "@/lib/brand-marketing/results-types";
-import {
-  listCompanyResultsAction,
-  updateCompanyInterestStatusAction,
-} from "@/lib/brand-marketing/results-actions";
+import { listCompanyResultsAction } from "@/lib/brand-marketing/results-actions";
 
 interface CampaignOption {
   id: string;
@@ -29,19 +24,18 @@ export function CompanyResultsTab({
   onSelectCompany,
   onNavigateToBrandList,
 }: CompanyResultsTabProps) {
-  const [isPending, startTransition] = useTransition();
-
   // Filter States
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [emailResultFilter, setEmailResultFilter] = useState<DeliveryResultStatus | "ALL">("ALL");
-  const [replyFilter, setReplyFilter] = useState<"ALL" | "REPLIED" | "NO_REPLY">("ALL");
-  const [interestFilter, setInterestFilter] = useState<CompanyInterestStatus | "ALL">("ALL");
-  const [followupDueFilter, setFollowupDueFilter] = useState<FollowupDueStatus | "ALL">("ALL");
 
   const [companyResults, setCompanyResults] = useState<CompanyResultItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
 
   // Load results from server action
   const loadData = () => {
@@ -52,9 +46,6 @@ export function CompanyResultsTab({
       campaignId: selectedCampaignId,
       searchQuery: searchQuery.trim() || undefined,
       emailResult: emailResultFilter,
-      replyStatus: replyFilter,
-      interestStatus: interestFilter,
-      followupDueStatus: followupDueFilter,
     })
       .then((res) => {
         if (res.success && res.results) {
@@ -72,37 +63,23 @@ export function CompanyResultsTab({
   };
 
   useEffect(() => {
+    setCurrentPage(1);
     loadData();
-  }, [
-    selectedCampaignId,
-    emailResultFilter,
-    replyFilter,
-    interestFilter,
-    followupDueFilter,
-  ]);
+  }, [selectedCampaignId, emailResultFilter]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setCurrentPage(1);
     loadData();
   };
 
-  const handleQuickInterestChange = (companyId: string, campaignId: string, newStatus: CompanyInterestStatus) => {
-    // Optimistic UI update
-    setCompanyResults((prev) =>
-      prev.map((c) => (c.companyId === companyId ? { ...c, interestStatus: newStatus } : c))
-    );
+  // Paginated slice
+  const paginatedCompanies = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return companyResults.slice(start, start + pageSize);
+  }, [companyResults, currentPage, pageSize]);
 
-    startTransition(async () => {
-      const res = await updateCompanyInterestStatusAction({
-        companyId,
-        campaignId,
-        interestStatus: newStatus,
-      });
-      if (!res.success) {
-        loadData(); // Revert on failure
-      }
-    });
-  };
+  const totalPages = Math.ceil(companyResults.length / pageSize) || 1;
 
   return (
     <div className="space-y-5">
@@ -111,26 +88,26 @@ export function CompanyResultsTab({
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3">
           <div>
             <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-              TAB B: Company Results & Outreach Action List
+              TAB B: Company Results (Email Delivery Analytics)
             </span>
             <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
               <span>🏢</span> Company Outreach Directory
             </h2>
           </div>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+          <span className="text-xs font-semibold px-2.5 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
             {companyResults.length} Contacted Companies
           </span>
         </div>
 
         {/* Filter Controls Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           {/* Search */}
           <form onSubmit={handleSearchSubmit} className="sm:col-span-2 flex gap-1.5">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search company, brand, contact email..."
+              placeholder="Search company, brand, recipient email..."
               className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
             />
             <button
@@ -164,79 +141,24 @@ export function CompanyResultsTab({
               onChange={(e) => setEmailResultFilter(e.target.value as any)}
               className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-medium"
             >
-              <option value="ALL">All Delivery States</option>
+              <option value="ALL">All Delivery Statuses</option>
               <option value="DELIVERED">Delivered</option>
-              <option value="SENT">Sent</option>
               <option value="BOUNCED">Bounced</option>
-              <option value="FAILED">Failed</option>
+              <option value="FAILED">Suppressed / Failed</option>
+              <option value="SENT">Sent (In Flight)</option>
             </select>
           </div>
-
-          {/* Reply Status Filter */}
-          <div>
-            <select
-              value={replyFilter}
-              onChange={(e) => setReplyFilter(e.target.value as any)}
-              className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-medium"
-            >
-              <option value="ALL">All Reply Status</option>
-              <option value="REPLIED">✓ Replied</option>
-              <option value="NO_REPLY">No Reply</option>
-            </select>
-          </div>
-
-          {/* Interest Status Filter */}
-          <div>
-            <select
-              value={interestFilter}
-              onChange={(e) => setInterestFilter(e.target.value as any)}
-              className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-medium"
-            >
-              <option value="ALL">All Interest</option>
-              <option value="INTERESTED">★ Interested</option>
-              <option value="NOT_INTERESTED">✕ Not Interested</option>
-              <option value="UNKNOWN">— Unknown</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Second Row: Follow-up Due Filter Pills */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
-          <span className="text-[11px] font-semibold text-zinc-500 mr-1">Follow-up:</span>
-          {(
-            [
-              { key: "ALL", label: "All" },
-              { key: "OVERDUE", label: "⚠️ Overdue" },
-              { key: "DUE_TODAY", label: "⏰ Due Today" },
-              { key: "UPCOMING", label: "📅 Upcoming" },
-              { key: "NO_DATE", label: "No Date" },
-              { key: "COMPLETED", label: "✓ Completed" },
-            ] as const
-          ).map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setFollowupDueFilter(item.key)}
-              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                followupDueFilter === item.key
-                  ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold"
-                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
         </div>
       </div>
 
-      {errorMsg && (
-        <div className="p-3 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-800 dark:text-red-200">
-          ⚠️ {errorMsg}
-        </div>
-      )}
-
-      {/* 2. COMPANY RESULTS DATA TABLE */}
+      {/* 2. RESULTS TABLE */}
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+        {errorMsg && (
+          <div className="p-3 bg-red-50 dark:bg-red-950/60 border-b border-red-200 dark:border-red-800 text-xs text-red-800 dark:text-red-200">
+            ⚠️ {errorMsg}
+          </div>
+        )}
+
         {isLoading ? (
           <div className="p-12 text-center text-xs text-zinc-400">Loading company results...</div>
         ) : companyResults.length === 0 ? (
@@ -249,17 +171,17 @@ export function CompanyResultsTab({
               <thead className="bg-zinc-50 dark:bg-zinc-950/60 border-b border-zinc-200 dark:border-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
                 <tr>
                   <th className="py-2.5 px-4">Company</th>
-                  <th className="py-2.5 px-3">Campaign</th>
+                  <th className="py-2.5 px-3 text-center">Recipient Count</th>
                   <th className="py-2.5 px-3 text-center">Emails Sent</th>
-                  <th className="py-2.5 px-3">Latest Result</th>
-                  <th className="py-2.5 px-3">Reply</th>
-                  <th className="py-2.5 px-3">Interest</th>
-                  <th className="py-2.5 px-3">Next Follow-up</th>
+                  <th className="py-2.5 px-3 text-center">Delivered</th>
+                  <th className="py-2.5 px-3 text-center">Bounced</th>
+                  <th className="py-2.5 px-3 text-center">Suppressed / Failed</th>
+                  <th className="py-2.5 px-3">Overall Email Status</th>
                   <th className="py-2.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                {companyResults.map((c) => (
+                {paginatedCompanies.map((c) => (
                   <tr
                     key={c.companyId}
                     className="hover:bg-zinc-50/70 dark:hover:bg-zinc-900/70 transition-colors"
@@ -283,137 +205,111 @@ export function CompanyResultsTab({
                         </span>
                       </div>
                       {c.brandNames.length > 0 && (
-                        <div className="text-[11px] text-zinc-500 truncate max-w-[180px] pl-4">
+                        <div className="text-[11px] text-zinc-500 truncate max-w-[220px] pl-4">
                           {c.brandNames.join(", ")}
                         </div>
                       )}
                     </td>
 
-                    {/* Campaign */}
-                    <td className="py-3 px-3 text-zinc-600 dark:text-zinc-400 font-medium truncate max-w-[160px]">
-                      {c.campaignName}
+                    {/* Recipient Count */}
+                    <td className="py-3 px-3 text-center font-mono font-medium text-zinc-700 dark:text-zinc-300">
+                      {c.recipientCount ?? c.recipients.length}
                     </td>
 
                     {/* Emails Sent */}
                     <td className="py-3 px-3 text-center">
-                      <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">
-                        {c.emailsSentCount}
+                      <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                        {c.emailsSent ?? c.emailsSentCount}
                       </span>
                     </td>
 
-                    {/* Latest Email Result */}
+                    {/* Delivered */}
+                    <td className="py-3 px-3 text-center">
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {c.delivered ?? c.recipients.filter((r) => r.deliveryResult === "DELIVERED").length}
+                      </span>
+                    </td>
+
+                    {/* Bounced */}
+                    <td className="py-3 px-3 text-center">
+                      <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                        {c.bounced ?? c.recipients.filter((r) => r.deliveryResult === "BOUNCED").length}
+                      </span>
+                    </td>
+
+                    {/* Suppressed / Failed */}
+                    <td className="py-3 px-3 text-center">
+                      <span className="font-mono font-bold text-red-600 dark:text-red-400">
+                        {c.suppressed ?? c.recipients.filter((r) => r.deliveryResult === "FAILED").length}
+                      </span>
+                    </td>
+
+                    {/* Overall Email Status */}
                     <td className="py-3 px-3">
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                          c.latestEmailResult === "DELIVERED"
+                          (c.overallEmailStatus || c.latestEmailResult) === "DELIVERED"
                             ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                            : c.latestEmailResult === "SENT"
-                            ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-                            : c.latestEmailResult === "BOUNCED"
+                            : (c.overallEmailStatus || c.latestEmailResult) === "BOUNCED"
+                            ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                            : (c.overallEmailStatus || c.latestEmailResult) === "SUPPRESSED"
                             ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                            : (c.overallEmailStatus || c.latestEmailResult) === "MIXED"
+                            ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                            : (c.overallEmailStatus || c.latestEmailResult) === "SENT"
+                            ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
                             : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
                         }`}
                       >
-                        {c.latestEmailResult}
+                        {c.overallEmailStatus || c.latestEmailResult}
                       </span>
-                    </td>
-
-                    {/* Reply */}
-                    <td className="py-3 px-3">
-                      {c.hasReply ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-extrabold">
-                          ✓ Replied
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-zinc-400">No reply</span>
-                      )}
-                    </td>
-
-                    {/* Interest Status (Interactive Dropdown) */}
-                    <td className="py-3 px-3">
-                      <select
-                        value={c.interestStatus}
-                        onChange={(e) =>
-                          handleQuickInterestChange(
-                            c.companyId,
-                            c.campaignId,
-                            e.target.value as CompanyInterestStatus
-                          )
-                        }
-                        className={`text-[11px] font-bold py-1 px-1.5 rounded border cursor-pointer ${
-                          c.interestStatus === "INTERESTED"
-                            ? "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
-                            : c.interestStatus === "NOT_INTERESTED"
-                            ? "bg-zinc-100 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
-                            : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800"
-                        }`}
-                      >
-                        <option value="UNKNOWN">— Unknown</option>
-                        <option value="INTERESTED">★ Interested</option>
-                        <option value="NOT_INTERESTED">✕ Not Interested</option>
-                      </select>
-                    </td>
-
-                    {/* Next Follow-up */}
-                    <td className="py-3 px-3 text-[11px] whitespace-nowrap">
-                      {c.nextFollowupDate ? (
-                        <div className="flex flex-col gap-0.5">
-                          <span
-                            className={`font-mono font-bold ${
-                              c.followupDueStatus === "OVERDUE"
-                                ? "text-red-600"
-                                : c.followupDueStatus === "DUE_TODAY"
-                                ? "text-amber-600"
-                                : "text-zinc-700 dark:text-zinc-300"
-                            }`}
-                          >
-                            {c.nextFollowupDate}
-                          </span>
-                          <span
-                            className={`text-[9px] px-1 py-0.2 rounded w-fit font-bold ${
-                              c.followupDueStatus === "OVERDUE"
-                                ? "bg-red-100 text-red-700"
-                                : c.followupDueStatus === "DUE_TODAY"
-                                ? "bg-amber-100 text-amber-700"
-                                : c.followupDueStatus === "COMPLETED"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "text-zinc-400"
-                            }`}
-                          >
-                            {c.followupDueStatus}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-zinc-400">—</span>
-                      )}
                     </td>
 
                     {/* Actions */}
                     <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => onSelectCompany(c)}
-                          className="px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded hover:bg-blue-100 cursor-pointer"
-                        >
-                          Details →
-                        </button>
-                        {onNavigateToBrandList && (
-                          <button
-                            type="button"
-                            onClick={() => onNavigateToBrandList(c.companyId)}
-                            className="px-2 py-1 text-[11px] font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded cursor-pointer"
-                            title="Open in Brand List"
-                          >
-                            Brand ↗
-                          </button>
-                        )}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onSelectCompany(c)}
+                        className="px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded hover:bg-blue-100 cursor-pointer"
+                      >
+                        View Email Details →
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Pagination Bar */}
+        {totalPages > 1 && (
+          <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-500">
+            <span>
+              Showing {(currentPage - 1) * pageSize + 1}–
+              {Math.min(currentPage * pageSize, companyResults.length)} of {companyResults.length}
+            </span>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 disabled:opacity-40 cursor-pointer"
+              >
+                Previous
+              </button>
+              <span className="px-2 py-1 font-semibold text-zinc-700 dark:text-zinc-300">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 disabled:opacity-40 cursor-pointer"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>

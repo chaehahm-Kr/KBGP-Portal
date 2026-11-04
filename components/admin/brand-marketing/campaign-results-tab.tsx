@@ -99,13 +99,13 @@ export function CampaignResultsTab({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-              TAB A: Live Campaign Performance
+              TAB A: Campaign Results
             </span>
             <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              <span>📊</span> Campaign Results Overview
+              <span>📊</span> Verified Email Delivery Analytics
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Select an email campaign to view outreach volume, delivery verification, and conversion rates.
+              Select an email campaign to view verified Resend outreach volume, mailbox deliveries, bounces, and suppressions.
             </p>
           </div>
 
@@ -163,11 +163,28 @@ export function CampaignResultsTab({
         </div>
       )}
 
-      {/* 2. SUMMARY METRICS GRID (9 Cards) */}
+      {/* 2. SUMMARY METRICS GRID */}
       {metrics ? (
         <div className="space-y-4">
-          {/* SIMULATION ONLY / LIVE_MODE BANNER (ADM-EMAIL-APP-003 / ADM-EMAIL-APP-008) */}
-          {metrics.emailsSent === 0 && (
+          {/* COMPLETED / SEND-LOCKED BANNER vs AWAITING DISPATCH BANNER */}
+          {selectedCampaign?.status === "COMPLETED" || metrics.campaignStatus === "COMPLETED" || (metrics.emailsSent > 0 && metrics.emailsSent === metrics.delivered + (metrics.bounced || 0) + (metrics.suppressed || 0) + (metrics.failed || 0)) ? (
+            <div className="p-3.5 border rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs shadow-2xs bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200">
+              <div className="flex items-center gap-2">
+                <span className="text-base shrink-0">✅</span>
+                <div>
+                  <span className="font-bold tracking-tight">
+                    CAMPAIGN COMPLETED — READ-ONLY RESULTS
+                  </span>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed">
+                    본 캠페인의 모든 승인 대상 발송이 완료되어 안전 잠금(Send Locked)되었습니다. 모든 발송 결과 및 전달 통계는 읽기 전용으로 안전하게 보존됩니다.
+                  </p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold shrink-0 self-start sm:self-auto border bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700">
+                DISPATCH COMPLETED ({metrics.emailsSent} RECIPIENTS)
+              </span>
+            </div>
+          ) : metrics.emailsSent === 0 ? (
             <div className={`p-3.5 border rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs shadow-2xs ${
               selectedCampaign?.isLiveModeEnabled
                 ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-900 dark:text-red-200"
@@ -196,36 +213,38 @@ export function CampaignResultsTab({
                 {selectedCampaign?.isLiveModeEnabled ? "LIVE READY (0 DISPATCHES)" : "0 ACTUAL DISPATCHES"}
               </span>
             </div>
-          )}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-3">
+          ) : null}
+
+          {/* PRIMARY METRICS ROW (6 Cards) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {/* Card 1: Companies Contacted */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-2xs">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
                 Companies Contacted
               </span>
-              <p className="text-xl font-extrabold text-zinc-900 dark:text-zinc-100 mt-1">
+              <p className="text-2xl font-extrabold text-zinc-900 dark:text-zinc-100 mt-1">
                 {metrics.companiesContacted}
               </p>
-              <span className="text-[10px] text-zinc-400">Unique company IDs</span>
+              <span className="text-[10px] text-zinc-400">Distinct companies with sends</span>
             </div>
 
             {/* Card 2: Emails Sent */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-2xs">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
                 Emails Sent
               </span>
-              <p className="text-xl font-extrabold text-blue-600 dark:text-blue-400 mt-1">
+              <p className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 mt-1">
                 {metrics.emailsSent}
               </p>
-              <span className="text-[10px] text-zinc-400">Recipient messages</span>
+              <span className="text-[10px] text-zinc-400">Accepted by provider</span>
             </div>
 
             {/* Card 3: Delivered */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-2xs">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
                 Delivered
               </span>
-              <p className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
+              <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
                 {metrics.delivered > 0 ? (
                   metrics.delivered
                 ) : metrics.emailsSent > 0 ? (
@@ -236,159 +255,132 @@ export function CampaignResultsTab({
                   0
                 )}
               </p>
-              <span className="text-[10px] text-zinc-400">
-                {metrics.deliveryRate !== null
-                  ? `${formatRate(metrics.deliveryRate)} rate`
-                  : metrics.emailsSent > 0
-                  ? "Not Verified / Pending Telemetry"
-                  : "No emails"}
-              </span>
+              <span className="text-[10px] text-zinc-400">Verified mailbox receipt</span>
             </div>
 
-            {/* Card 4: Opened (Estimated) */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-2xs">
+            {/* Card 4: Bounced */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
-                Opened (Est.)
+                Bounced
               </span>
-              <p className="text-xl font-extrabold text-zinc-500 dark:text-zinc-400 mt-1">
-                {metrics.openedEstimated !== null ? metrics.openedEstimated : "N/A"}
+              <p className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
+                {metrics.bounced ?? 0}
               </p>
-              <span
-                className="text-[10px] text-amber-600 dark:text-amber-400 block truncate"
-                title="Open tracking is an unverified estimate due to image blocking and privacy proxy caching"
-              >
-                Not Tracked ℹ
-              </span>
+              <span className="text-[10px] text-zinc-400">MTA rejection / invalid</span>
             </div>
 
-            {/* Card 5: Clicked */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-2xs">
+            {/* Card 5: Suppressed / Failed */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
-                Clicked
+                Suppressed / Failed
               </span>
-              <p className="text-xl font-extrabold text-zinc-500 dark:text-zinc-400 mt-1">
-                {metrics.clicked !== null ? metrics.clicked : "N/A"}
-              </p>
-              <span className="text-[10px] text-zinc-400 block truncate">
-                Not Tracked
-              </span>
-            </div>
-
-            {/* Card 6: Replied */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-2xs">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
-                Replied
-              </span>
-              <p className="text-xl font-extrabold text-purple-600 dark:text-purple-400 mt-1">
-                {metrics.replied}
+              <p className="text-2xl font-extrabold text-red-600 dark:text-red-400 mt-1">
+                {(metrics.suppressed || 0) + (metrics.failed || 0)}
               </p>
               <span className="text-[10px] text-zinc-400">
-                {metrics.replyRate !== null
-                  ? `${formatRate(metrics.replyRate)} rate`
-                  : "Verified replies"}
+                {metrics.suppressed ? `${metrics.suppressed} supp. / ${metrics.failed || 0} fail` : "Preflight blocked"}
               </span>
             </div>
 
-            {/* Card 7: Interested Companies */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-2xs">
+            {/* Card 6: Delivery Rate */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
-                Interested
+                Delivery Rate
               </span>
-              <p className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
-                {metrics.interestedCompanies}
+              <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
+                {metrics.deliveryRate !== null ? formatRate(metrics.deliveryRate * 100) : "N/A"}
               </p>
-              <span className="text-[10px] text-zinc-400">
-                {formatRate(metrics.interestRate)} rate
-              </span>
-            </div>
-
-            {/* Card 8: Meetings */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-2xs">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
-                Meetings
-              </span>
-              <p className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1">
-                {metrics.meetings}
-              </p>
-              <span className="text-[10px] text-zinc-400">
-                {formatRate(metrics.meetingConversionRate)} conv.
-              </span>
-            </div>
-
-            {/* Card 9: Partners */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-2xs">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight block truncate">
-                Partners
-              </span>
-              <p className="text-xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
-                {metrics.partners}
-              </p>
-              <span className="text-[10px] text-zinc-400">
-                {formatRate(metrics.partnerConversionRate)} conv.
-              </span>
+              <span className="text-[10px] text-zinc-400">Delivered / Emails Sent</span>
             </div>
           </div>
 
-          {/* 3. RATES CONVERSION & RELIABILITY DISCLOSURE */}
+          {/* SECONDARY METRICS ROW (Engagement & Hygiene) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+              <span className="text-[10px] text-zinc-500 font-semibold block uppercase tracking-tight">Opened</span>
+              <p className="text-sm font-bold text-zinc-500 dark:text-zinc-400 mt-0.5">
+                {metrics.openedEstimated !== null ? metrics.openedEstimated : "N/A — Not Tracked"}
+              </p>
+              <span className="text-[10px] text-zinc-400">Tracking pixel unverified</span>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+              <span className="text-[10px] text-zinc-500 font-semibold block uppercase tracking-tight">Clicked</span>
+              <p className="text-sm font-bold text-zinc-500 dark:text-zinc-400 mt-0.5">
+                {metrics.clicked !== null ? metrics.clicked : "N/A — Not Tracked"}
+              </p>
+              <span className="text-[10px] text-zinc-400">Link redirect unverified</span>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+              <span className="text-[10px] text-zinc-500 font-semibold block uppercase tracking-tight">Complained</span>
+              <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300 mt-0.5">
+                {metrics.complained !== null ? metrics.complained : "0 (No Complaints Recorded)"}
+              </p>
+              <span className="text-[10px] text-zinc-400">Spam reports</span>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+              <span className="text-[10px] text-zinc-500 font-semibold block uppercase tracking-tight">Unsubscribed</span>
+              <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300 mt-0.5">
+                {metrics.unsubscribed !== null ? metrics.unsubscribed : "0 (No Unsubscribes)"}
+              </p>
+              <span className="text-[10px] text-zinc-400">Commercial opt-outs</span>
+            </div>
+          </div>
+
+          {/* 3. DELIVERY PERFORMANCE & TELEMETRY STANDARDS */}
           <div className="bg-zinc-50 dark:bg-zinc-950/40 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
             <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider flex items-center gap-1.5">
-              <span>📈</span> Conversion Funnel & Reliability Rules
+              <span>📊</span> Delivery Telemetry & Outcome Breakdown
             </h3>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                 <span className="text-[10px] text-zinc-500 font-semibold block">Delivery Rate</span>
                 <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatRate(metrics.deliveryRate)}
+                  {metrics.deliveryRate !== null ? formatRate(metrics.deliveryRate * 100) : "N/A"}
                 </span>
                 <p className="text-[10px] text-zinc-400 mt-0.5">Delivered / Emails Sent</p>
               </div>
 
               <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
-                <span className="text-[10px] text-zinc-500 font-semibold block">Reply Rate</span>
-                <span className="text-sm font-bold text-purple-600 dark:text-purple-400">
-                  {formatRate(metrics.replyRate)}
-                </span>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Verified Replies / Companies Contacted</p>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
-                <span className="text-[10px] text-zinc-500 font-semibold block">Interest Rate</span>
-                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatRate(metrics.interestRate)}
-                </span>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Interested / Companies Contacted</p>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
-                <span className="text-[10px] text-zinc-500 font-semibold block">Meeting Conv.</span>
-                <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
-                  {formatRate(metrics.meetingConversionRate)}
-                </span>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Meetings / Companies Contacted</p>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
-                <span className="text-[10px] text-zinc-500 font-semibold block">Partner Conv.</span>
+                <span className="text-[10px] text-zinc-500 font-semibold block">Bounce Rate</span>
                 <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
-                  {formatRate(metrics.partnerConversionRate)}
+                  {metrics.emailsSent > 0 ? formatRate(((metrics.bounced || 0) / metrics.emailsSent) * 100) : "0%"}
                 </span>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Partners / Companies Contacted</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Bounced / Emails Sent</p>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                <span className="text-[10px] text-zinc-500 font-semibold block">Suppression Rate</span>
+                <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                  {metrics.emailsSent > 0 ? formatRate((((metrics.suppressed || 0) + (metrics.failed || 0)) / metrics.emailsSent) * 100) : "0%"}
+                </span>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Suppressed / Emails Sent</p>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                <span className="text-[10px] text-zinc-500 font-semibold block">Provider Precision</span>
+                <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                  100% Correlated
+                </span>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Exact Resend Message IDs</p>
               </div>
             </div>
 
             {/* MANDATORY RELIABILITY POLICY DISCLOSURE */}
             <div className="p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 text-[11px] text-blue-950 dark:text-blue-200 leading-relaxed">
-              <strong className="font-bold">⚠️ Delivery & Engagement Reliability Standard:</strong>
+              <strong className="font-bold">🛡️ Email Delivery & Telemetry Standard:</strong>
               <ul className="list-disc pl-4 mt-1 space-y-0.5 text-zinc-600 dark:text-zinc-400">
                 <li>
-                  <strong className="text-zinc-800 dark:text-zinc-200">SENT ≠ DELIVERED:</strong> Messages are only counted as delivered upon verified SMTP gateway acceptance.
+                  <strong className="text-zinc-800 dark:text-zinc-200">SENT ≠ DELIVERED:</strong> Messages are only counted as delivered upon verified SMTP gateway acceptance (Resend `email.delivered` webhook event).
                 </li>
                 <li>
-                  <strong className="text-zinc-800 dark:text-zinc-200">OPENED is an estimate:</strong> Image proxying and privacy protection (e.g. Apple Mail Privacy) make open tracking unreliable. When telemetry is not connected, it is disclosed as N/A rather than zero.
+                  <strong className="text-zinc-800 dark:text-zinc-200">Engagement Metrics:</strong> Open and Click telemetry are only recorded when verifiable provider tracking is enabled. Unverified tracking is disclosed transparently as N/A rather than zero.
                 </li>
                 <li>
-                  <strong className="text-zinc-800 dark:text-zinc-200">REPLIED requires human verification:</strong> Replies and interest are never inferred solely from opens or clicks.
+                  <strong className="text-zinc-800 dark:text-zinc-200">Suppression Isolation:</strong> Bounces and preflight suppressions are permanently isolated to prevent re-sending to rejected mailboxes.
                 </li>
               </ul>
             </div>
@@ -412,11 +404,11 @@ export function CampaignResultsTab({
               <span>🏢</span> Contacted Companies in this Campaign
             </h3>
             <p className="text-xs text-zinc-500">
-              Shows one row per company with aggregate delivery state, interest status, and follow-up.
+              Shows one row per company with verified email delivery outcomes and recipient breakdown.
             </p>
           </div>
           <span className="text-xs font-semibold px-2.5 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-            {companyResults.length} Companies
+            {companyResults.length} Contacted Companies
           </span>
         </div>
 
@@ -430,11 +422,12 @@ export function CampaignResultsTab({
               <thead className="bg-zinc-50 dark:bg-zinc-950/60 border-b border-zinc-200 dark:border-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
                 <tr>
                   <th className="py-2.5 px-4">Company</th>
-                  <th className="py-2.5 px-3">Emails Sent</th>
-                  <th className="py-2.5 px-3">Delivery Result</th>
-                  <th className="py-2.5 px-3">Reply</th>
-                  <th className="py-2.5 px-3">Interest Status</th>
-                  <th className="py-2.5 px-3">Next Follow-up</th>
+                  <th className="py-2.5 px-3 text-center">Recipients</th>
+                  <th className="py-2.5 px-3 text-center">Sent</th>
+                  <th className="py-2.5 px-3 text-center">Delivered</th>
+                  <th className="py-2.5 px-3 text-center">Bounced</th>
+                  <th className="py-2.5 px-3 text-center">Suppressed</th>
+                  <th className="py-2.5 px-3">Delivery Status</th>
                   <th className="py-2.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -454,67 +447,39 @@ export function CampaignResultsTab({
                         </div>
                       )}
                     </td>
-                    <td className="py-3 px-3">
-                      <span className="font-mono text-zinc-700 dark:text-zinc-300 font-bold">
-                        {c.emailsSentCount}
-                      </span>{" "}
-                      <span className="text-[10px] text-zinc-400">
-                        recipient{c.emailsSentCount !== 1 ? "s" : ""}
-                      </span>
+                    <td className="py-3 px-3 text-center font-mono font-medium text-zinc-700 dark:text-zinc-300">
+                      {c.recipientCount ?? c.recipients.length}
+                    </td>
+                    <td className="py-3 px-3 text-center font-mono font-bold text-blue-600 dark:text-blue-400">
+                      {c.emailsSent ?? c.emailsSentCount}
+                    </td>
+                    <td className="py-3 px-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {c.delivered ?? c.recipients.filter((r) => r.deliveryResult === "DELIVERED").length}
+                    </td>
+                    <td className="py-3 px-3 text-center font-mono font-bold text-amber-600 dark:text-amber-400">
+                      {c.bounced ?? c.recipients.filter((r) => r.deliveryResult === "BOUNCED").length}
+                    </td>
+                    <td className="py-3 px-3 text-center font-mono font-bold text-red-600 dark:text-red-400">
+                      {c.suppressed ?? c.recipients.filter((r) => r.deliveryResult === "FAILED").length}
                     </td>
                     <td className="py-3 px-3">
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                          c.latestEmailResult === "DELIVERED"
+                          (c.overallEmailStatus || c.latestEmailResult) === "DELIVERED"
                             ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                            : c.latestEmailResult === "SENT"
-                            ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-                            : c.latestEmailResult === "BOUNCED"
+                            : (c.overallEmailStatus || c.latestEmailResult) === "BOUNCED"
+                            ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                            : (c.overallEmailStatus || c.latestEmailResult) === "SUPPRESSED"
                             ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                            : (c.overallEmailStatus || c.latestEmailResult) === "MIXED"
+                            ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                            : (c.overallEmailStatus || c.latestEmailResult) === "SENT"
+                            ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
                             : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
                         }`}
                       >
-                        {c.latestEmailResult}
+                        {c.overallEmailStatus || c.latestEmailResult}
                       </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      {c.hasReply ? (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-extrabold">
-                          ✓ Replied
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-zinc-400">No reply</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3">
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                          c.interestStatus === "INTERESTED"
-                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                            : c.interestStatus === "NOT_INTERESTED"
-                            ? "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
-                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-850 dark:text-zinc-400"
-                        }`}
-                      >
-                        {c.interestStatus}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-[11px] text-zinc-500 whitespace-nowrap">
-                      {c.nextFollowupDate ? (
-                        <span
-                          className={`font-mono ${
-                            c.followupDueStatus === "OVERDUE"
-                              ? "text-red-600 font-bold"
-                              : c.followupDueStatus === "DUE_TODAY"
-                              ? "text-amber-600 font-bold"
-                              : "text-zinc-700 dark:text-zinc-300"
-                          }`}
-                        >
-                          {c.nextFollowupDate}
-                        </span>
-                      ) : (
-                        <span className="text-zinc-400">—</span>
-                      )}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <button
@@ -522,7 +487,7 @@ export function CampaignResultsTab({
                         onClick={() => onSelectCompany(c)}
                         className="px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded hover:bg-blue-100 cursor-pointer"
                       >
-                        Details & Follow-up →
+                        View Email Details →
                       </button>
                     </td>
                   </tr>

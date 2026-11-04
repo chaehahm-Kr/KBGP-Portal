@@ -2210,6 +2210,128 @@ export async function getMarketingSuppressionAuditLog(
   }
 }
 
+export interface AddSuppressionInput {
+  email: string;
+  reason?: "UNSUBSCRIBED" | "BOUNCED" | "COMPLAINT" | "MANUAL_ADMIN" | string;
+  notes?: string;
+  source?: string;
+  addedBy?: string;
+}
+
+/**
+ * Manually adds an email address to marketing_suppression_list.
+ * Records full audit trail to marketing_suppression_audit_log.
+ */
+export async function addMarketingSuppression(
+  input: AddSuppressionInput,
+  customClient?: any
+): Promise<{ success: boolean; record?: any; error?: string }> {
+  try {
+    const { email, reason = "MANUAL_ADMIN", notes, addedBy = "admin" } = input;
+    if (!email || !email.includes("@")) {
+      return { success: false, error: "유효한 이메일 주소를 입력해주세요." };
+    }
+
+    const normalized = email.toLowerCase().trim();
+    const supabase = await getClient(customClient);
+    const nowIso = new Date().toISOString();
+
+    // Check existing record
+    const { data: existing, error: fetchErr } = await supabase
+      .from("marketing_suppression_list")
+      .select("*")
+      .eq("email", normalized)
+      .limit(1);
+
+    if (fetchErr && !fetchErr.message?.includes("does not exist")) {
+      console.warn("[addMarketingSuppression] Fetch warning:", fetchErr.message);
+    }
+
+    const existingRecord = existing && existing.length > 0 ? existing[0] : null;
+
+    let targetId = existingRecord?.id;
+    let previousStatus = existingRecord?.status || null;
+
+    if (existingRecord) {
+      if (existingRecord.status === "ACTIVE") {
+        return {
+          success: false,
+          error: "이미 활성 수신 거부 목록에 등록되어 있는 이메일 주소입니다.",
+        };
+      }
+
+      // Re-suppress previously released entry
+      const { data: updated, error: updateErr } = await supabase
+        .from("marketing_suppression_list")
+        .update({
+          status: "ACTIVE",
+          reason,
+          notes: notes ? notes.trim() : existingRecord.notes,
+          suppressed_at: nowIso,
+          created_by: addedBy,
+          released_at: null,
+          released_by: null,
+          release_reason: null,
+          release_evidence: null,
+        })
+        .eq("id", existingRecord.id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        return { success: false, error: updateErr.message };
+      }
+      targetId = existingRecord.id;
+    } else {
+      // Insert new active suppression
+      const insertPayload: any = {
+        email: normalized,
+        reason,
+        notes: notes ? notes.trim() : "Admin manual suppression entry",
+        suppressed_at: nowIso,
+        created_by: addedBy,
+        status: "ACTIVE",
+      };
+
+      const { data: inserted, error: insertErr } = await supabase
+        .from("marketing_suppression_list")
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (insertErr) {
+        return { success: false, error: insertErr.message };
+      }
+      targetId = inserted?.id;
+    }
+
+    // Append audit log
+    try {
+      const trustedAuditClient = customClient || createAdminClient();
+      await trustedAuditClient.from("marketing_suppression_audit_log").insert({
+        suppression_id: targetId || null,
+        email: normalized,
+        action: previousStatus ? "RE_SUPPRESS" : "MANUAL_ADD",
+        previous_status: previousStatus,
+        new_status: "ACTIVE",
+        suppression_reason: reason,
+        release_reason: null,
+        release_evidence: null,
+        evidence_type: "DIRECT_ADMIN_ACTION",
+        policy_validation_notes: notes ? notes.trim() : "Added via Admin Suppression Management",
+        performed_by: addedBy,
+        performed_at: nowIso,
+      });
+    } catch (auditErr: any) {
+      console.warn("[addMarketingSuppression] Audit log write warning:", auditErr.message);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
 
 /**
  * -----------------------------------------------------------------------------

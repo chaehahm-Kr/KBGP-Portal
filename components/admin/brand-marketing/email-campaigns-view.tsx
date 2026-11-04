@@ -4118,6 +4118,18 @@ export function EmailCampaignsView({
                       editingCampaign.isLiveModeEnabled || editingCampaign.stats?.isLiveModeEnabled
                     );
 
+                    const totalSendable =
+                      editingCampaign.approvalSnapshot?.sendableCount ??
+                      editingCampaign.stats?.sendableCount ??
+                      selectedRecipientItems.filter((r) => r.isSendable).length;
+                    const alreadySent = editingCampaign.stats?.sentCount ?? 0;
+                    const unsentCount = Math.max(0, totalSendable - alreadySent);
+
+                    const isCampaignFullyCompleted =
+                      editingCampaign.status === "COMPLETED" ||
+                      (alreadySent > 0 && unsentCount === 0) ||
+                      Boolean(editingCampaign.stats?.deliveryStatus === "COMPLETED");
+
                     return (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
@@ -4142,7 +4154,11 @@ export function EmailCampaignsView({
                             }`}
                           >
                             <span>🚀</span> 2. LIVE Mode (실제 고객 발송)
-                            {isLiveActive ? (
+                            {isCampaignFullyCompleted ? (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-mono font-bold">
+                                Completed
+                              </span>
+                            ) : isLiveActive ? (
                               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                             ) : (
                               <span className="text-[10px] px-1 py-0.2 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 font-mono">
@@ -4224,8 +4240,34 @@ export function EmailCampaignsView({
                         {/* MODE 2: LIVE TAB CONTENT */}
                         {deliveryModeTab === "LIVE" && (
                           <div className="space-y-3">
-                            {/* Live Active vs Inactive Banner */}
-                            {isLiveActive ? (
+                            {/* Live Active vs Inactive Banner vs Completed Banner */}
+                            {isCampaignFullyCompleted ? (
+                              <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                                <div className="flex items-start gap-2.5">
+                                  <span className="text-base shrink-0 text-emerald-600 dark:text-emerald-400">✓</span>
+                                  <div>
+                                    <div className="font-bold text-emerald-900 dark:text-emerald-100 flex items-center gap-2">
+                                      <span>CAMPAIGN COMPLETED — READ-ONLY RESULTS</span>
+                                      <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 font-bold">
+                                        DISPATCH COMPLETED
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5 leading-relaxed">
+                                      본 캠페인의 모든 승인 대상({alreadySent}명)에 대한 실제 메일 발송이 성공적으로 완료되었습니다.
+                                      중복 발송 방지를 위해 추가 발송이 영구 잠금(Send Locked)되어 있으며, 상세 배달 결과는 Email Results에서 확인할 수 있습니다.
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                                  <a
+                                    href="/admin/brand-marketing?tab=results"
+                                    className="px-3.5 py-1.5 rounded font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs flex items-center gap-1.5 transition-colors"
+                                  >
+                                    <span>📊</span> Email Results 확인 ↗
+                                  </a>
+                                </div>
+                              </div>
+                            ) : isLiveActive ? (
                               <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                                 <div className="flex items-center gap-2">
                                   <span className="text-base shrink-0">🔴</span>
@@ -4413,10 +4455,12 @@ export function EmailCampaignsView({
                                           <button
                                           type="button"
                                           onClick={() => setShowUnlockModal(true)}
-                                          disabled={isActivelyDispatching}
+                                          disabled={isActivelyDispatching || isCampaignFullyCompleted || unsentCount === 0}
                                           className={'px-3.5 py-2 rounded font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5 shrink-0 self-start sm:self-auto ' + (isStaleSending ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse' : 'bg-amber-600 hover:bg-amber-700 text-white')}
                                           title={
-                                            isStaleSending
+                                            isCampaignFullyCompleted || unsentCount === 0
+                                              ? "모든 승인 대상 발송이 완료되어 잠금 해제가 불필요합니다."
+                                              : isStaleSending
                                               ? "비정상 중단된 발송 상태를 복구하고 미발송 대상 발송을 허용합니다."
                                               : "관리자 권한 및 사유 입력을 통해 미발송 대상에 대한 발송 잠금을 해제합니다."
                                           }
@@ -4484,25 +4528,27 @@ export function EmailCampaignsView({
                                     <button
                                       type="button"
                                       onClick={() => setShowSendNowModal(true)}
-                                      disabled={isDispatching || isSimulating || isSendLocked || !isLiveActive}
+                                      disabled={isDispatching || isSimulating || isSendLocked || !isLiveActive || isCampaignFullyCompleted}
                                       className={`px-4 py-2 rounded font-bold text-xs shadow-xs flex items-center gap-1.5 ${
-                                        !isLiveActive || isSendLocked
+                                        !isLiveActive || isSendLocked || isCampaignFullyCompleted
                                           ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-300 dark:border-zinc-700"
                                           : "bg-red-600 hover:bg-red-700 text-white cursor-pointer"
                                       }`}
                                       title={
-                                        !isLiveActive
+                                        isCampaignFullyCompleted
+                                          ? "캠페인 발송이 이미 완료되었습니다."
+                                          : !isLiveActive
                                           ? "LIVE 모드가 비활성화되어 있습니다. 먼저 'LIVE 모드 활성화'를 진행하세요."
                                           : isSendLocked
                                           ? "중복 발송 방지를 위해 발송이 잠겨 있습니다. 미발송 대상 추가 발송은 'Unlock Send'를 먼저 실행하세요."
                                           : "실제 고객 대상 캠페인 발송을 실행합니다."
                                       }
                                     >
-                                      <span>{isSendLocked ? "🔒" : "🚀"}</span>{" "}
-                                      {isSendLocked ? "Send Now (Locked)" : "Send Now (실제 발송)"}
+                                      <span>{isCampaignFullyCompleted || isSendLocked ? "🔒" : "🚀"}</span>{" "}
+                                      {isCampaignFullyCompleted ? "Campaign Completed (Read-only)" : isSendLocked ? "Send Now (Locked)" : "Send Now (실제 발송)"}
                                     </button>
 
-                                    {!isSendLocked && isLiveActive && (
+                                    {!isSendLocked && !isCampaignFullyCompleted && isLiveActive && (
                                       <button
                                         type="button"
                                         onClick={() => {

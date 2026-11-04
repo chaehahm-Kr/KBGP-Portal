@@ -127,6 +127,21 @@ export function calculateCampaignSummaryMetrics(
   ).length;
 
   const delivered = liveRecipients.filter((r) => r.status === "DELIVERED").length;
+  const bounced = liveRecipients.filter((r) => r.status === "BOUNCED").length;
+  const suppressed = liveRecipients.filter(
+    (r: any) =>
+      r.status === "FAILED" &&
+      (r.error_message?.toLowerCase().includes("suppress") ||
+        r.errorMessage?.toLowerCase().includes("suppress"))
+  ).length;
+  const failed = liveRecipients.filter(
+    (r: any) =>
+      r.status === "FAILED" &&
+      !(
+        r.error_message?.toLowerCase().includes("suppress") ||
+        r.errorMessage?.toLowerCase().includes("suppress")
+      )
+  ).length;
 
   // Unique companies contacted
   const contactedCompanyIds = new Set<string>();
@@ -200,8 +215,13 @@ export function calculateCampaignSummaryMetrics(
     companiesContacted,
     emailsSent,
     delivered,
+    bounced,
+    suppressed,
+    failed,
     openedEstimated: null, // Transparently disclosed as NOT_TRACKED without provider telemetry
     clicked: null, // Transparently disclosed as NOT_TRACKED without click redirect engine
+    complained: null, // Transparently disclosed as NOT_TRACKED
+    unsubscribed: null, // Transparently disclosed as NOT_TRACKED
     replied,
     interestedCompanies: interestedCount,
     meetings,
@@ -232,8 +252,13 @@ function getFallbackCampaignSummary(): CampaignSummaryMetrics {
     companiesContacted: 18,
     emailsSent: 24,
     delivered: 22,
+    bounced: 1,
+    suppressed: 1,
+    failed: 0,
     openedEstimated: null,
     clicked: null,
+    complained: null,
+    unsubscribed: null,
     replied: 5,
     interestedCompanies: 4,
     meetings: 2,
@@ -677,68 +702,93 @@ export async function listCompanyResults(
     }
 
     // 3. Group recipients by company_id
+    // FIX 429 vs 430 discrepancy (ADM-EMAIL-ANALYTICS-001):
+    // "Companies Contacted: Distinct companies with at least one actual provider-accepted send."
+    // If a campaign has live dispatches, only include companies that actually received a provider dispatch.
+    const hasLiveDispatches = recipientRows.some(
+      (r: any) =>
+        r.status !== "TEST_SENT" &&
+        r.status !== "PENDING" &&
+        !r.provider_message_id?.startsWith("sim_")
+    );
+
     const companyRecipientsMap = new Map<string, any[]>();
     recipientRows.forEach((r: any) => {
-      const list = companyRecipientsMap.get(r.company_id) || [];
-      list.push(r);
-      companyRecipientsMap.set(r.company_id, list);
+      if (!r.company_id) return;
+      const isContactedRecipient =
+        r.status !== "TEST_SENT" &&
+        r.status !== "PENDING" &&
+        !r.provider_message_id?.startsWith("sim_");
+
+      if (!hasLiveDispatches || isContactedRecipient) {
+        const list = companyRecipientsMap.get(r.company_id) || [];
+        list.push(r);
+        companyRecipientsMap.set(r.company_id, list);
+      }
     });
 
     const companyIds = Array.from(companyRecipientsMap.keys());
     if (companyIds.length === 0) return [];
 
-    // 4. Fetch company master data
-    const { data: companiesData } = await supabase
-      .from("sourcing_companies")
-      .select(`
-        id,
-        company_name_kr,
-        company_name_en,
-        grade,
-        business_types,
-        assigned_to,
-        interest_status,
-        next_followup_date,
-        followup_note,
-        followup_completed_at,
-        last_contact_date,
-        sourcing_brands (
-          brand_name_kr,
-          brand_name_en
-        )
-      `)
-      .in("id", companyIds);
-
+    // 4. Fetch company master data in chunks of 100 to avoid URI length limits
     const companyMasterMap = new Map<string, any>();
-    if (companiesData) {
-      companiesData.forEach((c: any) => companyMasterMap.set(c.id, c));
+    const CHUNK_SIZE = 100;
+    for (let i = 0; i < companyIds.length; i += CHUNK_SIZE) {
+      const chunk = companyIds.slice(i, i + CHUNK_SIZE);
+      const { data: companiesData } = await supabase
+        .from("sourcing_companies")
+        .select(`
+          id,
+          company_name_kr,
+          company_name_en,
+          grade,
+          business_types,
+          assigned_to,
+          interest_status,
+          next_followup_date,
+          followup_note,
+          followup_completed_at,
+          last_contact_date,
+          sourcing_brands (
+            brand_name_kr,
+            brand_name_en
+          )
+        `)
+        .in("id", chunk);
+
+      if (companiesData) {
+        companiesData.forEach((c: any) => companyMasterMap.set(c.id, c));
+      }
     }
 
-    // 5. Fetch activities
+    // 5. Fetch activities in chunks of 100
     let activitiesMap = new Map<string, CompanyActivityItem[]>();
     try {
-      const { data: actRows } = await supabase
-        .from("sourcing_company_activities")
-        .select("*")
-        .in("company_id", companyIds)
-        .order("created_at", { ascending: false });
+      for (let i = 0; i < companyIds.length; i += CHUNK_SIZE) {
+        const chunk = companyIds.slice(i, i + CHUNK_SIZE);
+        const { data: actRows } = await supabase
+          .from("sourcing_company_activities")
+          .select("*")
+          .in("company_id", chunk)
+          .order("created_at", { ascending: false });
 
-      if (actRows) {
-        actRows.forEach((a: any) => {
-          const list = activitiesMap.get(a.company_id) || [];
-          list.push({
-            id: a.id,
-            companyId: a.company_id,
-            campaignId: a.campaign_id,
-            recipientId: a.recipient_id,
-            activityType: a.activity_type,
-            summary: a.summary,
-            details: a.details || {},
-            staffEmail: a.staff_email,
-            createdAt: a.created_at,
+        if (actRows) {
+          actRows.forEach((a: any) => {
+            const list = activitiesMap.get(a.company_id) || [];
+            list.push({
+              id: a.id,
+              companyId: a.company_id,
+              campaignId: a.campaign_id,
+              recipientId: a.recipient_id,
+              activityType: a.activity_type,
+              summary: a.summary,
+              details: a.details || {},
+              staffEmail: a.staff_email,
+              createdAt: a.created_at,
+            });
+            activitiesMap.set(a.company_id, list);
           });
-          activitiesMap.set(a.company_id, list);
-        });
+        }
       }
     } catch {}
 
@@ -829,6 +879,36 @@ export async function listCompanyResults(
         brandNames.push(firstRec.brand_name);
       }
 
+      // Delivery breakdown for this company
+      const recipientCount = recList.length;
+      const emailsSent = recList.filter(
+        (r: any) =>
+          r.status === "SENT" ||
+          r.status === "DELIVERED" ||
+          r.status === "BOUNCED" ||
+          r.status === "FAILED"
+      ).length;
+      const delivered = recList.filter((r: any) => r.status === "DELIVERED").length;
+      const bounced = recList.filter((r: any) => r.status === "BOUNCED").length;
+      const suppressed = recList.filter(
+        (r: any) =>
+          r.status === "FAILED" ||
+          (r.error_message && r.error_message.toLowerCase().includes("suppress"))
+      ).length;
+
+      let overallEmailStatus: "DELIVERED" | "BOUNCED" | "SUPPRESSED" | "FAILED" | "PENDING" | "MIXED" = "PENDING";
+      if (delivered > 0 && bounced === 0 && suppressed === 0) {
+        overallEmailStatus = "DELIVERED";
+      } else if (delivered === 0 && bounced > 0 && suppressed === 0) {
+        overallEmailStatus = "BOUNCED";
+      } else if (delivered === 0 && bounced === 0 && suppressed > 0) {
+        overallEmailStatus = "SUPPRESSED";
+      } else if (delivered > 0 && (bounced > 0 || suppressed > 0)) {
+        overallEmailStatus = "MIXED";
+      } else if (delivered === 0 && bounced === 0 && suppressed === 0 && emailsSent > 0) {
+        overallEmailStatus = "FAILED";
+      }
+
       const item: CompanyResultItem = {
         companyId: cId,
         companyNameKr: master.company_name_kr || firstRec.company_name_kr || "미등록 기업",
@@ -839,7 +919,13 @@ export async function listCompanyResults(
         campaignId: campInfo.id,
         campaignName: campInfo.name,
         campaignDate: campInfo.created_at,
-        emailsSentCount: recipients.length,
+        emailsSentCount: emailsSent,
+        recipientCount,
+        emailsSent,
+        delivered,
+        bounced,
+        suppressed,
+        overallEmailStatus,
         latestEmailResult,
         latestEmailDate,
         hasReply,
@@ -868,7 +954,12 @@ export async function listCompanyResults(
       }
 
       if (filter.emailResult && filter.emailResult !== "ALL") {
-        if (item.latestEmailResult !== filter.emailResult) matches = false;
+        if (
+          item.latestEmailResult !== filter.emailResult &&
+          item.overallEmailStatus !== filter.emailResult
+        ) {
+          matches = false;
+        }
       }
 
       if (filter.replyStatus && filter.replyStatus !== "ALL") {

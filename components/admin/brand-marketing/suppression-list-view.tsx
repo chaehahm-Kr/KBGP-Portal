@@ -4,6 +4,7 @@ import React, { useState, useEffect, useTransition } from "react";
 import {
   listMarketingSuppressionListAction,
   releaseMarketingSuppressionAction,
+  addMarketingSuppressionAction,
 } from "@/lib/brand-marketing/campaign-actions";
 
 export interface SuppressionEntry {
@@ -36,6 +37,9 @@ export function SuppressionListView() {
 
   // Audit Detail Modal State
   const [auditDetailRecord, setAuditDetailRecord] = useState<SuppressionEntry | null>(null);
+
+  // Add Suppression Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const fetchSuppressions = (
     query: string = search,
@@ -167,6 +171,13 @@ export function SuppressionListView() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="px-3 py-1.5 text-xs font-bold rounded bg-rose-600 hover:bg-rose-700 text-white transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+            >
+              <span>+</span> 수신 거부 직접 등록
+            </button>
             <button
               type="button"
               onClick={() => fetchSuppressions(search, statusFilter)}
@@ -391,6 +402,19 @@ export function SuppressionListView() {
             setSuccessBanner(
               `[${releasedRecord.email}] 주소가 안전하게 해제되었습니다. 감사 로그가 보존되었습니다.`
             );
+            fetchSuppressions(search, statusFilter);
+          }}
+        />
+      )}
+
+      {/* Add Suppression Modal */}
+      {showAddModal && (
+        <AddSuppressionModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          onSuccess={(email) => {
+            setShowAddModal(false);
+            setSuccessBanner(`수신 거부 목록에 등록되었습니다: ${email}`);
             fetchSuppressions(search, statusFilter);
           }}
         />
@@ -804,6 +828,147 @@ function AuditDetailModal({ record, onClose, formatDate }: AuditDetailModalProps
             확인 닫기
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+function AddSuppressionModal({
+  isOpen,
+  onClose,
+  onSuccess,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: (email: string) => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [reason, setReason] = useState<string>("MANUAL_ADMIN");
+  const [notes, setNotes] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !email.includes("@")) {
+      setErrorMessage("유효한 이메일 주소를 입력해주세요.");
+      return;
+    }
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      const res = await addMarketingSuppressionAction({
+        email: email.trim(),
+        reason,
+        notes: notes.trim() || undefined,
+        source: "admin_portal",
+      });
+
+      if (res.success) {
+        onSuccess(email.trim());
+      } else {
+        setErrorMessage(res.error || "수신 거부 등록에 실패했습니다.");
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "오류가 발생했습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in">
+      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 w-full max-w-lg shadow-2xl overflow-hidden">
+        <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🚫</span>
+            <h3 className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+              수신 거부 직접 등록 (Add Suppression)
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+          {errorMessage && (
+            <div className="p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-lg text-red-700 dark:text-red-300">
+              ⚠️ {errorMessage}
+            </div>
+          )}
+
+          <div>
+            <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+              이메일 주소 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="e.g. buyer@company.com"
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-rose-500"
+            />
+            <p className="text-[11px] text-zinc-500 mt-1">
+              등록된 이메일 주소는 모든 마케팅 이메일 발송 대상에서 자동으로 즉시 제외(Fail-Closed)됩니다.
+            </p>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+              차단 사유 (Suppression Reason)
+            </label>
+            <select
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-xs focus:outline-none focus:ring-1 focus:ring-rose-500"
+            >
+              <option value="MANUAL_ADMIN">관리자 수기 차단 (MANUAL_ADMIN)</option>
+              <option value="UNSUBSCRIBED">수신 거부 요청 (UNSUBSCRIBED)</option>
+              <option value="BOUNCED">반송 / 무효 주소 (BOUNCED)</option>
+              <option value="COMPLAINT">스팸 신고 (COMPLAINT)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+              등록 사유 및 증빙 메모 (Notes)
+            </label>
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. 유선 통화로 마케팅 메일 수신 거부 요청함, 또는 바이어 탈퇴 요청"
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-xs focus:outline-none focus:ring-1 focus:ring-rose-500"
+            />
+          </div>
+
+          <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs font-semibold cursor-pointer"
+            >
+              취소
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {isSubmitting ? "등록 중..." : "수신 거부 등록"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

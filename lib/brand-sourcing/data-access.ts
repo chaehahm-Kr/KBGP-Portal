@@ -41,6 +41,7 @@ export interface SourcingListParams {
   businessTypeMatchMode?: "ANY" | "ALL";
   assignedTo?: string;
   marketingConsentStatus?: string;
+  emailStatus?: string;
   limit?: number;
   offset?: number;
   sortBy?: "company_name" | "brand_name" | "grade" | "category" | "email" | "consent" | "created_at" | null;
@@ -1629,7 +1630,7 @@ export async function listSourcingCompanies(
 
   // When sorting is requested or "ALL" mode (limit <= 0 or limit === -1),
   // retrieve full matching dataset up to 5,000 records so we can sort before pagination
-  const needsFullFetch = !!sortBy || limit === 0 || limit === -1 || (limit !== undefined && limit >= 5000);
+  const needsFullFetch = !!sortBy || (Boolean(params?.emailStatus) && params?.emailStatus !== "ALL") || limit === 0 || limit === -1 || (limit !== undefined && limit >= 5000);
 
   if (needsFullFetch) {
     query = query.range(0, 4999);
@@ -1695,6 +1696,146 @@ export async function listSourcingCompanies(
       }
       return 0;
     });
+  }
+
+  // Attach email delivery summary to each company (ADM-EMAIL-ANALYTICS-001)
+  if (results.length > 0) {
+    try {
+      const companyIds = results.map((c: any) => c.id);
+      const allContactEmails: string[] = [];
+      results.forEach((c: any) => {
+        (c.sourcing_contacts || []).forEach((ct: any) => {
+          if (ct.email) allContactEmails.push(ct.email.toLowerCase().trim());
+        });
+      });
+
+      const CHUNK_SIZE = 100;
+      let recipientRows: any[] = [];
+      for (let i = 0; i < companyIds.length; i += CHUNK_SIZE) {
+        const chunk = companyIds.slice(i, i + CHUNK_SIZE);
+        const { data: recData } = await supabase
+          .from("marketing_campaign_recipients")
+          .select("id, company_id, recipient_email, recipient_name, status, sent_at, delivered_at, error_message, provider_message_id")
+          .in("company_id", chunk);
+        if (recData) {
+          recipientRows.push(...recData);
+        }
+      }
+
+      const suppressedEmails = new Set<string>();
+      if (allContactEmails.length > 0) {
+        for (let i = 0; i < allContactEmails.length; i += CHUNK_SIZE) {
+          const chunk = allContactEmails.slice(i, i + CHUNK_SIZE);
+          const { data: suppData } = await supabase
+            .from("marketing_suppression_list")
+            .select("email, status")
+            .in("email", chunk)
+            .eq("status", "ACTIVE");
+          if (suppData) {
+            suppData.forEach((s: any) => suppressedEmails.add(s.email.toLowerCase().trim()));
+          }
+        }
+      }
+
+      const recByCompany = new Map<string, any[]>();
+      recipientRows.forEach((r) => {
+        if (!r.company_id) return;
+        const list = recByCompany.get(r.company_id) || [];
+        list.push(r);
+        recByCompany.set(r.company_id, list);
+      });
+
+      results.forEach((c: any) => {
+        const companyRecs = (recByCompany.get(c.id) || []).filter(
+          (r) => !r.provider_message_id?.startsWith("sim_")
+        );
+
+        const contactEmails = (c.sourcing_contacts || [])
+          .map((ct: any) => (ct.email || "").toLowerCase().trim())
+          .filter(Boolean);
+
+        const hasSuppressedContact = contactEmails.some((e: string) => suppressedEmails.has(e));
+
+        const totalSent = companyRecs.filter(
+          (r) => r.status === "SENT" || r.status === "DELIVERED" || r.status === "BOUNCED" || r.status === "FAILED"
+        ).length;
+
+        const deliveredCount = companyRecs.filter((r) => r.status === "DELIVERED").length;
+        const bouncedCount = companyRecs.filter((r) => r.status === "BOUNCED").length;
+        const suppressedCount = companyRecs.filter(
+          (r) =>
+            r.status === "FAILED" ||
+            (r.error_message && r.error_message.toLowerCase().includes("suppress")) ||
+            (r.recipient_email && suppressedEmails.has(r.recipient_email.toLowerCase().trim()))
+        ).length;
+        const failedCount = companyRecs.filter(
+          (r) => r.status === "FAILED" && !r.error_message?.toLowerCase().includes("suppress")
+        ).length;
+
+        let overallStatus: "NOT_CONTACTED" | "DELIVERED" | "BOUNCED" | "SUPPRESSED" | "FAILED" | "PENDING" = "NOT_CONTACTED";
+        if (bouncedCount > 0) {
+          overallStatus = "BOUNCED";
+        } else if (suppressedCount > 0 || hasSuppressedContact) {
+          overallStatus = "SUPPRESSED";
+        } else if (deliveredCount > 0) {
+          overallStatus = "DELIVERED";
+        } else if (failedCount > 0) {
+          overallStatus = "FAILED";
+        } else if (companyRecs.some((r) => r.status === "PENDING")) {
+          overallStatus = "PENDING";
+        } else {
+          overallStatus = "NOT_CONTACTED";
+        }
+
+        const sortedRecs = [...companyRecs].sort(
+          (a, b) => new Date(b.sent_at || 0).getTime() - new Date(a.sent_at || 0).getTime()
+        );
+
+        const contactsSummary = companyRecs.map((r) => ({
+          email: r.recipient_email,
+          contactName: r.recipient_name,
+          status: r.status,
+          sentAt: r.sent_at,
+          deliveredAt: r.delivered_at,
+          errorMessage: r.error_message,
+        }));
+
+        if (contactsSummary.length === 0 && hasSuppressedContact) {
+          contactEmails.forEach((email: string) => {
+            if (suppressedEmails.has(email)) {
+              contactsSummary.push({
+                email,
+                contactName: null,
+                status: "SUPPRESSED",
+                sentAt: null,
+                deliveredAt: null,
+                errorMessage: "Registered in suppression list",
+              });
+            }
+          });
+        }
+
+        c.email_delivery_summary = {
+          overallStatus,
+          totalSent,
+          deliveredCount,
+          bouncedCount,
+          suppressedCount,
+          lastSentAt: sortedRecs[0]?.sent_at || null,
+          contacts: contactsSummary,
+        };
+      });
+    } catch (deliveryErr) {
+      console.warn("[listSourcingCompanies] Failed to attach delivery summary:", deliveryErr);
+    }
+  }
+
+  // Filter by emailStatus if requested
+  if (params?.emailStatus && params.emailStatus !== "ALL") {
+    const filtered = results.filter((c: any) => c.email_delivery_summary?.overallStatus === params.emailStatus);
+    const filteredTotal = filtered.length;
+    const paged = limit !== undefined && limit > 0 ? filtered.slice(offset, offset + limit) : filtered;
+    return { data: paged, total: filteredTotal };
   }
 
   // If we fetched the full dataset for sorting and a specific page limit was requested
