@@ -40,6 +40,7 @@ export function CampaignIssueRecipientsModal({
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ total: number; current: number; success: number } | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Keep internal recipients list synchronized when props change
   React.useEffect(() => {
@@ -76,7 +77,6 @@ export function CampaignIssueRecipientsModal({
   const failedCount = (recipients || []).filter((r) => r.status === "FAILED").length;
 
   // 1. Tab-Specific Scoped Recipients (ADM-EMAIL-ANALYTICS-001-R2)
-  // Ensures bulk actions operate strictly within the active tab's category.
   const tabScopedRecipients = useMemo(() => {
     const list = recipients || [];
     if (activeTab === "BOUNCED") {
@@ -143,7 +143,6 @@ export function CampaignIssueRecipientsModal({
   // Open single confirmation modal (preserves provider evidence, no MANUAL_ADMIN overwrite)
   const handleOpenSingleConfirm = (item: CampaignIssueRecipientItem) => {
     setConfirmRecipient(item);
-    // Preserve provider evidence: bounce or preflight suppression from Resend
     setConfirmReason("BOUNCED");
     const notesText = item.status === "FAILED"
       ? `[RESEND Preflight Suppressed] MsgID: ${item.providerMessageId || "N/A"}, Error: ${item.errorMessage || "Prior bounce or suppression"}, Campaign: ${campaignName}`
@@ -166,7 +165,6 @@ export function CampaignIssueRecipientsModal({
         });
 
         if (res.success) {
-          // Update local state immediately
           setRecipients((prev) =>
             prev.map((r) =>
               r.recipientEmail.toLowerCase() === confirmRecipient.recipientEmail.toLowerCase()
@@ -230,7 +228,6 @@ export function CampaignIssueRecipientsModal({
       });
     }
 
-    // Update local state
     setRecipients((prev) =>
       prev.map((r) =>
         newlySuppressed.has(r.recipientEmail.toLowerCase())
@@ -249,13 +246,22 @@ export function CampaignIssueRecipientsModal({
     }, 1200);
   };
 
+  const handleCopyId = (id: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(id);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1500);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="w-full max-w-6xl max-h-[90vh] bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-5 animate-in fade-in">
+      {/* OPTIMIZED RESPONSIVE MODAL CONTAINER (ADM-EMAIL-ANALYTICS-001-R3) */}
+      <div className="w-[96vw] max-w-[1340px] max-h-[92vh] bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
         {/* MODAL HEADER */}
-        <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-start justify-between bg-zinc-50 dark:bg-zinc-950/60">
+        <div className="p-4 sm:p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-start justify-between bg-zinc-50 dark:bg-zinc-950/60 shrink-0">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300 border border-red-200 dark:border-red-800">
@@ -266,10 +272,10 @@ export function CampaignIssueRecipientsModal({
                 Campaign: {campaignName}
               </span>
             </div>
-            <h2 className="text-xl font-extrabold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+            <h2 className="text-lg sm:text-xl font-extrabold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
               <span>⚠️ 배송 이슈 수신자 목록 &amp; 안전 수신 거부 관리</span>
             </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
               반송(Bounced) 또는 프로바이더 사전 차단(Suppressed/Failed)된 수신자 내역을 조회하고, 영구 차단 대상자를 수신 거부 목록에 안전하게 등록합니다.
             </p>
           </div>
@@ -285,7 +291,7 @@ export function CampaignIssueRecipientsModal({
         </div>
 
         {/* CONTROLS BAR: TABS, SEARCH, TAB-SPECIFIC BULK ACTION */}
-        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-zinc-900">
+        <div className="p-3 sm:p-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-zinc-900 shrink-0">
           {/* Tabs */}
           <div className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-xl text-xs">
             <button
@@ -330,7 +336,7 @@ export function CampaignIssueRecipientsModal({
               placeholder="이메일, 기업명, 브랜드 검색..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 w-52 sm:w-64"
+              className="px-3 py-1.5 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 w-48 sm:w-60"
             />
 
             <button
@@ -350,36 +356,44 @@ export function CampaignIssueRecipientsModal({
         </div>
 
         {/* POLICY CALLOUT */}
-        <div className="px-5 py-2.5 bg-amber-50/60 dark:bg-amber-950/20 border-b border-amber-200/50 dark:border-amber-900/30 text-[11px] text-amber-900 dark:text-amber-200 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+        <div className="px-4 sm:px-5 py-2 bg-amber-50/60 dark:bg-amber-950/20 border-b border-amber-200/50 dark:border-amber-900/30 text-[11px] text-amber-900 dark:text-amber-200 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2 truncate">
             <span>💡</span>
-            <span>
-              <strong>안전 수신 거부 정책:</strong> 영구 반송(Hard Bounce) 및 원격 MTA 거부 수신자는 향후 발송 보호를 위해 수신 거부 등록이 권장됩니다.
-              소프트 바운스(사서함 용량 초과 등)는 영구 차단되지 않도록 보호됩니다.
+            <span className="truncate">
+              <strong>안전 수신 거부 정책:</strong> 영구 반송 및 원격 MTA 거부 수신자는 자동 영구 차단 권장 대상이며, 소프트 바운스는 보호됩니다.
             </span>
           </div>
-          <span className="font-mono text-[10px] shrink-0 font-bold px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-300">
-            미등록 대상: {tabMetrics.newCount}건 ({tabMetrics.total}건 중)
+          <span className="font-mono text-[10px] shrink-0 font-bold px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-300 whitespace-nowrap">
+            미등록: {tabMetrics.newCount}건 / 전체 {tabMetrics.total}건
           </span>
         </div>
 
-        {/* RECIPIENTS TABLE */}
-        <div className="flex-1 overflow-y-auto">
+        {/* OPTIMIZED RECIPIENTS TABLE CONTAINER (VERTICAL SCROLL ONLY, NO HORIZONTAL SCROLL) */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 bg-white dark:bg-zinc-900">
           {filteredRecipients.length === 0 ? (
             <div className="p-12 text-center text-xs text-zinc-400">
               해당 조건의 반송 또는 발송 실패 수신자가 없습니다.
             </div>
           ) : (
-            <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-400 z-10">
+            <table className="w-full table-fixed text-left text-xs">
+              <colgroup>
+                <col className="w-[22%]" /> {/* Recipient Email */}
+                <col className="w-[17%]" /> {/* Company / Brand */}
+                <col className="w-[11%]" /> {/* Provider Status */}
+                <col className="w-[23%]" /> {/* Bounce / Failure Reason */}
+                <col className="w-[8%]" />  {/* Message ID */}
+                <col className="w-[9%]" />  {/* Suppression Status */}
+                <col className="w-[10%]" /> {/* Action Button */}
+              </colgroup>
+              <thead className="sticky top-0 bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-400 z-10 shadow-2xs">
                 <tr>
-                  <th className="py-2.5 px-4">수신자 이메일</th>
-                  <th className="py-2.5 px-3">소속 기업 / 브랜드</th>
-                  <th className="py-2.5 px-3 text-center">프로바이더 상태</th>
+                  <th className="py-2.5 px-3">수신자 이메일</th>
+                  <th className="py-2.5 px-3">기업 / 브랜드</th>
+                  <th className="py-2.5 px-2 text-center">프로바이더 상태</th>
                   <th className="py-2.5 px-3">반송/실패 사유</th>
-                  <th className="py-2.5 px-3">메시지 ID</th>
-                  <th className="py-2.5 px-3 text-center">수신 거부 등록 여부</th>
-                  <th className="py-2.5 px-4 text-right">조치</th>
+                  <th className="py-2.5 px-2 text-center">메시지 ID</th>
+                  <th className="py-2.5 px-2 text-center">수신 거부</th>
+                  <th className="py-2.5 px-3 text-right">조치</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -389,99 +403,131 @@ export function CampaignIssueRecipientsModal({
                       key={item.id}
                       className="hover:bg-zinc-50/80 dark:hover:bg-zinc-850/40 transition-colors"
                     >
-                      {/* Email */}
-                      <td className="py-3 px-4">
-                        <div className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                      {/* 1. Email (Truncated with tooltip) */}
+                      <td className="py-2.5 px-3">
+                        <div
+                          className="font-mono text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate block"
+                          title={item.recipientEmail}
+                        >
                           {item.recipientEmail}
                         </div>
-                        {item.recipientName && (
-                          <div className="text-[11px] text-zinc-500">{item.recipientName}</div>
-                        )}
+                        {item.recipientName ? (
+                          <div
+                            className="text-[11px] text-zinc-500 truncate block"
+                            title={item.recipientName}
+                          >
+                            {item.recipientName}
+                          </div>
+                        ) : null}
                       </td>
 
-                      {/* Company & Brand */}
-                      <td className="py-3 px-3">
-                        <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                      {/* 2. Company & Brand (Truncated with tooltip) */}
+                      <td className="py-2.5 px-3">
+                        <div
+                          className="font-medium text-xs text-zinc-900 dark:text-zinc-100 truncate block"
+                          title={item.companyNameKr}
+                        >
                           {item.companyNameKr}
                         </div>
-                        <div className="text-[11px] text-zinc-400 flex items-center gap-1.5">
-                          {item.companyNameEn && <span>{item.companyNameEn}</span>}
-                          {item.brandName && (
-                            <span className="px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                        <div className="text-[11px] text-zinc-400 flex items-center gap-1 mt-0.5 truncate">
+                          {item.brandName ? (
+                            <span
+                              className="px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium truncate max-w-[120px]"
+                              title={`브랜드: ${item.brandName}`}
+                            >
                               {item.brandName}
                             </span>
-                          )}
+                          ) : item.companyNameEn ? (
+                            <span className="truncate block" title={item.companyNameEn}>
+                              {item.companyNameEn}
+                            </span>
+                          ) : null}
                         </div>
                       </td>
 
-                      {/* Provider Status */}
-                      <td className="py-3 px-3 text-center">
+                      {/* 3. Provider Status Badge */}
+                      <td className="py-2.5 px-2 text-center">
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                          className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase whitespace-nowrap ${
                             item.status === "BOUNCED"
                               ? "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
                               : "bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300 border border-red-200 dark:border-red-800"
                           }`}
+                          title={
+                            item.status === "BOUNCED"
+                              ? "Remote Mailbox Bounce (MTA Rejection)"
+                              : "Resend Preflight Suppressed (Prior bounce or suppression)"
+                          }
                         >
-                          {item.status === "BOUNCED" ? "BOUNCED" : "FAILED / SUPPRESSED"}
+                          {item.status === "BOUNCED" ? "BOUNCED" : "FAILED"}
                         </span>
                       </td>
 
-                      {/* Error Message */}
-                      <td className="py-3 px-3 max-w-xs">
+                      {/* 4. Bounce / Failure Reason (Clamped to 2 lines with tooltip) */}
+                      <td className="py-2.5 px-3">
                         <div
-                          className="text-[11px] text-zinc-600 dark:text-zinc-300 truncate"
+                          className="text-[11px] leading-snug text-zinc-600 dark:text-zinc-300 line-clamp-2 cursor-help"
                           title={item.errorMessage || "사유 미기재"}
                         >
                           {item.errorMessage || "—"}
                         </div>
                         {item.isEligibleForSuppression ? (
-                          <span className="inline-block mt-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400">
-                            🛡️ 영구 차단 권장 (Permanent failure)
+                          <span className="inline-flex items-center gap-1 mt-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                            <span>🛡️</span> 영구 차단 권장
                           </span>
                         ) : (
-                          <span className="inline-block mt-0.5 text-[9px] text-zinc-400">
-                            소프트 바운스 / 임시 오류
+                          <span className="inline-block mt-0.5 text-[9px] text-zinc-400 whitespace-nowrap">
+                            소프트 바운스 / 임시
                           </span>
                         )}
                       </td>
 
-                      {/* Provider Message ID */}
-                      <td className="py-3 px-3 font-mono text-[10px] text-zinc-500">
+                      {/* 5. Provider Message ID (Shortened with tooltip & click-to-copy) */}
+                      <td className="py-2.5 px-2 font-mono text-[10px] text-zinc-500 text-center">
                         {item.providerMessageId ? (
-                          <span title={item.providerMessageId}>
-                            {item.providerMessageId.slice(0, 16)}...
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyId(item.providerMessageId!)}
+                            className="inline-block px-1 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 font-mono text-[10px] cursor-pointer transition-colors max-w-full truncate"
+                            title={`클릭하여 전체 ID 복사:\n${item.providerMessageId}`}
+                          >
+                            {copiedId === item.providerMessageId
+                              ? "복사됨 ✓"
+                              : `${item.providerMessageId.slice(0, 8)}…`}
+                          </button>
                         ) : (
-                          <span className="text-zinc-400 italic">미기재</span>
+                          <span className="text-zinc-400 italic">—</span>
                         )}
                       </td>
 
-                      {/* Current Suppression Status */}
-                      <td className="py-3 px-3 text-center">
+                      {/* 6. Current Suppression Status */}
+                      <td className="py-2.5 px-2 text-center">
                         {item.isSuppressed ? (
                           <span
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                            title={`등록 사유: ${item.suppressionReason || "UNKNOWN"}`}
+                            className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 whitespace-nowrap"
+                            title={`등록 사유: ${item.suppressionReason || "ACTIVE"}\n등록일: ${item.suppressedAt || "기록됨"}`}
                           >
-                            🛡️ 등록됨 ({item.suppressionReason || "ACTIVE"})
+                            🛡️ 차단됨
                           </span>
                         ) : (
-                          <span className="text-[11px] text-zinc-400">미등록</span>
+                          <span className="text-[10px] text-zinc-400 font-medium">미등록</span>
                         )}
                       </td>
 
-                      {/* Action Button */}
-                      <td className="py-3 px-4 text-right">
+                      {/* 7. Compact Action Button (Always visible on all screen sizes) */}
+                      <td className="py-2.5 px-3 text-right">
                         {item.isSuppressed ? (
-                          <span className="text-[11px] text-zinc-400 italic">차단 유지 중</span>
+                          <span className="inline-block text-[10px] text-zinc-400 font-medium whitespace-nowrap">
+                            차단 유지
+                          </span>
                         ) : (
                           <button
                             type="button"
                             onClick={() => handleOpenSingleConfirm(item)}
-                            className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors cursor-pointer"
+                            className="px-2 py-1 text-[11px] font-bold rounded bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
+                            title="수신 거부 등록"
                           >
-                            + 수신 거부 등록
+                            + 차단 등록
                           </button>
                         )}
                       </td>
@@ -494,7 +540,7 @@ export function CampaignIssueRecipientsModal({
         </div>
 
         {/* MODAL FOOTER */}
-        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-950/60 text-xs">
+        <div className="p-3 sm:p-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-950/60 text-xs shrink-0">
           <div className="text-zinc-500">
             표시 중: <strong>{filteredRecipients.length}건</strong> (전체 {totalCount}건)
           </div>
