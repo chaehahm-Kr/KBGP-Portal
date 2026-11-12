@@ -9,6 +9,7 @@ import {
   resolveRootCategoryEnum,
 } from "@/lib/product/types";
 import { bulkDeleteProducts } from "@/lib/product/actions";
+import { BulkProductUploadModal } from "@/components/product/bulk-product-upload-modal";
 import { useSearchParams } from "next/navigation";
 import {
   SELECTION_STATUS_LABELS,
@@ -86,6 +87,7 @@ export function PortalProductsList({ initialProducts, hasBrand, canCreateProduct
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
+  const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   React.useEffect(() => {
@@ -280,21 +282,40 @@ export function PortalProductsList({ initialProducts, hasBrand, canCreateProduct
           </p>
         </div>
         {!canCreateProduct ? (
-          <button
-            type="button"
-            disabled
-            title="제품 추가 권한이 없습니다 (Access Restricted)"
-            className="w-full sm:w-auto text-center rounded-md bg-zinc-200 px-4 py-2 text-xs font-semibold text-zinc-400 cursor-not-allowed opacity-60 dark:bg-zinc-800 dark:text-zinc-600 select-none"
-          >
-            🔒 새 제품 추가
-          </button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <button
+              type="button"
+              disabled
+              title="제품 추가 권한이 없습니다 (Access Restricted)"
+              className="w-full sm:w-auto text-center rounded-md border border-zinc-200 bg-zinc-100 px-4 py-2 text-xs font-semibold text-zinc-400 cursor-not-allowed opacity-60 dark:border-zinc-800 dark:bg-zinc-850 dark:text-zinc-600 select-none"
+            >
+              🔒 Excel Bulk Upload
+            </button>
+            <button
+              type="button"
+              disabled
+              title="제품 추가 권한이 없습니다 (Access Restricted)"
+              className="w-full sm:w-auto text-center rounded-md bg-zinc-200 px-4 py-2 text-xs font-semibold text-zinc-400 cursor-not-allowed opacity-60 dark:bg-zinc-800 dark:text-zinc-600 select-none"
+            >
+              🔒 새 제품 추가
+            </button>
+          </div>
         ) : hasBrand ? (
-          <Link
-            href="/portal/products/new"
-            className="w-full sm:w-auto text-center rounded-md bg-zinc-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
-          >
-            새 제품 추가
-          </Link>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsBulkUploadModalOpen(true)}
+              className="w-full sm:w-auto text-center rounded-md border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-900 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+            >
+              Excel Bulk Upload
+            </button>
+            <Link
+              href="/portal/products/new"
+              className="w-full sm:w-auto text-center rounded-md bg-zinc-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+            >
+              새 제품 추가
+            </Link>
+          </div>
         ) : (
           <Link
             href="/portal/brands/new"
@@ -862,6 +883,15 @@ export function PortalProductsList({ initialProducts, hasBrand, canCreateProduct
           </div>
         </div>
       )}
+
+      <BulkProductUploadModal
+        isOpen={isBulkUploadModalOpen}
+        onClose={() => setIsBulkUploadModalOpen(false)}
+        onImportSuccess={(count) => {
+          setToastMessage(`${count}개의 제품이 엑셀 일괄 등록(Draft)되었습니다.`);
+          setTimeout(() => setToastMessage(null), 5000);
+        }}
+      />
     </div>
   );
 }

@@ -49,10 +49,11 @@ export default async function ProductsPage() {
 
   const { data: brands } = await supabase
     .from("brands")
-    .select("id, name");
+    .select("id, name, is_active")
+    .eq("company_id", companyId);
 
   const brandNameById = new Map((brands ?? []).map((b) => [b.id, b.name]));
-  const hasBrand = (brands ?? []).filter((b) => b.id !== undefined).length > 0;
+  const hasBrand = (brands ?? []).some((b) => b.id !== undefined && b.is_active !== false);
 
   // Fetch product images to display thumbnail
   const { data: productImages } = await supabase
