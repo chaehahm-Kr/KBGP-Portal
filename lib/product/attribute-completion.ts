@@ -30,7 +30,7 @@ export interface CategoryCompletionResult {
  */
 export function isAttributeValueFilled(inputType: string, val: any): boolean {
   if (val === null || val === undefined) return false;
-  if (val === "NA" || val === "UNKNOWN") return true;
+  if (val === "NA" || val === "NOT_APPLICABLE" || val === "UNKNOWN") return true;
   if (typeof val === "string") return val.trim() !== "";
   if (typeof val === "number") return !isNaN(val);
   if (typeof val === "boolean") return true;

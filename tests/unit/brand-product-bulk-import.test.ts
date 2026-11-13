@@ -290,7 +290,7 @@ describe("BRAND-PRODUCT-BULK-002-R2: Category Hierarchy, Common Attributes & Med
         [h("attrTargetAge")]: "20s; 30s; 성인",
         [h("attrTargetGender")]: "Unisex",
         [h("attrSkinType")]: "Dry Skin; Sensitive Skin",
-        [h("attrUsageFrequency")]: "Daily; 2-3 Times Weekly",
+        [h("attrUsageFrequency")]: "Daily",
         [h("attrDailyUseCount")]: "Twice Daily",
         [h("attrUsageOccasion")]: "After Cleansing; Before Bed",
         [h("attrApplicationArea")]: "Face; Eye Area",
@@ -345,7 +345,7 @@ describe("BRAND-PRODUCT-BULK-002-R2: Category Hierarchy, Common Attributes & Med
     expect(pkgFormat?.text_value).toBe("Airless Pump");
 
     const usageFreq = attrs.find((a) => a.attribute_code === "USAGE_FREQUENCY");
-    expect(usageFreq?.value_json).toEqual(["DAILY", "WEEKLY_2_3"]);
+    expect(usageFreq?.value_json).toBe("DAILY");
 
     const scented = attrs.find((a) => a.attribute_code === "SCENTED");
     expect(scented?.value_json).toBe("NOT_APPLICABLE");

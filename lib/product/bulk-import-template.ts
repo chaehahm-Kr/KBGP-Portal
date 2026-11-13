@@ -115,6 +115,50 @@ interface OoxmlSheetSpec {
   defaultRowHeight?: number;
 }
 
+export const EXCEL_MULTI_SELECT_PROMPT_TITLE = "복수 선택 항목 안내";
+export const EXCEL_MULTI_SELECT_PROMPT_MESSAGE = [
+  "드롭다운에서 첫 번째 항목을 선택하세요.",
+  "두 번째 항목부터는 기존 값 뒤에",
+  "세미콜론(;)을 입력하고 직접 추가하세요.",
+  "예: 건성 (Dry Skin); 민감성 (Sensitive Skin)",
+].join("\n");
+
+export const EXCEL_SINGLE_SELECT_PROMPT_TITLE = "단일 선택 항목 안내";
+export const EXCEL_SINGLE_SELECT_PROMPT_MESSAGE = [
+  "목록에서 하나의 항목만 선택하세요.",
+  "복수 입력은 허용되지 않습니다.",
+].join("\n");
+
+export const EXCEL_YES_NO_NA_PROMPT_TITLE = "예 / 아니요 / 해당 없음 안내";
+export const EXCEL_YES_NO_NA_PROMPT_MESSAGE = [
+  "예 (Yes), 아니요 (No), 해당 없음 (Not Applicable) 중 하나만 선택하세요.",
+  "복수 입력은 허용되지 않습니다.",
+].join("\n");
+
+export const EXCEL_MULTI_SELECT_OVERWRITE_WARNING =
+  "드롭다운에서 다른 항목을 다시 선택하면 기존 값이 대체됩니다. 추가 항목은 직접 입력하세요.";
+
+function resolveOptionAttributeValidationPrompt(
+  inputType: BulkCommonAttributeSpec["inputType"]
+): { promptTitle: string; prompt: string } {
+  if (inputType === "MULTI_SELECT") {
+    return {
+      promptTitle: EXCEL_MULTI_SELECT_PROMPT_TITLE,
+      prompt: EXCEL_MULTI_SELECT_PROMPT_MESSAGE,
+    };
+  }
+  if (inputType === "SINGLE_SELECT") {
+    return {
+      promptTitle: EXCEL_SINGLE_SELECT_PROMPT_TITLE,
+      prompt: EXCEL_SINGLE_SELECT_PROMPT_MESSAGE,
+    };
+  }
+  return {
+    promptTitle: EXCEL_YES_NO_NA_PROMPT_TITLE,
+    prompt: EXCEL_YES_NO_NA_PROMPT_MESSAGE,
+  };
+}
+
 function escapeXml(raw: string): string {
   const cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, "");
   return cleaned
@@ -123,6 +167,10 @@ function escapeXml(raw: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+}
+
+function escapeXmlAttrPreserveNewlines(raw: string): string {
+  return escapeXml(raw).replace(/\r\n/g, "&#10;").replace(/\n/g, "&#10;");
 }
 
 export function encodeColLetter(colIdxZeroBased: number): string {
@@ -485,10 +533,10 @@ function buildWorksheetXml(
       ? `<dataValidations count="${sheet.dataValidations.length}">${sheet.dataValidations
           .map((dv) => {
             const pt = dv.promptTitle
-              ? ` promptTitle="${escapeXml(dv.promptTitle.slice(0, 32))}"`
+              ? ` promptTitle="${escapeXmlAttrPreserveNewlines(dv.promptTitle.slice(0, 32))}"`
               : "";
             const pm = dv.prompt
-              ? ` prompt="${escapeXml(dv.prompt.slice(0, 220))}"`
+              ? ` prompt="${escapeXmlAttrPreserveNewlines(dv.prompt.slice(0, 250))}"`
               : "";
             return `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0"${pt}${pm} sqref="${dv.sqref}"><formula1>${escapeXml(
               dv.formula1
@@ -776,15 +824,57 @@ function resolveTemplateCommonAttributes(
 
   return COMMON_BULK_ATTRIBUTES.map((spec) => {
     const live = byCode.get(spec.code.toUpperCase());
-    if (!live || live.options.length === 0) return spec;
+    if (!live) return spec;
+
+    const normalizedInputType = (live.inputType || "").toUpperCase();
+    const resolvedInputType =
+      normalizedInputType === "NUMBER_UNIT" ||
+      normalizedInputType === "SINGLE_SELECT" ||
+      normalizedInputType === "MULTI_SELECT" ||
+      normalizedInputType === "YES_NO_NA"
+        ? (normalizedInputType as BulkCommonAttributeSpec["inputType"])
+        : spec.inputType;
+
+    // Ensure exampleValue and description stay consistent with authoritative DB input_type
+    let resolvedExample = spec.exampleValue;
+    if (
+      resolvedInputType !== "MULTI_SELECT" &&
+      typeof resolvedExample === "string" &&
+      resolvedExample.includes(";")
+    ) {
+      resolvedExample = resolvedExample.split(";")[0].trim();
+    }
+
+    let resolvedDescription = spec.description;
+    if (resolvedInputType !== spec.inputType) {
+      if (resolvedInputType === "MULTI_SELECT") {
+        resolvedDescription = `복수 선택 가능 — 드롭다운에서 첫 항목 선택 후 세미콜론(;)으로 구분 추가 입력 (Common_Attributes 시트 참조 -> EAV ${spec.code}).`;
+      } else if (resolvedInputType === "SINGLE_SELECT") {
+        resolvedDescription = `단일 선택 — 목록에서 하나의 항목만 선택 (복수 입력 불가 · Common_Attributes 시트 참조 -> EAV ${spec.code}).`;
+      }
+    }
+
+    if (live.options.length === 0) {
+      return {
+        ...spec,
+        inputType: resolvedInputType,
+        allowNa: live.allowNa,
+        allowOther: live.allowOther,
+        exampleValue: resolvedExample,
+        description: resolvedDescription,
+      };
+    }
 
     const staticMap = new Map<string, BulkCommonAttributeOptionSpec>();
     for (const o of spec.options) staticMap.set(o.optionCode.toUpperCase(), o);
 
     return {
       ...spec,
+      inputType: resolvedInputType,
       allowNa: live.allowNa,
       allowOther: live.allowOther,
+      exampleValue: resolvedExample,
+      description: resolvedDescription,
       options: live.options.map((lo) => {
         const st = staticMap.get(lo.optionCode.toUpperCase());
         return {
@@ -1214,19 +1304,7 @@ export async function generateBulkProductTemplateBuffer(
     optionAttrDropdownColumns.forEach((colInfo, offsetIdx) => {
       if (colInfo.values.length === 0) return;
       const allowedColLetter = encodeColLetter(6 + offsetIdx); // 6 = 'G' .. 25 = 'Z'
-      const isMulti = colInfo.inputType === "MULTI_SELECT";
-      const promptTitle = isMulti
-        ? "복수 선택 가능 (; 구분)"
-        : colInfo.allowOther
-        ? "단일 선택 (기타 입력 가능)"
-        : "단일 선택 항목";
-      const prompt = isMulti
-        ? `목록에서 1개 선택하거나 복수 선택 시 세미콜론(;)으로 구분 입력 (예: 옵션1; 옵션2).${
-            colInfo.allowOther ? " 직접 입력: '기타: 내용' 또는 'Other: 내용'" : ""
-          }`
-        : `드롭다운 목록에서 1개 옵션을 선택하세요.${
-            colInfo.allowOther ? " 직접 입력: '기타: 내용' 또는 'Other: 내용'" : ""
-          }`;
+      const { promptTitle, prompt } = resolveOptionAttributeValidationPrompt(colInfo.inputType);
 
       addValidation(
         colInfo.fieldKey,
@@ -1286,8 +1364,8 @@ export async function generateBulkProductTemplateBuffer(
       "대표 이미지 URL(position 0) 및 추가 이미지 URL 2~10은 직접 다운로드 가능한 HTTPS 이미지 URL(JPG, PNG, WEBP · 최대 10MB)을 입력해 주세요. 제품 동영상 URL은 YouTube/Vimeo 등 HTTPS 외부 링크를 지원합니다.",
     ],
     [
-      "5. 공통 속성 드롭다운 · 복수 선택 · 기타 직접입력 (Common Attributes)",
-      '모든 선택형 공통 속성(20종) 셀에 국영문 병기 드롭다운이 제공됩니다. 단일 값은 목록에서 클릭 선택하고, 복수 선택(Multi-select) 항목은 세미콜론(;)으로 구분하여 입력합니다 (예: 실온 (Room Temperature); 기타: Cool). 기타 허용 항목은 반드시 "기타: 내용" 또는 "Other: text" 형식으로 입력해 주세요.',
+      "5. 공통 속성 단일/복수 선택 · 기타 직접입력 안내 (Common Attributes)",
+      `단일 선택 항목(목록에서 1개만 선택 · 복수 입력 불가)과 복수 선택 항목(드롭다운에서 첫 번째 항목 선택 후 세미콜론 ';'으로 구분하여 추가 입력, 예: 건성 (Dry Skin); 민감성 (Sensitive Skin))을 구분해 입력해 주세요. ※ 주의: ${EXCEL_MULTI_SELECT_OVERWRITE_WARNING} 기타 허용(allow_other=true) 항목은 반드시 "기타: Cool" 또는 "Other: Cool" 형식으로 입력해 주세요.`,
     ],
     [
       "6. 예시 행 자동 제외 & 텍스트(@) 서식 보존",
@@ -1362,16 +1440,21 @@ export async function generateBulkProductTemplateBuffer(
         { value: "입력 규칙 및 설명 (Validation & Format Guide)", style: STYLE.REF_HEADER },
       ],
     },
-    ...BULK_PRODUCT_COLUMNS.map((col) => ({
-      height: 22,
-      cells: [
-        { value: col.header, style: STYLE.REF_BODY },
-        { value: col.required ? "필수 (REQUIRED)" : "선택 (Optional)", style: STYLE.REF_BODY },
-        { value: getSectionNameKo(col.section), style: STYLE.REF_BODY },
-        { value: col.dbColumn, style: STYLE.REF_BODY },
-        { value: col.description, style: STYLE.REF_BODY },
-      ],
-    })),
+    ...BULK_PRODUCT_COLUMNS.map((col) => {
+      const liveAttr = col.attributeCode
+        ? commonAttrs.find((a) => a.code === col.attributeCode)
+        : undefined;
+      return {
+        height: 22,
+        cells: [
+          { value: col.header, style: STYLE.REF_BODY },
+          { value: col.required ? "필수 (REQUIRED)" : "선택 (Optional)", style: STYLE.REF_BODY },
+          { value: getSectionNameKo(col.section), style: STYLE.REF_BODY },
+          { value: col.dbColumn, style: STYLE.REF_BODY },
+          { value: liveAttr ? liveAttr.description : col.description, style: STYLE.REF_BODY },
+        ],
+      };
+    }),
   ];
 
   const instructionsMerges: string[] = [
@@ -1621,7 +1704,7 @@ export async function generateBulkProductTemplateBuffer(
   };
 
   // =========================================================================
-  // 7. Common_Attributes Sheet (Complete Reference for All 23 Common Attributes)
+  // 7. Common_Attributes Sheet (Complete Reference for All 23 Common Attributes + R4 Guidance)
   // =========================================================================
   const inputTypeLabelMap: Record<string, string> = {
     NUMBER_UNIT: "숫자 입력 · 개월 (Numeric Months)",
@@ -1630,7 +1713,7 @@ export async function generateBulkProductTemplateBuffer(
     YES_NO_NA: "예/아니요/해당없음 드롭다운 (Yes / No / N/A)",
   };
 
-  const commonAttrSheetRows: OoxmlRowSpec[] = [
+  const commonAttrTableRows: OoxmlRowSpec[] = [
     {
       height: 28,
       cells: [
@@ -1661,7 +1744,11 @@ export async function generateBulkProductTemplateBuffer(
           formattedOpts.push("해당 없음 (Not Applicable) [NA]");
         }
         if (attr.allowOther) {
-          formattedOpts.push("직접 입력 시 '기타: 내용' 또는 'Other: text'");
+          formattedOpts.push(
+            attr.inputType === "MULTI_SELECT"
+              ? "직접 입력 시 'Other: Cool' 또는 '기타: Cool' (복수 예: 실온 (Room Temperature); 기타: Cool)"
+              : "직접 입력 시 'Other: Cool' 또는 '기타: Cool'"
+          );
         }
         acceptedSummary = formattedOpts.join("  |  ");
       }
@@ -1686,20 +1773,97 @@ export async function generateBulkProductTemplateBuffer(
     }),
   ];
 
+  const commonAttrGuideStartRow = commonAttrTableRows.length + 2; // 1-based row after blank spacer
+  const commonAttrSheetRows: OoxmlRowSpec[] = [
+    ...commonAttrTableRows,
+    { height: 10, cells: [] },
+    {
+      height: 24,
+      cells: [
+        {
+          value: "■ 공통 속성 단일·복수 선택 및 기타(Other) 직접입력 필수 안내",
+          style: STYLE.SECTION_HEADER,
+        },
+        { value: "", style: STYLE.SECTION_HEADER },
+        { value: "", style: STYLE.SECTION_HEADER },
+        { value: "", style: STYLE.SECTION_HEADER },
+        { value: "", style: STYLE.SECTION_HEADER },
+        { value: "", style: STYLE.SECTION_HEADER },
+        { value: "", style: STYLE.SECTION_HEADER },
+      ],
+    },
+    {
+      height: 26,
+      cells: [
+        { value: "복수 선택(MULTI_SELECT) 주의 안내", style: STYLE.REF_BODY, forceString: true },
+        {
+          value: `${EXCEL_MULTI_SELECT_OVERWRITE_WARNING} (예: 건성 (Dry Skin); 민감성 (Sensitive Skin))`,
+          style: STYLE.REF_BODY,
+          forceString: true,
+        },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+      ],
+    },
+    {
+      height: 26,
+      cells: [
+        { value: "단일 선택(SINGLE_SELECT) 입력 규칙", style: STYLE.REF_BODY, forceString: true },
+        {
+          value:
+            "목록에서 하나의 항목만 선택하세요. 복수 입력은 허용되지 않습니다. 세미콜론(;)으로 여러 항목을 입력하면 검증 오류가 표시됩니다.",
+          style: STYLE.REF_BODY,
+          forceString: true,
+        },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+      ],
+    },
+    {
+      height: 28,
+      cells: [
+        { value: "기타(Other) 직접입력 규칙", style: STYLE.REF_BODY, forceString: true },
+        {
+          value:
+            "'기타 직접입력 가능 (allow_other = true)' 항목만 'Other: Cool' 또는 '기타: Cool' (복수 선택 시 '실온 (Room Temperature); 기타: Cool') 형식을 허용합니다. 접두어 없는 임의 텍스트 및 '고정 옵션만 (allow_other = false)' 항목(대상 성별·규제 상태 등)에는 직접입력이 불가합니다.",
+          style: STYLE.REF_BODY,
+          forceString: true,
+        },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+      ],
+    },
+  ];
+
   const commonAttributesSheetSpec: OoxmlSheetSpec = {
     name: "Common_Attributes",
     cols: [
-      { width: 26 },
+      { width: 28 },
       { width: 38 },
       { width: 26 },
       { width: 34 },
       { width: 24 },
-      { width: 82 },
+      { width: 86 },
       { width: 30 },
     ],
     rows: commonAttrSheetRows,
+    merges: [
+      `A${commonAttrGuideStartRow}:G${commonAttrGuideStartRow}`,
+      `B${commonAttrGuideStartRow + 1}:G${commonAttrGuideStartRow + 1}`,
+      `B${commonAttrGuideStartRow + 2}:G${commonAttrGuideStartRow + 2}`,
+      `B${commonAttrGuideStartRow + 3}:G${commonAttrGuideStartRow + 3}`,
+    ],
     freezeRows: 1,
-    autoFilterRef: `A1:G${commonAttrSheetRows.length}`,
+    autoFilterRef: `A1:G${commonAttrTableRows.length}`,
   };
 
   return buildOoxmlWorkbookBuffer([
@@ -2060,18 +2224,12 @@ export async function generateAnnotatedErrorWorkbookBuffer(
   optionAttrDropdownColumns.forEach((colInfo, offsetIdx) => {
     if (colInfo.values.length === 0) return;
     const allowedColLetter = encodeColLetter(6 + offsetIdx);
-    const isMulti = colInfo.inputType === "MULTI_SELECT";
+    const { promptTitle, prompt } = resolveOptionAttributeValidationPrompt(colInfo.inputType);
     addAnnotatedDropdown(
       colInfo.fieldKey,
       `Allowed_Values!$${allowedColLetter}$2:$${allowedColLetter}$${colInfo.values.length + 1}`,
-      isMulti ? "복수 선택 가능 (; 구분)" : "단일 선택 항목",
-      isMulti
-        ? `목록에서 1개 선택하거나 복수 선택 시 세미콜론(;) 구분 입력.${
-            colInfo.allowOther ? " 직접 입력: '기타: 내용' 또는 'Other: 내용'" : ""
-          }`
-        : `드롭다운 목록에서 1개 옵션을 선택하세요.${
-            colInfo.allowOther ? " 직접 입력: '기타: 내용' 또는 'Other: 내용'" : ""
-          }`
+      promptTitle,
+      prompt
     );
   });
 
@@ -2502,7 +2660,7 @@ export async function generateAnnotatedErrorWorkbookBuffer(
     MULTI_SELECT: "드롭다운 + 세미콜론 ';' 복수 입력 (Multi Select)",
     YES_NO_NA: "예/아니요/해당없음 드롭다운 (Yes / No / N/A)",
   };
-  const commonAttrSheetRows: OoxmlRowSpec[] = [
+  const commonAttrTableRows: OoxmlRowSpec[] = [
     {
       height: 28,
       cells: [
@@ -2528,7 +2686,13 @@ export async function generateAnnotatedErrorWorkbookBuffer(
               !visibleOpts.some((o) => o.optionCode.toUpperCase() === "NOT_APPLICABLE")
                 ? ["해당 없음 (Not Applicable) [NA]"]
                 : []),
-              ...(attr.allowOther ? ["직접 입력 시 '기타: 내용' 또는 'Other: text'"] : []),
+              ...(attr.allowOther
+                ? [
+                    attr.inputType === "MULTI_SELECT"
+                      ? "직접 입력 시 'Other: Cool' 또는 '기타: Cool' (복수 예: 실온 (Room Temperature); 기타: Cool)"
+                      : "직접 입력 시 'Other: Cool' 또는 '기타: Cool'",
+                  ]
+                : []),
             ].join("  |  ");
 
       return {
@@ -2549,20 +2713,78 @@ export async function generateAnnotatedErrorWorkbookBuffer(
       };
     }),
   ];
+  const annotatedCommonAttrGuideStartRow = commonAttrTableRows.length + 2;
+  const commonAttrSheetRows: OoxmlRowSpec[] = [
+    ...commonAttrTableRows,
+    { height: 10, cells: [] },
+    {
+      height: 24,
+      cells: [
+        {
+          value: "■ 공통 속성 단일·복수 선택 및 기타(Other) 직접입력 필수 안내",
+          style: STYLE.SECTION_HEADER,
+        },
+        { value: "", style: STYLE.SECTION_HEADER },
+        { value: "", style: STYLE.SECTION_HEADER },
+        { value: "", style: STYLE.SECTION_HEADER },
+        { value: "", style: STYLE.SECTION_HEADER },
+        { value: "", style: STYLE.SECTION_HEADER },
+        { value: "", style: STYLE.SECTION_HEADER },
+      ],
+    },
+    {
+      height: 26,
+      cells: [
+        { value: "복수 선택(MULTI_SELECT) 주의 안내", style: STYLE.REF_BODY, forceString: true },
+        {
+          value: `${EXCEL_MULTI_SELECT_OVERWRITE_WARNING} (예: 건성 (Dry Skin); 민감성 (Sensitive Skin))`,
+          style: STYLE.REF_BODY,
+          forceString: true,
+        },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+      ],
+    },
+    {
+      height: 28,
+      cells: [
+        { value: "기타(Other) 직접입력 규칙", style: STYLE.REF_BODY, forceString: true },
+        {
+          value:
+            "'기타 직접입력 가능 (allow_other = true)' 항목만 'Other: Cool' 또는 '기타: Cool' (복수 선택 시 '실온 (Room Temperature); 기타: Cool') 형식을 허용합니다. 접두어 없는 임의 텍스트 및 '고정 옵션만 (allow_other = false)' 항목에는 직접입력이 불가합니다.",
+          style: STYLE.REF_BODY,
+          forceString: true,
+        },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+      ],
+    },
+  ];
   const commonAttributesSheetSpec: OoxmlSheetSpec = {
     name: "Common_Attributes",
     cols: [
-      { width: 26 },
+      { width: 28 },
       { width: 38 },
       { width: 26 },
       { width: 34 },
       { width: 24 },
-      { width: 82 },
+      { width: 86 },
       { width: 30 },
     ],
     rows: commonAttrSheetRows,
+    merges: [
+      `A${annotatedCommonAttrGuideStartRow}:G${annotatedCommonAttrGuideStartRow}`,
+      `B${annotatedCommonAttrGuideStartRow + 1}:G${annotatedCommonAttrGuideStartRow + 1}`,
+      `B${annotatedCommonAttrGuideStartRow + 2}:G${annotatedCommonAttrGuideStartRow + 2}`,
+    ],
     freezeRows: 1,
-    autoFilterRef: `A1:G${commonAttrSheetRows.length}`,
+    autoFilterRef: `A1:G${commonAttrTableRows.length}`,
   };
 
   return buildOoxmlWorkbookBuffer([

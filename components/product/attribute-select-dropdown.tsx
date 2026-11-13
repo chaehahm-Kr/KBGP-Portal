@@ -211,6 +211,9 @@ export function AttributeSelectDropdown({
   const singleSelectedCode: string = useMemo(() => {
     if (isMulti) return "";
     if (typeof value === "string") return value.trim();
+    if (Array.isArray(value) && value.length === 1 && typeof value[0] === "string") {
+      return value[0].trim();
+    }
     return "";
   }, [isMulti, value]);
 

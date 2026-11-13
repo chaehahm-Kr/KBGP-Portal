@@ -382,8 +382,26 @@ function buildEffectiveCommonAttributeSpecs(
 
   return COMMON_BULK_ATTRIBUTES.map((spec) => {
     const live = liveByCode.get(spec.code.toUpperCase());
-    if (!live || live.options.length === 0) {
+    if (!live) {
       return spec;
+    }
+
+    const normalizedInputType = (live.inputType || "").toUpperCase();
+    const resolvedInputType =
+      normalizedInputType === "NUMBER_UNIT" ||
+      normalizedInputType === "SINGLE_SELECT" ||
+      normalizedInputType === "MULTI_SELECT" ||
+      normalizedInputType === "YES_NO_NA"
+        ? (normalizedInputType as BulkCommonAttributeSpec["inputType"])
+        : spec.inputType;
+
+    if (live.options.length === 0) {
+      return {
+        ...spec,
+        inputType: resolvedInputType,
+        allowNa: live.allowNa,
+        allowOther: live.allowOther,
+      };
     }
 
     const staticByOptionCode = new Map<string, BulkCommonAttributeOptionSpec>();
@@ -405,6 +423,7 @@ function buildEffectiveCommonAttributeSpecs(
 
     return {
       ...spec,
+      inputType: resolvedInputType,
       allowNa: live.allowNa,
       allowOther: live.allowOther,
       options: mergedOptions,
@@ -450,7 +469,15 @@ function matchAttributeOptionToken(
 
     if (opt.aliases) {
       for (const a of opt.aliases) {
-        if (normalizeLookupToken(a) === norm) return true;
+        const aliasNorm = normalizeLookupToken(a);
+        if (!aliasNorm) continue;
+        if (aliasNorm === norm) return true;
+        if (koNorm && (norm === `${koNorm} (${aliasNorm})` || norm === `${aliasNorm} (${koNorm})`)) {
+          return true;
+        }
+        if (enNorm && (norm === `${aliasNorm} (${enNorm})` || norm === `${enNorm} (${aliasNorm})`)) {
+          return true;
+        }
       }
     }
     return false;
@@ -1989,14 +2016,14 @@ export function parseAndValidateBulkProductWorkbook(
       }
 
       if (attr.inputType === "YES_NO_NA" || attr.inputType === "SINGLE_SELECT") {
-        // Multi-value semicolon input in a single-select field must be rejected clearly
+        // Multi-value semicolon input in a single-select field must be rejected clearly (never silently truncate)
         if (rawCell.includes(";")) {
           addCellError({
             fieldKey: attr.fieldKey,
             category: "INVALID_ATTRIBUTE_VALUE",
-            reason: `[${excelRowNumber}행 · ${colHeader}] 단일 선택 항목에는 복수 값("${rawCell}")을 입력할 수 없습니다.`,
+            reason: `[${excelRowNumber}행 · ${colHeader}] 단일 선택 항목에는 세미콜론(;)으로 구분된 복수 값("${rawCell}")을 입력할 수 없습니다. 하나의 항목만 선택해 주세요.`,
             acceptedValues: acceptedSummary,
-            guidance: `Common_Attributes 시트에서 "${attr.nameKo}"의 허용 옵션 중 1개만 선택해 주세요.`,
+            guidance: `"${attr.nameKo}" 항목은 단일 선택 전용입니다. 입력된 값 중 실제로 적용할 1개 옵션만 남기고 나머지 값을 삭제해 주세요 (Common_Attributes 시트 참조).`,
             legacyFlag: "commonAttribute",
           });
           continue;

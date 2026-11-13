@@ -404,7 +404,23 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
       const stored = valMap[attr.code];
       if (stored) {
-        initialVals[attr.code] = stored.value;
+        let loadedVal = stored.value;
+        if (
+          attr.inputType === "SINGLE_SELECT" &&
+          Array.isArray(loadedVal) &&
+          loadedVal.length === 1 &&
+          typeof loadedVal[0] === "string"
+        ) {
+          loadedVal = loadedVal[0].trim();
+        } else if (
+          attr.inputType === "MULTI_SELECT" &&
+          typeof loadedVal === "string" &&
+          loadedVal.trim() !== "" &&
+          loadedVal !== "NA"
+        ) {
+          loadedVal = [loadedVal.trim()];
+        }
+        initialVals[attr.code] = loadedVal;
         initialTexts[attr.code] = stored.text || "";
       } else {
         // Fallback defaults
