@@ -23,12 +23,15 @@ interface BulkProductUploadModalProps {
 type WizardStep = 1 | 2 | 3 | 4 | 5;
 type PreviewFilter = "ALL" | "VALID" | "WARNING" | "INVALID";
 
-const STEP_DEFINITIONS: { step: WizardStep; title: string; shortTitle: string }[] = [
-  { step: 1, title: "STEP 1: Download Excel Template", shortTitle: "1. Template" },
-  { step: 2, title: "STEP 2: Upload Completed Excel", shortTitle: "2. Upload" },
-  { step: 3, title: "STEP 3: Validate & Preview", shortTitle: "3. Preview" },
-  { step: 4, title: "STEP 4: Confirm Draft Registration", shortTitle: "4. Confirm" },
-  { step: 5, title: "STEP 5: Import Results", shortTitle: "5. Results" },
+const PREVIEW_PAGE_SIZE = 5;
+const ERROR_RESULT_PAGE_SIZE = 4;
+
+const STEP_DEFINITIONS: { step: WizardStep; label: string }[] = [
+  { step: 1, label: "1. 양식 받기" },
+  { step: 2, label: "2. 파일 업로드" },
+  { step: 3, label: "3. 데이터 검증" },
+  { step: 4, label: "4. 등록 확인" },
+  { step: 5, label: "5. 등록 결과" },
 ];
 
 function triggerBase64XlsxDownload(base64: string, fileName: string) {
@@ -68,10 +71,12 @@ export function BulkProductUploadModal({
   const [isValidating, setIsValidating] = useState(false);
   const [previewResult, setPreviewResult] = useState<BulkPreviewResult | null>(null);
   const [previewFilter, setPreviewFilter] = useState<PreviewFilter>("ALL");
+  const [previewPage, setPreviewPage] = useState<number>(1);
 
   const [submissionKey, setSubmissionKey] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [importResult, setImportResult] = useState<BulkImportExecutionResult | null>(null);
+  const [errorPage, setErrorPage] = useState<number>(1);
 
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
@@ -86,9 +91,11 @@ export function BulkProductUploadModal({
     setIsValidating(false);
     setPreviewResult(null);
     setPreviewFilter("ALL");
+    setPreviewPage(1);
     setSubmissionKey("");
     setIsSubmitting(false);
     setImportResult(null);
+    setErrorPage(1);
     setErrorBanner(null);
   };
 
@@ -107,13 +114,13 @@ export function BulkProductUploadModal({
     try {
       const res = await downloadBulkProductTemplateAction();
       if (!res.success || !res.base64 || !res.fileName) {
-        setErrorBanner(res.error || "Failed to download Excel template.");
+        setErrorBanner(res.error || "Excel 양식을 다운로드하지 못했습니다.");
         return;
       }
       triggerBase64XlsxDownload(res.base64, res.fileName);
       setTemplateDownloaded(true);
     } catch (err: any) {
-      setErrorBanner(err?.message || "Failed to generate Excel template.");
+      setErrorBanner(err?.message || "Excel 양식 생성 중 오류가 발생했습니다.");
     } finally {
       setIsDownloadingTemplate(false);
     }
@@ -124,12 +131,12 @@ export function BulkProductUploadModal({
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".xlsx")) {
       setSelectedFile(null);
-      setErrorBanner("Unsupported file format. Please upload an .xlsx Excel file.");
+      setErrorBanner("지원하지 않는 파일 형식입니다. .xlsx 형식의 Excel 파일만 업로드할 수 있습니다.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
       setSelectedFile(null);
-      setErrorBanner("File size exceeds 10 MB limit.");
+      setErrorBanner("파일 크기가 허용 한도(10 MB)를 초과했습니다.");
       return;
     }
     setSelectedFile(file);
@@ -137,7 +144,7 @@ export function BulkProductUploadModal({
 
   const handleValidateFile = async () => {
     if (!selectedFile) {
-      setErrorBanner("Please select an .xlsx file first.");
+      setErrorBanner("먼저 업로드할 .xlsx 파일을 선택해 주세요.");
       return;
     }
     setErrorBanner(null);
@@ -147,11 +154,12 @@ export function BulkProductUploadModal({
       formData.append("file", selectedFile);
       const res = await validateBulkProductExcelAction(formData);
       if (!res.success || !res.summary || !res.rows) {
-        setErrorBanner(res.error || "Failed to validate the uploaded Excel file.");
+        setErrorBanner(res.error || "업로드된 Excel 파일을 검증하지 못했습니다.");
         return;
       }
       setPreviewResult(res);
       setPreviewFilter("ALL");
+      setPreviewPage(1);
       setSubmissionKey(
         typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
@@ -159,7 +167,7 @@ export function BulkProductUploadModal({
       );
       setStep(3);
     } catch (err: any) {
-      setErrorBanner(err?.message || "Unexpected error while validating Excel file.");
+      setErrorBanner(err?.message || "Excel 데이터 검증 중 예기치 않은 오류가 발생했습니다.");
     } finally {
       setIsValidating(false);
     }
@@ -178,17 +186,18 @@ export function BulkProductUploadModal({
 
       const res = await executeBulkProductImportAction(formData);
       if (!res.success) {
-        setErrorBanner(res.error || "Bulk product registration failed.");
+        setErrorBanner(res.error || "상품 대량 등록 처리에 실패했습니다.");
         return;
       }
       setImportResult(res);
+      setErrorPage(1);
       setStep(5);
       if (res.createdCount > 0) {
         router.refresh();
         onImportSuccess?.(res.createdCount);
       }
     } catch (err: any) {
-      setErrorBanner(err?.message || "Unexpected error during Draft creation.");
+      setErrorBanner(err?.message || "상품 등록 중 예기치 않은 오류가 발생했습니다.");
     } finally {
       setIsSubmitting(false);
     }
@@ -199,521 +208,613 @@ export function BulkProductUploadModal({
     return r.status === previewFilter;
   });
 
+  const totalPreviewPages = Math.max(1, Math.ceil(filteredPreviewRows.length / PREVIEW_PAGE_SIZE));
+  const safePreviewPage = Math.min(previewPage, totalPreviewPages);
+  const pagedPreviewRows = filteredPreviewRows.slice(
+    (safePreviewPage - 1) * PREVIEW_PAGE_SIZE,
+    safePreviewPage * PREVIEW_PAGE_SIZE
+  );
+
+  const rejectedList = importResult?.rejectedRows ?? [];
+  const totalErrorPages = Math.max(1, Math.ceil(rejectedList.length / ERROR_RESULT_PAGE_SIZE));
+  const safeErrorPage = Math.min(errorPage, totalErrorPages);
+  const pagedErrorRows = rejectedList.slice(
+    (safeErrorPage - 1) * ERROR_RESULT_PAGE_SIZE,
+    safeErrorPage * ERROR_RESULT_PAGE_SIZE
+  );
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-5"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4"
       onClick={handleClose}
     >
       <div
-        className="w-full max-w-5xl max-h-[90vh] flex flex-col rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bulk-upload-modal-title"
+        className="w-full max-w-4xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2.5rem)] flex flex-col rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header */}
-        <div className="flex items-center justify-between gap-4 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-          <div>
-            <h2 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              <span>📊 Excel Bulk Product Registration</span>
-              <span className="rounded bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                Draft Workflow · Max {BULK_IMPORT_MAX_ROWS} Rows
-              </span>
+        {/* Compact Modal Header */}
+        <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-5 py-3 dark:border-zinc-800 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <h2
+              id="bulk-upload-modal-title"
+              className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white truncate"
+            >
+              상품 Excel 대량 등록
             </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              Register multiple Draft products quickly with 4 required fields and optional specifications.
-            </p>
+            <span className="rounded bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 shrink-0">
+              임시 등록 (Draft) · 최대 {BULK_IMPORT_MAX_ROWS}건
+            </span>
           </div>
           <button
             type="button"
             onClick={handleClose}
             disabled={isValidating || isSubmitting}
-            aria-label="Close bulk upload modal"
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 disabled:opacity-40 cursor-pointer"
+            aria-label="대량 등록 창 닫기"
+            className="rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 disabled:opacity-40 cursor-pointer shrink-0"
           >
             ✕
           </button>
         </div>
 
-        {/* 5-Step Progress Bar */}
-        <div className="border-b border-zinc-200 bg-zinc-50/70 px-5 py-2.5 dark:border-zinc-800 dark:bg-zinc-950/50 overflow-x-auto">
-          <div className="flex items-center gap-2 min-w-max">
-            {STEP_DEFINITIONS.map((item, idx) => {
+        {/* Zero-Overflow 5-Step Stepper */}
+        <div className="border-b border-zinc-200 bg-zinc-50/70 px-4 sm:px-5 py-2 dark:border-zinc-800 dark:bg-zinc-950/50 shrink-0">
+          <div className="grid grid-cols-5 gap-1 sm:gap-1.5">
+            {STEP_DEFINITIONS.map((item) => {
               const isCurrent = step === item.step;
               const isCompleted = step > item.step;
               return (
-                <React.Fragment key={item.step}>
-                  <div
-                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-bold transition-colors ${
-                      isCurrent
-                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
-                        : isCompleted
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900"
-                        : "text-zinc-400 dark:text-zinc-500"
-                    }`}
-                  >
-                    <span>{isCompleted ? "✓" : ""}</span>
-                    <span>{item.title}</span>
-                  </div>
-                  {idx < STEP_DEFINITIONS.length - 1 && (
-                    <span className="text-zinc-300 dark:text-zinc-700 text-xs">›</span>
-                  )}
-                </React.Fragment>
+                <div
+                  key={item.step}
+                  className={`flex items-center justify-center gap-1 rounded-md px-1.5 py-1.5 text-[11px] sm:text-xs font-bold text-center truncate transition-colors ${
+                    isCurrent
+                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-2xs"
+                      : isCompleted
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900"
+                      : "text-zinc-400 dark:text-zinc-500 bg-transparent"
+                  }`}
+                >
+                  {isCompleted && <span className="shrink-0">✓</span>}
+                  <span className="truncate">{item.label}</span>
+                </div>
               );
             })}
           </div>
         </div>
 
-        {/* Body Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {errorBanner && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300 flex items-start justify-between gap-3">
-              <span>⚠️ {errorBanner}</span>
-              <button
-                type="button"
-                onClick={() => setErrorBanner(null)}
-                className="text-rose-500 hover:text-rose-700 font-bold shrink-0 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-          )}
+        {/* Body Content (Consistent height across steps, responsive scroll on small viewports) */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 min-h-[340px] flex flex-col justify-between gap-3">
+          <div className="space-y-3">
+            {errorBanner && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-medium text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300 flex items-start justify-between gap-3">
+                <span className="break-words">{errorBanner}</span>
+                <button
+                  type="button"
+                  onClick={() => setErrorBanner(null)}
+                  className="text-rose-500 hover:text-rose-700 font-bold shrink-0 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
-          {/* STEP 1: DOWNLOAD EXCEL TEMPLATE */}
-          {step === 1 && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div>
+            {/* STEP 1: 양식 받기 */}
+            {step === 1 && (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-950/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="space-y-1 min-w-0">
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                      STEP 1: Download Official Excel Template (.xlsx)
+                      공식 Excel 업로드 양식 다운로드 (.xlsx)
                     </h3>
-                    <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
-                      Includes your company&apos;s active Brands, live 3-Depth Categories, Countries, Allowed Values, and an example row.
+                    <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                      귀사의 활성 브랜드, 3단계 카테고리 코드, 국가, 허용 입력값 및 예시 행이 포함되어 있습니다.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={handleDownloadTemplate}
                     disabled={isDownloadingTemplate}
-                    className="shrink-0 rounded-lg bg-zinc-900 px-4 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer shadow-xs"
+                    className="shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer shadow-2xs"
                   >
-                    {isDownloadingTemplate
-                      ? "Generating .xlsx..."
-                      : "⬇ Download Excel Template (.xlsx)"}
+                    {isDownloadingTemplate ? "양식 생성 중..." : "⬇ Excel 양식 다운로드"}
                   </button>
                 </div>
 
                 {templateDownloaded && (
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-3.5 py-2 text-xs font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300">
-                    ✓ Template downloaded. Fill in the <strong>&quot;Products&quot;</strong> sheet and proceed to Step 2.
+                    ✓ 양식이 다운로드되었습니다. <strong>&quot;Products&quot;</strong> 시트를 작성한 뒤 다음 단계로 이동해 주세요.
                   </div>
                 )}
-              </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                <div className="rounded-lg border border-zinc-200 p-3.5 dark:border-zinc-800 space-y-1.5">
-                  <div className="font-bold text-zinc-900 dark:text-white">
-                    Minimum Required Columns (Only 4)
+                <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                  <div className="rounded-lg border border-zinc-200 p-3.5 dark:border-zinc-800 space-y-1.5">
+                    <div className="font-bold text-zinc-900 dark:text-white">
+                      필수 입력 항목 (4개만 입력해도 등록 가능)
+                    </div>
+                    <ul className="space-y-1 text-zinc-600 dark:text-zinc-400">
+                      <li>• <strong>브랜드 (Brand) *</strong> — 귀사에 등록된 활성 브랜드명</li>
+                      <li>• <strong>제조사 SKU (Manufacturer SKU) *</strong> — 고유 상품 코드</li>
+                      <li>• <strong>영문 제품명 (Product Name EN) *</strong> — 공식 영문 상품명</li>
+                      <li>• <strong>카테고리 (1Depth) *</strong> — 대분류 카테고리 (예: Skincare)</li>
+                    </ul>
                   </div>
-                  <ul className="space-y-1 text-zinc-600 dark:text-zinc-400">
-                    <li>• <strong>Brand *</strong> — Active brand registered to your company</li>
-                    <li>• <strong>Manufacturer SKU *</strong> — Unique SKU code (A-Z, 0-9, -, _)</li>
-                    <li>• <strong>Product Name EN *</strong> — Official English product name</li>
-                    <li>• <strong>Category 1Depth *</strong> — Top-level category (e.g., Skincare)</li>
-                  </ul>
+
+                  <div className="rounded-lg border border-zinc-200 p-3.5 dark:border-zinc-800 space-y-1.5">
+                    <div className="font-bold text-zinc-900 dark:text-white">
+                      작성 안내 및 임시 등록 (Draft) 정책
+                    </div>
+                    <ul className="space-y-1 text-zinc-600 dark:text-zinc-400">
+                      <li>• 세부 카테고리, 바코드(UPC/EAN), 가격, 물류 규격 등 48개 선택 항목 지원</li>
+                      <li>• 제조사 SKU 및 바코드의 선행 <code className="font-mono">0</code> 유지를 위해 텍스트 서식 기본 적용</li>
+                      <li>• 등록 상품은 이미지·속성 보완 전까지 <strong>임시 등록 (Draft)</strong> 상태로 보호됨</li>
+                    </ul>
+                  </div>
                 </div>
-
-                <div className="rounded-lg border border-zinc-200 p-3.5 dark:border-zinc-800 space-y-1.5">
-                  <div className="font-bold text-zinc-900 dark:text-white">
-                    Optional Data & Draft Behavior
-                  </div>
-                  <ul className="space-y-1 text-zinc-600 dark:text-zinc-400">
-                    <li>• Supports 2Depth/3Depth Categories, Barcodes (UPC/EAN), Pricing, and Logistics.</li>
-                    <li>• Keep SKU, UPC (12 digits), and EAN (13 digits) as <strong>Text</strong> to preserve leading zeros.</li>
-                    <li>• Imported products remain <strong>Draft (보완 대기)</strong> until images &amp; category attributes are completed.</li>
-                  </ul>
-                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* STEP 2: UPLOAD COMPLETED EXCEL */}
-          {step === 2 && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                  STEP 2: Upload Completed Excel (.xlsx)
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Upload your completed <code className="font-mono">.xlsx</code> file (up to {BULK_IMPORT_MAX_ROWS} product rows). Every row will be validated on the server before creation.
-                </p>
-              </div>
-
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setIsDragging(false);
-                  acceptFileSelection(e.dataTransfer.files?.[0]);
-                }}
-                onClick={() => fileInputRef.current?.click()}
-                className={`rounded-xl border-2 border-dashed p-8 text-center transition-colors cursor-pointer ${
-                  isDragging
-                    ? "border-zinc-900 bg-zinc-100/70 dark:border-white dark:bg-zinc-800/40"
-                    : "border-zinc-300 bg-zinc-50/50 hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950/40 dark:hover:border-zinc-600"
-                }`}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  className="hidden"
-                  onChange={(e) => {
-                    acceptFileSelection(e.target.files?.[0]);
-                    e.target.value = "";
-                  }}
-                />
-                <div className="text-2xl mb-2">📄</div>
-                {selectedFile ? (
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-zinc-900 dark:text-white">
-                      {selectedFile.name}
-                    </p>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                      {(selectedFile.size / 1024).toFixed(1)} KB · Click or drop another .xlsx file to replace
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                      Click to choose an .xlsx file or drag and drop here
-                    </p>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Only .xlsx format supported · Maximum {BULK_IMPORT_MAX_ROWS} rows · Max 10 MB
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: VALIDATE & PREVIEW */}
-          {step === 3 && previewResult?.summary && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
+            {/* STEP 2: 파일 업로드 */}
+            {step === 2 && (
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                   <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                    STEP 3: Validation &amp; Preview — <span className="font-mono font-normal text-zinc-500">{previewResult.fileName}</span>
+                    작성 완료된 Excel 파일 업로드 (.xlsx)
                   </h3>
-                  {previewResult.summary.exampleRowsSkipped > 0 && (
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                      ℹ️ Template sample row (<code className="font-mono">EXAMPLE-SKU-001</code>) was automatically skipped.
-                    </p>
+                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    최대 {BULK_IMPORT_MAX_ROWS}개 행 · 10 MB 이하 · 서버 사전 검증 적용
+                  </span>
+                </div>
+
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    acceptFileSelection(e.dataTransfer.files?.[0]);
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`rounded-xl border-2 border-dashed px-6 py-11 text-center transition-colors cursor-pointer ${
+                    isDragging
+                      ? "border-zinc-900 bg-zinc-100/70 dark:border-white dark:bg-zinc-800/40"
+                      : "border-zinc-300 bg-zinc-50/50 hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950/40 dark:hover:border-zinc-600"
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    className="hidden"
+                    onChange={(e) => {
+                      acceptFileSelection(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
+                  <div className="text-2xl mb-2">📄</div>
+                  {selectedFile ? (
+                    <div className="space-y-1">
+                      <p className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white break-all">
+                        {selectedFile.name}
+                      </p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {(selectedFile.size / 1024).toFixed(1)} KB · 다른 .xlsx 파일로 변경하려면 클릭하거나 드래그하세요
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="text-xs sm:text-sm font-bold text-zinc-800 dark:text-zinc-200">
+                        클릭하여 .xlsx 파일을 선택하거나 이곳으로 끌어다 놓으세요
+                      </p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        공식 양식의 &quot;Products&quot; 시트 기준 · 예시 행(EXAMPLE-SKU-001)은 자동 제외됩니다
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
+            )}
 
-              {/* KPI Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                <div className="rounded-lg border border-zinc-200 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
-                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400">Total Product Rows</div>
-                  <div className="text-lg font-extrabold text-zinc-900 dark:text-white mt-0.5">
-                    {previewResult.summary.totalRows}
+            {/* STEP 3: 데이터 검증 및 미리보기 */}
+            {step === 3 && previewResult?.summary && (
+              <div className="space-y-2.5">
+                {/* Compact Header + Filter Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0 text-xs">
+                    <span className="font-bold text-zinc-900 dark:text-white truncate max-w-[240px]">
+                      {previewResult.fileName}
+                    </span>
+                    {previewResult.summary.exampleRowsSkipped > 0 && (
+                      <span className="rounded bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                        예시 행 자동 제외됨
+                      </span>
+                    )}
                   </div>
-                </div>
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-                  <div className="text-[11px] text-emerald-700 dark:text-emerald-400">Valid Rows</div>
-                  <div className="text-lg font-extrabold text-emerald-700 dark:text-emerald-400 mt-0.5">
-                    {previewResult.summary.validRows}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
-                  <div className="text-[11px] text-amber-700 dark:text-amber-400">Warning Rows</div>
-                  <div className="text-lg font-extrabold text-amber-700 dark:text-amber-400 mt-0.5">
-                    {previewResult.summary.warningRows}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-3 dark:border-rose-900/50 dark:bg-rose-950/20">
-                  <div className="text-[11px] text-rose-700 dark:text-rose-400">Invalid Rows (Rejected)</div>
-                  <div className="text-lg font-extrabold text-rose-700 dark:text-rose-400 mt-0.5">
-                    {previewResult.summary.invalidRows}
-                  </div>
-                </div>
-              </div>
 
-              {/* Filter Tabs */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {(
-                  [
-                    { id: "ALL", label: `All (${previewResult.summary.totalRows})` },
-                    { id: "VALID", label: `Valid (${previewResult.summary.validRows})` },
-                    { id: "WARNING", label: `Warnings (${previewResult.summary.warningRows})` },
-                    { id: "INVALID", label: `Invalid (${previewResult.summary.invalidRows})` },
-                  ] as { id: PreviewFilter; label: string }[]
-                ).map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setPreviewFilter(tab.id)}
-                    className={`rounded-md px-3 py-1 text-xs font-bold transition-colors cursor-pointer ${
-                      previewFilter === tab.id
-                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
-                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Compact Preview Table */}
-              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-x-auto max-h-80 overflow-y-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="sticky top-0 bg-zinc-100 dark:bg-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-700">
-                    <tr>
-                      <th className="px-3 py-2 w-16">Row #</th>
-                      <th className="px-3 py-2 w-24">Status</th>
-                      <th className="px-3 py-2 w-28">Brand</th>
-                      <th className="px-3 py-2 w-36">Manufacturer SKU</th>
-                      <th className="px-3 py-2 w-48">Product Name EN</th>
-                      <th className="px-3 py-2 w-36">Category</th>
-                      <th className="px-3 py-2">Validation Details / Error Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {filteredPreviewRows.map((row) => (
-                      <tr
-                        key={row.excelRowNumber}
-                        className={
-                          row.status === "INVALID"
-                            ? "bg-rose-50/30 dark:bg-rose-950/10"
-                            : row.status === "WARNING"
-                            ? "bg-amber-50/30 dark:bg-amber-950/10"
-                            : ""
-                        }
+                  <div className="flex flex-wrap items-center gap-1">
+                    {(
+                      [
+                        { id: "ALL", label: `전체 (${previewResult.summary.totalRows})` },
+                        { id: "VALID", label: `정상 (${previewResult.summary.validRows})` },
+                        { id: "WARNING", label: `확인 필요 (${previewResult.summary.warningRows})` },
+                        { id: "INVALID", label: `오류 (${previewResult.summary.invalidRows})` },
+                      ] as { id: PreviewFilter; label: string }[]
+                    ).map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          setPreviewFilter(tab.id);
+                          setPreviewPage(1);
+                        }}
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer ${
+                          previewFilter === tab.id
+                            ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
+                            : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                        }`}
                       >
-                        <td className="px-3 py-2 font-mono font-bold text-zinc-600 dark:text-zinc-400">
-                          #{row.excelRowNumber}
-                        </td>
-                        <td className="px-3 py-2">
-                          {row.status === "VALID" && (
-                            <span className="inline-flex rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                              Valid
-                            </span>
-                          )}
-                          {row.status === "WARNING" && (
-                            <span className="inline-flex rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                              Warning
-                            </span>
-                          )}
-                          {row.status === "INVALID" && (
-                            <span className="inline-flex rounded bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
-                              Invalid
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 truncate max-w-[120px] text-zinc-800 dark:text-zinc-200">
-                          {row.rawBrand || <span className="text-rose-500">(Missing)</span>}
-                        </td>
-                        <td className="px-3 py-2 font-mono truncate max-w-[150px] text-zinc-800 dark:text-zinc-200">
-                          {row.rawManufactureSku || <span className="text-rose-500">(Missing)</span>}
-                        </td>
-                        <td className="px-3 py-2 truncate max-w-[200px] text-zinc-800 dark:text-zinc-200">
-                          {row.rawProductNameEn || <span className="text-rose-500">(Missing)</span>}
-                        </td>
-                        <td className="px-3 py-2 truncate max-w-[160px] text-zinc-600 dark:text-zinc-400">
-                          {row.normalizedCategoryPath || row.rawCategory1Depth || "-"}
-                        </td>
-                        <td className="px-3 py-2">
-                          {row.status === "INVALID" ? (
-                            <div className="space-y-0.5 text-rose-700 dark:text-rose-400">
-                              {row.errors.map((err, i) => (
-                                <div key={i}>• {err}</div>
-                              ))}
-                            </div>
-                          ) : row.status === "WARNING" ? (
-                            <div className="space-y-0.5 text-amber-700 dark:text-amber-400">
-                              {row.warnings.map((w, i) => (
-                                <div key={i}>• {w}</div>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-emerald-600 dark:text-emerald-400">
-                              Ready for Draft creation
-                            </span>
-                          )}
-                        </td>
-                      </tr>
+                        {tab.label}
+                      </button>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4: CONFIRM DRAFT REGISTRATION */}
-          {step === 4 && previewResult?.summary && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                  STEP 4: Confirm Draft Batch Registration
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Review the batch summary below before creating Draft product records.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-950/40 space-y-3 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="rounded-lg bg-white p-3 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
-                    <div className="text-zinc-500 dark:text-zinc-400">Drafts to Create</div>
-                    <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                      {previewResult.summary.importableRows}
-                    </div>
-                    <div className="text-[11px] text-zinc-500 mt-0.5">
-                      ({previewResult.summary.validRows} valid + {previewResult.summary.warningRows} normalized)
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg bg-white p-3 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
-                    <div className="text-zinc-500 dark:text-zinc-400">Invalid Rows Skipped</div>
-                    <div className="text-xl font-extrabold text-rose-600 dark:text-rose-400 mt-0.5">
-                      {previewResult.summary.invalidRows}
-                    </div>
-                    <div className="text-[11px] text-zinc-500 mt-0.5">
-                      Downloadable error report in Step 5
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg bg-white p-3 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
-                    <div className="text-zinc-500 dark:text-zinc-400">Initial Status</div>
-                    <div className="text-sm font-extrabold text-zinc-900 dark:text-white mt-1">
-                      Draft (보완 대기)
-                    </div>
-                    <div className="text-[11px] text-zinc-500 mt-0.5">
-                      UNREVIEWED · Hidden from Retailer Hub
-                    </div>
                   </div>
                 </div>
 
-                <ul className="space-y-1 text-zinc-600 dark:text-zinc-400 pt-1">
-                  <li>• Every row is re-validated server-side against your company&apos;s active brands and existing SKUs before insertion.</li>
-                  <li>• Existing SKUs are never overwritten or modified.</li>
-                  <li>• After import, click any product on the Product List to upload images, complete category attributes, or edit fields.</li>
-                </ul>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 5: IMPORT RESULTS */}
-          {step === 5 && importResult && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                    STEP 5: Bulk Import Results
-                  </h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    {importResult.createdCount > 0
-                      ? `${importResult.createdCount} Draft product(s) have been added to your Product List.`
-                      : "No products were created from this upload."}
-                  </p>
-                </div>
-
-                {importResult.rejectedCount > 0 && importResult.errorReportBase64 && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      triggerBase64XlsxDownload(
-                        importResult.errorReportBase64!,
-                        importResult.errorReportFilename || "KSN_Bulk_Import_Errors.xlsx"
-                      )
-                    }
-                    className="shrink-0 rounded-lg border border-rose-300 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-950/70 cursor-pointer"
-                  >
-                    ⬇ Download Error Excel ({importResult.rejectedCount} Rejected)
-                  </button>
-                )}
-              </div>
-
-              {/* 5 Required Result Metrics */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
-                <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                  <div className="text-[11px] text-zinc-500">Total Uploaded</div>
-                  <div className="text-lg font-extrabold text-zinc-900 dark:text-white mt-0.5">
-                    {importResult.totalUploadedRows}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-                  <div className="text-[11px] text-emerald-700 dark:text-emerald-400">Created Drafts</div>
-                  <div className="text-lg font-extrabold text-emerald-700 dark:text-emerald-400 mt-0.5">
-                    {importResult.createdCount}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-3 dark:border-rose-900/50 dark:bg-rose-950/20">
-                  <div className="text-[11px] text-rose-700 dark:text-rose-400">Rejected Rows</div>
-                  <div className="text-lg font-extrabold text-rose-700 dark:text-rose-400 mt-0.5">
-                    {importResult.rejectedCount}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
-                  <div className="text-[11px] text-amber-700 dark:text-amber-400">Duplicates</div>
-                  <div className="text-lg font-extrabold text-amber-700 dark:text-amber-400 mt-0.5">
-                    {importResult.duplicateCount}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                  <div className="text-[11px] text-zinc-500">Validation Errors</div>
-                  <div className="text-lg font-extrabold text-zinc-900 dark:text-white mt-0.5">
-                    {importResult.validationErrorCount}
-                  </div>
-                </div>
-              </div>
-
-              {importResult.rejectedRows.length > 0 && (
-                <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-x-auto max-h-64 overflow-y-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead className="sticky top-0 bg-zinc-100 dark:bg-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-700">
+                {/* Bounded Paginated Table (Zero Horizontal Overflow, Zero Nested Desktop Scrollbar) */}
+                <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                  <table className="w-full table-fixed text-left text-xs border-collapse">
+                    <thead className="bg-zinc-100 dark:bg-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-700">
                       <tr>
-                        <th className="px-3 py-2 w-16">Row #</th>
-                        <th className="px-3 py-2 w-36">Manufacturer SKU</th>
-                        <th className="px-3 py-2 w-44">Product Name</th>
-                        <th className="px-3 py-2">Error Reason</th>
-                        <th className="px-3 py-2">Corrective Guidance</th>
+                        <th className="px-2.5 py-2 w-12">행</th>
+                        <th className="px-2 py-2 w-20">상태</th>
+                        <th className="px-2.5 py-2 w-36">브랜드 / SKU</th>
+                        <th className="px-2.5 py-2 w-44">영문 제품명</th>
+                        <th className="px-2.5 py-2 w-28 hidden sm:table-cell">카테고리</th>
+                        <th className="px-2.5 py-2">검증 결과 및 사유</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                      {importResult.rejectedRows.map((r, idx) => (
-                        <tr key={`${r.excelRowNumber}-${idx}`} className="bg-rose-50/20 dark:bg-rose-950/10">
-                          <td className="px-3 py-2 font-mono font-bold text-zinc-600 dark:text-zinc-400">
-                            #{r.excelRowNumber}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-zinc-800 dark:text-zinc-200">
-                            {r.manufactureSku || "-"}
-                          </td>
-                          <td className="px-3 py-2 text-zinc-800 dark:text-zinc-200">
-                            {r.productName || "-"}
-                          </td>
-                          <td className="px-3 py-2 text-rose-700 dark:text-rose-400">
-                            {r.errorReason}
-                          </td>
-                          <td className="px-3 py-2 text-zinc-600 dark:text-zinc-400">
-                            {r.correctiveGuidance}
+                      {pagedPreviewRows.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="px-4 py-8 text-center text-xs text-zinc-500 dark:text-zinc-400"
+                          >
+                            선택한 필터에 해당하는 행이 없습니다.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        pagedPreviewRows.map((row) => {
+                          const detailText =
+                            row.status === "INVALID"
+                              ? row.errors.join(" · ")
+                              : row.status === "WARNING"
+                              ? row.warnings.join(" · ")
+                              : "임시 등록 (Draft) 가능";
+
+                          return (
+                            <tr
+                              key={row.excelRowNumber}
+                              className={
+                                row.status === "INVALID"
+                                  ? "bg-rose-50/30 dark:bg-rose-950/10"
+                                  : row.status === "WARNING"
+                                  ? "bg-amber-50/30 dark:bg-amber-950/10"
+                                  : ""
+                              }
+                            >
+                              <td className="px-2.5 py-2 font-mono font-bold text-zinc-600 dark:text-zinc-400 align-top">
+                                #{row.excelRowNumber}
+                              </td>
+                              <td className="px-2 py-2 align-top">
+                                {row.status === "VALID" && (
+                                  <span className="inline-flex rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                    정상
+                                  </span>
+                                )}
+                                {row.status === "WARNING" && (
+                                  <span className="inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                    확인 필요
+                                  </span>
+                                )}
+                                {row.status === "INVALID" && (
+                                  <span className="inline-flex rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                                    오류
+                                  </span>
+                                )}
+                              </td>
+                              <td
+                                className="px-2.5 py-2 align-top"
+                                title={`${row.rawBrand || "(미입력)"} / ${row.rawManufactureSku || "(미입력)"}`}
+                              >
+                                <div className="truncate font-semibold text-zinc-800 dark:text-zinc-200">
+                                  {row.rawBrand || <span className="text-rose-500">(브랜드 누락)</span>}
+                                </div>
+                                <div className="truncate font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                                  {row.rawManufactureSku || <span className="text-rose-500">(SKU 누락)</span>}
+                                </div>
+                              </td>
+                              <td
+                                className="px-2.5 py-2 align-top text-zinc-800 dark:text-zinc-200"
+                                title={row.rawProductNameEn || ""}
+                              >
+                                <div className="line-clamp-2 break-words">
+                                  {row.rawProductNameEn || <span className="text-rose-500">(제품명 누락)</span>}
+                                </div>
+                              </td>
+                              <td
+                                className="px-2.5 py-2 align-top text-zinc-600 dark:text-zinc-400 hidden sm:table-cell"
+                                title={row.normalizedCategoryPath || row.rawCategory1Depth || ""}
+                              >
+                                <div className="line-clamp-2 break-words">
+                                  {row.normalizedCategoryPath || row.rawCategory1Depth || "-"}
+                                </div>
+                              </td>
+                              <td className="px-2.5 py-2 align-top" title={detailText}>
+                                {row.status === "INVALID" ? (
+                                  <div className="line-clamp-2 break-words text-rose-700 dark:text-rose-400">
+                                    {detailText}
+                                  </div>
+                                ) : row.status === "WARNING" ? (
+                                  <div className="line-clamp-2 break-words text-amber-700 dark:text-amber-400">
+                                    {detailText}
+                                  </div>
+                                ) : (
+                                  <span className="text-emerald-600 dark:text-emerald-400">
+                                    {detailText}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
-              )}
-            </div>
-          )}
+
+                {/* Pagination Bar */}
+                {totalPreviewPages > 1 && (
+                  <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 pt-0.5">
+                    <span>
+                      총 {filteredPreviewRows.length}건 중 {(safePreviewPage - 1) * PREVIEW_PAGE_SIZE + 1}–
+                      {Math.min(safePreviewPage * PREVIEW_PAGE_SIZE, filteredPreviewRows.length)}건 표시
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={safePreviewPage <= 1}
+                        onClick={() => setPreviewPage((p) => Math.max(1, p - 1))}
+                        className="rounded border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
+                      >
+                        이전
+                      </button>
+                      <span className="font-mono font-semibold text-zinc-700 dark:text-zinc-300 px-1">
+                        {safePreviewPage} / {totalPreviewPages}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={safePreviewPage >= totalPreviewPages}
+                        onClick={() => setPreviewPage((p) => Math.min(totalPreviewPages, p + 1))}
+                        className="rounded border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
+                      >
+                        다음
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STEP 4: 상품 등록 확인 */}
+            {step === 4 && previewResult?.summary && (
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+                    임시 등록 (Draft) 실행 전 최종 확인
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    검증을 통과한 상품만 등록되며, 오류가 있는 행은 제외 후 결과 화면에서 Excel로 다운로드할 수 있습니다.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="rounded-lg bg-zinc-50/70 p-3.5 border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">
+                    <div className="text-zinc-500 dark:text-zinc-400">등록 예정 상품</div>
+                    <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      {previewResult.summary.importableRows}건
+                    </div>
+                    <div className="text-[11px] text-zinc-500 mt-0.5">
+                      정상 {previewResult.summary.validRows}건 · 확인 필요 {previewResult.summary.warningRows}건
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-zinc-50/70 p-3.5 border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">
+                    <div className="text-zinc-500 dark:text-zinc-400">제외되는 오류 행</div>
+                    <div className="text-xl font-extrabold text-rose-600 dark:text-rose-400 mt-0.5">
+                      {previewResult.summary.invalidRows}건
+                    </div>
+                    <div className="text-[11px] text-zinc-500 mt-0.5">
+                      5단계에서 오류 내역 Excel 제공
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-zinc-50/70 p-3.5 border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">
+                    <div className="text-zinc-500 dark:text-zinc-400">초기 등록 상태</div>
+                    <div className="text-sm font-extrabold text-zinc-900 dark:text-white mt-1">
+                      임시 등록 (Draft · 보완 대기)
+                    </div>
+                    <div className="text-[11px] text-zinc-500 mt-0.5">
+                      미검토 · 리테일러 허브 비노출
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50/40 px-4 py-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-400 space-y-1">
+                  <div>• 등록 시점에 서버에서 브랜드 소유권 및 SKU·바코드 중복 여부를 다시 한 번 검증합니다.</div>
+                  <div>• 이미 등록된 제조사 SKU는 절대 덮어쓰거나 수정하지 않습니다.</div>
+                  <div>• 등록 완료 후 상품 목록에서 개별 상품을 클릭하여 이미지 업로드 및 상세 속성을 보완할 수 있습니다.</div>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 5: 등록 결과 */}
+            {step === 5 && importResult && (
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+                      상품 Excel 대량 등록 결과
+                    </h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      {importResult.createdCount > 0
+                        ? `${importResult.createdCount}개의 상품이 임시 등록 (Draft) 상태로 상품 목록에 추가되었습니다.`
+                        : "이번 업로드에서 신규 등록된 상품이 없습니다."}
+                    </p>
+                  </div>
+
+                  {importResult.rejectedCount > 0 && importResult.errorReportBase64 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        triggerBase64XlsxDownload(
+                          importResult.errorReportBase64!,
+                          importResult.errorReportFilename || "KSN_Bulk_Import_Errors.xlsx"
+                        )
+                      }
+                      className="shrink-0 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-950/70 cursor-pointer"
+                    >
+                      ⬇ 오류 내역 Excel 다운로드 ({importResult.rejectedCount}건)
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                  <div className="rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800">
+                    <div className="text-[11px] text-zinc-500">업로드 건수</div>
+                    <div className="text-base font-extrabold text-zinc-900 dark:text-white mt-0.5">
+                      {importResult.totalUploadedRows}건
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                    <div className="text-[11px] text-emerald-700 dark:text-emerald-400">정상 등록</div>
+                    <div className="text-base font-extrabold text-emerald-700 dark:text-emerald-400 mt-0.5">
+                      {importResult.createdCount}건
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-2.5 dark:border-rose-900/50 dark:bg-rose-950/20">
+                    <div className="text-[11px] text-rose-700 dark:text-rose-400">미등록 (제외)</div>
+                    <div className="text-base font-extrabold text-rose-700 dark:text-rose-400 mt-0.5">
+                      {importResult.rejectedCount}건
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2.5 dark:border-amber-900/50 dark:bg-amber-950/20">
+                    <div className="text-[11px] text-amber-700 dark:text-amber-400">중복 건수</div>
+                    <div className="text-base font-extrabold text-amber-700 dark:text-amber-400 mt-0.5">
+                      {importResult.duplicateCount}건
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800">
+                    <div className="text-[11px] text-zinc-500">검증 오류</div>
+                    <div className="text-base font-extrabold text-zinc-900 dark:text-white mt-0.5">
+                      {importResult.validationErrorCount}건
+                    </div>
+                  </div>
+                </div>
+
+                {pagedErrorRows.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                      <table className="w-full table-fixed text-left text-xs border-collapse">
+                        <thead className="bg-zinc-100 dark:bg-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-700">
+                          <tr>
+                            <th className="px-2.5 py-1.5 w-12">행</th>
+                            <th className="px-2.5 py-1.5 w-32">제조사 SKU</th>
+                            <th className="px-2.5 py-1.5 w-40">제품명</th>
+                            <th className="px-2.5 py-1.5">오류 사유</th>
+                            <th className="px-2.5 py-1.5 hidden sm:table-cell">수정 안내</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                          {pagedErrorRows.map((r, idx) => (
+                            <tr
+                              key={`${r.excelRowNumber}-${idx}`}
+                              className="bg-rose-50/20 dark:bg-rose-950/10"
+                            >
+                              <td className="px-2.5 py-1.5 font-mono font-bold text-zinc-600 dark:text-zinc-400 align-top">
+                                #{r.excelRowNumber}
+                              </td>
+                              <td
+                                className="px-2.5 py-1.5 font-mono truncate text-zinc-800 dark:text-zinc-200 align-top"
+                                title={r.manufactureSku}
+                              >
+                                {r.manufactureSku || "-"}
+                              </td>
+                              <td
+                                className="px-2.5 py-1.5 truncate text-zinc-800 dark:text-zinc-200 align-top"
+                                title={r.productName}
+                              >
+                                {r.productName || "-"}
+                              </td>
+                              <td
+                                className="px-2.5 py-1.5 text-rose-700 dark:text-rose-400 align-top"
+                                title={r.errorReason}
+                              >
+                                <div className="line-clamp-2 break-words">{r.errorReason}</div>
+                              </td>
+                              <td
+                                className="px-2.5 py-1.5 text-zinc-600 dark:text-zinc-400 align-top hidden sm:table-cell"
+                                title={r.correctiveGuidance}
+                              >
+                                <div className="line-clamp-2 break-words">{r.correctiveGuidance}</div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {totalErrorPages > 1 && (
+                      <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+                        <span>
+                          오류 {rejectedList.length}건 중 {(safeErrorPage - 1) * ERROR_RESULT_PAGE_SIZE + 1}–
+                          {Math.min(safeErrorPage * ERROR_RESULT_PAGE_SIZE, rejectedList.length)}건
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={safeErrorPage <= 1}
+                            onClick={() => setErrorPage((p) => Math.max(1, p - 1))}
+                            className="rounded border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 cursor-pointer"
+                          >
+                            이전
+                          </button>
+                          <span className="font-mono font-semibold px-1">
+                            {safeErrorPage} / {totalErrorPages}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={safeErrorPage >= totalErrorPages}
+                            onClick={() => setErrorPage((p) => Math.min(totalErrorPages, p + 1))}
+                            className="rounded border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 cursor-pointer"
+                          >
+                            다음
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Footer Navigation */}
-        <div className="flex items-center justify-between gap-3 border-t border-zinc-200 bg-zinc-50/50 px-5 py-3.5 dark:border-zinc-800 dark:bg-zinc-950/50">
+        {/* Always-Visible Compact Footer Navigation */}
+        <div className="flex items-center justify-between gap-3 border-t border-zinc-200 bg-zinc-50/60 px-5 py-3 dark:border-zinc-800 dark:bg-zinc-950/50 shrink-0">
           <div>
             {step === 2 && (
               <button
@@ -723,9 +824,9 @@ export function BulkProductUploadModal({
                   setStep(1);
                 }}
                 disabled={isValidating}
-                className="rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
               >
-                ← Back to Step 1
+                ← 양식 받기로
               </button>
             )}
             {step === 3 && (
@@ -735,9 +836,9 @@ export function BulkProductUploadModal({
                   setErrorBanner(null);
                   setStep(2);
                 }}
-                className="rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
               >
-                ← Upload Different File
+                ← 다른 파일 업로드
               </button>
             )}
             {step === 4 && (
@@ -748,9 +849,9 @@ export function BulkProductUploadModal({
                   setStep(3);
                 }}
                 disabled={isSubmitting}
-                className="rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
               >
-                ← Back to Preview
+                ← 검증 결과로
               </button>
             )}
           </div>
@@ -761,9 +862,9 @@ export function BulkProductUploadModal({
                 type="button"
                 onClick={handleClose}
                 disabled={isValidating || isSubmitting}
-                className="rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
               >
-                Cancel
+                취소
               </button>
             )}
 
@@ -774,9 +875,9 @@ export function BulkProductUploadModal({
                   setErrorBanner(null);
                   setStep(2);
                 }}
-                className="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
+                className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
               >
-                Next: Upload Excel →
+                다음: 파일 업로드 →
               </button>
             )}
 
@@ -785,9 +886,9 @@ export function BulkProductUploadModal({
                 type="button"
                 onClick={handleValidateFile}
                 disabled={!selectedFile || isValidating}
-                className="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
+                className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
               >
-                {isValidating ? "Validating Rows..." : "Validate & Preview →"}
+                {isValidating ? "데이터 검증 중..." : "데이터 검증 및 미리보기 →"}
               </button>
             )}
 
@@ -799,11 +900,11 @@ export function BulkProductUploadModal({
                   setErrorBanner(null);
                   setStep(4);
                 }}
-                className="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
+                className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
               >
                 {previewResult.summary.importableRows > 0
-                  ? `Next: Confirm (${previewResult.summary.importableRows} Drafts) →`
-                  : "0 Valid Rows to Import"}
+                  ? `다음: 상품 등록 확인 (${previewResult.summary.importableRows}건) →`
+                  : "등록 가능한 상품 없음"}
               </button>
             )}
 
@@ -812,11 +913,11 @@ export function BulkProductUploadModal({
                 type="button"
                 disabled={isSubmitting || previewResult.summary.importableRows === 0}
                 onClick={handleConfirmImport}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer shadow-xs"
+                className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer shadow-2xs"
               >
                 {isSubmitting
-                  ? "Creating Draft Products..."
-                  : `Confirm Draft Registration (${previewResult.summary.importableRows})`}
+                  ? "임시 등록 처리 중..."
+                  : `상품 등록 확인 (${previewResult.summary.importableRows}건)`}
               </button>
             )}
 
@@ -824,9 +925,9 @@ export function BulkProductUploadModal({
               <button
                 type="button"
                 onClick={handleClose}
-                className="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
+                className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
               >
-                Done &amp; View Product List
+                완료 및 목록 보기
               </button>
             )}
           </div>

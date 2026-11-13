@@ -198,7 +198,7 @@ export async function downloadBulkProductTemplateAction(): Promise<{
   } catch (err: any) {
     return {
       success: false,
-      error: err?.message || "Failed to generate Excel template.",
+      error: err?.message || "Excel 양식을 생성하지 못했습니다.",
     };
   }
 }
@@ -213,14 +213,14 @@ export async function validateBulkProductExcelAction(
     if (!file || !(file instanceof File)) {
       return {
         success: false,
-        error: "Please select an .xlsx Excel file to upload.",
+        error: "업로드할 .xlsx Excel 파일을 선택해 주세요.",
       };
     }
 
     if (file.size > BULK_IMPORT_MAX_FILE_BYTES) {
       return {
         success: false,
-        error: "Excel file exceeds the maximum allowed size of 10 MB.",
+        error: "파일 크기가 허용 한도(10 MB)를 초과했습니다.",
       };
     }
 
@@ -230,7 +230,7 @@ export async function validateBulkProductExcelAction(
     if (refData.brands.filter((b) => b.is_active).length === 0) {
       return {
         success: false,
-        error: "Your company has no active brands. Please register or activate a brand before uploading products.",
+        error: "귀사에 등록된 활성 브랜드가 없습니다. 브랜드를 먼저 등록하거나 활성화한 후 이용해 주세요.",
       };
     }
 
@@ -262,7 +262,7 @@ export async function validateBulkProductExcelAction(
   } catch (err: any) {
     return {
       success: false,
-      error: err?.message || "Unexpected error while validating Excel file.",
+      error: err?.message || "Excel 파일 검증 중 오류가 발생했습니다.",
     };
   }
 }
@@ -280,7 +280,7 @@ export async function executeBulkProductImportAction(
     if (membership.isImpersonating) {
       return {
         success: false,
-        error: "Product bulk writes require an authenticated Brand Portal session so Supabase RLS is enforced.",
+        error: "상품 대량 등록은 브랜드 포털 정식 로그인 세션에서만 실행할 수 있습니다.",
         totalUploadedRows: 0,
         createdCount: 0,
         rejectedCount: 0,
@@ -297,7 +297,7 @@ export async function executeBulkProductImportAction(
     if (!file || !(file instanceof File)) {
       return {
         success: false,
-        error: "Uploaded Excel file is missing. Please re-upload the file.",
+        error: "업로드된 Excel 파일 정보를 찾을 수 없습니다. 파일을 다시 선택해 주세요.",
         totalUploadedRows: 0,
         createdCount: 0,
         rejectedCount: 0,
@@ -313,7 +313,7 @@ export async function executeBulkProductImportAction(
       if (inFlightBatchKeys.has(scopedSubmissionKey) || completedBatchTimestamps.has(scopedSubmissionKey)) {
         return {
           success: false,
-          error: "This import batch has already been submitted. Duplicate submission was prevented.",
+          error: "이미 처리 중이거나 등록 완료된 요청입니다. 중복 등록이 차단되었습니다.",
           totalUploadedRows: 0,
           createdCount: 0,
           rejectedCount: 0,
@@ -337,7 +337,7 @@ export async function executeBulkProductImportAction(
     if (authErr || !user) {
       return {
         success: false,
-        error: "Your Brand Portal session has expired. Please sign in again.",
+        error: "로그인 세션이 만료되었습니다. 다시 로그인한 후 시도해 주세요.",
         totalUploadedRows: 0,
         createdCount: 0,
         rejectedCount: 0,
@@ -364,7 +364,7 @@ export async function executeBulkProductImportAction(
     if (!revalidated.success || !revalidated.rows || !revalidated.summary) {
       return {
         success: false,
-        error: revalidated.error || "Server-side validation failed.",
+        error: revalidated.error || "서버 데이터 검증에 실패했습니다.",
         totalUploadedRows: 0,
         createdCount: 0,
         rejectedCount: 0,
@@ -388,7 +388,7 @@ export async function executeBulkProductImportAction(
       if (inFlightBatchKeys.has(fingerprintKey)) {
         return {
           success: false,
-          error: "An identical import batch is currently in progress. Duplicate submission was blocked.",
+          error: "동일한 상품 묶음이 현재 등록 처리 중입니다. 중복 요청이 차단되었습니다.",
           totalUploadedRows: revalidated.rows.length,
           createdCount: 0,
           rejectedCount: revalidated.rows.length,
@@ -409,7 +409,7 @@ export async function executeBulkProductImportAction(
       errorReason: row.errors.join(" | "),
       correctiveGuidance:
         row.correctiveGuidance.join(" | ") ||
-        "Review and correct the invalid field values before re-uploading.",
+        "오류 항목을 수정한 후 다시 업로드해 주세요.",
       isDuplicate: row.isDuplicateError,
     }));
 
@@ -465,24 +465,24 @@ export async function executeBulkProductImportAction(
           } else {
             const isUniqueViolation = singleErr?.code === "23505";
             const msg = singleErr?.message || "";
-            let reason = "Database rejected row during Draft creation.";
-            let guidance = "Verify all field values and try again.";
+            let reason = "데이터베이스 제약 조건으로 인해 등록되지 않았습니다.";
+            let guidance = "입력값을 확인한 후 다시 시도해 주세요.";
 
             if (isUniqueViolation) {
               duplicateCount += 1;
               if (msg.toLowerCase().includes("ean")) {
-                reason = `EAN "${row.payload!.ean}" is already registered in the system.`;
-                guidance = "Provide a unique 13-digit EAN barcode not used by any existing product.";
+                reason = `EAN 바코드 "${row.payload!.ean}"은(는) 이미 시스템에 등록되어 있습니다.`;
+                guidance = "중복되지 않는 고유한 13자리 EAN 바코드를 입력해 주세요.";
               } else if (msg.toLowerCase().includes("sku")) {
-                reason = `Manufacturer SKU "${row.payload!.manufacture_sku}" already exists in your company catalog.`;
-                guidance = "Existing SKUs are never overwritten. Assign a new unique Manufacturer SKU.";
+                reason = `제조사 SKU "${row.payload!.manufacture_sku}"은(는) 이미 등록된 상품입니다.`;
+                guidance = "기존 SKU는 덮어쓰지 않습니다. 새로운 고유 제조사 SKU를 지정해 주세요.";
               } else {
-                reason = "Duplicate product identifier (SKU or Barcode) already exists.";
-                guidance = "Ensure Manufacturer SKU, UPC, and EAN are unique.";
+                reason = "중복된 식별 코드(SKU 또는 바코드)가 이미 존재합니다.";
+                guidance = "제조사 SKU, UPC, EAN이 중복되지 않는지 확인해 주세요.";
               }
             } else {
               validationErrorCount += 1;
-              reason = `Insert failed: ${msg || "Constraint check failed"}`;
+              reason = `등록 실패: ${msg || "제약 조건 검증 오류"}`;
             }
 
             rejectedRows.push({
@@ -552,7 +552,7 @@ export async function executeBulkProductImportAction(
     let errorReportBase64: string | null = null;
     let errorReportFilename: string | null = null;
     if (rejectedRows.length > 0) {
-      const errBuf = generateBulkImportErrorBuffer(rejectedRows);
+      const errBuf = await generateBulkImportErrorBuffer(rejectedRows);
       errorReportBase64 = errBuf.toString("base64");
       const ts = new Date().toISOString().slice(0, 10).replace(/-/g, "");
       errorReportFilename = `KSN_Bulk_Import_Errors_${ts}.xlsx`;
@@ -573,7 +573,7 @@ export async function executeBulkProductImportAction(
   } catch (err: any) {
     return {
       success: false,
-      error: err?.message || "Unexpected error during bulk product registration.",
+      error: err?.message || "상품 대량 등록 처리 중 예기치 않은 오류가 발생했습니다.",
       totalUploadedRows: 0,
       createdCount: 0,
       rejectedCount: 0,

@@ -289,7 +289,7 @@ export function PortalProductsList({ initialProducts, hasBrand, canCreateProduct
               title="제품 추가 권한이 없습니다 (Access Restricted)"
               className="w-full sm:w-auto text-center rounded-md border border-zinc-200 bg-zinc-100 px-4 py-2 text-xs font-semibold text-zinc-400 cursor-not-allowed opacity-60 dark:border-zinc-800 dark:bg-zinc-850 dark:text-zinc-600 select-none"
             >
-              🔒 Excel Bulk Upload
+              🔒 Excel 대량 등록
             </button>
             <button
               type="button"
@@ -307,7 +307,7 @@ export function PortalProductsList({ initialProducts, hasBrand, canCreateProduct
               onClick={() => setIsBulkUploadModalOpen(true)}
               className="w-full sm:w-auto text-center rounded-md border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-900 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
             >
-              Excel Bulk Upload
+              Excel 대량 등록
             </button>
             <Link
               href="/portal/products/new"

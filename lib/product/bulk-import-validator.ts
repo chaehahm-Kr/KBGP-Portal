@@ -119,7 +119,8 @@ const LEGACY_DEPTH1_ALIASES: Record<string, string> = {
 
 function normalizeHeaderLabel(raw: string): string {
   return raw
-    .replace(/\u00A0/g, " ")
+    .replace(/[\u00A0\r\n\t]+/g, " ")
+    .replace(/\*+$/g, "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
@@ -184,7 +185,6 @@ function extractCellString(
 
 function hasFormulaInjectionPrefix(val: string, isMultilineText: boolean): boolean {
   if (!val) return false;
-  // Check raw leading character before trim as well as trimmed
   if (/^[\t\r]/.test(val)) return true;
   const t = val.trim();
   if (!t) return false;
@@ -193,7 +193,6 @@ function hasFormulaInjectionPrefix(val: string, isMultilineText: boolean): boole
   }
   if (t.startsWith("-")) {
     if (isMultilineText) {
-      // Allow "- Step 1" prose bullets, block "-1+1", "-cmd|...", "-@..."
       return /^-[^\s]/.test(t);
     }
     return true;
@@ -206,10 +205,10 @@ function parseStrictBoolean(
 ): { valid: boolean; value: boolean } {
   if (!val) return { valid: true, value: false };
   const lower = val.trim().toLowerCase();
-  if (lower === "true" || lower === "yes" || lower === "y" || lower === "1") {
+  if (lower === "true" || lower === "yes" || lower === "y" || lower === "1" || lower === "예") {
     return { valid: true, value: true };
   }
-  if (lower === "false" || lower === "no" || lower === "n" || lower === "0") {
+  if (lower === "false" || lower === "no" || lower === "n" || lower === "0" || lower === "아니오") {
     return { valid: true, value: false };
   }
   return { valid: false, value: false };
@@ -220,10 +219,10 @@ function parseYesNoFlag(
 ): { valid: boolean; value: "Y" | null } {
   if (!val) return { valid: true, value: null };
   const lower = val.trim().toLowerCase();
-  if (lower === "y" || lower === "yes" || lower === "true" || lower === "1") {
+  if (lower === "y" || lower === "yes" || lower === "true" || lower === "1" || lower === "예") {
     return { valid: true, value: "Y" };
   }
-  if (lower === "n" || lower === "no" || lower === "false" || lower === "0") {
+  if (lower === "n" || lower === "no" || lower === "false" || lower === "0" || lower === "아니오") {
     return { valid: true, value: null };
   }
   return { valid: false, value: null };
@@ -321,7 +320,7 @@ export function parseAndValidateBulkProductWorkbook(
   if (!fileName || !fileName.toLowerCase().endsWith(".xlsx")) {
     return {
       success: false,
-      error: "Unsupported file format. Only .xlsx Excel files are supported.",
+      error: "지원하지 않는 파일 형식입니다. .xlsx 형식의 Excel 파일만 업로드할 수 있습니다.",
     };
   }
 
@@ -329,19 +328,19 @@ export function parseAndValidateBulkProductWorkbook(
   if (uint8.byteLength === 0) {
     return {
       success: false,
-      error: "Uploaded Excel file is empty.",
+      error: "업로드된 Excel 파일이 비어 있습니다.",
     };
   }
   if (uint8.byteLength > BULK_IMPORT_MAX_FILE_BYTES) {
     return {
       success: false,
-      error: "Excel file exceeds the maximum allowed file size (10 MB).",
+      error: "파일 크기가 허용 한도(10 MB)를 초과했습니다.",
     };
   }
   if (!hasValidZipHeader(uint8)) {
     return {
       success: false,
-      error: "Invalid .xlsx file structure. Please download and use the official .xlsx template.",
+      error: "유효한 .xlsx 파일 구조가 아닙니다. 공식 Excel 양식을 다운로드하여 사용해 주세요.",
     };
   }
 
@@ -357,7 +356,7 @@ export function parseAndValidateBulkProductWorkbook(
   } catch {
     return {
       success: false,
-      error: "Failed to parse .xlsx file. Ensure the file is not corrupted or password-protected.",
+      error: ".xlsx 파일을 읽을 수 없습니다. 파일이 손상되었거나 암호가 설정되어 있지 않은지 확인해 주세요.",
     };
   }
 
@@ -367,7 +366,7 @@ export function parseAndValidateBulkProductWorkbook(
   if (!productsSheetName) {
     return {
       success: false,
-      error: `Missing required sheet "Products". Found sheets: ${workbook.SheetNames.join(", ") || "none"}.`,
+      error: `필수 시트("Products")를 찾을 수 없습니다. (현재 시트: ${workbook.SheetNames.join(", ") || "없음"})`,
     };
   }
 
@@ -375,19 +374,41 @@ export function parseAndValidateBulkProductWorkbook(
   if (!sheet || !sheet["!ref"]) {
     return {
       success: false,
-      error: 'The "Products" sheet is empty.',
+      error: '"Products" 시트가 비어 있습니다.',
     };
   }
 
   const range = XLSX.utils.decode_range(sheet["!ref"]);
-  const headerRowIdx = range.s.r;
 
-  // Build alias -> spec lookup
+  // Build alias -> spec lookup (supports Korean-first bilingual headers, English V1 headers, and stripped '*')
   const aliasToSpec = new Map<string, BulkColumnSpec>();
   for (const spec of BULK_PRODUCT_COLUMNS) {
     aliasToSpec.set(normalizeHeaderLabel(spec.header), spec);
+    aliasToSpec.set(normalizeHeaderLabel(spec.headerEn), spec);
     for (const alias of spec.aliases) {
       aliasToSpec.set(normalizeHeaderLabel(alias), spec);
+    }
+  }
+
+  // Scan top rows (up to first 5 rows) to locate the column header row (supports Row 1 group banner + Row 2 headers as well as Row 1 headers)
+  let headerRowIdx = range.s.r;
+  let bestMatchedCount = -1;
+  const maxHeaderScanRow = Math.min(range.e.r, range.s.r + 4);
+
+  for (let candidateRow = range.s.r; candidateRow <= maxHeaderScanRow; candidateRow++) {
+    let matchedInRow = 0;
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r: candidateRow, c });
+      const cell = sheet[addr] as XLSX.CellObject | undefined;
+      const raw = cell ? String(cell.v ?? cell.w ?? "").trim() : "";
+      if (!raw) continue;
+      if (aliasToSpec.has(normalizeHeaderLabel(raw))) {
+        matchedInRow += 1;
+      }
+    }
+    if (matchedInRow > bestMatchedCount) {
+      bestMatchedCount = matchedInRow;
+      headerRowIdx = candidateRow;
     }
   }
 
@@ -403,7 +424,7 @@ export function parseAndValidateBulkProductWorkbook(
     const spec = aliasToSpec.get(normalizeHeaderLabel(rawHeader));
     if (spec) {
       if (colIndexByKey.has(spec.key)) {
-        duplicateHeaders.push(spec.header);
+        duplicateHeaders.push(spec.header.replace(/\s*\*$/, ""));
       } else {
         colIndexByKey.set(spec.key, c);
       }
@@ -413,22 +434,22 @@ export function parseAndValidateBulkProductWorkbook(
   if (duplicateHeaders.length > 0) {
     return {
       success: false,
-      error: `Duplicate column headers detected in "Products" sheet: ${duplicateHeaders.join(", ")}.`,
+      error: `"Products" 시트에 중복된 컬럼 헤더가 있습니다: ${duplicateHeaders.join(", ")}`,
     };
   }
 
   const missingRequiredHeaders = BULK_PRODUCT_COLUMNS.filter(
     (s) => s.required && !colIndexByKey.has(s.key)
-  ).map((s) => s.header.replace(" *", ""));
+  ).map((s) => s.header.replace(/\s*\*$/, ""));
 
   if (missingRequiredHeaders.length > 0) {
     return {
       success: false,
-      error: `Missing required column header(s) in "Products" sheet: ${missingRequiredHeaders.join(", ")}.`,
+      error: `"Products" 시트에 필수 컬럼 헤더가 누락되었습니다: ${missingRequiredHeaders.join(", ")}`,
     };
   }
 
-  // Extract non-empty rows first to check row limits & example row skipping
+  // Extract non-empty rows after headerRowIdx to check row limits & example row skipping
   interface ExtractedRow {
     excelRowNumber: number;
     values: Record<BulkRowRawFieldKey, string>;
@@ -454,7 +475,7 @@ export function parseAndValidateBulkProductWorkbook(
       const { value, hasFormula } = extractCellString(cell, spec.key);
       values[spec.key] = value;
       if (hasFormula) {
-        formulaHeaders.push(spec.header.replace(" *", ""));
+        formulaHeaders.push(spec.header.replace(/\s*\*$/, ""));
         hasAnyNonEmpty = true;
       } else if (value !== "") {
         hasAnyNonEmpty = true;
@@ -466,9 +487,12 @@ export function parseAndValidateBulkProductWorkbook(
     // Auto-skip template example row if left unchanged by supplier
     const skuUpper = values.manufactureSku.trim().toUpperCase();
     const nameEnUpper = values.productNameEn.trim().toUpperCase();
+    const nameKoTrimmed = values.productNameKo.trim();
     if (
       skuUpper === BULK_TEMPLATE_EXAMPLE_SKU ||
-      nameEnUpper.startsWith("[EXAMPLE]")
+      nameEnUpper.startsWith("[EXAMPLE") ||
+      values.productNameEn.trim().startsWith("[예시") ||
+      nameKoTrimmed.startsWith("[예시")
     ) {
       exampleRowsSkipped += 1;
       continue;
@@ -483,7 +507,7 @@ export function parseAndValidateBulkProductWorkbook(
     if (extractedRows.length > BULK_IMPORT_MAX_ROWS) {
       return {
         success: false,
-        error: `Maximum ${BULK_IMPORT_MAX_ROWS} product rows per upload are supported in V1. Please split larger catalogs into batches of ${BULK_IMPORT_MAX_ROWS} rows or fewer.`,
+        error: `1회 업로드당 최대 ${BULK_IMPORT_MAX_ROWS}개 상품까지만 등록할 수 있습니다. ${BULK_IMPORT_MAX_ROWS}개 이하로 나누어 업로드해 주세요.`,
       };
     }
   }
@@ -493,8 +517,8 @@ export function parseAndValidateBulkProductWorkbook(
       success: false,
       error:
         exampleRowsSkipped > 0
-          ? `No product rows found (only the template example row ${BULK_TEMPLATE_EXAMPLE_SKU} was present in "Products"). Please add at least one product row.`
-          : 'No product rows found in the "Products" sheet.',
+          ? `등록할 상품 데이터가 없습니다 ("Products" 시트에 예시 행 ${BULK_TEMPLATE_EXAMPLE_SKU}만 포함되어 있습니다). 최소 1개 이상의 상품을 입력해 주세요.`
+          : '"Products" 시트에 등록할 상품 데이터가 없습니다.',
     };
   }
 
@@ -521,7 +545,7 @@ export function parseAndValidateBulkProductWorkbook(
     catByCode.set(c.code.toUpperCase(), c);
   }
 
-  // Track first-seen in-file identifiers (skuUpper -> rowIndex in validatedRows)
+  // Track first-seen in-file identifiers
   const seenSkuFirstRowIndex = new Map<string, { excelRowNumber: number; arrayIdx: number }>();
   const seenUpcFirstRowIndex = new Map<string, { excelRowNumber: number; arrayIdx: number }>();
   const seenEanFirstRowIndex = new Map<string, { excelRowNumber: number; arrayIdx: number }>();
@@ -551,20 +575,21 @@ export function parseAndValidateBulkProductWorkbook(
     // 0. Formula & Formula Injection Prevention
     if (formulaHeaders.length > 0) {
       addValidationError(
-        `Excel formulas are not allowed (${formulaHeaders.join(", ")}).`,
-        "Replace Excel formulas with plain text or numeric values (Paste Values)."
+        `Excel 수식은 허용되지 않습니다 (${formulaHeaders.join(", ")}).`,
+        "수식 대신 순수 텍스트 또는 숫자 값('값 붙여넣기')으로 입력해 주세요."
       );
     }
 
     for (const spec of BULK_PRODUCT_COLUMNS) {
       const rawVal = values[spec.key];
       if (!rawVal) continue;
-      if (NUMERIC_FIELD_KEYS.has(spec.key)) continue; // numeric fields checked by strict numeric regex
+      if (NUMERIC_FIELD_KEYS.has(spec.key)) continue;
       const isMulti = MULTILINE_TEXT_KEYS.has(spec.key);
       if (hasFormulaInjectionPrefix(rawVal, isMulti)) {
+        const cleanCol = spec.header.replace(/\s*\*$/, "");
         addValidationError(
-          `Field "${spec.header.replace(" *", "")}" starts with a restricted formula character (=, +, -, @).`,
-          `Remove leading '=', '+', '-', or '@' from "${spec.header.replace(" *", "")}".`
+          `"${cleanCol}" 항목이 제한된 수식 문자(=, +, -, @)로 시작합니다.`,
+          `"${cleanCol}" 값 앞의 '=', '+', '-', '@' 문자를 제거해 주세요.`
         );
       }
     }
@@ -574,8 +599,8 @@ export function parseAndValidateBulkProductWorkbook(
     const rawBrand = values.brand.trim();
     if (!rawBrand) {
       addValidationError(
-        "Brand is required.",
-        "Enter an active brand name belonging to your company (check the Brands sheet)."
+        "브랜드(Brand)는 필수 입력 항목입니다.",
+        "Brands 시트에 안내된 귀사의 활성 브랜드명을 입력해 주세요."
       );
     } else {
       const lowerBrand = rawBrand.toLowerCase();
@@ -584,13 +609,13 @@ export function parseAndValidateBulkProductWorkbook(
         resolvedBrand = activeMatch;
       } else if (inactiveBrandByLowerName.has(lowerBrand)) {
         addValidationError(
-          `Brand "${rawBrand}" is currently inactive.`,
-          "Select an active brand from the Brands sheet or reactivate the brand first."
+          `브랜드 "${rawBrand}"은(는) 현재 비활성 상태입니다.`,
+          "활성 상태인 브랜드를 선택하거나 브랜드를 먼저 활성화해 주세요."
         );
       } else {
         addValidationError(
-          `Brand "${rawBrand}" does not belong to your company or does not exist.`,
-          "Use an exact active brand name listed in your template's Brands sheet."
+          `브랜드 "${rawBrand}"은(는) 귀사 소속이 아니거나 존재하지 않는 브랜드입니다.`,
+          "양식의 Brands 시트에 표시된 정확한 활성 브랜드명을 입력해 주세요."
         );
       }
     }
@@ -600,47 +625,45 @@ export function parseAndValidateBulkProductWorkbook(
     let normalizedSku = "";
     if (!rawSku) {
       addValidationError(
-        "Manufacturer SKU is required.",
-        "Provide a unique Manufacturer SKU using letters, numbers, hyphens (-), or underscores (_)."
+        "제조사 SKU(Manufacturer SKU)는 필수 입력 항목입니다.",
+        "영문, 숫자, 하이픈(-), 언더스코어(_)를 사용하여 고유한 제조사 SKU를 입력해 주세요."
       );
     } else if (rawSku.length > 100) {
       addValidationError(
-        "Manufacturer SKU exceeds maximum length of 100 characters.",
-        "Shorten Manufacturer SKU to 100 characters or fewer."
+        "제조사 SKU는 최대 100자까지 입력할 수 있습니다.",
+        "제조사 SKU를 100자 이내로 줄여 주세요."
       );
     } else if (isDraftPlaceholderSku(rawSku.toUpperCase())) {
       addValidationError(
-        `Manufacturer SKU "${rawSku}" uses a reserved system draft prefix (DRAFT-SKU-).`,
-        "Enter your actual Manufacturer SKU instead of a DRAFT-SKU placeholder."
+        `제조사 SKU "${rawSku}"은(는) 시스템 예약 접두어(DRAFT-SKU-)를 사용할 수 없습니다.`,
+        "실제 제조사 SKU 코드를 입력해 주세요."
       );
     } else if (!/^[A-Za-z0-9]+(?:[\-_][A-Za-z0-9]+)*$/.test(rawSku)) {
       addValidationError(
-        `Invalid Manufacturer SKU format "${rawSku}". Only A-Z, 0-9, single '-' or '_' between characters are allowed (no spaces or leading/trailing separators).`,
-        "Use alphanumeric characters with single '-' or '_' separators (e.g., KSN-TONER-200ML)."
+        `제조사 SKU 형식이 올바르지 않습니다 ("${rawSku}"). 영문, 숫자 및 단어 사이의 단일 '-' 또는 '_'만 허용됩니다.`,
+        "공백이나 특수문자 없이 영문/숫자 및 '-' 또는 '_' 조합으로 입력해 주세요 (예: KSN-TONER-200ML)."
       );
     } else {
       normalizedSku = rawSku.toUpperCase();
       if (normalizedSku !== rawSku) {
-        warnings.push(`Manufacturer SKU normalized to uppercase "${normalizedSku}".`);
+        warnings.push(`제조사 SKU가 대문자("${normalizedSku}")로 자동 변환됩니다.`);
       }
 
-      // Check existing DB SKU collision (company-scoped, case-insensitive)
       if (ctx.existingCompanySkus.has(normalizedSku)) {
         addDuplicateError(
-          `Manufacturer SKU "${normalizedSku}" already exists in your company catalog.`,
-          "Existing SKUs are never overwritten. Remove this row or use a new unique SKU."
+          `제조사 SKU "${normalizedSku}"은(는) 이미 등록된 상품입니다.`,
+          "기존 SKU는 덮어쓰지 않습니다. 해당 행을 제외하거나 새로운 고유 SKU를 입력해 주세요."
         );
       } else {
-        // Check in-file duplicate SKU
         const prev = seenSkuFirstRowIndex.get(normalizedSku);
         if (prev) {
           addDuplicateError(
-            `Duplicate Manufacturer SKU "${normalizedSku}" within uploaded Excel (already used on row ${prev.excelRowNumber}).`,
-            `Remove the duplicate row or assign a distinct Manufacturer SKU (conflicts with row ${prev.excelRowNumber}).`
+            `파일 내 제조사 SKU "${normalizedSku}" 중복 (${prev.excelRowNumber}행과 동일).`,
+            `${prev.excelRowNumber}행과 중복된 행을 삭제하거나 서로 다른 제조사 SKU를 지정해 주세요.`
           );
           const firstRow = validatedRows[prev.arrayIdx];
           if (firstRow && firstRow.status !== "INVALID") {
-            const note = `Duplicate SKU "${normalizedSku}" also appeared on row ${excelRowNumber} (row ${excelRowNumber} was rejected).`;
+            const note = `동일한 SKU("${normalizedSku}")가 ${excelRowNumber}행에도 중복 입력되어 ${excelRowNumber}행은 제외됩니다.`;
             if (!firstRow.warnings.includes(note)) {
               firstRow.warnings.push(note);
               firstRow.status = "WARNING";
@@ -657,30 +680,30 @@ export function parseAndValidateBulkProductWorkbook(
     const rawNameKo = values.productNameKo.trim();
     if (!rawNameEn) {
       addValidationError(
-        "Product Name EN is required.",
-        "Enter the English product name in Product Name EN."
+        "영문 제품명(Product Name EN)은 필수 입력 항목입니다.",
+        "공식 영문 제품명을 입력해 주세요."
       );
     } else if (rawNameEn.length > 300) {
       addValidationError(
-        "Product Name EN exceeds maximum length of 300 characters.",
-        "Shorten Product Name EN to 300 characters or fewer."
+        "영문 제품명은 최대 300자까지 입력할 수 있습니다.",
+        "영문 제품명을 300자 이내로 입력해 주세요."
       );
     } else if (isDraftPlaceholderName(rawNameEn)) {
       addValidationError(
-        "Product Name EN cannot use a reserved placeholder title.",
-        "Enter the actual English product name."
+        "영문 제품명에 시스템 임시 제목을 사용할 수 없습니다.",
+        "실제 영문 제품명을 입력해 주세요."
       );
     }
 
     if (rawNameKo.length > 300) {
       addValidationError(
-        "Product Name KO exceeds maximum length of 300 characters.",
-        "Shorten Product Name KO to 300 characters or fewer."
+        "국문 제품명은 최대 300자까지 입력할 수 있습니다.",
+        "국문 제품명을 300자 이내로 입력해 주세요."
       );
     } else if (rawNameKo && isDraftPlaceholderName(rawNameKo)) {
       addValidationError(
-        "Product Name KO cannot use a reserved placeholder title.",
-        "Enter the actual Korean product name or leave blank."
+        "국문 제품명에 시스템 임시 제목을 사용할 수 없습니다.",
+        "실제 국문 제품명을 입력하거나 비워 두세요."
       );
     }
 
@@ -695,8 +718,8 @@ export function parseAndValidateBulkProductWorkbook(
 
     if (!rawCat1) {
       addValidationError(
-        "Category 1Depth is required.",
-        "Select a valid Category 1Depth from the Categories sheet (e.g., Skincare, Hair Care)."
+        "카테고리 (1Depth)는 필수 입력 항목입니다.",
+        "Categories 시트에서 유효한 1Depth 카테고리를 선택해 주세요 (예: Skincare, 스킨케어)."
       );
     } else if (hasCategoryMaster) {
       const aliasCode = LEGACY_DEPTH1_ALIASES[rawCat1.toLowerCase()];
@@ -706,23 +729,23 @@ export function parseAndValidateBulkProductWorkbook(
 
       if (!matchedD1) {
         addValidationError(
-          `Invalid Category 1Depth "${rawCat1}".`,
-          "Refer to the Categories sheet for valid Category 1Depth codes or names."
+          `유효하지 않은 카테고리 (1Depth) 값입니다: "${rawCat1}".`,
+          "Categories 시트에 안내된 1Depth 코드 또는 명칭을 입력해 주세요."
         );
       } else if (!matchedD1.is_active) {
         addValidationError(
-          `Category 1Depth "${matchedD1.name_en || matchedD1.code}" is inactive.`,
-          "Choose an active Category 1Depth from the Categories sheet."
+          `카테고리 (1Depth) "${matchedD1.name_ko || matchedD1.name_en || matchedD1.code}"은(는) 비활성 상태입니다.`,
+          "Categories 시트에서 활성 상태인 1Depth 카테고리를 선택해 주세요."
         );
       } else {
         resolvedCategoryEnum = resolveRootCategoryEnum(matchedD1.code);
         resolvedCategoryCode = matchedD1.code;
-        const pathParts = [matchedD1.name_en || matchedD1.code];
+        const pathParts = [matchedD1.name_ko || matchedD1.name_en || matchedD1.code];
 
         if (!rawCat2 && rawCat3) {
           addValidationError(
-            "Category 2Depth is required when Category 3Depth is provided.",
-            "Specify the parent Category 2Depth for the selected Category 3Depth, or clear Category 3Depth."
+            "카테고리 (3Depth) 입력 시 상위 카테고리 (2Depth)도 함께 입력해야 합니다.",
+            "해당 3Depth의 상위 2Depth 카테고리를 입력하거나 3Depth를 비워 두세요."
           );
         } else if (rawCat2) {
           const childrenD2 = depth2All.filter((c) => c.parent_code === matchedD1.code);
@@ -735,30 +758,30 @@ export function parseAndValidateBulkProductWorkbook(
                 ? catByCode.get(otherParentD2.parent_code.toUpperCase())
                 : undefined;
               addValidationError(
-                `Category 2Depth "${rawCat2}" does not belong to Category 1Depth "${matchedD1.name_en || matchedD1.code}" (belongs to "${actualParent?.name_en || otherParentD2.parent_code}").`,
-                "Check the Categories sheet and match Category 1Depth and Category 2Depth in the same branch."
+                `카테고리 (2Depth) "${rawCat2}"은(는) "${matchedD1.name_en || matchedD1.code}" 하위가 아닙니다 ("${actualParent?.name_en || otherParentD2.parent_code}" 소속).`,
+                "Categories 시트에서 동일한 상위·하위 계층의 카테고리를 입력해 주세요."
               );
             } else {
               addValidationError(
-                `Invalid Category 2Depth "${rawCat2}" under "${matchedD1.name_en || matchedD1.code}".`,
-                "Refer to the Categories sheet for valid Category 2Depth values."
+                `"${matchedD1.name_en || matchedD1.code}" 하위에 유효하지 않은 카테고리 (2Depth) 값입니다: "${rawCat2}".`,
+                "Categories 시트에서 정확한 2Depth 코드 또는 명칭을 확인해 주세요."
               );
             }
           } else if (!matchedD2.is_active) {
             addValidationError(
-              `Category 2Depth "${matchedD2.name_en || matchedD2.code}" is inactive.`,
-              "Choose an active Category 2Depth from the Categories sheet."
+              `카테고리 (2Depth) "${matchedD2.name_ko || matchedD2.name_en || matchedD2.code}"은(는) 비활성 상태입니다.`,
+              "활성 상태인 2Depth 카테고리를 선택해 주세요."
             );
           } else {
             resolvedCategoryCode = matchedD2.code;
-            pathParts.push(matchedD2.name_en || matchedD2.code);
+            pathParts.push(matchedD2.name_ko || matchedD2.name_en || matchedD2.code);
 
             if (rawCat3) {
               const childrenD3 = depth3All.filter((c) => c.parent_code === matchedD2.code);
               if (matchedD2.is_final && childrenD3.length === 0) {
                 addValidationError(
-                  `Category 2Depth "${matchedD2.name_en || matchedD2.code}" is already a final category and has no 3Depth subcategories.`,
-                  "Leave Category 3Depth blank for this category."
+                  `카테고리 (2Depth) "${matchedD2.name_en || matchedD2.code}"은(는) 하위 3Depth가 없는 최종 카테고리입니다.`,
+                  "카테고리 (3Depth) 칸을 비워 두세요."
                 );
               } else {
                 const matchedD3 = matchCategoryInList(rawCat3, childrenD3);
@@ -769,23 +792,23 @@ export function parseAndValidateBulkProductWorkbook(
                       ? catByCode.get(otherParentD3.parent_code.toUpperCase())
                       : undefined;
                     addValidationError(
-                      `Category 3Depth "${rawCat3}" does not belong under "${matchedD2.name_en || matchedD2.code}" (belongs under "${actualP2?.name_en || otherParentD3.parent_code}").`,
-                      "Select a Category 3Depth that belongs to the chosen Category 2Depth."
+                      `카테고리 (3Depth) "${rawCat3}"은(는) "${matchedD2.name_en || matchedD2.code}" 하위가 아닙니다 ("${actualP2?.name_en || otherParentD3.parent_code}" 소속).`,
+                      "선택한 2Depth 카테고리에 속하는 3Depth 값을 입력해 주세요."
                     );
                   } else {
                     addValidationError(
-                      `Invalid Category 3Depth "${rawCat3}" under "${matchedD2.name_en || matchedD2.code}".`,
-                      "Refer to the Categories sheet for valid Category 3Depth values."
+                      `"${matchedD2.name_en || matchedD2.code}" 하위에 유효하지 않은 카테고리 (3Depth) 값입니다: "${rawCat3}".`,
+                      "Categories 시트에서 정확한 3Depth 코드 또는 명칭을 확인해 주세요."
                     );
                   }
                 } else if (!matchedD3.is_active) {
                   addValidationError(
-                    `Category 3Depth "${matchedD3.name_en || matchedD3.code}" is inactive.`,
-                    "Choose an active Category 3Depth from the Categories sheet."
+                    `카테고리 (3Depth) "${matchedD3.name_ko || matchedD3.name_en || matchedD3.code}"은(는) 비활성 상태입니다.`,
+                    "활성 상태인 3Depth 카테고리를 선택해 주세요."
                   );
                 } else {
                   resolvedCategoryCode = matchedD3.code;
-                  pathParts.push(matchedD3.name_en || matchedD3.code);
+                  pathParts.push(matchedD3.name_ko || matchedD3.name_en || matchedD3.code);
                 }
               }
             }
@@ -795,7 +818,6 @@ export function parseAndValidateBulkProductWorkbook(
         normalizedCategoryPath = pathParts.join(" > ");
       }
     } else {
-      // Fallback when categories table is empty in an unseeded environment
       const aliasCode = LEGACY_DEPTH1_ALIASES[rawCat1.toLowerCase()];
       const validEnums = Object.keys(CATEGORY_TO_CODE_MAP) as ProductCategory[];
       if (validEnums.includes(rawCat1.toLowerCase() as ProductCategory)) {
@@ -808,14 +830,14 @@ export function parseAndValidateBulkProductWorkbook(
         normalizedCategoryPath = aliasCode;
       } else {
         addValidationError(
-          `Invalid Category 1Depth "${rawCat1}".`,
-          "Use Skincare, Hair Care, Beauty Tools, Body Care, Personal Care, Makeup, Sets & Collections, or Other."
+          `유효하지 않은 카테고리 (1Depth) 값입니다: "${rawCat1}".`,
+          "Skincare, Hair Care, Beauty Tools, Body Care, Personal Care, Makeup, Sets & Collections, Other 중 하나를 입력해 주세요."
         );
       }
       if (rawCat2 || rawCat3) {
         addValidationError(
-          "Category 2Depth / 3Depth taxonomy is unavailable in the current environment.",
-          "Leave Category 2Depth and Category 3Depth blank or seed the category master table."
+          "현재 환경에서 2Depth / 3Depth 카테고리 마스터 정보를 사용할 수 없습니다.",
+          "2Depth 및 3Depth 항목을 비워 두세요."
         );
       }
     }
@@ -826,26 +848,26 @@ export function parseAndValidateBulkProductWorkbook(
     const rawVolUnit = values.volumeUnit.trim();
     if (rawVolVal && !rawVolUnit) {
       addValidationError(
-        "Volume Unit is required when Volume Value is provided.",
-        "Select a Volume Unit (ml, L, g, kg, mg, oz, fl oz, ea / pcs, or Other)."
+        "용량 수치 입력 시 용량 단위(Volume Unit)도 함께 입력해야 합니다.",
+        "용량 단위(ml, L, g, kg, mg, oz, fl oz, ea / pcs, Other)를 선택해 주세요."
       );
     } else if (!rawVolVal && rawVolUnit) {
       addValidationError(
-        "Volume Value is required when Volume Unit is specified.",
-        "Enter a Volume Value or clear Volume Unit."
+        "용량 단위 지정 시 용량 수치(Volume Value)도 함께 입력해야 합니다.",
+        "용량 수치를 입력하거나 용량 단위를 비워 두세요."
       );
     } else if (rawVolVal && rawVolUnit) {
       const normUnit = normalizeVolumeUnit(rawVolUnit);
       if (!normUnit) {
         addValidationError(
-          `Invalid Volume Unit "${rawVolUnit}".`,
-          "Use one of: ml, L, g, kg, mg, oz, fl oz, ea / pcs, Other."
+          `허용되지 않는 용량 단위입니다: "${rawVolUnit}".`,
+          "ml, L, g, kg, mg, oz, fl oz, ea / pcs, Other 중 하나를 입력해 주세요."
         );
       } else if (normUnit === "Other") {
         if (rawVolVal.length > 50) {
           addValidationError(
-            "Volume Value exceeds 50 characters.",
-            "Keep custom volume text within 50 characters."
+            "용량 수치는 최대 50자까지 입력할 수 있습니다.",
+            "사용자 정의 용량 표기를 50자 이내로 입력해 주세요."
           );
         } else {
           resolvedVolume = formatVolume(rawVolVal, normUnit);
@@ -854,8 +876,8 @@ export function parseAndValidateBulkProductWorkbook(
         const parsedVol = parsePositiveDecimal(rawVolVal);
         if (!parsedVol.valid) {
           addValidationError(
-            `Volume Value "${rawVolVal}" must be a positive number for unit "${normUnit}".`,
-            "Enter a positive numeric Volume Value (e.g., 200) or set Volume Unit to Other."
+            `용량 수치("${rawVolVal}")는 0보다 큰 숫자여야 합니다 (단위: ${normUnit}).`,
+            "양수 숫자(예: 200)를 입력하거나 단위를 Other로 변경해 주세요."
           );
         } else {
           resolvedVolume = formatVolume(String(parsedVol.value), normUnit);
@@ -869,13 +891,13 @@ export function parseAndValidateBulkProductWorkbook(
     if (rawOrigin) {
       if (!isValidCanonicalCountry(rawOrigin)) {
         addValidationError(
-          `Invalid Country of Origin "${rawOrigin}".`,
-          "Refer to the Countries sheet for valid canonical country names or ISO codes (or leave blank)."
+          `유효하지 않은 제조국(Country of Origin)입니다: "${rawOrigin}".`,
+          "Countries 시트의 표준 영문 국가명 또는 ISO 코드(예: South Korea, KR)를 입력하거나 비워 두세요."
         );
       } else {
         resolvedOrigin = formatCanonicalCountryName(rawOrigin);
         if (resolvedOrigin.toLowerCase() !== rawOrigin.toLowerCase()) {
-          warnings.push(`Country of Origin normalized to "${resolvedOrigin}".`);
+          warnings.push(`제조국이 표준 명칭("${resolvedOrigin}")으로 자동 변환됩니다.`);
         }
       }
     }
@@ -886,27 +908,27 @@ export function parseAndValidateBulkProductWorkbook(
     const rawLtUnit = values.leadTimeUnit.trim();
     if (rawLtVal && !rawLtUnit) {
       addValidationError(
-        "Lead Time Unit is required when Lead Time Value is provided.",
-        "Select Days, Weeks, or Months for Lead Time Unit."
+        "리드타임 수치 입력 시 리드타임 단위(Lead Time Unit)도 함께 입력해야 합니다.",
+        "리드타임 단위로 Days(일), Weeks(주), Months(개월) 중 하나를 입력해 주세요."
       );
     } else if (!rawLtVal && rawLtUnit) {
       addValidationError(
-        "Lead Time Value is required when Lead Time Unit is specified.",
-        "Enter a positive integer for Lead Time Value or clear Lead Time Unit."
+        "리드타임 단위 지정 시 리드타임 수치(Lead Time Value)도 함께 입력해야 합니다.",
+        "양의 정수로 리드타임 수치를 입력하거나 단위를 비워 두세요."
       );
     } else if (rawLtVal && rawLtUnit) {
       const parsedLt = parsePositiveInteger(rawLtVal, 3650);
       const normLtUnit = normalizeLeadTimeUnit(rawLtUnit);
       if (!parsedLt.valid) {
         addValidationError(
-          `Lead Time Value "${rawLtVal}" must be a positive integer.`,
-          "Enter a whole number greater than 0 (e.g., 14)."
+          `리드타임 수치("${rawLtVal}")는 1 이상의 정수여야 합니다.`,
+          "1 이상의 자연수(예: 14)를 입력해 주세요."
         );
       }
       if (!normLtUnit) {
         addValidationError(
-          `Invalid Lead Time Unit "${rawLtUnit}".`,
-          "Use Days, Weeks, or Months."
+          `허용되지 않는 리드타임 단위입니다: "${rawLtUnit}".`,
+          "Days, Weeks, Months (또는 일, 주, 개월) 중 하나를 입력해 주세요."
         );
       }
       if (parsedLt.valid && normLtUnit) {
@@ -918,8 +940,8 @@ export function parseAndValidateBulkProductWorkbook(
     const rawColor = values.color.trim();
     if (rawColor.length > 100) {
       addValidationError(
-        "Color exceeds maximum length of 100 characters.",
-        "Shorten Color to 100 characters or fewer."
+        "색상명(Color)은 최대 100자까지 입력할 수 있습니다.",
+        "색상명을 100자 이내로 입력해 주세요."
       );
     }
 
@@ -931,8 +953,8 @@ export function parseAndValidateBulkProductWorkbook(
       );
       if (!matchedCm) {
         addValidationError(
-          `Invalid Color Map "${rawColorMap}".`,
-          `Select an allowed Color Map value (${ALLOWED_COLOR_MAPS.join(", ")}).`
+          `허용되지 않는 색상 계열(Color Map)입니다: "${rawColorMap}".`,
+          `Allowed_Values 시트의 표준 색상 계열 중 하나를 선택해 주세요 (${ALLOWED_COLOR_MAPS.join(", ")}).`
         );
       } else {
         resolvedColorMap = matchedCm;
@@ -943,8 +965,8 @@ export function parseAndValidateBulkProductWorkbook(
     const rawDescription = values.description.trim();
     if (rawDescription.length > 5000) {
       addValidationError(
-        "Description exceeds maximum length of 5,000 characters.",
-        "Shorten Description to 5,000 characters or fewer."
+        "상품 설명(Description)은 최대 5,000자까지 입력할 수 있습니다.",
+        "상품 설명을 5,000자 이내로 줄여 주세요."
       );
     }
 
@@ -961,8 +983,8 @@ export function parseAndValidateBulkProductWorkbook(
       if (bVal) {
         if (bVal.length > 500) {
           addValidationError(
-            `Bullet Point ${bIdx + 1} exceeds maximum length of 500 characters.`,
-            `Shorten Bullet Point ${bIdx + 1} to 500 characters or fewer.`
+            `핵심 포인트 ${bIdx + 1}(Bullet Point ${bIdx + 1})은(는) 최대 500자까지 입력할 수 있습니다.`,
+            `핵심 포인트 ${bIdx + 1}을(를) 500자 이내로 줄여 주세요.`
           );
         } else {
           bulletPoints.push(bVal);
@@ -973,16 +995,16 @@ export function parseAndValidateBulkProductWorkbook(
     const rawHowToUse = values.howToUse.trim();
     if (rawHowToUse.length > 5000) {
       addValidationError(
-        "How to Use exceeds maximum length of 5,000 characters.",
-        "Shorten How to Use to 5,000 characters or fewer."
+        "사용 방법(How to Use)은 최대 5,000자까지 입력할 수 있습니다.",
+        "사용 방법을 5,000자 이내로 줄여 주세요."
       );
     }
 
     const rawIngredients = values.ingredients.trim();
     if (rawIngredients.length > 10000) {
       addValidationError(
-        "Ingredients exceeds maximum length of 10,000 characters.",
-        "Shorten Ingredients to 10,000 characters or fewer."
+        "전성분(Ingredients)은 최대 10,000자까지 입력할 수 있습니다.",
+        "전성분 텍스트를 10,000자 이내로 줄여 주세요."
       );
     }
 
@@ -991,20 +1013,20 @@ export function parseAndValidateBulkProductWorkbook(
     const parsedChild = parseYesNoFlag(values.childSku);
     if (!parsedParent.valid) {
       addValidationError(
-        `Invalid Parent SKU value "${values.parentSku}".`,
-        "Use Y or N (or leave blank) for Parent SKU."
+        `상위 SKU 여부(Parent SKU) 값이 올바르지 않습니다: "${values.parentSku}".`,
+        "Y 또는 N으로 입력하거나 비워 두세요."
       );
     }
     if (!parsedChild.valid) {
       addValidationError(
-        `Invalid Child SKU value "${values.childSku}".`,
-        "Use Y or N (or leave blank) for Child SKU."
+        `하위 SKU 여부(Child SKU) 값이 올바르지 않습니다: "${values.childSku}".`,
+        "Y 또는 N으로 입력하거나 비워 두세요."
       );
     }
     if (parsedParent.value === "Y" && parsedChild.value === "Y") {
       addValidationError(
-        "A product cannot be marked as both Parent SKU and Child SKU.",
-        "Set either Parent SKU or Child SKU to Y, not both."
+        "상위 SKU(Parent SKU)와 하위 SKU(Child SKU)를 동시에 Y로 설정할 수 없습니다.",
+        "둘 중 하나만 Y로 설정하거나 모두 N으로 입력해 주세요."
       );
     }
 
@@ -1014,20 +1036,20 @@ export function parseAndValidateBulkProductWorkbook(
     if (rawUpc) {
       if (!/^\d{12}$/.test(rawUpc)) {
         addValidationError(
-          `Invalid UPC "${rawUpc}". UPC must be exactly 12 numeric digits (including leading zeros).`,
-          "Format the UPC column as Text and enter exactly 12 digits (e.g., 012345678905)."
+          `유효하지 않은 UPC 바코드입니다 ("${rawUpc}"). 선행 0을 포함한 정확히 12자리 숫자여야 합니다.`,
+          "UPC 열을 텍스트(@) 서식으로 유지하고 12자리 숫자만 입력해 주세요 (예: 012345678905)."
         );
       } else if (ctx.existingUpcs.has(rawUpc)) {
         addDuplicateError(
-          `UPC "${rawUpc}" is already registered in your catalog.`,
-          "Provide a unique 12-digit UPC barcode."
+          `UPC 바코드 "${rawUpc}"은(는) 이미 등록된 상품에서 사용 중입니다.`,
+          "중복되지 않는 고유한 12자리 UPC 바코드를 입력해 주세요."
         );
       } else {
         const prevUpc = seenUpcFirstRowIndex.get(rawUpc);
         if (prevUpc) {
           addDuplicateError(
-            `Duplicate UPC "${rawUpc}" within uploaded Excel (already used on row ${prevUpc.excelRowNumber}).`,
-            `Each product requires a unique UPC barcode (conflicts with row ${prevUpc.excelRowNumber}).`
+            `파일 내 UPC 바코드 "${rawUpc}" 중복 (${prevUpc.excelRowNumber}행과 동일).`,
+            `${prevUpc.excelRowNumber}행과 중복되지 않도록 고유한 UPC 바코드를 입력해 주세요.`
           );
         } else {
           seenUpcFirstRowIndex.set(rawUpc, { excelRowNumber, arrayIdx: idx });
@@ -1041,20 +1063,20 @@ export function parseAndValidateBulkProductWorkbook(
     if (rawEan) {
       if (!/^\d{13}$/.test(rawEan)) {
         addValidationError(
-          `Invalid EAN "${rawEan}". EAN must be exactly 13 numeric digits (including leading zeros).`,
-          "Format the EAN column as Text and enter exactly 13 digits (e.g., 8801234567890)."
+          `유효하지 않은 EAN 바코드입니다 ("${rawEan}"). 선행 0을 포함한 정확히 13자리 숫자여야 합니다.`,
+          "EAN 열을 텍스트(@) 서식으로 유지하고 13자리 숫자만 입력해 주세요 (예: 8801234567890)."
         );
       } else if (ctx.existingEans.has(rawEan)) {
         addDuplicateError(
-          `EAN "${rawEan}" is already registered in the system.`,
-          "Provide a unique 13-digit EAN barcode."
+          `EAN 바코드 "${rawEan}"은(는) 이미 시스템에 등록되어 있습니다.`,
+          "중복되지 않는 고유한 13자리 EAN 바코드를 입력해 주세요."
         );
       } else {
         const prevEan = seenEanFirstRowIndex.get(rawEan);
         if (prevEan) {
           addDuplicateError(
-            `Duplicate EAN "${rawEan}" within uploaded Excel (already used on row ${prevEan.excelRowNumber}).`,
-            `Each product requires a unique EAN barcode (conflicts with row ${prevEan.excelRowNumber}).`
+            `파일 내 EAN 바코드 "${rawEan}" 중복 (${prevEan.excelRowNumber}행과 동일).`,
+            `${prevEan.excelRowNumber}행과 중복되지 않도록 고유한 EAN 바코드를 입력해 주세요.`
           );
         } else {
           seenEanFirstRowIndex.set(rawEan, { excelRowNumber, arrayIdx: idx });
@@ -1068,14 +1090,14 @@ export function parseAndValidateBulkProductWorkbook(
     const parsedOffline = parseStrictBoolean(values.sellingOffline);
     if (!parsedOnline.valid) {
       addValidationError(
-        `Invalid Selling Online value "${values.sellingOnline}".`,
-        "Use TRUE or FALSE (or Y/N) for Selling Online."
+        `온라인 판매 여부(Selling Online) 값이 올바르지 않습니다: "${values.sellingOnline}".`,
+        "TRUE 또는 FALSE (또는 Y/N)로 입력해 주세요."
       );
     }
     if (!parsedOffline.valid) {
       addValidationError(
-        `Invalid Selling Offline value "${values.sellingOffline}".`,
-        "Use TRUE or FALSE (or Y/N) for Selling Offline."
+        `오프라인 판매 여부(Selling Offline) 값이 올바르지 않습니다: "${values.sellingOffline}".`,
+        "TRUE 또는 FALSE (또는 Y/N)로 입력해 주세요."
       );
     }
 
@@ -1084,26 +1106,26 @@ export function parseAndValidateBulkProductWorkbook(
     if (rawLink1) {
       if (rawLink1.length > 1000 || !isValidHttpUrl(rawLink1)) {
         addValidationError(
-          `Invalid Sales Link 1 "${rawLink1}". Must be a valid http:// or https:// URL.`,
-          "Include full URL starting with https:// (e.g., https://brand.com/product)."
+          `온라인 판매 링크 1(Sales Link 1) URL 형식이 올바르지 않습니다: "${rawLink1}".`,
+          "http:// 또는 https://로 시작하는 전체 URL을 입력해 주세요."
         );
       }
     }
     if (rawLink2) {
       if (rawLink2.length > 1000 || !isValidHttpUrl(rawLink2)) {
         addValidationError(
-          `Invalid Sales Link 2 "${rawLink2}". Must be a valid http:// or https:// URL.`,
-          "Include full URL starting with https://."
+          `온라인 판매 링크 2(Sales Link 2) URL 형식이 올바르지 않습니다: "${rawLink2}".`,
+          "http:// 또는 https://로 시작하는 전체 URL을 입력해 주세요."
         );
       }
     }
     if (parsedOnline.valid && parsedOnline.value && !rawLink1) {
       addValidationError(
-        "Sales Link 1 is required when Selling Online is TRUE.",
-        "Provide Sales Link 1 (https://...) or set Selling Online to FALSE."
+        "온라인 판매 여부(Selling Online)가 TRUE인 경우 온라인 판매 링크 1(Sales Link 1)은 필수입니다.",
+        "온라인 판매 링크 1(https://...)을 입력하거나 온라인 판매 여부를 FALSE로 변경해 주세요."
       );
     } else if (parsedOnline.valid && !parsedOnline.value && (rawLink1 || rawLink2)) {
-      warnings.push("Sales Link provided while Selling Online is FALSE.");
+      warnings.push("온라인 판매 여부가 FALSE인 상태에서 판매 링크가 함께 입력되었습니다.");
     }
 
     // 13. Pricing (KRW integer >= 0, USD decimal >= 0)
@@ -1118,8 +1140,8 @@ export function parseAndValidateBulkProductWorkbook(
       });
       if (!v.valid || (v.value !== null && v.value !== undefined && v.value > 1_000_000_000)) {
         addValidationError(
-          `Invalid Retail Price KRW "${values.retailPriceKrw}". Must be a whole number >= 0 without currency symbols.`,
-          "Enter an integer >= 0 for Retail Price KRW (e.g., 25000)."
+          `소비자가 KRW("${values.retailPriceKrw}") 형식이 올바르지 않습니다. 통화기호 없는 0 이상의 정수여야 합니다.`,
+          "소비자가 KRW를 숫자로만 입력해 주세요 (예: 25000)."
         );
       } else {
         priceKrwRetail = v.value ?? null;
@@ -1137,8 +1159,8 @@ export function parseAndValidateBulkProductWorkbook(
       });
       if (!v.valid || (v.value !== null && v.value !== undefined && v.value > 1_000_000_000)) {
         addValidationError(
-          `Invalid Wholesale Price KRW "${values.wholesalePriceKrw}". Must be a whole number >= 0 without currency symbols.`,
-          "Enter an integer >= 0 for Wholesale Price KRW (e.g., 12500)."
+          `국내 공급가 KRW("${values.wholesalePriceKrw}") 형식이 올바르지 않습니다. 통화기호 없는 0 이상의 정수여야 합니다.`,
+          "국내 공급가 KRW를 숫자로만 입력해 주세요 (예: 12500)."
         );
       } else {
         priceKrwWholesale = v.value ?? null;
@@ -1156,8 +1178,8 @@ export function parseAndValidateBulkProductWorkbook(
       });
       if (!v.valid || (v.value !== null && v.value !== undefined && v.value > 1_000_000)) {
         addValidationError(
-          `Invalid Estimated Retail Price USD "${values.estimatedRetailPriceUsd}". Must be a non-negative number.`,
-          "Enter a valid USD amount without '$' (e.g., 24.00)."
+          `예상 미국 판매가 USD("${values.estimatedRetailPriceUsd}") 형식이 올바르지 않습니다.`,
+          "'$' 기호 없이 0 이상의 숫자로 입력해 주세요 (예: 24.00)."
         );
       } else {
         estimatedRetailPrice = v.value ?? null;
@@ -1175,15 +1197,15 @@ export function parseAndValidateBulkProductWorkbook(
       });
       if (!v.valid || (v.value !== null && v.value !== undefined && v.value > 1_000_000)) {
         addValidationError(
-          `Invalid Export FOB Price USD "${values.exportFobPriceUsd}". Must be a non-negative number.`,
-          "Enter a valid USD amount without '$' (e.g., 8.50)."
+          `수출 FOB 단가 USD("${values.exportFobPriceUsd}") 형식이 올바르지 않습니다.`,
+          "'$' 기호 없이 0 이상의 숫자로 입력해 주세요 (예: 8.50)."
         );
       } else {
         priceUsdFob = v.value ?? null;
       }
     }
 
-    // 14. Logistics Measurements (all optional; positive > 0 when supplied)
+    // 14. Logistics Measurements
     const checkPositiveMeasure = (
       key: BulkRowRawFieldKey,
       label: string
@@ -1193,8 +1215,8 @@ export function parseAndValidateBulkProductWorkbook(
       const res = parsePositiveDecimal(raw);
       if (!res.valid) {
         addValidationError(
-          `Invalid ${label} "${raw}". Must be a positive number greater than 0.`,
-          `Enter a positive numeric measurement (> 0) for ${label} or leave blank.`
+          `${label} 값("${raw}")이 올바르지 않습니다. 0보다 큰 양수여야 합니다.`,
+          `${label} 항목에 0보다 큰 숫자를 입력하거나 비워 두세요.`
         );
         return null;
       }
@@ -1210,40 +1232,40 @@ export function parseAndValidateBulkProductWorkbook(
       const res = parsePositiveInteger(raw, 100_000);
       if (!res.valid) {
         addValidationError(
-          `Invalid ${label} "${raw}". Must be a positive whole number (>= 1).`,
-          `Enter a positive integer (>= 1) for ${label} or leave blank.`
+          `${label} 값("${raw}")이 올바르지 않습니다. 1 이상의 자연수여야 합니다.`,
+          `${label} 항목에 1 이상의 정수를 입력하거나 비워 두세요.`
         );
         return null;
       }
       return res.value;
     };
 
-    const itemWidth = checkPositiveMeasure("itemWidth", "Item Width (cm)");
-    const itemDepth = checkPositiveMeasure("itemDepth", "Item Depth (cm)");
-    const itemHeight = checkPositiveMeasure("itemHeight", "Item Height (cm)");
-    const itemWeight = checkPositiveMeasure("itemWeight", "Item Weight (g)");
+    const itemWidth = checkPositiveMeasure("itemWidth", "단품 가로(cm)");
+    const itemDepth = checkPositiveMeasure("itemDepth", "단품 세로(cm)");
+    const itemHeight = checkPositiveMeasure("itemHeight", "단품 높이(cm)");
+    const itemWeight = checkPositiveMeasure("itemWeight", "단품 중량(g)");
 
-    const packageWidth = checkPositiveMeasure("packageWidth", "Package Width (cm)");
-    const packageDepth = checkPositiveMeasure("packageDepth", "Package Depth (cm)");
-    const packageHeight = checkPositiveMeasure("packageHeight", "Package Height (cm)");
-    const packageWeight = checkPositiveMeasure("packageWeight", "Package Weight (g)");
+    const packageWidth = checkPositiveMeasure("packageWidth", "개별포장 가로(cm)");
+    const packageDepth = checkPositiveMeasure("packageDepth", "개별포장 세로(cm)");
+    const packageHeight = checkPositiveMeasure("packageHeight", "개별포장 높이(cm)");
+    const packageWeight = checkPositiveMeasure("packageWeight", "개별포장 중량(g)");
 
-    const cartonPackQty = checkPositiveQty("cartonPackQty", "Carton Pack Quantity (ea)");
-    const cartonWidth = checkPositiveMeasure("cartonWidth", "Carton Width (cm)");
-    const cartonDepth = checkPositiveMeasure("cartonDepth", "Carton Depth (cm)");
-    const cartonHeight = checkPositiveMeasure("cartonHeight", "Carton Height (cm)");
-    const cartonWeight = checkPositiveMeasure("cartonWeight", "Carton Weight (kg)");
+    const cartonPackQty = checkPositiveQty("cartonPackQty", "카톤 입수량(ea)");
+    const cartonWidth = checkPositiveMeasure("cartonWidth", "카톤 가로(cm)");
+    const cartonDepth = checkPositiveMeasure("cartonDepth", "카톤 세로(cm)");
+    const cartonHeight = checkPositiveMeasure("cartonHeight", "카톤 높이(cm)");
+    const cartonWeight = checkPositiveMeasure("cartonWeight", "카톤 중량(kg)");
 
     let cartonCbm: number | null = null;
     if (cartonWidth && cartonDepth && cartonHeight) {
       cartonCbm = Number(((cartonWidth * cartonDepth * cartonHeight) / 1_000_000).toFixed(5));
     }
 
-    const palletCartonQty = checkPositiveQty("palletCartonQty", "Pallet Carton Quantity (boxes)");
-    const palletWidth = checkPositiveMeasure("palletWidth", "Pallet Width (cm)");
-    const palletDepth = checkPositiveMeasure("palletDepth", "Pallet Depth (cm)");
-    const palletHeight = checkPositiveMeasure("palletHeight", "Pallet Height (cm)");
-    const palletWeight = checkPositiveMeasure("palletWeight", "Pallet Weight (kg)");
+    const palletCartonQty = checkPositiveQty("palletCartonQty", "파렛트 적재 박스수");
+    const palletWidth = checkPositiveMeasure("palletWidth", "파렛트 가로(cm)");
+    const palletDepth = checkPositiveMeasure("palletDepth", "파렛트 세로(cm)");
+    const palletHeight = checkPositiveMeasure("palletHeight", "파렛트 높이(cm)");
+    const palletWeight = checkPositiveMeasure("palletWeight", "파렛트 중량(kg)");
 
     const isInvalid = errors.length > 0;
     const status = isInvalid ? "INVALID" : warnings.length > 0 ? "WARNING" : "VALID";
