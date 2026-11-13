@@ -51,11 +51,13 @@ export async function getTradingProductDetailData(productId: string) {
     .from("products")
     .select(`
       id, name, name_en, category, volume, estimated_retail_price, brand_id, company_id,
-      description, bullet_points, origin, lead_time,
+      description, how_to_use, bullet_points, origin, lead_time,
       parent_sku, child_sku, manufacture_sku, letusto_sku, upc, ean,
       price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info,
       item_width, item_depth, item_height, item_weight,
       package_width, package_depth, package_height, package_weight,
+      carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight,
+      selling_online, sales_link_1,
       selection_status, sales_status, category_code, trading_status, retailer_visibility,
       trading_wholesale_price, trading_promo_wholesale_price, trading_promo_start_date, trading_promo_end_date, trading_srp_price, trading_map_price
     `)

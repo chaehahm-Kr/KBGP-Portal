@@ -376,14 +376,22 @@ export async function saveProductAttributeValues(
       isEmpty = val.length === 0 || val.every(v => v === "" || v === null || v === undefined);
     }
 
-    if (isEmpty) {
+    const rawText = (textValues[code] || "").trim();
+
+    if (isEmpty && !rawText) {
       deleteCodes.push(code);
     } else {
+      const normalizedVal =
+        isEmpty && rawText
+          ? Array.isArray(val)
+            ? ["OTHER"]
+            : "OTHER"
+          : val;
       upsertRows.push({
         product_id: productId,
         attribute_code: code,
-        value_json: val,
-        text_value: textValues[code] || null,
+        value_json: normalizedVal,
+        text_value: rawText || null,
         updated_at: new Date().toISOString(),
       });
     }

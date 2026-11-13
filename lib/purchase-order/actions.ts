@@ -760,6 +760,7 @@ export async function getProductsForSupplier(supplierId: string) {
     .from("products")
     .select(`
       id, name, name_en, manufacture_sku, letusto_sku, parent_sku, child_sku, price_usd_fob, price_additional_info, category, brand_id, company_id,
+      description, how_to_use, bullet_points,
       carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, carton_cbm,
       item_width, item_depth, item_height, item_weight, package_width, package_depth, package_height, package_weight,
       brands (name), upc, ean, status, trading_status, category_code, origin, price_krw_retail, selling_online, sales_link_1

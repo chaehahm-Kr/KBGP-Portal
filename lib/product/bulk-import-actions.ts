@@ -21,6 +21,7 @@ import {
 } from "@/lib/product/bulk-import-types";
 import { parseAndValidateBulkProductWorkbook } from "@/lib/product/bulk-import-validator";
 import {
+  generateAnnotatedErrorWorkbookBuffer,
   generateBulkImportErrorBuffer,
   generateBulkProductTemplateBuffer,
 } from "@/lib/product/bulk-import-template";
@@ -1104,6 +1105,81 @@ export async function generateCombinedBulkErrorReportAction(params: {
     return {
       success: false,
       error: err?.message || "오류 리포트 Excel 생성에 실패했습니다.",
+    };
+  }
+}
+
+export async function downloadAnnotatedErrorWorkbookAction(
+  formData: FormData
+): Promise<{
+  success: boolean;
+  base64?: string;
+  fileName?: string;
+  error?: string;
+}> {
+  try {
+    const { companyId } = await requirePortalPermission("products", "write");
+    const file = formData.get("file");
+
+    if (!file || !(file instanceof File)) {
+      return {
+        success: false,
+        error: "원본 Excel 파일 정보를 찾을 수 없습니다. 파일을 다시 선택해 주세요.",
+      };
+    }
+
+    if (file.size > BULK_IMPORT_MAX_FILE_BYTES) {
+      return {
+        success: false,
+        error: "파일 크기가 허용 한도(10 MB)를 초과했습니다.",
+      };
+    }
+
+    const supabase = await createClient();
+    const refData = await loadBulkValidationReferenceData(supabase, companyId);
+    const arrayBuffer = await file.arrayBuffer();
+
+    const preview = parseAndValidateBulkProductWorkbook({
+      fileName: file.name,
+      buffer: new Uint8Array(arrayBuffer),
+      companyBrands: refData.brands,
+      allCategories: refData.categories,
+      commonAttributes: refData.commonAttributes,
+      existingCompanySkus: refData.existingCompanySkus,
+      existingUpcs: refData.existingUpcs,
+      existingEans: refData.existingEans,
+    });
+
+    if (!preview.success || !preview.rows) {
+      return {
+        success: false,
+        error: preview.error || "원본 Excel 데이터를 검증하지 못했습니다.",
+      };
+    }
+
+    const buf = await generateAnnotatedErrorWorkbookBuffer({
+      brands: refData.brands,
+      categories: refData.categories,
+      commonAttributes: refData.commonAttributes,
+      preview,
+    });
+
+    const ts = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const safeStem = file.name
+      .replace(/\.xlsx$/i, "")
+      .replace(/[^a-zA-Z0-9가-힣_-]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 48);
+
+    return {
+      success: true,
+      base64: buf.toString("base64"),
+      fileName: `${safeStem || "KSN_Product_Upload"}_오류표시_${ts}.xlsx`,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "오류 표시 Excel 생성 중 예기치 않은 오류가 발생했습니다.",
     };
   }
 }

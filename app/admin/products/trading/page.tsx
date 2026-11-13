@@ -22,7 +22,7 @@ export default async function AdminTradingProductsPage() {
   const { data: prodsWithVis, error: queryError } = await supabase
     .from("products")
     .select(
-      "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status, trading_status, retailer_visibility, created_at, upc, ean, estimated_retail_price, trading_wholesale_price, trading_promo_wholesale_price, trading_promo_start_date, trading_promo_end_date, trading_srp_price, trading_map_price"
+      "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, description, how_to_use, bullet_points, price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info, origin, category_code, item_width, item_depth, item_height, item_weight, package_width, package_depth, package_height, package_weight, carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, selling_online, sales_link_1, selection_status, sales_status, trading_status, retailer_visibility, created_at, upc, ean, estimated_retail_price, trading_wholesale_price, trading_promo_wholesale_price, trading_promo_start_date, trading_promo_end_date, trading_srp_price, trading_map_price"
     )
     .or("trading_status.in.(active,inactive,historical),selection_status.eq.SELECTED")
     .order("created_at", { ascending: false });
@@ -31,7 +31,7 @@ export default async function AdminTradingProductsPage() {
     const { data: fallbackProds, error: fallbackError } = await supabase
       .from("products")
       .select(
-        "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status, trading_status, created_at, upc, ean, estimated_retail_price, trading_wholesale_price, trading_promo_wholesale_price, trading_promo_start_date, trading_promo_end_date, trading_srp_price, trading_map_price"
+        "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, description, how_to_use, bullet_points, price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info, origin, category_code, item_width, item_depth, item_height, item_weight, package_width, package_depth, package_height, package_weight, carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, selling_online, sales_link_1, selection_status, sales_status, trading_status, created_at, upc, ean, estimated_retail_price, trading_wholesale_price, trading_promo_wholesale_price, trading_promo_start_date, trading_promo_end_date, trading_srp_price, trading_map_price"
       )
       .or("trading_status.in.(active,inactive,historical),selection_status.eq.SELECTED")
       .order("created_at", { ascending: false });
@@ -138,17 +138,33 @@ export default async function AdminTradingProductsPage() {
         name_en: p.name_en,
         brand_id: p.brand_id,
         category_code: p.category_code,
-        manufacture_sku: p.manufacture_sku,
+        manufacture_sku: effectiveManufactureSku,
         origin: p.origin,
+        description: p.description,
+        how_to_use: p.how_to_use,
+        bullet_points: p.bullet_points,
         price_krw_retail: p.price_krw_retail,
         price_usd_fob: p.price_usd_fob,
+        item_width: p.item_width,
+        item_depth: p.item_depth,
+        item_height: p.item_height,
+        item_weight: p.item_weight,
         package_width: p.package_width,
         package_depth: p.package_depth,
         package_height: p.package_height,
         package_weight: p.package_weight,
+        carton_pack_qty: p.carton_pack_qty,
+        carton_width: p.carton_width,
+        carton_depth: p.carton_depth,
+        carton_height: p.carton_height,
+        carton_weight: p.carton_weight,
         upc: p.upc,
         ean: p.ean,
-        hasImages: !!photoUrl,
+        selling_online: p.selling_online,
+        sales_link_1: p.sales_link_1,
+        deleted_at: priceAddInfo.deleted_at || (p as any).deleted_at || null,
+        adminOverrides,
+        hasImages: (productImages ?? []).some((img) => img.product_id === p.id),
       });
 
       const hubVis = evaluateHubVisibility(p, totalAvailable);

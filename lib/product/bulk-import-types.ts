@@ -1943,6 +1943,48 @@ export interface BulkNormalizedProductPayload {
 
 export type BulkRowValidationStatus = "VALID" | "WARNING" | "INVALID";
 
+export type BulkErrorCategory =
+  | "REQUIRED_FIELD"
+  | "CATEGORY_HIERARCHY"
+  | "INVALID_ATTRIBUTE_VALUE"
+  | "INVALID_CUSTOM_VALUE"
+  | "DUPLICATE_SKU_BARCODE"
+  | "PRICING_LOGISTICS"
+  | "MEDIA_URL"
+  | "OTHER_VALIDATION";
+
+export const BULK_ERROR_CATEGORY_LABELS_KO: Record<BulkErrorCategory, string> = {
+  REQUIRED_FIELD: "필수 항목 오류",
+  CATEGORY_HIERARCHY: "카테고리 계층 오류",
+  INVALID_ATTRIBUTE_VALUE: "허용되지 않는 속성값",
+  INVALID_CUSTOM_VALUE: "기타 직접입력 오류",
+  DUPLICATE_SKU_BARCODE: "SKU · 바코드 중복",
+  PRICING_LOGISTICS: "가격 · 물류 규격 오류",
+  MEDIA_URL: "이미지 · 미디어 URL 오류",
+  OTHER_VALIDATION: "기타 유효성 오류",
+};
+
+export interface BulkCellValidationIssue {
+  severity: "ERROR" | "WARNING";
+  category: BulkErrorCategory;
+  categoryLabelKo: string;
+  excelRowNumber: number;
+  colIndex: number;
+  colLetter: string;
+  columnHeader: string;
+  fieldKey: BulkRowRawFieldKey;
+  submittedValue: string;
+  reason: string;
+  acceptedValues: string;
+  guidance: string;
+}
+
+export interface BulkUploadedColumnMeta {
+  key: BulkRowRawFieldKey;
+  header: string;
+  colIndex: number;
+}
+
 export interface BulkValidatedRow {
   excelRowNumber: number;
   status: BulkRowValidationStatus;
@@ -1951,8 +1993,11 @@ export interface BulkValidatedRow {
   rawProductNameEn: string;
   rawCategory1Depth: string;
   normalizedCategoryPath: string;
+  rawValues: Record<BulkRowRawFieldKey, string>;
   errors: string[];
   warnings: string[];
+  errorDetails: BulkCellValidationIssue[];
+  warningDetails: BulkCellValidationIssue[];
   correctiveGuidance: string[];
   isDuplicateError: boolean;
   isValidationError: boolean;
@@ -1988,6 +2033,8 @@ export interface BulkPreviewResult {
   error?: string;
   fileName?: string;
   batchFingerprint?: string;
+  headerRowNumber?: number;
+  uploadedColumns?: BulkUploadedColumnMeta[];
   summary?: BulkPreviewSummary;
   rows?: BulkValidatedRow[];
 }

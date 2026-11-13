@@ -110,6 +110,7 @@ export default async function AdminBrandDetailPage({ params }: AdminBrandDetailP
     .from("products")
     .select(`
       id, brand_id, name, name_en, category_code, manufacture_sku, origin,
+      description, how_to_use, bullet_points,
       price_krw_retail, price_usd_fob, item_width, item_depth, item_height, item_weight,
       package_width, package_depth, package_height, package_weight,
       carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight,
@@ -157,6 +158,9 @@ export default async function AdminBrandDetailPage({ params }: AdminBrandDetailP
       category_code: p.category_code,
       manufacture_sku: effectiveManufactureSku,
       origin: p.origin,
+      description: p.description,
+      how_to_use: p.how_to_use,
+      bullet_points: p.bullet_points,
       price_krw_retail: p.price_krw_retail,
       price_usd_fob: p.price_usd_fob,
       item_width: p.item_width,

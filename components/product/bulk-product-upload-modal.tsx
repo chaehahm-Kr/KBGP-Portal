@@ -3,6 +3,7 @@
 import React, { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  downloadAnnotatedErrorWorkbookAction,
   downloadBulkProductTemplateAction,
   executeBulkProductImportAction,
   generateCombinedBulkErrorReportAction,
@@ -10,9 +11,12 @@ import {
   validateBulkProductExcelAction,
 } from "@/lib/product/bulk-import-actions";
 import {
+  BULK_ERROR_CATEGORY_LABELS_KO,
   BULK_PRODUCT_COLUMNS,
   BULK_IMPORT_MAX_ROWS,
   COMMON_BULK_ATTRIBUTES,
+  type BulkCellValidationIssue,
+  type BulkErrorCategory,
   type BulkImportExecutionResult,
   type BulkMediaFailureItem,
   type BulkPendingMediaTask,
@@ -70,6 +74,27 @@ function triggerBase64XlsxDownload(base64: string, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
+function getErrorCategoryBadgeClasses(category: BulkErrorCategory): string {
+  switch (category) {
+    case "REQUIRED_FIELD":
+      return "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800";
+    case "CATEGORY_HIERARCHY":
+      return "bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800";
+    case "INVALID_ATTRIBUTE_VALUE":
+      return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800";
+    case "INVALID_CUSTOM_VALUE":
+      return "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-950/60 dark:text-orange-300 dark:border-orange-800";
+    case "DUPLICATE_SKU_BARCODE":
+      return "bg-red-100 text-red-800 border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800";
+    case "PRICING_LOGISTICS":
+      return "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800";
+    case "MEDIA_URL":
+      return "bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800";
+    default:
+      return "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700";
+  }
+}
+
 export function BulkProductUploadModal({
   isOpen,
   onClose,
@@ -88,6 +113,8 @@ export function BulkProductUploadModal({
   const [previewResult, setPreviewResult] = useState<BulkPreviewResult | null>(null);
   const [previewFilter, setPreviewFilter] = useState<PreviewFilter>("ALL");
   const [previewPage, setPreviewPage] = useState<number>(1);
+  const [detailRowNumber, setDetailRowNumber] = useState<number | null>(null);
+  const [isDownloadingAnnotatedWorkbook, setIsDownloadingAnnotatedWorkbook] = useState(false);
 
   const [submissionKey, setSubmissionKey] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -125,6 +152,8 @@ export function BulkProductUploadModal({
     setPreviewResult(null);
     setPreviewFilter("ALL");
     setPreviewPage(1);
+    setDetailRowNumber(null);
+    setIsDownloadingAnnotatedWorkbook(false);
     setSubmissionKey("");
     setIsSubmitting(false);
     setImportResult(null);
@@ -391,6 +420,26 @@ export function BulkProductUploadModal({
     }
   };
 
+  const handleDownloadAnnotatedWorkbook = async () => {
+    if (!selectedFile || isDownloadingAnnotatedWorkbook) return;
+    setErrorBanner(null);
+    setIsDownloadingAnnotatedWorkbook(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      const res = await downloadAnnotatedErrorWorkbookAction(formData);
+      if (!res.success || !res.base64 || !res.fileName) {
+        setErrorBanner(res.error || "오류 표시 Excel을 생성하지 못했습니다.");
+        return;
+      }
+      triggerBase64XlsxDownload(res.base64, res.fileName);
+    } catch (err: any) {
+      setErrorBanner(err?.message || "오류 표시 Excel 다운로드 중 오류가 발생했습니다.");
+    } finally {
+      setIsDownloadingAnnotatedWorkbook(false);
+    }
+  };
+
   const filteredPreviewRows: BulkValidatedRow[] = (previewResult?.rows ?? []).filter((r) => {
     if (previewFilter === "ALL") return true;
     if (previewFilter === "CAT_ERR") return r.hasCategoryError;
@@ -398,6 +447,17 @@ export function BulkProductUploadModal({
     if (previewFilter === "MEDIA_ERR") return r.hasMediaUrlError;
     return r.status === previewFilter;
   });
+
+  const detailNavigableRows = filteredPreviewRows.filter(
+    (r) => r.status === "INVALID" || r.status === "WARNING"
+  );
+  const activeDetailRow =
+    detailRowNumber !== null
+      ? (previewResult?.rows ?? []).find((r) => r.excelRowNumber === detailRowNumber) ?? null
+      : null;
+  const activeDetailNavIdx = activeDetailRow
+    ? detailNavigableRows.findIndex((r) => r.excelRowNumber === activeDetailRow.excelRowNumber)
+    : -1;
 
   const totalPreviewPages = Math.max(
     1,
@@ -439,7 +499,7 @@ export function BulkProductUploadModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="bulk-upload-modal-title"
-        className="w-full max-w-4xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2.5rem)] flex flex-col rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden"
+        className="relative w-full max-w-4xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2.5rem)] flex flex-col rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Compact Modal Header */}
@@ -554,7 +614,7 @@ export function BulkProductUploadModal({
                     </div>
                     <ul className="space-y-1 text-zinc-600 dark:text-zinc-400">
                       <li>• <strong>미디어 URL</strong>: 직접 다운로드 HTTPS 이미지(최대 10장) 및 소개 영상</li>
-                      <li>• <strong>공통 속성</strong>: 유통기한·제형·피부타입 등 (복수 선택은 <code className="font-mono">;</code> 구분)</li>
+                      <li>• <strong>공통 속성</strong>: 한글 (영문) 드롭다운 제공 · 복수 선택은 <code className="font-mono">;</code> 구분 · 허용 속성은 <code className="font-mono">기타: 값</code> (<code className="font-mono">Other: Value</code>) 지원</li>
                       <li>• 모든 상품은 <strong>임시 등록 (Draft · 리테일러 비노출)</strong> 상태로 안전 생성</li>
                     </ul>
                   </div>
@@ -705,7 +765,7 @@ export function BulkProductUploadModal({
                   </div>
                 </div>
 
-                {/* Primary Status Filter Tabs */}
+                {/* Primary Status Filter Tabs + Annotated Error Workbook Download */}
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-1">
                     {(
@@ -739,13 +799,29 @@ export function BulkProductUploadModal({
                       </button>
                     ))}
                   </div>
-                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                    등록 가능 <strong>{previewResult.summary.importableRows}</strong>건 · 제외{" "}
-                    <strong className="text-rose-600 dark:text-rose-400">
-                      {previewResult.summary.invalidRows}
-                    </strong>
-                    건
-                  </span>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      등록 가능 <strong>{previewResult.summary.importableRows}</strong>건 · 제외{" "}
+                      <strong className="text-rose-600 dark:text-rose-400">
+                        {previewResult.summary.invalidRows}
+                      </strong>
+                      건
+                    </span>
+
+                    {previewResult.summary.invalidRows > 0 && selectedFile && (
+                      <button
+                        type="button"
+                        onClick={handleDownloadAnnotatedWorkbook}
+                        disabled={isDownloadingAnnotatedWorkbook}
+                        className="rounded-md border border-rose-300 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/50 cursor-pointer shadow-2xs"
+                      >
+                        {isDownloadingAnnotatedWorkbook
+                          ? "오류 표시 Excel 생성 중..."
+                          : "⬇ 오류 표시 Excel 다운로드"}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Bounded Paginated Table (Zero Horizontal Overflow) */}
@@ -755,9 +831,9 @@ export function BulkProductUploadModal({
                       <tr>
                         <th className="px-2 py-1.5 w-11">행</th>
                         <th className="px-2 py-1.5 w-18">상태</th>
-                        <th className="px-2.5 py-1.5 w-34">브랜드 / SKU</th>
-                        <th className="px-2.5 py-1.5 w-40">영문 제품명</th>
-                        <th className="px-2 py-1.5 w-32 hidden sm:table-cell">카테고리 / 부가</th>
+                        <th className="px-2.5 py-1.5 w-32">브랜드 / SKU</th>
+                        <th className="px-2.5 py-1.5 w-36">영문 제품명</th>
+                        <th className="px-2 py-1.5 w-28 hidden sm:table-cell">카테고리 / 부가</th>
                         <th className="px-2.5 py-1.5">검증 결과 및 사유</th>
                       </tr>
                     </thead>
@@ -784,11 +860,33 @@ export function BulkProductUploadModal({
                               ? `등록 가능 (${extraParts.join(" · ")})`
                               : "임시 등록 (Draft) 가능";
 
-                          const detailText =
+                          const errCount = row.errorDetails?.length ?? row.errors.length;
+                          const warnCount = row.warningDetails?.length ?? row.warnings.length;
+
+                          const shortSummaryText =
                             row.status === "INVALID"
-                              ? row.errors.join(" · ")
+                              ? row.errors[0] || "입력 검증 오류가 있습니다."
                               : row.status === "WARNING"
-                              ? row.warnings.join(" · ")
+                              ? row.warnings[0] || "확인 필요 항목이 있습니다."
+                              : validSummary;
+
+                          const fullHoverDetails =
+                            row.status === "INVALID"
+                              ? (row.errorDetails && row.errorDetails.length > 0
+                                  ? row.errorDetails.map(
+                                      (d, i) =>
+                                        `[${i + 1}/${row.errorDetails.length}] ${d.colLetter}${row.excelRowNumber} (${d.columnHeader})\n• 입력값: ${d.submittedValue || "(미입력)"}\n• 사유: ${d.reason}\n• 수정: ${d.guidance}`
+                                    )
+                                  : row.errors.map((e, i) => `[${i + 1}] ${e}`)
+                                ).join("\n\n")
+                              : row.status === "WARNING"
+                              ? (row.warningDetails && row.warningDetails.length > 0
+                                  ? row.warningDetails.map(
+                                      (w, i) =>
+                                        `[확인 ${i + 1}] ${w.colLetter}${row.excelRowNumber} (${w.columnHeader}): ${w.reason}`
+                                    )
+                                  : row.warnings
+                                ).join("\n")
                               : validSummary;
 
                           return (
@@ -818,7 +916,7 @@ export function BulkProductUploadModal({
                                 )}
                                 {row.status === "INVALID" && (
                                   <span className="inline-flex rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
-                                    오류
+                                    오류 {errCount}건
                                   </span>
                                 )}
                               </td>
@@ -860,18 +958,52 @@ export function BulkProductUploadModal({
                                   </div>
                                 )}
                               </td>
-                              <td className="px-2.5 py-1.5 align-top" title={detailText}>
+                              <td className="px-2.5 py-1.5 align-top" title={fullHoverDetails}>
                                 {row.status === "INVALID" ? (
-                                  <div className="line-clamp-2 break-words text-rose-700 dark:text-rose-400">
-                                    {detailText}
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="line-clamp-2 break-words text-rose-700 dark:text-rose-400">
+                                        {shortSummaryText}
+                                      </div>
+                                      {errCount > 1 && (
+                                        <div className="mt-0.5 text-[10px] font-semibold text-rose-600/90 dark:text-rose-300">
+                                          외 {errCount - 1}건 더 있음 (총 {errCount}건 오류)
+                                        </div>
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDetailRowNumber(row.excelRowNumber)}
+                                      className="shrink-0 rounded border border-rose-300 bg-white px-2 py-0.5 text-[10px] font-bold text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:bg-zinc-900 dark:text-rose-300 dark:hover:bg-rose-950/50 cursor-pointer"
+                                    >
+                                      오류 상세
+                                    </button>
                                   </div>
                                 ) : row.status === "WARNING" ? (
-                                  <div className="line-clamp-2 break-words text-amber-700 dark:text-amber-400">
-                                    {detailText}
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="line-clamp-2 break-words text-amber-700 dark:text-amber-400">
+                                        {shortSummaryText}
+                                      </div>
+                                      {warnCount > 1 && (
+                                        <div className="mt-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-300">
+                                          확인 필요 총 {warnCount}건
+                                        </div>
+                                      )}
+                                    </div>
+                                    {warnCount > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setDetailRowNumber(row.excelRowNumber)}
+                                        className="shrink-0 rounded border border-amber-300 bg-white px-2 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:bg-zinc-900 dark:text-amber-300 dark:hover:bg-amber-950/50 cursor-pointer"
+                                      >
+                                        오류 상세
+                                      </button>
+                                    )}
                                   </div>
                                 ) : (
                                   <span className="text-emerald-600 dark:text-emerald-400">
-                                    {detailText}
+                                    {validSummary}
                                   </span>
                                 )}
                               </td>
@@ -1018,6 +1150,21 @@ export function BulkProductUploadModal({
                         {retryMediaTasks.reduce((sum, t) => sum + t.imageUrls.length, 0)}건)
                       </button>
                     )}
+
+                    {!isIngestingMedia &&
+                      importResult.rejectedCount > 0 &&
+                      selectedFile && (
+                        <button
+                          type="button"
+                          disabled={isDownloadingAnnotatedWorkbook}
+                          onClick={handleDownloadAnnotatedWorkbook}
+                          className="shrink-0 rounded-lg border border-rose-300 bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50 dark:border-rose-700 cursor-pointer shadow-2xs"
+                        >
+                          {isDownloadingAnnotatedWorkbook
+                            ? "오류 표시 Excel 생성 중..."
+                            : "⬇ 오류 표시 Excel 다운로드"}
+                        </button>
+                      )}
 
                     {!isIngestingMedia &&
                       (importResult.rejectedCount > 0 || mediaFailures.length > 0) && (
@@ -1464,6 +1611,234 @@ export function BulkProductUploadModal({
             )}
           </div>
         </div>
+
+        {/* Row Validation Error / Warning Full Detail Overlay Modal */}
+        {step === 3 && activeDetailRow && (
+          <div
+            className="absolute inset-0 z-30 flex items-center justify-center bg-black/55 backdrop-blur-2xs p-3 sm:p-5"
+            onClick={() => setDetailRowNumber(null)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Excel ${activeDetailRow.excelRowNumber}행 검증 상세`}
+              className="w-full max-w-2xl max-h-full flex flex-col rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Detail Header */}
+              <div className="flex items-start justify-between gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950/70 shrink-0">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-zinc-900 px-2 py-0.5 font-mono text-xs font-extrabold text-white dark:bg-white dark:text-zinc-950">
+                      Excel #{activeDetailRow.excelRowNumber}행
+                    </span>
+                    {activeDetailRow.errorDetails.length > 0 && (
+                      <span className="rounded bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-800 dark:bg-rose-950/70 dark:text-rose-300">
+                        오류 총 {activeDetailRow.errorDetails.length}건
+                      </span>
+                    )}
+                    {activeDetailRow.warningDetails.length > 0 && (
+                      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-950/70 dark:text-amber-300">
+                        확인 필요 {activeDetailRow.warningDetails.length}건
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-zinc-700 dark:text-zinc-300 break-words">
+                    <span className="font-semibold">
+                      {activeDetailRow.rawBrand || "(브랜드 미입력)"}
+                    </span>{" "}
+                    ·{" "}
+                    <span className="font-mono font-semibold">
+                      {activeDetailRow.rawManufactureSku || "(SKU 미입력)"}
+                    </span>{" "}
+                    ·{" "}
+                    <span>
+                      {activeDetailRow.rawProductNameEn || "(영문 제품명 미입력)"}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDetailRowNumber(null)}
+                  aria-label="오류 상세 닫기"
+                  className="rounded-md p-1 text-zinc-400 hover:bg-zinc-200/70 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 cursor-pointer shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Unclipped Scrollable Issue Cards */}
+              <div className="flex-1 overflow-y-auto px-4 py-3.5 space-y-3">
+                {activeDetailRow.errorDetails.map(
+                  (issue: BulkCellValidationIssue, idx: number) => (
+                    <div
+                      key={`err-${idx}-${issue.colIndex}-${issue.fieldKey}`}
+                      className="rounded-lg border border-rose-200 bg-rose-50/40 p-3 dark:border-rose-900/60 dark:bg-rose-950/20 space-y-2 text-xs"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-extrabold text-rose-700 dark:text-rose-300">
+                            오류 {idx + 1}
+                          </span>
+                          <span
+                            className={`rounded border px-1.5 py-0.5 text-[11px] font-bold ${getErrorCategoryBadgeClasses(
+                              issue.category
+                            )}`}
+                          >
+                            {issue.categoryLabelKo ||
+                              BULK_ERROR_CATEGORY_LABELS_KO[issue.category]}
+                          </span>
+                        </div>
+                        <span className="rounded bg-white px-2 py-0.5 font-mono text-[11px] font-bold text-zinc-700 border border-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:border-zinc-700">
+                          Excel #{activeDetailRow.excelRowNumber}행 · {issue.colLetter}열 (셀{" "}
+                          {issue.colLetter}
+                          {activeDetailRow.excelRowNumber})
+                        </span>
+                      </div>
+
+                      <div className="grid gap-1.5 sm:grid-cols-2 rounded-md bg-white/90 p-2.5 border border-rose-100 dark:bg-zinc-900/80 dark:border-zinc-800">
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
+                            항목명 (Excel 열)
+                          </div>
+                          <div className="font-bold text-zinc-900 dark:text-white break-words mt-0.5">
+                            [{issue.colLetter}열] {issue.columnHeader}
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
+                            입력된 값
+                          </div>
+                          <div className="font-mono font-semibold text-rose-700 dark:text-rose-300 break-all mt-0.5">
+                            {issue.submittedValue ? (
+                              issue.submittedValue
+                            ) : (
+                              <span className="italic text-rose-500">(미입력 / 빈 셀)</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 pt-0.5">
+                        <div>
+                          <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                            • 오류 사유:{" "}
+                          </span>
+                          <span className="text-rose-800 dark:text-rose-300 font-medium break-words">
+                            {issue.reason}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                            • 허용값 / 기대 형식:{" "}
+                          </span>
+                          <span className="text-zinc-700 dark:text-zinc-300 break-words">
+                            {issue.acceptedValues}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                            • 권장 수정 방법:{" "}
+                          </span>
+                          <span className="text-emerald-800 dark:text-emerald-300 font-medium break-words">
+                            {issue.guidance}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {activeDetailRow.warningDetails.map(
+                  (warn: BulkCellValidationIssue, idx: number) => (
+                    <div
+                      key={`warn-${idx}-${warn.colIndex}-${warn.fieldKey}`}
+                      className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 dark:border-amber-900/60 dark:bg-amber-950/20 space-y-1.5 text-xs"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-extrabold text-amber-800 dark:text-amber-300">
+                          확인 필요 {idx + 1} · [{warn.colLetter}열] {warn.columnHeader}
+                        </span>
+                        <span className="font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
+                          셀 {warn.colLetter}
+                          {activeDetailRow.excelRowNumber}
+                        </span>
+                      </div>
+                      <div className="text-amber-900 dark:text-amber-200 break-words">
+                        <strong>안내:</strong> {warn.reason}
+                      </div>
+                      <div className="text-zinc-700 dark:text-zinc-300 break-words">
+                        <strong>권장 조치:</strong> {warn.guidance}
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Detail Footer */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-950/70 shrink-0">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={activeDetailNavIdx <= 0}
+                    onClick={() => {
+                      if (activeDetailNavIdx > 0) {
+                        setDetailRowNumber(
+                          detailNavigableRows[activeDetailNavIdx - 1].excelRowNumber
+                        );
+                      }
+                    }}
+                    className="rounded border border-zinc-300 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
+                  >
+                    ◀ 이전 행
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      activeDetailNavIdx < 0 ||
+                      activeDetailNavIdx >= detailNavigableRows.length - 1
+                    }
+                    onClick={() => {
+                      if (
+                        activeDetailNavIdx >= 0 &&
+                        activeDetailNavIdx < detailNavigableRows.length - 1
+                      ) {
+                        setDetailRowNumber(
+                          detailNavigableRows[activeDetailNavIdx + 1].excelRowNumber
+                        );
+                      }
+                    }}
+                    className="rounded border border-zinc-300 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
+                  >
+                    다음 행 ▶
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {(previewResult?.summary?.invalidRows ?? 0) > 0 && selectedFile && (
+                    <button
+                      type="button"
+                      onClick={handleDownloadAnnotatedWorkbook}
+                      disabled={isDownloadingAnnotatedWorkbook}
+                      className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 cursor-pointer"
+                    >
+                      {isDownloadingAnnotatedWorkbook
+                        ? "생성 중..."
+                        : "⬇ 오류 표시 Excel 다운로드"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setDetailRowNumber(null)}
+                    className="rounded-lg bg-zinc-900 px-3.5 py-1 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 cursor-pointer"
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

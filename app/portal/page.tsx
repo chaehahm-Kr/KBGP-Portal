@@ -94,7 +94,7 @@ export default async function PortalHomePage() {
   // 7. Fetch Products (Canonical source for company)
   const { data: rawProducts } = await supabase
     .from("products")
-    .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, item_width, item_depth, item_height, item_weight, package_width, package_depth, package_height, package_weight, carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status, status, updated_at, created_at")
+    .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, description, how_to_use, bullet_points, price_krw_retail, price_usd_fob, item_width, item_depth, item_height, item_weight, package_width, package_depth, package_height, package_weight, carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status, status, updated_at, created_at")
     .eq("company_id", companyId)
     .order("updated_at", { ascending: false });
 
@@ -140,6 +140,9 @@ export default async function PortalHomePage() {
       category_code: p.category_code,
       manufacture_sku: effectiveManufactureSku,
       origin: p.origin,
+      description: p.description,
+      how_to_use: p.how_to_use,
+      bullet_points: p.bullet_points,
       price_krw_retail: p.price_krw_retail,
       price_usd_fob: p.price_usd_fob,
       item_width: p.item_width,

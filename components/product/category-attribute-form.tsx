@@ -10,6 +10,10 @@ import {
   type CategoryNode,
   type AttributeMasterItem
 } from "@/lib/product/attribute-actions";
+import {
+  AttributeSelectDropdown,
+  formatBilingualOptionLabel,
+} from "@/components/product/attribute-select-dropdown";
 
 interface FlatCategoryPath {
   code: string;
@@ -560,7 +564,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
   // 속성값이 입력되었는지(완료되었는지) 판별하는 공통 헬퍼
   const isAttributeValueFilled = (attr: AttributeMasterItem, val: any): boolean => {
-    if (val === "NA" || val === "UNKNOWN") return true;
+    if (val === "NA" || val === "NOT_APPLICABLE" || val === "UNKNOWN") return true;
     if (attr.inputType === "MULTI_SELECT") {
       return Array.isArray(val) ? val.length > 0 : false;
     }
@@ -886,7 +890,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
             >
               <option value="">대분류 선택</option>
               {categoriesTree.map(c => (
-                <option key={c.code} value={c.code}>{c.nameKo} ({c.code})</option>
+                <option key={c.code} value={c.code}>{formatBilingualOptionLabel(c.nameKo, c.nameEn, c.code)}</option>
               ))}
             </select>
           </div>
@@ -903,7 +907,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
             >
               <option value="">중분류 선택</option>
               {getActiveCat2Options().map(c => (
-                <option key={c.code} value={c.code}>{c.nameKo} ({c.code})</option>
+                <option key={c.code} value={c.code}>{formatBilingualOptionLabel(c.nameKo, c.nameEn, c.code)}</option>
               ))}
             </select>
           </div>
@@ -920,7 +924,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
             >
               <option value="">소분류 선택</option>
               {getActiveCat3Options().map(c => (
-                <option key={c.code} value={c.code}>{c.nameKo} ({c.code})</option>
+                <option key={c.code} value={c.code}>{formatBilingualOptionLabel(c.nameKo, c.nameEn, c.code)}</option>
               ))}
             </select>
           </div>
@@ -982,7 +986,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
                 <span className="w-2.5 h-2.5 rounded-full bg-zinc-400 dark:bg-zinc-500" />
                 <span>공통 속성 입력 (모든 제품군 공통)</span>
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5 items-start">
                 {attributes.filter(a => a.scope === "COMMON").map((attr) => renderField(attr))}
               </div>
             </div>
@@ -1002,7 +1006,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5 items-start">
                 {attributes.filter(a => a.scope === "PROFILE").map((attr) => renderField(attr))}
               </div>
             </div>
@@ -1057,148 +1061,64 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
           <span className="text-xs text-zinc-450 dark:text-zinc-500 leading-normal">{attr.helpText}</span>
         )}
 
-        {/* 3.1 SINGLE_SELECT 드롭다운 */}
-        {attr.inputType === "SINGLE_SELECT" && (
-          <div className="flex flex-col gap-2">
-            <select
-              id={`attr-input-${attr.code}`}
-              value={val || ""}
-              disabled={!isEditable || saving}
-              onChange={(e) => updateValue(attr.code, e.target.value)}
-              className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60"
-            >
-              <option value="">선택 안함</option>
-              {attr.allowNa && (
-                <option value="NA">해당 없음 (N/A)</option>
-              )}
-              {attr.options.map(o => (
-                <option key={o.optionCode} value={o.optionCode}>{o.optionKo}</option>
-              ))}
-              {attr.allowOther && (
-                <option value="OTHER">기타 (직접 입력)</option>
-              )}
-            </select>
-            {attr.allowOther && val === "OTHER" && (
-              <input
-                id={`attr-text-input-${attr.code}`}
-                type="text"
-                placeholder="상세 내용을 직접 기재하세요..."
-                value={textVal}
-                disabled={!isEditable || saving}
-                onChange={(e) => updateTextValue(attr.code, e.target.value)}
-                className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2 text-xs focus:outline-none"
-              />
-            )}
-          </div>
-        )}
-
-        {/* 3.2 MULTI_SELECT 체크박스 그룹 */}
-        {attr.inputType === "MULTI_SELECT" && (
-          <div className="flex flex-col gap-2.5 bg-zinc-50/50 dark:bg-zinc-950/40 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
-            {attr.allowNa && (
-              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-zinc-200 dark:border-zinc-800">
-                <label className="flex items-center gap-2.5 px-3 py-1 rounded-lg cursor-pointer text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200">
-                  <input
-                    id={`attr-checkbox-na-${attr.code}`}
-                    type="checkbox"
-                    checked={val === "NA"}
-                    disabled={!isEditable || saving}
-                    onChange={(e) => {
-                      updateValue(attr.code, e.target.checked ? "NA" : []);
-                    }}
-                    className="rounded text-indigo-650 focus:ring-indigo-500 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-800"
-                  />
-                  해당 없음 (N/A)
-                </label>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-2">
-              {attr.options.map(o => {
-                const list = Array.isArray(val) ? val : [];
-                const checked = list.includes(o.optionCode);
-                return (
-                  <label 
-                    key={o.optionCode} 
-                    className={`
-                      flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer text-xs transition-colors
-                      ${checked 
-                        ? 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-semibold border border-indigo-100 dark:border-indigo-900/30' 
-                        : 'hover:bg-zinc-100 dark:hover:bg-zinc-900/50 text-zinc-600 dark:text-zinc-400 border border-transparent'}
-                      ${(!isEditable || val === "NA") ? 'opacity-65 cursor-not-allowed' : ''}
-                    `}
-                  >
-                    <input
-                      id={`attr-checkbox-${attr.code}-${o.optionCode}`}
-                      type="checkbox"
-                      checked={checked}
-                      disabled={!isEditable || saving || val === "NA"}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          updateValue(attr.code, [...list, o.optionCode]);
-                        } else {
-                          updateValue(attr.code, list.filter(item => item !== o.optionCode));
-                        }
-                      }}
-                      className="rounded text-indigo-650 focus:ring-indigo-500 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-800"
-                    />
-                    {o.optionKo}
-                  </label>
-                );
-              })}
-            </div>
-            {attr.allowOther && (
-              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
-                <label className="text-[11px] text-zinc-400 dark:text-zinc-500 shrink-0">기타 직접입력:</label>
-                <input
-                  id={`attr-text-input-multi-${attr.code}`}
-                  type="text"
-                  placeholder="콤마(,) 등으로 구분하여 입력..."
-                  value={textVal}
-                  disabled={!isEditable || saving || val === "NA"}
-                  onChange={(e) => updateTextValue(attr.code, e.target.value)}
-                  className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-200 w-full focus:outline-none"
-                />
-              </div>
-            )}
-          </div>
+        {/* 3.1 & 3.2 SINGLE_SELECT / MULTI_SELECT 통합 컴팩트 검색형 드롭다운 */}
+        {(attr.inputType === "SINGLE_SELECT" || attr.inputType === "MULTI_SELECT") && (
+          <AttributeSelectDropdown
+            attr={attr}
+            value={val}
+            textValue={textVal}
+            disabled={!isEditable || saving}
+            isAdmin={isAdmin}
+            onChangeValue={(nextVal) => updateValue(attr.code, nextVal)}
+            onChangeTextValue={(nextText) => updateTextValue(attr.code, nextText)}
+          />
         )}
 
         {/* 3.3 YES_NO_NA 및 YES_NO_UNKNOWN 토글 버튼 그룹 */}
         {(attr.inputType === "YES_NO_NA" || attr.inputType === "YES_NO_UNKNOWN") && (
-          <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-950/50 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800 w-fit">
+          <div className="flex flex-wrap items-center gap-1.5 bg-zinc-100 dark:bg-zinc-950/50 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800 w-fit">
             {(attr.options && attr.options.length > 0
-              ? attr.options.map((o) => ({ key: o.optionCode, label: o.optionKo }))
+              ? attr.options.map((o) => ({
+                  key: o.optionCode,
+                  label: formatBilingualOptionLabel(o.optionKo, o.optionEn, o.optionCode),
+                }))
               : (attr.inputType === "YES_NO_UNKNOWN"
                   ? [
-                      { key: "YES", label: "예" },
-                      { key: "NO", label: "아니오" },
-                      { key: "UNKNOWN", label: "미확인" }
+                      { key: "YES", label: "예 (Yes)" },
+                      { key: "NO", label: "아니요 (No)" },
+                      { key: "UNKNOWN", label: "미확인 (Unknown)" }
                     ]
                   : [
-                      { key: "YES", label: "예" },
-                      { key: "NO", label: "아니오" },
-                      { key: "NA", label: "해당없음" }
+                      { key: "YES", label: "예 (Yes)" },
+                      { key: "NO", label: "아니요 (No)" },
+                      { key: "NA", label: "해당 없음 (Not Applicable)" }
                     ]
                 )
-            ).map((item) => (
-              <button
-                id={`attr-btn-${attr.code}-${item.key}`}
-                key={item.key}
-                type="button"
-                disabled={!isEditable || saving}
-                onClick={() => updateValue(attr.code, item.key)}
-                className={`
-                  px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer
-                  ${val === item.key 
-                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white font-bold shadow-sm' 
-                    : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
-                  }
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                `}
-              >
-                {item.label}
-              </button>
-            ))}
+            ).map((item) => {
+              const isSelected =
+                val === item.key ||
+                (val === "NA" && item.key === "NOT_APPLICABLE") ||
+                (val === "NOT_APPLICABLE" && item.key === "NA");
+              return (
+                <button
+                  id={`attr-btn-${attr.code}-${item.key}`}
+                  key={item.key}
+                  type="button"
+                  disabled={!isEditable || saving}
+                  onClick={() => updateValue(attr.code, item.key)}
+                  className={`
+                    px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer
+                    ${isSelected
+                      ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white font-bold shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                    }
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                  `}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
         )}
 
