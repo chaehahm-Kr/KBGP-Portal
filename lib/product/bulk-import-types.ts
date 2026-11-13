@@ -2,6 +2,8 @@ import type { ProductCategory } from "@/lib/product/types";
 
 export const BULK_IMPORT_MAX_ROWS = 500;
 export const BULK_IMPORT_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+export const BULK_MEDIA_MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB per image (matches manual editor)
+export const BULK_MEDIA_MAX_IMAGES_PER_PRODUCT = 10;
 export const BULK_TEMPLATE_EXAMPLE_SKU = "EXAMPLE-SKU-001";
 
 export const ALLOWED_COLOR_MAPS = [
@@ -32,7 +34,9 @@ export type BulkColumnSection =
   | "Category"
   | "Basic Info"
   | "Pricing"
-  | "Logistics";
+  | "Logistics"
+  | "Media"
+  | "Common Attributes";
 
 export interface BulkColumnSpec {
   key: BulkRowRawFieldKey;
@@ -45,7 +49,45 @@ export interface BulkColumnSpec {
   width: number;
   textFormat?: boolean;
   description: string;
+  attributeCode?: string;
 }
+
+export type BulkMediaImageFieldKey =
+  | "mainImageUrl"
+  | "additionalImageUrl2"
+  | "additionalImageUrl3"
+  | "additionalImageUrl4"
+  | "additionalImageUrl5"
+  | "additionalImageUrl6"
+  | "additionalImageUrl7"
+  | "additionalImageUrl8"
+  | "additionalImageUrl9"
+  | "additionalImageUrl10";
+
+export type BulkCommonAttributeFieldKey =
+  | "attrShelfLifeMonths"
+  | "attrMinRemainingShelfLife"
+  | "attrPaoMonths"
+  | "attrStorageCondition"
+  | "attrPackageFormat"
+  | "attrFormulation"
+  | "attrSealed"
+  | "attrRefillable"
+  | "attrTargetAge"
+  | "attrTargetGender"
+  | "attrSkinType"
+  | "attrUsageFrequency"
+  | "attrDailyUseCount"
+  | "attrUsageOccasion"
+  | "attrApplicationArea"
+  | "attrPrimaryConcern"
+  | "attrScented"
+  | "attrScentFamily"
+  | "attrScentIntensity"
+  | "attrFdaStatus"
+  | "attrMocraStatus"
+  | "attrOtcStatus"
+  | "attrDrugFactsStatus";
 
 export type BulkRowRawFieldKey =
   | "brand"
@@ -99,7 +141,961 @@ export type BulkRowRawFieldKey =
   | "palletWidth"
   | "palletDepth"
   | "palletHeight"
-  | "palletWeight";
+  | "palletWeight"
+  // Media URL Columns (+11, BA..BK)
+  | BulkMediaImageFieldKey
+  | "productVideoUrl"
+  // Common Attribute Columns (+23, BL..CH)
+  | BulkCommonAttributeFieldKey;
+
+export const BULK_IMAGE_URL_FIELD_KEYS: BulkMediaImageFieldKey[] = [
+  "mainImageUrl",
+  "additionalImageUrl2",
+  "additionalImageUrl3",
+  "additionalImageUrl4",
+  "additionalImageUrl5",
+  "additionalImageUrl6",
+  "additionalImageUrl7",
+  "additionalImageUrl8",
+  "additionalImageUrl9",
+  "additionalImageUrl10",
+];
+
+export type CommonAttributeInputType =
+  | "NUMBER_UNIT"
+  | "SINGLE_SELECT"
+  | "MULTI_SELECT"
+  | "YES_NO_NA";
+
+export interface BulkCommonAttributeOptionSpec {
+  optionCode: string;
+  optionKo: string;
+  optionEn: string;
+  aliases?: string[];
+  adminOnlyOption?: boolean;
+}
+
+export interface BulkCommonAttributeSpec {
+  code: string;
+  fieldKey: BulkCommonAttributeFieldKey;
+  header: string;
+  headerEn: string;
+  headerAliases: string[];
+  nameKo: string;
+  nameEn: string;
+  attrGroupKo: string;
+  attrGroupEn: string;
+  inputType: CommonAttributeInputType;
+  unitSet: string | null;
+  allowNa: boolean;
+  allowOther: boolean;
+  isRegulatoryBrandReported?: boolean;
+  width: number;
+  exampleValue: string | number;
+  description: string;
+  options: BulkCommonAttributeOptionSpec[];
+}
+
+export const COMMON_BULK_ATTRIBUTES: BulkCommonAttributeSpec[] = [
+  // Group 1: 유통 및 보관 (Shelf Life & Storage)
+  {
+    code: "SHELF_LIFE_MONTHS",
+    fieldKey: "attrShelfLifeMonths",
+    header: "전체 유통기한 개월 (Total Shelf Life)",
+    headerEn: "Total Shelf Life",
+    headerAliases: [
+      "전체 유통기한 개월 (total shelf life)",
+      "전체 유통기한 (개월)",
+      "전체 유통기한",
+      "total shelf life",
+      "total shelf life (months)",
+      "shelf_life_months",
+    ],
+    nameKo: "전체 유통기한",
+    nameEn: "Total Shelf Life",
+    attrGroupKo: "유통 및 보관",
+    attrGroupEn: "Shelf Life & Storage",
+    inputType: "NUMBER_UNIT",
+    unitSet: "MONTH",
+    allowNa: false,
+    allowOther: false,
+    width: 26,
+    exampleValue: 36,
+    description: "제조일 기준 전체 유통기한 개월 수 (양수 숫자 입력, 예: 36 -> EAV SHELF_LIFE_MONTHS).",
+    options: [],
+  },
+  {
+    code: "MIN_REMAINING_SHELF_LIFE",
+    fieldKey: "attrMinRemainingShelfLife",
+    header: "최소 잔여 유통기한 개월 (Min Remaining Shelf Life)",
+    headerEn: "Minimum Remaining Shelf Life",
+    headerAliases: [
+      "최소 잔여 유통기한 개월 (min remaining shelf life)",
+      "최소 잔여 유통기한 (개월)",
+      "최소 잔여 유통기한",
+      "minimum remaining shelf life",
+      "minimum remaining shelf life (months)",
+      "min remaining shelf life",
+      "min_remaining_shelf_life",
+    ],
+    nameKo: "최소 잔여 유통기한",
+    nameEn: "Minimum Remaining Shelf Life",
+    attrGroupKo: "유통 및 보관",
+    attrGroupEn: "Shelf Life & Storage",
+    inputType: "NUMBER_UNIT",
+    unitSet: "MONTH",
+    allowNa: false,
+    allowOther: false,
+    width: 30,
+    exampleValue: 24,
+    description: "납품 시 보장 가능한 최소 잔여 유통기한 개월 수 (양수 숫자 입력, 예: 24 -> EAV MIN_REMAINING_SHELF_LIFE).",
+    options: [],
+  },
+  {
+    code: "PAO_MONTHS",
+    fieldKey: "attrPaoMonths",
+    header: "개봉 후 사용기간 개월 (Period After Opening)",
+    headerEn: "Period After Opening",
+    headerAliases: [
+      "개봉 후 사용기간 개월 (period after opening)",
+      "개봉 후 사용기간 (개월)",
+      "개봉 후 사용기간",
+      "period after opening",
+      "period after opening (months)",
+      "pao",
+      "pao_months",
+    ],
+    nameKo: "개봉 후 사용기간",
+    nameEn: "Period After Opening",
+    attrGroupKo: "유통 및 보관",
+    attrGroupEn: "Shelf Life & Storage",
+    inputType: "NUMBER_UNIT",
+    unitSet: "MONTH",
+    allowNa: true,
+    allowOther: false,
+    width: 28,
+    exampleValue: 12,
+    description: "개봉 후 사용기간 개월 수 (양수 숫자 또는 '해당 없음' / 'NA' 입력 -> EAV PAO_MONTHS).",
+    options: [],
+  },
+  {
+    code: "STORAGE_CONDITION",
+    fieldKey: "attrStorageCondition",
+    header: "보관 조건 (Storage Conditions)",
+    headerEn: "Storage Conditions",
+    headerAliases: [
+      "보관 조건 (storage conditions)",
+      "보관 조건 (storage condition)",
+      "보관 조건",
+      "storage conditions",
+      "storage condition",
+      "storage_condition",
+    ],
+    nameKo: "보관 조건",
+    nameEn: "Storage Condition",
+    attrGroupKo: "유통 및 보관",
+    attrGroupEn: "Shelf Life & Storage",
+    inputType: "MULTI_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: true,
+    width: 30,
+    exampleValue: "Cool & Dry Place; Avoid Direct Sunlight",
+    description: "복수 선택 가능 — 세미콜론(;)으로 구분 입력 (Common_Attributes 시트 옵션 참조 -> EAV STORAGE_CONDITION).",
+    options: [
+      { optionCode: "ROOM_TEMP", optionKo: "실온", optionEn: "Room Temperature" },
+      { optionCode: "COOL_DRY", optionKo: "서늘하고 건조한 곳", optionEn: "Cool & Dry Place" },
+      { optionCode: "REFRIGERATED", optionKo: "냉장 보관", optionEn: "Refrigerated" },
+      { optionCode: "AVOID_SUNLIGHT", optionKo: "직사광선 피함", optionEn: "Avoid Direct Sunlight" },
+      { optionCode: "AVOID_HEAT", optionKo: "고온 피함", optionEn: "Avoid Heat" },
+      { optionCode: "KEEP_DRY", optionKo: "습기 피함", optionEn: "Keep Dry" },
+      { optionCode: "OTHER", optionKo: "기타", optionEn: "Other" },
+    ],
+  },
+
+  // Group 2: 패키지 및 제품 형태 (Packaging & Format)
+  {
+    code: "PACKAGE_FORMAT",
+    fieldKey: "attrPackageFormat",
+    header: "패키지 형태 (Package Format)",
+    headerEn: "Package Format",
+    headerAliases: [
+      "패키지 형태 (package format)",
+      "패키지 형태",
+      "package format",
+      "package_format",
+    ],
+    nameKo: "패키지 형태",
+    nameEn: "Package Format",
+    attrGroupKo: "패키지 및 제품 형태",
+    attrGroupEn: "Packaging & Format",
+    inputType: "SINGLE_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: true,
+    width: 26,
+    exampleValue: "Pump Bottle",
+    description: "단일 선택 — 용기/패키지 형태 입력 (예: Tube, Pump Bottle, 펌프 보틀 -> EAV PACKAGE_FORMAT).",
+    options: [
+      { optionCode: "TUBE", optionKo: "튜브", optionEn: "Tube" },
+      { optionCode: "JAR", optionKo: "자", optionEn: "Jar" },
+      { optionCode: "PUMP_BOTTLE", optionKo: "펌프 보틀", optionEn: "Pump Bottle" },
+      { optionCode: "DROPPER_BOTTLE", optionKo: "드로퍼 보틀", optionEn: "Dropper Bottle" },
+      { optionCode: "SPRAY_BOTTLE", optionKo: "스프레이 보틀", optionEn: "Spray Bottle" },
+      { optionCode: "STICK", optionKo: "스틱", optionEn: "Stick" },
+      { optionCode: "COMPACT", optionKo: "컴팩트", optionEn: "Compact" },
+      { optionCode: "CUSHION_COMPACT", optionKo: "쿠션 컴팩트", optionEn: "Cushion Compact" },
+      { optionCode: "SACHET", optionKo: "파우치/사셰", optionEn: "Sachet" },
+      { optionCode: "SHEET_PACK", optionKo: "시트 팩", optionEn: "Sheet Pack" },
+      { optionCode: "ROLL_ON", optionKo: "롤온", optionEn: "Roll-On", aliases: ["Roll On"] },
+      { optionCode: "AEROSOL", optionKo: "에어로졸", optionEn: "Aerosol" },
+      { optionCode: "OTHER", optionKo: "기타", optionEn: "Other" },
+    ],
+  },
+  {
+    code: "FORMULATION",
+    fieldKey: "attrFormulation",
+    header: "제형 (Formulation)",
+    headerEn: "Formulation",
+    headerAliases: ["제형 (formulation)", "제형", "formulation"],
+    nameKo: "제형",
+    nameEn: "Formulation",
+    attrGroupKo: "패키지 및 제품 형태",
+    attrGroupEn: "Packaging & Format",
+    inputType: "MULTI_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: true,
+    width: 26,
+    exampleValue: "Liquid",
+    description: "복수 선택 가능 — 세미콜론(;)으로 구분 입력 (예: Liquid; Gel -> EAV FORMULATION).",
+    options: [
+      { optionCode: "LIQUID", optionKo: "리퀴드", optionEn: "Liquid" },
+      { optionCode: "GEL", optionKo: "젤", optionEn: "Gel" },
+      { optionCode: "CREAM", optionKo: "크림", optionEn: "Cream" },
+      { optionCode: "LOTION", optionKo: "로션", optionEn: "Lotion" },
+      { optionCode: "BALM", optionKo: "밤", optionEn: "Balm" },
+      { optionCode: "OIL", optionKo: "오일", optionEn: "Oil" },
+      { optionCode: "FOAM", optionKo: "폼", optionEn: "Foam" },
+      { optionCode: "MOUSSE", optionKo: "무스", optionEn: "Mousse" },
+      { optionCode: "POWDER", optionKo: "파우더", optionEn: "Powder" },
+      { optionCode: "STICK", optionKo: "스틱", optionEn: "Stick" },
+      { optionCode: "MIST", optionKo: "미스트", optionEn: "Mist" },
+      { optionCode: "SHEET", optionKo: "시트", optionEn: "Sheet" },
+      { optionCode: "PATCH", optionKo: "패치", optionEn: "Patch" },
+      { optionCode: "WAX", optionKo: "왁스", optionEn: "Wax" },
+      { optionCode: "SOAP_BAR", optionKo: "고형 비누", optionEn: "Soap Bar" },
+      { optionCode: "OTHER", optionKo: "기타", optionEn: "Other" },
+    ],
+  },
+  {
+    code: "SEALED",
+    fieldKey: "attrSealed",
+    header: "밀봉 여부 (Sealed Packaging)",
+    headerEn: "Sealed Packaging",
+    headerAliases: [
+      "밀봉 여부 (sealed packaging)",
+      "밀봉 여부",
+      "sealed packaging",
+      "sealed",
+    ],
+    nameKo: "밀봉 여부",
+    nameEn: "Sealed Packaging",
+    attrGroupKo: "패키지 및 제품 형태",
+    attrGroupEn: "Packaging & Format",
+    inputType: "YES_NO_NA",
+    unitSet: null,
+    allowNa: true,
+    allowOther: false,
+    width: 24,
+    exampleValue: "Yes",
+    description: "단일 선택 — Yes(예), No(아니요), Not Applicable(해당 없음) 중 선택 (-> EAV SEALED).",
+    options: [
+      { optionCode: "YES", optionKo: "예", optionEn: "Yes", aliases: ["Y", "TRUE"] },
+      { optionCode: "NO", optionKo: "아니요", optionEn: "No", aliases: ["아니오", "N", "FALSE"] },
+      {
+        optionCode: "NOT_APPLICABLE",
+        optionKo: "해당 없음",
+        optionEn: "Not Applicable",
+        aliases: ["해당없음", "N/A", "NA"],
+      },
+    ],
+  },
+  {
+    code: "REFILLABLE",
+    fieldKey: "attrRefillable",
+    header: "리필 여부 (Refillable)",
+    headerEn: "Refillable",
+    headerAliases: ["리필 여부 (refillable)", "리필 여부", "refillable"],
+    nameKo: "리필 여부",
+    nameEn: "Refillable",
+    attrGroupKo: "패키지 및 제품 형태",
+    attrGroupEn: "Packaging & Format",
+    inputType: "YES_NO_NA",
+    unitSet: null,
+    allowNa: true,
+    allowOther: false,
+    width: 22,
+    exampleValue: "No",
+    description: "단일 선택 — Yes(예), No(아니요), Not Applicable(해당 없음) 중 선택 (-> EAV REFILLABLE).",
+    options: [
+      { optionCode: "YES", optionKo: "예", optionEn: "Yes", aliases: ["Y", "TRUE"] },
+      { optionCode: "NO", optionKo: "아니요", optionEn: "No", aliases: ["아니오", "N", "FALSE"] },
+      {
+        optionCode: "NOT_APPLICABLE",
+        optionKo: "해당 없음",
+        optionEn: "Not Applicable",
+        aliases: ["해당없음", "N/A", "NA"],
+      },
+    ],
+  },
+
+  // Group 3: 대상 고객 (Target Customer)
+  {
+    code: "TARGET_AGE",
+    fieldKey: "attrTargetAge",
+    header: "대상 연령 (Target Age)",
+    headerEn: "Target Age",
+    headerAliases: ["대상 연령 (target age)", "대상 연령", "target age", "target_age"],
+    nameKo: "대상 연령",
+    nameEn: "Target Age",
+    attrGroupKo: "대상 고객",
+    attrGroupEn: "Target Customer",
+    inputType: "MULTI_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: true,
+    width: 26,
+    exampleValue: "Adults; All Ages",
+    description: "복수 선택 가능 — 세미콜론(;) 구분 입력 (예: 20s; 30s; Adults -> EAV TARGET_AGE).",
+    options: [
+      { optionCode: "CHILDREN", optionKo: "어린이", optionEn: "Children" },
+      { optionCode: "TEENS", optionKo: "청소년", optionEn: "Teens" },
+      { optionCode: "TWENTIES", optionKo: "20대", optionEn: "20s" },
+      { optionCode: "THIRTIES", optionKo: "30대", optionEn: "30s" },
+      { optionCode: "FORTIES", optionKo: "40대", optionEn: "40s" },
+      { optionCode: "FIFTIES_PLUS", optionKo: "50대 이상", optionEn: "50s+", aliases: ["50s Plus"] },
+      { optionCode: "ADULTS", optionKo: "성인", optionEn: "Adults" },
+      { optionCode: "ALL_AGES", optionKo: "전 연령", optionEn: "All Ages" },
+      {
+        optionCode: "NOT_APPLICABLE",
+        optionKo: "해당 없음",
+        optionEn: "Not Applicable",
+        aliases: ["해당없음", "N/A", "NA"],
+      },
+      { optionCode: "OTHER", optionKo: "기타", optionEn: "Other" },
+    ],
+  },
+  {
+    code: "TARGET_GENDER",
+    fieldKey: "attrTargetGender",
+    header: "대상 성별 (Target Gender)",
+    headerEn: "Target Gender",
+    headerAliases: [
+      "대상 성별 (target gender)",
+      "대상 성별",
+      "target gender",
+      "target_gender",
+    ],
+    nameKo: "대상 성별",
+    nameEn: "Target Gender",
+    attrGroupKo: "대상 고객",
+    attrGroupEn: "Target Customer",
+    inputType: "MULTI_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: false,
+    width: 24,
+    exampleValue: "Unisex",
+    description: "복수 선택 가능 — 세미콜론(;) 구분 입력 (Women, Men, Unisex, Not Applicable -> EAV TARGET_GENDER).",
+    options: [
+      { optionCode: "WOMEN", optionKo: "여성", optionEn: "Women", aliases: ["Female"] },
+      { optionCode: "MEN", optionKo: "남성", optionEn: "Men", aliases: ["Male"] },
+      { optionCode: "UNISEX", optionKo: "남녀 공용", optionEn: "Unisex", aliases: ["남녀공용"] },
+      {
+        optionCode: "NOT_APPLICABLE",
+        optionKo: "해당 없음",
+        optionEn: "Not Applicable",
+        aliases: ["해당없음", "N/A", "NA"],
+      },
+    ],
+  },
+  {
+    code: "SKIN_TYPE",
+    fieldKey: "attrSkinType",
+    header: "피부 타입 (Skin Type)",
+    headerEn: "Skin Type",
+    headerAliases: ["피부 타입 (skin type)", "피부 타입", "skin type", "skin_type"],
+    nameKo: "피부 타입",
+    nameEn: "Skin Type",
+    attrGroupKo: "대상 고객",
+    attrGroupEn: "Target Customer",
+    inputType: "MULTI_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: true,
+    width: 28,
+    exampleValue: "Dry Skin; Sensitive Skin",
+    description: "복수 선택 가능 — 세미콜론(;) 구분 입력 (예: Dry Skin; Sensitive Skin -> EAV SKIN_TYPE).",
+    options: [
+      { optionCode: "DRY", optionKo: "건성", optionEn: "Dry", aliases: ["Dry Skin", "건성 피부"] },
+      { optionCode: "OILY", optionKo: "지성", optionEn: "Oily", aliases: ["Oily Skin", "지성 피부"] },
+      {
+        optionCode: "COMBINATION",
+        optionKo: "복합성",
+        optionEn: "Combination",
+        aliases: ["Combination Skin", "복합성 피부"],
+      },
+      { optionCode: "NORMAL", optionKo: "중성", optionEn: "Normal", aliases: ["Normal Skin", "중성 피부"] },
+      {
+        optionCode: "SENSITIVE",
+        optionKo: "민감성",
+        optionEn: "Sensitive",
+        aliases: ["Sensitive Skin", "민감성 피부"],
+      },
+      {
+        optionCode: "ACNE_PRONE",
+        optionKo: "여드름성 피부",
+        optionEn: "Acne-Prone",
+        aliases: ["Acne-Prone Skin", "Acne Prone", "Acne Prone Skin", "여드름성"],
+      },
+      { optionCode: "ALL_SKIN_TYPES", optionKo: "모든 피부 타입", optionEn: "All Skin Types" },
+      {
+        optionCode: "NOT_APPLICABLE",
+        optionKo: "해당 없음",
+        optionEn: "Not Applicable",
+        aliases: ["해당없음", "N/A", "NA"],
+      },
+      { optionCode: "OTHER", optionKo: "기타", optionEn: "Other" },
+    ],
+  },
+
+  // Group 4: 사용 정보 및 제품 특성 (Usage & Product Characteristics)
+  {
+    code: "USAGE_FREQUENCY",
+    fieldKey: "attrUsageFrequency",
+    header: "사용 주기 (Usage Frequency)",
+    headerEn: "Usage Frequency",
+    headerAliases: [
+      "사용 주기 (usage frequency)",
+      "사용 주기",
+      "usage frequency",
+      "usage_frequency",
+    ],
+    nameKo: "사용 주기",
+    nameEn: "Usage Frequency",
+    attrGroupKo: "사용 정보",
+    attrGroupEn: "Usage",
+    inputType: "MULTI_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: true,
+    width: 26,
+    exampleValue: "Daily",
+    description: "복수 선택 가능 — 세미콜론(;) 구분 입력 (예: Daily; As Needed -> EAV USAGE_FREQUENCY).",
+    options: [
+      { optionCode: "DAILY", optionKo: "매일", optionEn: "Daily" },
+      { optionCode: "WEEKLY_ONCE", optionKo: "주 1회", optionEn: "Once Weekly" },
+      {
+        optionCode: "WEEKLY_2_3",
+        optionKo: "주 2~3회",
+        optionEn: "2–3 Times Weekly",
+        aliases: ["2-3 Times Weekly", "2~3 Times Weekly", "주 2-3회", "주2~3회"],
+      },
+      { optionCode: "AS_NEEDED", optionKo: "필요 시", optionEn: "As Needed" },
+      { optionCode: "OTHER", optionKo: "기타", optionEn: "Other" },
+    ],
+  },
+  {
+    code: "DAILY_USE_COUNT",
+    fieldKey: "attrDailyUseCount",
+    header: "사용 횟수 (Daily Use Count)",
+    headerEn: "Daily Use Count",
+    headerAliases: [
+      "사용 횟수 (daily use count)",
+      "사용 횟수",
+      "daily use count",
+      "daily_use_count",
+    ],
+    nameKo: "사용 횟수",
+    nameEn: "Daily Use Count",
+    attrGroupKo: "사용 정보",
+    attrGroupEn: "Usage",
+    inputType: "SINGLE_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: true,
+    width: 26,
+    exampleValue: "Twice Daily",
+    description: "단일 선택 — 1일 권장 사용 횟수 선택 (예: Once Daily, Twice Daily -> EAV DAILY_USE_COUNT).",
+    options: [
+      { optionCode: "ONCE", optionKo: "1일 1회", optionEn: "Once Daily" },
+      { optionCode: "TWICE", optionKo: "1일 2회", optionEn: "Twice Daily" },
+      { optionCode: "THREE_PLUS", optionKo: "1일 3회 이상", optionEn: "3+ Times Daily" },
+      { optionCode: "AS_NEEDED", optionKo: "필요 시", optionEn: "As Needed" },
+      { optionCode: "OTHER", optionKo: "기타", optionEn: "Other" },
+    ],
+  },
+  {
+    code: "USAGE_OCCASION",
+    fieldKey: "attrUsageOccasion",
+    header: "사용 상황 (Usage Occasion)",
+    headerEn: "Usage Occasion",
+    headerAliases: [
+      "사용 상황 (usage occasion)",
+      "사용 상황",
+      "usage occasion",
+      "usage_occasion",
+    ],
+    nameKo: "사용 상황",
+    nameEn: "Usage Occasion",
+    attrGroupKo: "사용 정보",
+    attrGroupEn: "Usage",
+    inputType: "MULTI_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: true,
+    width: 28,
+    exampleValue: "After Cleansing; Before Bed",
+    description: "복수 선택 가능 — 세미콜론(;) 구분 입력 (예: After Cleansing; Before Bed -> EAV USAGE_OCCASION).",
+    options: [
+      { optionCode: "BEFORE_CLEANSING", optionKo: "세안 전", optionEn: "Before Cleansing" },
+      { optionCode: "DURING_CLEANSING", optionKo: "세안 중", optionEn: "During Cleansing" },
+      { optionCode: "AFTER_CLEANSING", optionKo: "세안 후", optionEn: "After Cleansing" },
+      { optionCode: "BEFORE_MAKEUP", optionKo: "메이크업 전", optionEn: "Before Makeup" },
+      { optionCode: "AFTER_MAKEUP", optionKo: "메이크업 후", optionEn: "After Makeup" },
+      { optionCode: "BEFORE_SHAMPOO", optionKo: "샴푸 전", optionEn: "Before Shampoo" },
+      { optionCode: "AFTER_SHAMPOO", optionKo: "샴푸 후", optionEn: "After Shampoo" },
+      { optionCode: "BEFORE_BED", optionKo: "취침 전", optionEn: "Before Bed" },
+      { optionCode: "BEFORE_GOING_OUT", optionKo: "외출 전", optionEn: "Before Going Out" },
+      { optionCode: "AS_NEEDED", optionKo: "필요 시", optionEn: "As Needed" },
+      { optionCode: "OTHER", optionKo: "기타", optionEn: "Other" },
+    ],
+  },
+  {
+    code: "APPLICATION_AREA",
+    fieldKey: "attrApplicationArea",
+    header: "사용 부위 (Application Area)",
+    headerEn: "Application Area",
+    headerAliases: [
+      "사용 부위 (application area)",
+      "사용 부위",
+      "application area",
+      "application_area",
+    ],
+    nameKo: "사용 부위",
+    nameEn: "Application Area",
+    attrGroupKo: "사용 정보",
+    attrGroupEn: "Usage",
+    inputType: "MULTI_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: true,
+    width: 26,
+    exampleValue: "Face",
+    description: "복수 선택 가능 — 세미콜론(;) 구분 입력 (예: Face; Eye Area -> EAV APPLICATION_AREA).",
+    options: [
+      { optionCode: "FACE", optionKo: "얼굴", optionEn: "Face" },
+      { optionCode: "EYE_AREA", optionKo: "눈가", optionEn: "Eye Area" },
+      { optionCode: "LIPS", optionKo: "입술", optionEn: "Lips" },
+      { optionCode: "NOSE", optionKo: "코", optionEn: "Nose" },
+      { optionCode: "SCALP", optionKo: "두피", optionEn: "Scalp" },
+      { optionCode: "HAIR", optionKo: "모발", optionEn: "Hair" },
+      { optionCode: "BODY", optionKo: "바디", optionEn: "Body" },
+      { optionCode: "HANDS", optionKo: "손", optionEn: "Hands" },
+      { optionCode: "FEET", optionKo: "발", optionEn: "Feet" },
+      { optionCode: "UNDERARMS", optionKo: "겨드랑이", optionEn: "Underarms" },
+      { optionCode: "ORAL", optionKo: "구강", optionEn: "Oral" },
+      { optionCode: "INTIMATE_AREA", optionKo: "외음부 주변", optionEn: "External Intimate Area" },
+      { optionCode: "OTHER", optionKo: "기타", optionEn: "Other" },
+    ],
+  },
+  {
+    code: "PRIMARY_CONCERN",
+    fieldKey: "attrPrimaryConcern",
+    header: "주요 고민 (Primary Concern)",
+    headerEn: "Primary Concern",
+    headerAliases: [
+      "주요 고민 (primary concern)",
+      "주요 고민",
+      "primary concern",
+      "primary_concern",
+    ],
+    nameKo: "주요 고민",
+    nameEn: "Primary Concern",
+    attrGroupKo: "제품 특성",
+    attrGroupEn: "Characteristics",
+    inputType: "MULTI_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: true,
+    width: 30,
+    exampleValue: "Dryness; Sensitivity & Soothing",
+    description: "복수 선택 가능 — 세미콜론(;) 구분 입력 (예: Dryness; Skin Barrier -> EAV PRIMARY_CONCERN).",
+    options: [
+      { optionCode: "DRYNESS", optionKo: "건조", optionEn: "Dryness" },
+      { optionCode: "OILINESS", optionKo: "유분", optionEn: "Oiliness" },
+      { optionCode: "ACNE", optionKo: "여드름/트러블", optionEn: "Acne & Blemishes", aliases: ["Acne"] },
+      {
+        optionCode: "SENSITIVITY",
+        optionKo: "민감/진정",
+        optionEn: "Sensitivity & Soothing",
+        aliases: ["Sensitivity", "Soothing"],
+      },
+      { optionCode: "DULLNESS", optionKo: "칙칙함", optionEn: "Dullness" },
+      { optionCode: "PIGMENTATION", optionKo: "색소 침착", optionEn: "Pigmentation" },
+      {
+        optionCode: "WRINKLES",
+        optionKo: "주름/탄력",
+        optionEn: "Wrinkles & Firmness",
+        aliases: ["Wrinkles"],
+      },
+      { optionCode: "PORES", optionKo: "모공", optionEn: "Pores" },
+      { optionCode: "BARRIER", optionKo: "피부 장벽", optionEn: "Skin Barrier" },
+      { optionCode: "UV_PROTECTION", optionKo: "자외선 보호", optionEn: "UV Protection" },
+      { optionCode: "HAIR_DAMAGE", optionKo: "모발 손상", optionEn: "Hair Damage" },
+      { optionCode: "SCALP_ISSUES", optionKo: "두피 고민", optionEn: "Scalp Concerns" },
+      { optionCode: "ODOR", optionKo: "냄새", optionEn: "Odor" },
+      { optionCode: "OTHER", optionKo: "기타", optionEn: "Other" },
+    ],
+  },
+
+  // Group 5: 향 정보 (Fragrance)
+  {
+    code: "SCENTED",
+    fieldKey: "attrScented",
+    header: "향 유무 (Scented)",
+    headerEn: "Scented",
+    headerAliases: ["향 유무 (scented)", "향 유무", "scented"],
+    nameKo: "향 유무",
+    nameEn: "Scented",
+    attrGroupKo: "제품 특성",
+    attrGroupEn: "Fragrance",
+    inputType: "YES_NO_NA",
+    unitSet: null,
+    allowNa: true,
+    allowOther: false,
+    width: 22,
+    exampleValue: "No",
+    description: "단일 선택 — Yes(예), No(아니요), Not Applicable(해당 없음) 중 선택 (-> EAV SCENTED).",
+    options: [
+      { optionCode: "YES", optionKo: "예", optionEn: "Yes", aliases: ["Y", "TRUE"] },
+      { optionCode: "NO", optionKo: "아니요", optionEn: "No", aliases: ["아니오", "N", "FALSE"] },
+      {
+        optionCode: "NOT_APPLICABLE",
+        optionKo: "해당 없음",
+        optionEn: "Not Applicable",
+        aliases: ["해당없음", "N/A", "NA"],
+      },
+    ],
+  },
+  {
+    code: "SCENT_FAMILY",
+    fieldKey: "attrScentFamily",
+    header: "향 계열 (Scent Family)",
+    headerEn: "Scent Family",
+    headerAliases: ["향 계열 (scent family)", "향 계열", "scent family", "scent_family"],
+    nameKo: "향 계열",
+    nameEn: "Scent Family",
+    attrGroupKo: "제품 특성",
+    attrGroupEn: "Fragrance",
+    inputType: "MULTI_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: true,
+    width: 26,
+    exampleValue: "Unscented",
+    description: "복수 선택 가능 — 세미콜론(;) 구분 입력 (예: Unscented 또는 Floral; Citrus -> EAV SCENT_FAMILY).",
+    options: [
+      { optionCode: "UNSCENTED", optionKo: "무향", optionEn: "Unscented" },
+      { optionCode: "FLORAL", optionKo: "플로럴", optionEn: "Floral" },
+      { optionCode: "CITRUS", optionKo: "시트러스", optionEn: "Citrus" },
+      { optionCode: "FRUITY", optionKo: "프루티", optionEn: "Fruity" },
+      { optionCode: "HERBAL", optionKo: "허벌", optionEn: "Herbal" },
+      { optionCode: "WOODY", optionKo: "우디", optionEn: "Woody" },
+      { optionCode: "MUSKY", optionKo: "머스크", optionEn: "Musky" },
+      { optionCode: "POWDERY", optionKo: "파우더리", optionEn: "Powdery" },
+      { optionCode: "FRESH", optionKo: "프레시", optionEn: "Fresh" },
+      { optionCode: "GOURMAND", optionKo: "구르망", optionEn: "Gourmand" },
+      { optionCode: "OTHER", optionKo: "기타", optionEn: "Other" },
+    ],
+  },
+  {
+    code: "SCENT_INTENSITY",
+    fieldKey: "attrScentIntensity",
+    header: "향 강도 (Scent Intensity)",
+    headerEn: "Scent Intensity",
+    headerAliases: [
+      "향 강도 (scent intensity)",
+      "향 강도",
+      "scent intensity",
+      "scent_intensity",
+    ],
+    nameKo: "향 강도",
+    nameEn: "Scent Intensity",
+    attrGroupKo: "제품 특성",
+    attrGroupEn: "Fragrance",
+    inputType: "SINGLE_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: false,
+    width: 24,
+    exampleValue: "None",
+    description: "단일 선택 — None(없음), Light(약함), Medium(중간), Strong(강함), N/A 중 선택 (-> EAV SCENT_INTENSITY).",
+    options: [
+      { optionCode: "NONE", optionKo: "없음", optionEn: "None" },
+      { optionCode: "LIGHT", optionKo: "약함", optionEn: "Light" },
+      { optionCode: "MEDIUM", optionKo: "중간", optionEn: "Medium" },
+      { optionCode: "STRONG", optionKo: "강함", optionEn: "Strong" },
+    ],
+  },
+
+  // Group 6: 규제 및 등록 (Regulatory — Brand Self-Reported Only)
+  {
+    code: "FDA_STATUS",
+    fieldKey: "attrFdaStatus",
+    header: "FDA 관련 상태 (FDA Related Status)",
+    headerEn: "FDA Related Status",
+    headerAliases: [
+      "fda 관련 상태 (fda related status)",
+      "fda 관련 상태",
+      "fda related status",
+      "fda status",
+      "fda_status",
+    ],
+    nameKo: "FDA 관련 상태",
+    nameEn: "FDA Related Status",
+    attrGroupKo: "규제 및 등록",
+    attrGroupEn: "Regulatory",
+    inputType: "SINGLE_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: false,
+    isRegulatoryBrandReported: true,
+    width: 28,
+    exampleValue: "Not Reviewed",
+    description:
+      "단일 선택 (브랜드 자체 기재 속성 — 공식 인증/승인으로 간주되지 않으며 관리자 확인 완료 상태는 직접 지정 불가 -> EAV FDA_STATUS).",
+    options: [
+      { optionCode: "NOT_REVIEWED", optionKo: "미검토", optionEn: "Not Reviewed" },
+      {
+        optionCode: "NOT_APPLICABLE",
+        optionKo: "해당 없음",
+        optionEn: "Not Applicable",
+        aliases: ["해당없음", "N/A", "NA"],
+      },
+      { optionCode: "REVIEW_REQUIRED", optionKo: "검토 필요", optionEn: "Review Required" },
+      { optionCode: "IN_PROGRESS", optionKo: "진행 중", optionEn: "In Progress" },
+      { optionCode: "SUBMITTED", optionKo: "제출 완료", optionEn: "Submitted" },
+      { optionCode: "COMPLETED", optionKo: "완료", optionEn: "Completed" },
+      {
+        optionCode: "ADMIN_VERIFIED",
+        optionKo: "관리자 확인 완료",
+        optionEn: "Admin Verified",
+        adminOnlyOption: true,
+      },
+    ],
+  },
+  {
+    code: "MOCRA_STATUS",
+    fieldKey: "attrMocraStatus",
+    header: "MoCRA 관련 상태 (MoCRA Related Status)",
+    headerEn: "MoCRA Related Status",
+    headerAliases: [
+      "mocra 관련 상태 (mocra related status)",
+      "mocra 관련 상태",
+      "mocra related status",
+      "mocra status",
+      "mocra_status",
+    ],
+    nameKo: "MoCRA 관련 상태",
+    nameEn: "MoCRA Related Status",
+    attrGroupKo: "규제 및 등록",
+    attrGroupEn: "Regulatory",
+    inputType: "SINGLE_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: false,
+    isRegulatoryBrandReported: true,
+    width: 30,
+    exampleValue: "Not Reviewed",
+    description:
+      "단일 선택 (브랜드 자체 기재 속성 — 공식 인증/승인으로 간주되지 않으며 관리자 확인 완료 상태는 직접 지정 불가 -> EAV MOCRA_STATUS).",
+    options: [
+      { optionCode: "NOT_REVIEWED", optionKo: "미검토", optionEn: "Not Reviewed" },
+      {
+        optionCode: "NOT_APPLICABLE",
+        optionKo: "해당 없음",
+        optionEn: "Not Applicable",
+        aliases: ["해당없음", "N/A", "NA"],
+      },
+      { optionCode: "REVIEW_REQUIRED", optionKo: "검토 필요", optionEn: "Review Required" },
+      {
+        optionCode: "FACILITY_PENDING",
+        optionKo: "시설 등록 준비 중",
+        optionEn: "Facility Registration Pending",
+      },
+      {
+        optionCode: "PRODUCT_LISTING_PENDING",
+        optionKo: "제품 리스팅 준비 중",
+        optionEn: "Product Listing Pending",
+      },
+      { optionCode: "COMPLETED", optionKo: "완료", optionEn: "Completed" },
+      {
+        optionCode: "ADMIN_VERIFIED",
+        optionKo: "관리자 확인 완료",
+        optionEn: "Admin Verified",
+        adminOnlyOption: true,
+      },
+    ],
+  },
+  {
+    code: "OTC_STATUS",
+    fieldKey: "attrOtcStatus",
+    header: "OTC 해당 여부 (OTC Status)",
+    headerEn: "OTC Status",
+    headerAliases: [
+      "otc 해당 여부 (otc status)",
+      "otc 해당 여부",
+      "otc status",
+      "otc_status",
+    ],
+    nameKo: "OTC 해당 여부",
+    nameEn: "OTC Status",
+    attrGroupKo: "규제 및 등록",
+    attrGroupEn: "Regulatory",
+    inputType: "SINGLE_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: false,
+    isRegulatoryBrandReported: true,
+    width: 26,
+    exampleValue: "Not OTC",
+    description:
+      "단일 선택 (브랜드 자체 기재 속성 — Not Reviewed, Not OTC, Potential OTC, OTC Required, In Progress, Completed -> EAV OTC_STATUS).",
+    options: [
+      { optionCode: "NOT_REVIEWED", optionKo: "미검토", optionEn: "Not Reviewed" },
+      { optionCode: "NOT_OTC", optionKo: "OTC 아님", optionEn: "Not OTC" },
+      { optionCode: "POTENTIAL_OTC", optionKo: "OTC 가능성 있음", optionEn: "Potential OTC" },
+      { optionCode: "OTC_REQUIRED", optionKo: "OTC 적용", optionEn: "OTC Required" },
+      { optionCode: "IN_PROGRESS", optionKo: "준비 중", optionEn: "In Progress" },
+      { optionCode: "COMPLETED", optionKo: "완료", optionEn: "Completed" },
+    ],
+  },
+  {
+    code: "DRUG_FACTS_STATUS",
+    fieldKey: "attrDrugFactsStatus",
+    header: "Drug Facts 상태 (Drug Facts Status)",
+    headerEn: "Drug Facts Status",
+    headerAliases: [
+      "drug facts 상태 (drug facts status)",
+      "drug facts 상태",
+      "drug facts status",
+      "drug_facts_status",
+    ],
+    nameKo: "Drug Facts 상태",
+    nameEn: "Drug Facts Status",
+    attrGroupKo: "규제 및 등록",
+    attrGroupEn: "Regulatory",
+    inputType: "SINGLE_SELECT",
+    unitSet: null,
+    allowNa: true,
+    allowOther: false,
+    isRegulatoryBrandReported: true,
+    width: 28,
+    exampleValue: "Not Applicable",
+    description:
+      "단일 선택 (브랜드 자체 기재 속성 — Not Reviewed, Not Applicable, Required, Draft, Under Review, Completed -> EAV DRUG_FACTS_STATUS).",
+    options: [
+      { optionCode: "NOT_REVIEWED", optionKo: "미검토", optionEn: "Not Reviewed" },
+      {
+        optionCode: "NOT_APPLICABLE",
+        optionKo: "해당 없음",
+        optionEn: "Not Applicable",
+        aliases: ["해당없음", "N/A", "NA"],
+      },
+      { optionCode: "REQUIRED", optionKo: "필요", optionEn: "Required" },
+      { optionCode: "DRAFT", optionKo: "초안", optionEn: "Draft" },
+      { optionCode: "REVIEWING", optionKo: "검토 중", optionEn: "Under Review", aliases: ["Reviewing"] },
+      { optionCode: "COMPLETED", optionKo: "완료", optionEn: "Completed" },
+    ],
+  },
+];
+
+const MEDIA_COLUMNS: BulkColumnSpec[] = [
+  {
+    key: "mainImageUrl",
+    header: "대표 이미지 URL (Main Image URL)",
+    headerEn: "Main Image URL",
+    aliases: [
+      "대표 이미지 url (main image url)",
+      "대표 이미지 url",
+      "대표이미지 url",
+      "main image url",
+      "main_image_url",
+      "image url 1",
+    ],
+    required: false,
+    section: "Media",
+    dbColumn: "product_images (position: 0)",
+    width: 34,
+    description:
+      "대표 상품 이미지 직접 다운로드 HTTPS URL (JPG, PNG, WEBP · 최대 10MB · position 0 등록).",
+  },
+  ...([2, 3, 4, 5, 6, 7, 8, 9, 10] as const).map(
+    (num): BulkColumnSpec => ({
+      key: `additionalImageUrl${num}` as BulkMediaImageFieldKey,
+      header: `추가 이미지 URL ${num} (Additional Image URL ${num})`,
+      headerEn: `Additional Image URL ${num}`,
+      aliases: [
+        `추가 이미지 url ${num} (additional image url ${num})`,
+        `추가 이미지 url ${num}`,
+        `추가이미지 url ${num}`,
+        `additional image url ${num}`,
+        `additional_image_url_${num}`,
+        `image url ${num}`,
+      ],
+      required: false,
+      section: "Media",
+      dbColumn: `product_images (position: ${num - 1})`,
+      width: 32,
+      description: `추가 상품 이미지 ${num} HTTPS URL (JPG, PNG, WEBP · 최대 10MB · 대표 이미지 URL 입력 시 순서대로 등록).`,
+    })
+  ),
+  {
+    key: "productVideoUrl",
+    header: "제품 동영상 URL (Product Video URL)",
+    headerEn: "Product Video URL",
+    aliases: [
+      "제품 동영상 url (product video url)",
+      "제품 소개 영상 url (product video url)",
+      "제품 동영상 url",
+      "동영상 url",
+      "product video url",
+      "product_video_url",
+      "video url",
+    ],
+    required: false,
+    section: "Media",
+    dbColumn: "product_videos.video_url",
+    width: 34,
+    description:
+      "제품 소개 외부 동영상 HTTPS 링크 (YouTube, Vimeo 등 -> product_videos.video_url 연동).",
+  },
+];
+
+const COMMON_ATTRIBUTE_COLUMNS: BulkColumnSpec[] = COMMON_BULK_ATTRIBUTES.map((attr) => ({
+  key: attr.fieldKey,
+  header: attr.header,
+  headerEn: attr.headerEn,
+  aliases: attr.headerAliases,
+  required: false,
+  section: "Common Attributes",
+  dbColumn: `product_attribute_values (${attr.code})`,
+  width: attr.width,
+  description: attr.description,
+  attributeCode: attr.code,
+}));
 
 export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
   // 1. REQUIRED (4) — Columns A..D
@@ -173,6 +1169,7 @@ export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
     aliases: [
       "카테고리 (1depth) *",
       "카테고리 (1depth)",
+      "카테고리 1depth (category 1depth)",
       "카테고리 1depth *",
       "카테고리 1depth",
       "1차 카테고리 *",
@@ -185,8 +1182,8 @@ export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
     required: true,
     section: "Required",
     dbColumn: "category / category_code",
-    width: 24,
-    description: "대분류 카테고리 코드 또는 명칭 입력 (예: Skincare, 스킨케어 — Categories 시트 참조).",
+    width: 26,
+    description: "대분류 카테고리 코드 또는 명칭 입력 (예: 스킨케어 (Skincare), Skincare — Categories 시트 참조).",
   },
 
   // 2. OPTIONAL — CATEGORY HIERARCHY (Columns E..F)
@@ -196,6 +1193,7 @@ export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
     headerEn: "Category 2Depth",
     aliases: [
       "카테고리 (2depth)",
+      "카테고리 2depth (category 2depth)",
       "카테고리 2depth",
       "2차 카테고리",
       "category 2depth",
@@ -205,8 +1203,8 @@ export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
     required: false,
     section: "Category",
     dbColumn: "category_code",
-    width: 24,
-    description: "선택한 1Depth 하위 중분류 카테고리 코드 또는 명칭 (Categories 시트 참조).",
+    width: 28,
+    description: "선택한 1Depth 하위 중분류 카테고리 (1Depth 선택 시 하위 목록 연동 드롭다운 제공 · Categories 시트 참조).",
   },
   {
     key: "category3Depth",
@@ -214,6 +1212,7 @@ export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
     headerEn: "Category 3Depth",
     aliases: [
       "카테고리 (3depth)",
+      "카테고리 3depth (category 3depth)",
       "카테고리 3depth",
       "3차 카테고리",
       "category 3depth",
@@ -223,8 +1222,8 @@ export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
     required: false,
     section: "Category",
     dbColumn: "category_code",
-    width: 26,
-    description: "선택한 2Depth 하위 소분류 카테고리 코드 또는 명칭 (Categories 시트 참조).",
+    width: 30,
+    description: "선택한 2Depth 하위 소분류 카테고리 (2Depth 선택 시 하위 목록 연동 드롭다운 제공 · Categories 시트 참조).",
   },
 
   // 3. OPTIONAL — BASIC INFORMATION (Columns G..AD)
@@ -828,6 +1827,12 @@ export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
     width: 22,
     description: "적재 파렛트 총중량 (단위: kg, > 0).",
   },
+
+  // 6. OPTIONAL — MEDIA URLS (+11 Columns, BA..BK)
+  ...MEDIA_COLUMNS,
+
+  // 7. OPTIONAL — COMMON PRODUCT ATTRIBUTES (+23 Columns, BL..CH)
+  ...COMMON_ATTRIBUTE_COLUMNS,
 ];
 
 export interface BulkReferenceBrand {
@@ -845,6 +1850,40 @@ export interface BulkReferenceCategory {
   is_final: boolean;
   is_active: boolean;
   display_order?: number;
+}
+
+export interface BulkReferenceCommonAttributeOption {
+  optionCode: string;
+  optionKo: string;
+  optionEn: string | null;
+  displayOrder: number;
+}
+
+export interface BulkReferenceCommonAttribute {
+  code: string;
+  nameKo: string;
+  nameEn: string | null;
+  inputType: string;
+  isMultiple: boolean;
+  unitSet: string | null;
+  allowNa: boolean;
+  allowOther: boolean;
+  brandEditable: boolean;
+  adminOnly: boolean;
+  isActive: boolean;
+  options: BulkReferenceCommonAttributeOption[];
+}
+
+export interface BulkNormalizedAttributeEntry {
+  attribute_code: string;
+  value_json: string | string[];
+  text_value: string | null;
+}
+
+export interface BulkNormalizedImageUrlItem {
+  url: string;
+  columnHeader: string;
+  slotNumber: number; // 1 = Main Image, 2..10 = Additional Image 2..10
 }
 
 export interface BulkNormalizedProductPayload {
@@ -896,6 +1935,10 @@ export interface BulkNormalizedProductPayload {
   palette_depth: number | null;
   palette_height: number | null;
   palette_weight: number | null;
+  // R2 Extensions
+  image_urls: BulkNormalizedImageUrlItem[];
+  product_video_url: string | null;
+  common_attributes: BulkNormalizedAttributeEntry[];
 }
 
 export type BulkRowValidationStatus = "VALID" | "WARNING" | "INVALID";
@@ -913,6 +1956,12 @@ export interface BulkValidatedRow {
   correctiveGuidance: string[];
   isDuplicateError: boolean;
   isValidationError: boolean;
+  hasCategoryError: boolean;
+  hasCommonAttributeError: boolean;
+  hasMediaUrlError: boolean;
+  imageUrlCount: number;
+  hasVideoUrl: boolean;
+  commonAttributeCount: number;
   payload: BulkNormalizedProductPayload | null;
 }
 
@@ -924,6 +1973,13 @@ export interface BulkPreviewSummary {
   invalidRows: number;
   duplicateRows: number;
   validationErrorRows: number;
+  categoryErrorRows: number;
+  commonAttributeErrorRows: number;
+  mediaUrlErrorRows: number;
+  rowsWithMediaCount: number;
+  totalImageUrlsCount: number;
+  rowsWithVideoCount: number;
+  rowsWithCommonAttrsCount: number;
   exampleRowsSkipped: number;
 }
 
@@ -945,6 +2001,36 @@ export interface BulkRejectedRowItem {
   isDuplicate: boolean;
 }
 
+export interface BulkPendingMediaTask {
+  excelRowNumber: number;
+  productId: string;
+  manufactureSku: string;
+  productNameEn: string;
+  imageUrls: BulkNormalizedImageUrlItem[];
+}
+
+export interface BulkMediaFailureItem {
+  excelRowNumber: number;
+  productId: string;
+  manufactureSku: string;
+  productNameEn: string;
+  columnHeader: string;
+  slotNumber: number;
+  url: string;
+  errorReason: string;
+  correctiveGuidance: string;
+}
+
+export interface BulkMediaBatchResult {
+  success: boolean;
+  error?: string;
+  processedProducts: number;
+  imagesImportedCount: number;
+  duplicatesSkippedCount: number;
+  failures: BulkMediaFailureItem[];
+  retryTasks: BulkPendingMediaTask[];
+}
+
 export interface BulkImportExecutionResult {
   success: boolean;
   error?: string;
@@ -953,8 +2039,12 @@ export interface BulkImportExecutionResult {
   rejectedCount: number;
   duplicateCount: number;
   validationErrorCount: number;
+  commonAttributesSavedCount: number;
+  videosImportedCount: number;
   createdProductIds: string[];
   rejectedRows: BulkRejectedRowItem[];
+  pendingMediaTasks: BulkPendingMediaTask[];
+  mediaFailures: BulkMediaFailureItem[];
   errorReportBase64?: string | null;
   errorReportFilename?: string | null;
 }

@@ -4,21 +4,30 @@ import {
   BULK_IMPORT_MAX_ROWS,
   BULK_PRODUCT_COLUMNS,
   BULK_TEMPLATE_EXAMPLE_SKU,
+  COMMON_BULK_ATTRIBUTES,
   type BulkColumnSection,
+  type BulkCommonAttributeOptionSpec,
+  type BulkCommonAttributeSpec,
+  type BulkMediaFailureItem,
   type BulkReferenceBrand,
   type BulkReferenceCategory,
+  type BulkReferenceCommonAttribute,
   type BulkRejectedRowItem,
 } from "@/lib/product/bulk-import-types";
 import { VOLUME_UNITS } from "@/lib/product/types";
 import { ALL_COUNTRIES } from "@/lib/constants/countries";
-import { sanitizeExcelOutputCell } from "@/lib/product/bulk-import-validator";
+import {
+  formatBilingualCategoryLabel,
+  sanitizeExcelOutputCell,
+} from "@/lib/product/bulk-import-validator";
 
 export interface GenerateTemplateOptions {
   brands: BulkReferenceBrand[];
   categories: BulkReferenceCategory[];
+  commonAttributes?: BulkReferenceCommonAttribute[];
 }
 
-// Style indices matching buildStylesXml() cellXfs order
+// Style indices matching buildStylesXml() cellXfs order (0..24)
 const STYLE = {
   DEFAULT: 0,
   TEXT_AT: 1, // Default body cell with '@' Text format (SKU, UPC, EAN columns)
@@ -41,6 +50,10 @@ const STYLE = {
   TITLE_BANNER: 18,
   SECTION_HEADER: 19,
   ERROR_HEADER: 20,
+  GROUP_MEDIA: 21,
+  HDR_MEDIA: 22,
+  GROUP_COMMON_ATTR: 23,
+  HDR_COMMON_ATTR: 24,
 } as const;
 
 interface OoxmlCellSpec {
@@ -57,6 +70,7 @@ interface OoxmlRowSpec {
 interface OoxmlColSpec {
   width: number;
   style?: number;
+  hidden?: boolean;
 }
 
 interface OoxmlDataValidationSpec {
@@ -77,7 +91,6 @@ interface OoxmlSheetSpec {
 }
 
 function escapeXml(raw: string): string {
-  // Strip illegal XML 1.0 control characters (keep \t, \n, \r)
   const cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, "");
   return cleaned
     .replace(/&/g, "&amp;")
@@ -87,7 +100,7 @@ function escapeXml(raw: string): string {
     .replace(/'/g, "&apos;");
 }
 
-function encodeColLetter(colIdxZeroBased: number): string {
+export function encodeColLetter(colIdxZeroBased: number): string {
   let n = colIdxZeroBased + 1;
   let result = "";
   while (n > 0) {
@@ -133,43 +146,17 @@ class SharedStringTable {
 }
 
 function buildStylesXml(): string {
-  // Fonts:
-  // 0: Malgun Gothic 10pt regular #0F172A
-  // 1: Malgun Gothic 10pt bold #FFFFFF (Required Group / Dark Header)
-  // 2: Malgun Gothic 10pt bold #1E3A8A (Required Column Header)
-  // 3: Malgun Gothic 10pt bold #0C4A6E (Category Group/Header)
-  // 4: Malgun Gothic 10pt bold #1E293B (Basic Info Group/Header)
-  // 5: Malgun Gothic 10pt bold #065F46 (Pricing Group/Header)
-  // 6: Malgun Gothic 10pt bold #78350F (Logistics Group/Header)
-  // 7: Malgun Gothic 9.5pt italic #475569 (Example Row)
-  // 8: Malgun Gothic 12pt bold #FFFFFF (Title Banner)
-  // 9: Malgun Gothic 10.5pt bold #1E293B (Section Header)
-  // 10: Malgun Gothic 10pt bold #FFFFFF (Error Header)
-
-  // Fills (0 = none, 1 = gray125 required by OOXML spec!):
-  // 2: #1E3A8A (Required Group Navy)
-  // 3: #E0F2FE (Category Group Sky)
-  // 4: #E2E8F0 (Basic Group Slate)
-  // 5: #D1FAE5 (Pricing Group Mint)
-  // 6: #FEF3C7 (Logistics Group Amber)
-  // 7: #DBEAFE (Required Col Header Ice Blue)
-  // 8: #F0F9FF (Category Col Header Pale Sky)
-  // 9: #F8FAFC (Basic Col Header Pale Slate)
-  // 10: #ECFDF5 (Pricing Col Header Pale Mint)
-  // 11: #FFFBEB (Logistics Col Header Pale Amber)
-  // 12: #FEFCE8 (Example Row Pale Ivory)
-  // 13: #0F172A (Reference Header Dark Slate)
-  // 14: #991B1B (Error Header Crimson)
-
-  // Borders:
-  // 0: none
-  // 1: thin #CBD5E1 all around
-  // 2: thin #CBD5E1 left/right/top + medium #2563EB bottom (Required Header)
-  // 3: thin #CBD5E1 left/right/top + medium #64748B bottom (Optional Header)
-
+  // Fonts (0..12):
+  // 11: Malgun Gothic 10pt bold #5B21B6 (Media Group/Header Violet)
+  // 12: Malgun Gothic 10pt bold #3730A3 (Common Attribute Group/Header Indigo)
+  // Fills (0..18):
+  // 15: #EDE9FE (Media Group Violet)
+  // 16: #F5F3FF (Media Col Header Pale Violet)
+  // 17: #E0E7FF (Common Attr Group Indigo)
+  // 18: #EEF2FF (Common Attr Col Header Pale Indigo)
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="11">
+  <fonts count="13">
     <font><sz val="10"/><color rgb="FF0F172A"/><name val="맑은 고딕"/><charset val="129"/></font>
     <font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="맑은 고딕"/><charset val="129"/></font>
     <font><b/><sz val="10"/><color rgb="FF1E3A8A"/><name val="맑은 고딕"/><charset val="129"/></font>
@@ -181,8 +168,10 @@ function buildStylesXml(): string {
     <font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="맑은 고딕"/><charset val="129"/></font>
     <font><b/><sz val="10.5"/><color rgb="FF1E293B"/><name val="맑은 고딕"/><charset val="129"/></font>
     <font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="맑은 고딕"/><charset val="129"/></font>
+    <font><b/><sz val="10"/><color rgb="FF5B21B6"/><name val="맑은 고딕"/><charset val="129"/></font>
+    <font><b/><sz val="10"/><color rgb="FF3730A3"/><name val="맑은 고딕"/><charset val="129"/></font>
   </fonts>
-  <fills count="15">
+  <fills count="19">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FF1E3A8A"/></patternFill></fill>
@@ -198,6 +187,10 @@ function buildStylesXml(): string {
     <fill><patternFill patternType="solid"><fgColor rgb="FFFEFCE8"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FF0F172A"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FF991B1B"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEDE9FE"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF5F3FF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFE0E7FF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEEF2FF"/></patternFill></fill>
   </fills>
   <borders count="4">
     <border><left/><right/><top/><bottom/><diagonal/></border>
@@ -226,7 +219,7 @@ function buildStylesXml(): string {
   <cellStyleXfs count="1">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
   </cellStyleXfs>
-  <cellXfs count="21">
+  <cellXfs count="25">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
@@ -248,6 +241,10 @@ function buildStylesXml(): string {
     <xf numFmtId="0" fontId="8" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
     <xf numFmtId="0" fontId="9" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
     <xf numFmtId="0" fontId="10" fillId="14" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="11" fillId="15" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="11" fillId="16" borderId="3" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="12" fillId="17" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="12" fillId="18" borderId="3" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
   </cellXfs>
   <cellStyles count="1">
     <cellStyle name="Normal" xfId="0" builtinId="0"/>
@@ -304,9 +301,9 @@ function buildWorksheetXml(
       .map((c, idx) => {
         const colNum = idx + 1;
         const styleAttr = c.style !== undefined ? ` style="${c.style}"` : "";
-        // Add +1.5 padding so Korean/English text never clips against AutoFilter arrows
+        const hiddenAttr = c.hidden ? ` hidden="1"` : "";
         const w = Number((c.width + 1.5).toFixed(2));
-        return `<col min="${colNum}" max="${colNum}" width="${w}" customWidth="1"${styleAttr}/>`;
+        return `<col min="${colNum}" max="${colNum}" width="${w}" customWidth="1"${styleAttr}${hiddenAttr}/>`;
       })
       .join("");
     colsXml = `<cols>${colItems}</cols>`;
@@ -329,9 +326,13 @@ function buildWorksheetXml(
       const styleAttr = cell.style !== undefined ? ` s="${cell.style}"` : "";
 
       if (cell.value === null || cell.value === undefined || cell.value === "") {
-        // Keep empty cell tag only when explicit styling (border/fill/numberFormat) is assigned
-        if (cell.style !== undefined) {
-          cellXmlList.push(`<c r="${addr}"${styleAttr}/>`);
+        if (cell.style !== undefined || cell.forceString) {
+          if (cell.forceString) {
+            const sstIdx = sst.add("");
+            cellXmlList.push(`<c r="${addr}"${styleAttr} t="s"><v>${sstIdx}</v></c>`);
+          } else {
+            cellXmlList.push(`<c r="${addr}"${styleAttr}/>`);
+          }
         }
         continue;
       }
@@ -348,10 +349,7 @@ function buildWorksheetXml(
   }
   const sheetDataXml = `<sheetData>${rowXmlList.join("")}</sheetData>`;
 
-  // 5. autoFilter (strict CT_Worksheet position BEFORE mergeCells & dataValidations!)
-  // Wait: verify ECMA-376 CT_Worksheet sequence:
-  // sheetData -> sheetCalcPr -> sheetProtection -> protectedRanges -> scenarios -> autoFilter -> sortState -> dataConsolidate -> customSheetViews -> mergeCells -> phoneticPr -> conditionalFormatting -> dataValidations -> hyperlinks -> printOptions -> pageMargins!
-  // Notice <autoFilter> MUST come BEFORE <mergeCells>, and <mergeCells> MUST come BEFORE <dataValidations>!
+  // 5. autoFilter -> mergeCells -> dataValidations -> pageMargins (strict ECMA-376 sequence)
   const autoFilterXml = sheet.autoFilterRef
     ? `<autoFilter ref="${sheet.autoFilterRef}"/>`
     : "";
@@ -397,17 +395,14 @@ async function buildOoxmlWorkbookBuffer(sheets: OoxmlSheetSpec[]): Promise<Buffe
   const zip = new JSZip();
   const sst = new SharedStringTable();
 
-  //Worksheet XMLs
   sheets.forEach((sheet, idx) => {
     const xml = buildWorksheetXml(sheet, sst, idx === 0);
     zip.file(`xl/worksheets/sheet${idx + 1}.xml`, xml);
   });
 
-  // Shared Strings & Styles
   zip.file("xl/sharedStrings.xml", sst.toXml());
   zip.file("xl/styles.xml", buildStylesXml());
 
-  // xl/workbook.xml
   const sheetEntries = sheets
     .map(
       (s, idx) =>
@@ -422,7 +417,6 @@ async function buildOoxmlWorkbookBuffer(sheets: OoxmlSheetSpec[]): Promise<Buffe
     `</workbook>`;
   zip.file("xl/workbook.xml", workbookXml);
 
-  // xl/_rels/workbook.xml.rels
   const stylesRelId = sheets.length + 1;
   const sstRelId = sheets.length + 2;
   const sheetRels = sheets
@@ -440,7 +434,6 @@ async function buildOoxmlWorkbookBuffer(sheets: OoxmlSheetSpec[]): Promise<Buffe
     `</Relationships>`;
   zip.file("xl/_rels/workbook.xml.rels", workbookRelsXml);
 
-  // _rels/.rels
   const rootRelsXml =
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
@@ -448,7 +441,6 @@ async function buildOoxmlWorkbookBuffer(sheets: OoxmlSheetSpec[]): Promise<Buffe
     `</Relationships>`;
   zip.file("_rels/.rels", rootRelsXml);
 
-  // [Content_Types].xml
   const sheetOverrides = sheets
     .map(
       (_, idx) =>
@@ -474,14 +466,19 @@ async function buildOoxmlWorkbookBuffer(sheets: OoxmlSheetSpec[]): Promise<Buffe
   });
 }
 
-function buildCategoryReferenceRows(categories: BulkReferenceCategory[]) {
+function buildCategoryReferenceAndLookupTables(categories: BulkReferenceCategory[]): {
+  hierarchyRows: string[][];
+  d1ToD2Pairs: [string, string][];
+  d2ToD3Pairs: [string, string][];
+  hasDependentHierarchy: boolean;
+} {
   const active = categories.filter((c) => c.is_active !== false);
   const d1List = active.filter((c) => c.depth === 1);
   const d2List = active.filter((c) => c.depth === 2);
   const d3List = active.filter((c) => c.depth === 3);
 
   if (d1List.length === 0) {
-    return [
+    const fallbackRows = [
       ["SKINCARE", "Skincare", "스킨케어", "", "", "", "", "", "", "SKINCARE"],
       ["HAIR_CARE", "Hair Care", "헤어케어", "", "", "", "", "", "", "HAIR_CARE"],
       ["BEAUTY_TOOLS", "Beauty Tools", "뷰티툴", "", "", "", "", "", "", "BEAUTY_TOOLS"],
@@ -491,13 +488,57 @@ function buildCategoryReferenceRows(categories: BulkReferenceCategory[]) {
       ["SETS_COLLECTIONS", "Sets & Collections", "세트/기획", "", "", "", "", "", "", "SETS_COLLECTIONS"],
       ["OTHER", "Other", "기타", "", "", "", "", "", "", "OTHER"],
     ];
+    return {
+      hierarchyRows: fallbackRows,
+      d1ToD2Pairs: [],
+      d2ToD3Pairs: [],
+      hasDependentHierarchy: false,
+    };
   }
 
-  const rows: string[][] = [];
+  const hierarchyRows: string[][] = [];
+  const d1ToD2Pairs: [string, string][] = [];
+  const d2ToD3Pairs: [string, string][] = [];
+
+  // Guard parent aliases case-insensitively because Excel MATCH/COUNTIF are case-insensitive!
+  const usedD1ParentKeysLower = new Set<string>();
+  const usedD2ParentKeysLower = new Set<string>();
+
+  const collectUniqueParentAliases = (
+    cat: BulkReferenceCategory,
+    usedGlobalSet: Set<string>
+  ): string[] => {
+    const candidates = [
+      formatBilingualCategoryLabel(cat),
+      (cat.name_en || "").trim(),
+      cat.name_ko.trim(),
+      cat.code.trim(),
+    ].filter((s) => s !== "");
+
+    const accepted: string[] = [];
+    for (const candidate of candidates) {
+      const lower = candidate.toLowerCase();
+      if (usedGlobalSet.has(lower)) continue;
+      usedGlobalSet.add(lower);
+      accepted.push(candidate);
+    }
+    return accepted;
+  };
+
   for (const d1 of d1List) {
     const children2 = d2List.filter((c) => c.parent_code === d1.code);
+    const d1Aliases = collectUniqueParentAliases(d1, usedD1ParentKeysLower);
+    const child2Labels =
+      children2.length > 0 ? children2.map((c) => formatBilingualCategoryLabel(c)) : [""];
+
+    for (const alias of d1Aliases) {
+      for (const cLabel of child2Labels) {
+        d1ToD2Pairs.push([alias, cLabel]);
+      }
+    }
+
     if (children2.length === 0) {
-      rows.push([
+      hierarchyRows.push([
         d1.code,
         d1.name_en || d1.code,
         d1.name_ko,
@@ -514,8 +555,18 @@ function buildCategoryReferenceRows(categories: BulkReferenceCategory[]) {
 
     for (const d2 of children2) {
       const children3 = d3List.filter((c) => c.parent_code === d2.code);
+      const d2Aliases = collectUniqueParentAliases(d2, usedD2ParentKeysLower);
+      const child3Labels =
+        children3.length > 0 ? children3.map((c) => formatBilingualCategoryLabel(c)) : [""];
+
+      for (const alias of d2Aliases) {
+        for (const cLabel of child3Labels) {
+          d2ToD3Pairs.push([alias, cLabel]);
+        }
+      }
+
       if (children3.length === 0) {
-        rows.push([
+        hierarchyRows.push([
           d1.code,
           d1.name_en || d1.code,
           d1.name_ko,
@@ -531,7 +582,7 @@ function buildCategoryReferenceRows(categories: BulkReferenceCategory[]) {
       }
 
       for (const d3 of children3) {
-        rows.push([
+        hierarchyRows.push([
           d1.code,
           d1.name_en || d1.code,
           d1.name_ko,
@@ -547,7 +598,61 @@ function buildCategoryReferenceRows(categories: BulkReferenceCategory[]) {
     }
   }
 
-  return rows;
+  return {
+    hierarchyRows,
+    d1ToD2Pairs,
+    d2ToD3Pairs,
+    hasDependentHierarchy: d2List.length > 0,
+  };
+}
+
+function resolveTemplateCommonAttributes(
+  liveAttrs?: BulkReferenceCommonAttribute[]
+): BulkCommonAttributeSpec[] {
+  if (!liveAttrs || liveAttrs.length === 0) {
+    return COMMON_BULK_ATTRIBUTES;
+  }
+
+  const byCode = new Map<string, BulkReferenceCommonAttribute>();
+  for (const la of liveAttrs) {
+    if (la.isActive !== false) {
+      byCode.set(la.code.toUpperCase(), la);
+    }
+  }
+
+  return COMMON_BULK_ATTRIBUTES.map((spec) => {
+    const live = byCode.get(spec.code.toUpperCase());
+    if (!live || live.options.length === 0) return spec;
+
+    const staticMap = new Map<string, BulkCommonAttributeOptionSpec>();
+    for (const o of spec.options) staticMap.set(o.optionCode.toUpperCase(), o);
+
+    return {
+      ...spec,
+      allowNa: live.allowNa,
+      allowOther: live.allowOther,
+      options: live.options.map((lo) => {
+        const st = staticMap.get(lo.optionCode.toUpperCase());
+        return {
+          optionCode: lo.optionCode,
+          optionKo: lo.optionKo || st?.optionKo || lo.optionCode,
+          optionEn: lo.optionEn || st?.optionEn || lo.optionCode,
+          aliases: st?.aliases,
+          adminOnlyOption:
+            st?.adminOnlyOption ?? lo.optionCode.toUpperCase() === "ADMIN_VERIFIED",
+        };
+      }),
+    };
+  });
+}
+
+function formatBilingualOptionLabel(opt: BulkCommonAttributeOptionSpec): string {
+  const ko = (opt.optionKo || "").trim();
+  const en = (opt.optionEn || "").trim();
+  if (ko && en && ko.toLowerCase() !== en.toLowerCase()) {
+    return `${ko} (${en})`;
+  }
+  return ko || en || opt.optionCode;
 }
 
 function getColumnHeaderStyle(section: BulkColumnSection): number {
@@ -562,6 +667,10 @@ function getColumnHeaderStyle(section: BulkColumnSection): number {
       return STYLE.HDR_PRICING;
     case "Logistics":
       return STYLE.HDR_LOGISTICS;
+    case "Media":
+      return STYLE.HDR_MEDIA;
+    case "Common Attributes":
+      return STYLE.HDR_COMMON_ATTR;
   }
 }
 
@@ -577,6 +686,10 @@ function getSectionNameKo(section: BulkColumnSection): string {
       return "가격 정보 (Pricing)";
     case "Logistics":
       return "물류 규격 (Logistics)";
+    case "Media":
+      return "미디어 URL (Media)";
+    case "Common Attributes":
+      return "공통 속성 (Common Attributes)";
   }
 }
 
@@ -585,6 +698,7 @@ export async function generateBulkProductTemplateBuffer(
 ): Promise<Buffer> {
   const activeBrands = options.brands.filter((b) => b.is_active !== false);
   const activeCategories = options.categories.filter((c) => c.is_active !== false);
+  const commonAttrs = resolveTemplateCommonAttributes(options.commonAttributes);
 
   const sampleBrandName = activeBrands[0]?.name || "Your Active Brand Name";
   const sampleSkincareD1 =
@@ -601,9 +715,9 @@ export async function generateBulkProductTemplateBuffer(
     brand: sampleBrandName,
     manufactureSku: BULK_TEMPLATE_EXAMPLE_SKU,
     productNameEn: "[EXAMPLE] Gentle Cica Soothing Toner 200ml",
-    category1Depth: sampleSkincareD1?.name_en || "Skincare",
-    category2Depth: sampleD2?.name_en || "",
-    category3Depth: sampleD3?.name_en || "",
+    category1Depth: sampleSkincareD1 ? formatBilingualCategoryLabel(sampleSkincareD1) : "스킨케어 (Skincare)",
+    category2Depth: sampleD2 ? formatBilingualCategoryLabel(sampleD2) : "",
+    category3Depth: sampleD3 ? formatBilingualCategoryLabel(sampleD3) : "",
     productNameKo: "[예시행 - 업로드 시 자동 제외] 시카 수딩 토너 200ml",
     volumeValue: 200,
     volumeUnit: "ml",
@@ -650,10 +764,33 @@ export async function generateBulkProductTemplateBuffer(
     palletDepth: 110,
     palletHeight: 145,
     palletWeight: 299,
+    mainImageUrl: "https://cdn.example.com/products/cica-toner-main.jpg",
+    additionalImageUrl2: "https://cdn.example.com/products/cica-toner-detail-2.jpg",
+    additionalImageUrl3: "",
+    additionalImageUrl4: "",
+    additionalImageUrl5: "",
+    additionalImageUrl6: "",
+    additionalImageUrl7: "",
+    additionalImageUrl8: "",
+    additionalImageUrl9: "",
+    additionalImageUrl10: "",
+    productVideoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
   };
 
+  for (const attr of commonAttrs) {
+    exampleByKey[attr.fieldKey] = attr.exampleValue;
+  }
+
+  // Build Categories hierarchy + dependent dropdown lookup tables
+  const {
+    hierarchyRows: categoryRefRows,
+    d1ToD2Pairs,
+    d2ToD3Pairs,
+    hasDependentHierarchy,
+  } = buildCategoryReferenceAndLookupTables(activeCategories);
+
   // =========================================================================
-  // 1. Products Sheet (Row 1 = Group Banners, Row 2 = 52 Headers, Row 3 = Example)
+  // 1. Products Sheet (Row 1 = Group Banners, Row 2 = 86 Headers, Row 3 = Example)
   // =========================================================================
   const groupBannerSpans: Array<{
     startIdx: number;
@@ -670,7 +807,7 @@ export async function generateBulkProductTemplateBuffer(
     {
       startIdx: 4,
       endIdx: 5,
-      label: "세부 카테고리 · 선택 (Category)",
+      label: "세부 카테고리 · 연동 선택 (Category)",
       style: STYLE.GROUP_CATEGORY,
     },
     {
@@ -708,6 +845,48 @@ export async function generateBulkProductTemplateBuffer(
       endIdx: 51,
       label: "물류 규격 · 카톤/파렛트 (Carton & Pallet · 선택)",
       style: STYLE.GROUP_LOGISTICS,
+    },
+    {
+      startIdx: 52,
+      endIdx: 62,
+      label: "미디어 URL · 이미지 1~10 및 동영상 (Media URLs · 선택)",
+      style: STYLE.GROUP_MEDIA,
+    },
+    {
+      startIdx: 63,
+      endIdx: 66,
+      label: "공통 속성 · 유통/보관 (Shelf Life & Storage · 선택)",
+      style: STYLE.GROUP_COMMON_ATTR,
+    },
+    {
+      startIdx: 67,
+      endIdx: 70,
+      label: "공통 속성 · 패키지/제형 (Packaging & Format · 선택)",
+      style: STYLE.GROUP_COMMON_ATTR,
+    },
+    {
+      startIdx: 71,
+      endIdx: 73,
+      label: "공통 속성 · 대상 고객 (Target Customer · 선택)",
+      style: STYLE.GROUP_COMMON_ATTR,
+    },
+    {
+      startIdx: 74,
+      endIdx: 78,
+      label: "공통 속성 · 사용/주요고민 (Usage & Concerns · 선택)",
+      style: STYLE.GROUP_COMMON_ATTR,
+    },
+    {
+      startIdx: 79,
+      endIdx: 81,
+      label: "공통 속성 · 향 정보 (Fragrance · 선택)",
+      style: STYLE.GROUP_COMMON_ATTR,
+    },
+    {
+      startIdx: 82,
+      endIdx: 85,
+      label: "공통 속성 · 규제/등록 상태 (Regulatory · 브랜드 기재 · 선택)",
+      style: STYLE.GROUP_COMMON_ATTR,
     },
   ];
 
@@ -761,24 +940,50 @@ export async function generateBulkProductTemplateBuffer(
   }));
 
   // Dropdown Lists (Row 3 example + 500 product rows = Rows 3..503)
-  const depth1Names =
+  const depth1DropdownLabels =
     activeCategories.filter((c) => c.depth === 1).length > 0
       ? activeCategories
           .filter((c) => c.depth === 1)
-          .map((c) => c.name_en || c.code)
+          .map((c) => formatBilingualCategoryLabel(c))
       : [
-          "Skincare",
-          "Hair Care",
-          "Makeup",
-          "Body Care",
-          "Personal Care",
-          "Beauty Tools",
-          "Sets & Collections",
-          "Other",
+          "스킨케어 (Skincare)",
+          "헤어케어 (Hair Care)",
+          "메이크업 (Makeup)",
+          "바디케어 (Body Care)",
+          "퍼스널케어 (Personal Care)",
+          "뷰티툴 (Beauty Tools)",
+          "세트/기획 (Sets & Collections)",
+          "기타 (Other)",
         ];
   const volumeUnits = VOLUME_UNITS.map((u) => u.value);
   const leadTimeUnits = ["Days", "Weeks", "Months"];
   const colorMaps = [...ALLOWED_COLOR_MAPS];
+  const booleans = ["TRUE", "FALSE"];
+  const flags = ["Y", "N"];
+
+  // Prepare single-select / yes-no-na Common Attribute dropdown lists on Allowed_Values (Cols G..P)
+  const singleChoiceCommonAttrs = commonAttrs.filter(
+    (a) => a.inputType === "SINGLE_SELECT" || a.inputType === "YES_NO_NA"
+  );
+  const singleChoiceDropdownColumns: Array<{
+    fieldKey: string;
+    header: string;
+    values: string[];
+  }> = singleChoiceCommonAttrs.map((attr) => {
+    const allowedOpts = attr.options.filter((o) => !o.adminOnlyOption);
+    const hasExplicitNa = allowedOpts.some(
+      (o) => o.optionCode.toUpperCase() === "NOT_APPLICABLE"
+    );
+    const list = allowedOpts.map((o) => formatBilingualOptionLabel(o));
+    if (attr.allowNa && !hasExplicitNa) {
+      list.push("해당 없음 (Not Applicable)");
+    }
+    return {
+      fieldKey: attr.fieldKey,
+      header: `${attr.nameKo} (${attr.code})`,
+      values: list,
+    };
+  });
 
   const maxValidationRow = BULK_IMPORT_MAX_ROWS + 3; // Row 1 Group + Row 2 Header + Row 3 Example + 500 rows
   const productValidations: OoxmlDataValidationSpec[] = [];
@@ -796,9 +1001,26 @@ export async function generateBulkProductTemplateBuffer(
   if (activeBrands.length > 0) {
     addDropdownForKey("brand", `Brands!$A$2:$A$${activeBrands.length + 1}`);
   }
-  if (depth1Names.length > 0) {
-    addDropdownForKey("category1Depth", `Allowed_Values!$A$2:$A$${depth1Names.length + 1}`);
+  if (depth1DropdownLabels.length > 0) {
+    addDropdownForKey("category1Depth", `Allowed_Values!$A$2:$A$${depth1DropdownLabels.length + 1}`);
   }
+
+  // Macro-free Dependent Dropdowns for Category 2Depth (col E, ref D3) and 3Depth (col F, ref E3)
+  if (hasDependentHierarchy && d1ToD2Pairs.length > 0) {
+    const lastLRow = d1ToD2Pairs.length + 1;
+    addDropdownForKey(
+      "category2Depth",
+      `OFFSET(Categories!$M$2,MATCH(D3,Categories!$L$2:$L$${lastLRow},0)-1,0,COUNTIF(Categories!$L$2:$L$${lastLRow},D3),1)`
+    );
+  }
+  if (hasDependentHierarchy && d2ToD3Pairs.length > 0) {
+    const lastORow = d2ToD3Pairs.length + 1;
+    addDropdownForKey(
+      "category3Depth",
+      `OFFSET(Categories!$P$2,MATCH(E3,Categories!$O$2:$O$${lastORow},0)-1,0,COUNTIF(Categories!$O$2:$O$${lastORow},E3),1)`
+    );
+  }
+
   addDropdownForKey("volumeUnit", `Allowed_Values!$B$2:$B$${volumeUnits.length + 1}`);
   addDropdownForKey("countryOfOrigin", `Countries!$A$2:$A$${ALL_COUNTRIES.length + 1}`);
   addDropdownForKey("leadTimeUnit", `Allowed_Values!$C$2:$C$${leadTimeUnits.length + 1}`);
@@ -807,6 +1029,16 @@ export async function generateBulkProductTemplateBuffer(
   addDropdownForKey("sellingOffline", `Allowed_Values!$E$2:$E$3`);
   addDropdownForKey("parentSku", `Allowed_Values!$F$2:$F$3`);
   addDropdownForKey("childSku", `Allowed_Values!$F$2:$F$3`);
+
+  // Attach dropdowns for Single-Select / Yes-No-NA Common Attributes (Allowed_Values Cols G..P)
+  singleChoiceDropdownColumns.forEach((colInfo, offsetIdx) => {
+    if (colInfo.values.length === 0) return;
+    const allowedColLetter = encodeColLetter(6 + offsetIdx); // 6 = 'G'
+    addDropdownForKey(
+      colInfo.fieldKey,
+      `Allowed_Values!$${allowedColLetter}$2:$${allowedColLetter}$${colInfo.values.length + 1}`
+    );
+  });
 
   const productsSheetSpec: OoxmlSheetSpec = {
     name: "Products",
@@ -825,40 +1057,40 @@ export async function generateBulkProductTemplateBuffer(
   };
 
   // =========================================================================
-  // 2. Instructions Sheet (Korean-first Bilingual Guidance)
+  // 2. Instructions Sheet (Korean-first Bilingual Guidance for all 86 Columns)
   // =========================================================================
   const guideRules: [string, string][] = [
     [
       "1. 작성 시트 (Primary Sheet)",
-      '"Products" 시트의 4행부터 1행당 1개 상품을 입력해 주세요. (1회 업로드 최대 500개 상품 지원 / Enter one product per row starting from Row 4, max 500 rows).',
+      '"Products" 시트의 4행부터 1행당 1개 상품을 입력해 주세요. (1회 업로드 최대 500개 상품 지원 · 전체 86개 컬럼 / Enter one product per row starting at Row 4, max 500 rows).',
     ],
     [
-      "2. 최소 필수 항목 4개 (4 Required Fields)",
-      "초기 임시 등록(Draft)에는 [브랜드 (Brand) *], [제조사 SKU (Manufacturer SKU) *], [영문 제품명 (Product Name EN) *], [카테고리 (1Depth) *] 4개 항목만 필수입니다.",
+      "2. 최소 필수 항목 4개 유지 (4 Required Fields Only)",
+      "초기 임시 등록(Draft)에는 [브랜드 *], [제조사 SKU *], [영문 제품명 *], [카테고리 (1Depth) *] 4개 항목만 필수이며, 나머지 82개 항목(세부 카테고리, 기본/가격/물류, 미디어 URL 11개, 공통 속성 23개)은 모두 선택 입력입니다.",
     ],
     [
-      "3. 예시 행 자동 제외 (Sample Row Skipped)",
-      `3행(${BULK_TEMPLATE_EXAMPLE_SKU})은 작성 참고용 예시 데이터입니다. 삭제하지 않고 그대로 업로드하셔도 시스템이 자동으로 제외합니다.`,
+      "3. 카테고리 1→2→3단계 연동 드롭다운 (Dependent Categories)",
+      "카테고리 (1Depth) 선택 시 하위 2Depth 목록만 자동 표시되며, 2Depth 선택 시 하위 3Depth 목록만 표시됩니다. 직접 코드/국문명/영문명을 입력해도 서버가 상위·하위 계층 정합성을 검증합니다.",
     ],
     [
-      "4. 임시 등록 상태 유지 (Draft Workflow)",
-      "업로드된 모든 상품은 '임시 등록 (보완 대기 / Draft · UNREVIEWED)' 상태로 생성되며, 대표 이미지 및 카테고리별 필수 속성을 보완하기 전까지 리테일러 허브(Retailer Hub)에 노출되지 않습니다.",
+      "4. 이미지 및 동영상 URL 등록 (Media URLs)",
+      "대표 이미지 URL(position 0) 및 추가 이미지 URL 2~10은 직접 다운로드 가능한 HTTPS 이미지 URL(JPG, PNG, WEBP · 최대 10MB)을 입력해 주세요. 제품 동영상 URL은 YouTube/Vimeo 등 HTTPS 외부 링크를 지원합니다.",
     ],
     [
-      "5. 텍스트 서식 및 선행 0 보존 (Text Formatting)",
-      "제조사 SKU, UPC 바코드(12자리), EAN 바코드(13자리) 열은 텍스트(@) 서식이 기본 적용되어 앞자리 '0'(예: 012345678905)이 그대로 보존됩니다.",
+      "5. 공통 속성 23개 입력 규칙 (Common Attributes)",
+      '"Common_Attributes" 시트의 허용 옵션을 참조해 주세요. 복수 선택(Multi-select) 항목은 세미콜론(;)으로 구분하여 입력합니다 (예: Dry Skin; Sensitive Skin). 규제 관련 상태(FDA/MoCRA/OTC/Drug Facts)는 브랜드 자체 기재 정보로만 저장됩니다.',
     ],
     [
-      "6. 제조국 공란 처리 (Country of Origin)",
-      "제조국(Country of Origin)이 미확정인 경우 비워 두세요. 공란은 빈 값(NULL)으로 저장되며 임의로 특정 국가가 자동 입력되지 않습니다.",
+      "6. 예시 행 자동 제외 & 텍스트(@) 서식 보존",
+      `3행(${BULK_TEMPLATE_EXAMPLE_SKU})은 작성 참고용 예시 행으로 업로드 시 자동 제외됩니다. 제조사 SKU, UPC(12자리), EAN(13자리)은 선행 '0' 보존을 위해 텍스트(@) 서식이 적용되어 있습니다.`,
     ],
     [
-      "7. Excel 업로드 제외 항목 (V1 Excluded)",
-      "상품 이미지, 동영상, 인증서 파일, 카테고리별 세부 속성(EAV), Letusto SKU는 등록 후 상품 관리 상세 화면에서 입력/업로드합니다. 카톤 CBM은 카톤 가로·세로·높이 입력 시 자동 계산됩니다.",
+      "7. 임시 등록 보호 및 제외 항목 안내",
+      "업로드된 상품은 미검토(UNREVIEWED) 및 리테일러 허브 비노출(hidden) 상태로 안전하게 보호됩니다. 인증서 파일 업로드 및 카테고리별 추가 프로필 속성(PROFILE)은 등록 후 상품 상세 화면에서 입력합니다.",
     ],
     [
       "8. 수식 입력 금지 (Formula Security)",
-      "보안을 위해 엑셀 수식(=SUM, =VLOOKUP, =HYPERLINK 등)은 허용되지 않습니다. 반드시 순수 값(텍스트/숫자)으로 입력된 .xlsx 파일을 업로드해 주세요.",
+      "보안을 위해 셀 내 엑셀 수식(=SUM, =VLOOKUP, =HYPERLINK 등)은 허용되지 않습니다. 반드시 순수 값(텍스트/숫자)으로 입력된 .xlsx 파일을 업로드해 주세요.",
     ],
   ];
 
@@ -867,7 +1099,7 @@ export async function generateBulkProductTemplateBuffer(
       height: 28,
       cells: [
         {
-          value: "K SELECT NETWORK — 상품 Excel 대량 등록 안내서 (Brand Product Bulk Upload Guide)",
+          value: "K SELECT NETWORK — 상품 Excel 대량 등록 안내서 (Brand Product Bulk Upload Guide · 86 Columns)",
           style: STYLE.TITLE_BANNER,
         },
         { value: "", style: STYLE.TITLE_BANNER },
@@ -888,7 +1120,7 @@ export async function generateBulkProductTemplateBuffer(
       ],
     },
     ...guideRules.map(([title, desc]) => ({
-      height: 24,
+      height: 26,
       cells: [
         { value: title, style: STYLE.REF_BODY },
         { value: desc, style: STYLE.REF_BODY },
@@ -902,7 +1134,7 @@ export async function generateBulkProductTemplateBuffer(
       height: 24,
       cells: [
         {
-          value: "■ 전체 52개 컬럼 상세 규격 (52 Column Specifications)",
+          value: `■ 전체 ${BULK_PRODUCT_COLUMNS.length}개 컬럼 상세 규격 (${BULK_PRODUCT_COLUMNS.length} Column Specifications)`,
           style: STYLE.SECTION_HEADER,
         },
         { value: "", style: STYLE.SECTION_HEADER },
@@ -917,7 +1149,7 @@ export async function generateBulkProductTemplateBuffer(
         { value: "컬럼명 (Column Header)", style: STYLE.REF_HEADER },
         { value: "필수 여부 (Requirement)", style: STYLE.REF_HEADER },
         { value: "분류 그룹 (Group)", style: STYLE.REF_HEADER },
-        { value: "영문 기준명 (English Key)", style: STYLE.REF_HEADER },
+        { value: "저장 대상 (Target Field / EAV)", style: STYLE.REF_HEADER },
         { value: "입력 규칙 및 설명 (Validation & Format Guide)", style: STYLE.REF_HEADER },
       ],
     },
@@ -927,7 +1159,7 @@ export async function generateBulkProductTemplateBuffer(
         { value: col.header, style: STYLE.REF_BODY },
         { value: col.required ? "필수 (REQUIRED)" : "선택 (Optional)", style: STYLE.REF_BODY },
         { value: getSectionNameKo(col.section), style: STYLE.REF_BODY },
-        { value: col.headerEn, style: STYLE.REF_BODY },
+        { value: col.dbColumn, style: STYLE.REF_BODY },
         { value: col.description, style: STYLE.REF_BODY },
       ],
     })),
@@ -943,11 +1175,11 @@ export async function generateBulkProductTemplateBuffer(
   const instructionsSheetSpec: OoxmlSheetSpec = {
     name: "Instructions",
     cols: [
+      { width: 38 },
+      { width: 18 },
+      { width: 26 },
       { width: 34 },
-      { width: 20 },
-      { width: 22 },
-      { width: 28 },
-      { width: 68 },
+      { width: 70 },
     ],
     rows: instructionsRows,
     merges: instructionsMerges,
@@ -985,9 +1217,8 @@ export async function generateBulkProductTemplateBuffer(
   };
 
   // =========================================================================
-  // 4. Categories Sheet
+  // 4. Categories Sheet (Cols A..J Hierarchy + Hidden Cols L:M & O:P Dependent Lookup Ranges)
   // =========================================================================
-  const categoryRefRows = buildCategoryReferenceRows(activeCategories);
   const categoriesHeaders = [
     "1Depth 코드 (Code)",
     "1Depth 영문명 (Name EN)",
@@ -999,7 +1230,56 @@ export async function generateBulkProductTemplateBuffer(
     "3Depth 영문명 (Name EN)",
     "3Depth 국문명 (Name KO)",
     "최종 적용 코드 (Resolved Code)",
+    "", // K spacer
+    "LKP_D1_PARENT", // L (col 11)
+    "LKP_D2_CHILD",  // M (col 12)
+    "", // N spacer
+    "LKP_D2_PARENT", // O (col 14)
+    "LKP_D3_CHILD",  // P (col 15)
   ];
+
+  const maxCatSheetDataRows = Math.max(
+    categoryRefRows.length,
+    d1ToD2Pairs.length,
+    d2ToD3Pairs.length
+  );
+
+  const categoriesBodyRows: OoxmlRowSpec[] = [];
+  for (let i = 0; i < maxCatSheetDataRows; i++) {
+    const hRow = categoryRefRows[i];
+    const p12 = d1ToD2Pairs[i];
+    const p23 = d2ToD3Pairs[i];
+
+    const cells: (OoxmlCellSpec | null)[] = [];
+    for (let c = 0; c < 10; c++) {
+      if (hRow) {
+        cells.push({ value: hRow[c] ?? "", style: STYLE.REF_BODY, forceString: true });
+      } else {
+        cells.push(null);
+      }
+    }
+    cells.push(null); // K
+    if (p12) {
+      cells.push({ value: p12[0], forceString: true });
+      cells.push({ value: p12[1], forceString: true });
+    } else {
+      cells.push(null);
+      cells.push(null);
+    }
+    cells.push(null); // N
+    if (p23) {
+      cells.push({ value: p23[0], forceString: true });
+      cells.push({ value: p23[1], forceString: true });
+    } else {
+      cells.push(null);
+      cells.push(null);
+    }
+
+    categoriesBodyRows.push({
+      height: 20,
+      cells,
+    });
+  }
 
   const categoriesSheetSpec: OoxmlSheetSpec = {
     name: "Categories",
@@ -1014,16 +1294,25 @@ export async function generateBulkProductTemplateBuffer(
       { width: 28 },
       { width: 22 },
       { width: 24 },
+      { width: 4, hidden: true },
+      { width: 26, hidden: true },
+      { width: 28, hidden: true },
+      { width: 4, hidden: true },
+      { width: 28, hidden: true },
+      { width: 30, hidden: true },
     ],
     rows: [
       {
         height: 26,
-        cells: categoriesHeaders.map((h) => ({ value: h, style: STYLE.REF_HEADER })),
+        cells: categoriesHeaders.map((h, idx) =>
+          idx < 10
+            ? { value: h, style: STYLE.REF_HEADER }
+            : h
+            ? { value: h, forceString: true }
+            : null
+        ),
       },
-      ...categoryRefRows.map((r) => ({
-        height: 20,
-        cells: r.map((v) => ({ value: v, style: STYLE.REF_BODY, forceString: true })),
-      })),
+      ...categoriesBodyRows,
     ],
     freezeRows: 1,
   };
@@ -1056,30 +1345,35 @@ export async function generateBulkProductTemplateBuffer(
   };
 
   // =========================================================================
-  // 6. Allowed_Values Sheet
+  // 6. Allowed_Values Sheet (Core Dropdown Lists + Single-Select Common Attributes)
   // =========================================================================
-  const booleans = ["TRUE", "FALSE"];
-  const flags = ["Y", "N"];
   const maxAllowedLen = Math.max(
-    depth1Names.length,
+    depth1DropdownLabels.length,
     volumeUnits.length,
     leadTimeUnits.length,
     colorMaps.length,
     booleans.length,
-    flags.length
+    flags.length,
+    ...singleChoiceDropdownColumns.map((c) => c.values.length)
   );
+
+  const allowedHeaderCells: OoxmlCellSpec[] = [
+    { value: "카테고리 1Depth (Category 1Depth)", style: STYLE.REF_HEADER },
+    { value: "용량 단위 (Volume Unit)", style: STYLE.REF_HEADER },
+    { value: "리드타임 단위 (Lead Time Unit)", style: STYLE.REF_HEADER },
+    { value: "색상 계열 (Color Map)", style: STYLE.REF_HEADER },
+    { value: "판매 여부 (Selling Online/Offline)", style: STYLE.REF_HEADER },
+    { value: "상·하위 SKU 여부 (Parent/Child Flag)", style: STYLE.REF_HEADER },
+    ...singleChoiceDropdownColumns.map((c) => ({
+      value: c.header,
+      style: STYLE.REF_HEADER,
+    })),
+  ];
 
   const allowedRows: OoxmlRowSpec[] = [
     {
       height: 26,
-      cells: [
-        { value: "카테고리 1Depth (Category 1Depth)", style: STYLE.REF_HEADER },
-        { value: "용량 단위 (Volume Unit)", style: STYLE.REF_HEADER },
-        { value: "리드타임 단위 (Lead Time Unit)", style: STYLE.REF_HEADER },
-        { value: "색상 계열 (Color Map)", style: STYLE.REF_HEADER },
-        { value: "판매 여부 (Selling Online/Offline)", style: STYLE.REF_HEADER },
-        { value: "상·하위 SKU 여부 (Parent/Child Flag)", style: STYLE.REF_HEADER },
-      ],
+      cells: allowedHeaderCells,
     },
   ];
 
@@ -1087,12 +1381,17 @@ export async function generateBulkProductTemplateBuffer(
     allowedRows.push({
       height: 20,
       cells: [
-        { value: depth1Names[i] || "", style: STYLE.REF_BODY, forceString: true },
+        { value: depth1DropdownLabels[i] || "", style: STYLE.REF_BODY, forceString: true },
         { value: volumeUnits[i] || "", style: STYLE.REF_BODY, forceString: true },
         { value: leadTimeUnits[i] || "", style: STYLE.REF_BODY, forceString: true },
         { value: colorMaps[i] || "", style: STYLE.REF_BODY, forceString: true },
         { value: booleans[i] || "", style: STYLE.REF_BODY, forceString: true },
         { value: flags[i] || "", style: STYLE.REF_BODY, forceString: true },
+        ...singleChoiceDropdownColumns.map((c) => ({
+          value: c.values[i] || "",
+          style: STYLE.REF_BODY,
+          forceString: true,
+        })),
       ],
     });
   }
@@ -1100,15 +1399,98 @@ export async function generateBulkProductTemplateBuffer(
   const allowedSheetSpec: OoxmlSheetSpec = {
     name: "Allowed_Values",
     cols: [
-      { width: 26 },
+      { width: 28 },
       { width: 20 },
       { width: 24 },
       { width: 20 },
       { width: 28 },
       { width: 28 },
+      ...singleChoiceDropdownColumns.map(() => ({ width: 30 })),
     ],
     rows: allowedRows,
     freezeRows: 1,
+  };
+
+  // =========================================================================
+  // 7. Common_Attributes Sheet (Complete Reference for All 23 Common Attributes)
+  // =========================================================================
+  const inputTypeLabelMap: Record<string, string> = {
+    NUMBER_UNIT: "숫자 입력 · 개월 (Numeric Months)",
+    SINGLE_SELECT: "단일 선택 (Single Select)",
+    MULTI_SELECT: "복수 선택 · 세미콜론 ';' 구분 (Multi Select)",
+    YES_NO_NA: "예/아니요/해당없음 (Yes / No / N/A)",
+  };
+
+  const commonAttrSheetRows: OoxmlRowSpec[] = [
+    {
+      height: 28,
+      cells: [
+        { value: "속성 그룹 (Group)", style: STYLE.REF_HEADER },
+        { value: "Products 시트 컬럼명 (Excel Header)", style: STYLE.REF_HEADER },
+        { value: "EAV 속성 코드 (Attribute Code)", style: STYLE.REF_HEADER },
+        { value: "입력 방식 (Input Type)", style: STYLE.REF_HEADER },
+        { value: "N/A · 기타 허용", style: STYLE.REF_HEADER },
+        { value: "허용 입력값 목록 (Accepted Values — 국문/영문/코드 모두 인식)", style: STYLE.REF_HEADER },
+        { value: "입력 예시 (Example)", style: STYLE.REF_HEADER },
+      ],
+    },
+    ...commonAttrs.map((attr) => {
+      const visibleOpts = attr.options.filter((o) => !o.adminOnlyOption);
+      let acceptedSummary = "";
+      if (attr.inputType === "NUMBER_UNIT") {
+        acceptedSummary = attr.allowNa
+          ? "1 ~ 600 양수 숫자 (단위: 개월) 또는 '해당 없음 (NA)'"
+          : "1 ~ 600 양수 숫자 (단위: 개월)";
+      } else {
+        const formattedOpts = visibleOpts.map(
+          (o) => `${o.optionKo} / ${o.optionEn} [${o.optionCode}]`
+        );
+        if (
+          attr.allowNa &&
+          !visibleOpts.some((o) => o.optionCode.toUpperCase() === "NOT_APPLICABLE")
+        ) {
+          formattedOpts.push("해당 없음 / Not Applicable [NA]");
+        }
+        if (attr.allowOther) {
+          formattedOpts.push("직접 입력 시 '기타: 내용' 또는 'Other: text'");
+        }
+        acceptedSummary = formattedOpts.join("  |  ");
+      }
+
+      const naOtherFlags = [
+        attr.allowNa ? "N/A 가능" : "N/A 불가",
+        attr.allowOther ? "기타 직접입력 가능" : "고정 옵션만",
+      ].join(" · ");
+
+      return {
+        height: 26,
+        cells: [
+          { value: `${attr.attrGroupKo} (${attr.attrGroupEn})`, style: STYLE.REF_BODY, forceString: true },
+          { value: attr.header, style: STYLE.REF_BODY, forceString: true },
+          { value: attr.code, style: STYLE.REF_BODY, forceString: true },
+          { value: inputTypeLabelMap[attr.inputType] || attr.inputType, style: STYLE.REF_BODY, forceString: true },
+          { value: naOtherFlags, style: STYLE.REF_BODY, forceString: true },
+          { value: acceptedSummary, style: STYLE.REF_BODY, forceString: true },
+          { value: String(attr.exampleValue), style: STYLE.REF_BODY, forceString: true },
+        ],
+      };
+    }),
+  ];
+
+  const commonAttributesSheetSpec: OoxmlSheetSpec = {
+    name: "Common_Attributes",
+    cols: [
+      { width: 26 },
+      { width: 38 },
+      { width: 26 },
+      { width: 32 },
+      { width: 24 },
+      { width: 78 },
+      { width: 28 },
+    ],
+    rows: commonAttrSheetRows,
+    freezeRows: 1,
+    autoFilterRef: `A1:G${commonAttrSheetRows.length}`,
   };
 
   return buildOoxmlWorkbookBuffer([
@@ -1118,62 +1500,135 @@ export async function generateBulkProductTemplateBuffer(
     categoriesSheetSpec,
     countriesSheetSpec,
     allowedSheetSpec,
+    commonAttributesSheetSpec,
   ]);
 }
 
 export async function generateBulkImportErrorBuffer(
-  rejectedRows: BulkRejectedRowItem[]
+  rejectedRows: BulkRejectedRowItem[],
+  mediaFailures: BulkMediaFailureItem[] = []
 ): Promise<Buffer> {
-  const errorSheet: OoxmlSheetSpec = {
-    name: "Import_Errors",
-    cols: [
-      { width: 18 },
-      { width: 26, style: STYLE.TEXT_AT },
-      { width: 34, style: STYLE.TEXT_AT },
-      { width: 52, style: STYLE.TEXT_AT },
-      { width: 54, style: STYLE.TEXT_AT },
-    ],
-    rows: [
-      {
-        height: 28,
-        cells: [
-          { value: "원본 행 번호 (Excel Row #)", style: STYLE.ERROR_HEADER },
-          { value: "제조사 SKU (Manufacturer SKU)", style: STYLE.ERROR_HEADER },
-          { value: "제품명 (Product Name)", style: STYLE.ERROR_HEADER },
-          { value: "오류 사유 (Error Reason)", style: STYLE.ERROR_HEADER },
-          { value: "수정 방법 안내 (Corrective Guidance)", style: STYLE.ERROR_HEADER },
-        ],
-      },
-      ...rejectedRows.map((item) => ({
-        height: 22,
-        cells: [
-          { value: item.excelRowNumber, style: STYLE.REF_BODY },
-          {
-            value: sanitizeExcelOutputCell(item.manufactureSku),
-            style: STYLE.REF_BODY_TEXT_AT,
-            forceString: true,
-          },
-          {
-            value: sanitizeExcelOutputCell(item.productName),
-            style: STYLE.REF_BODY_TEXT_AT,
-            forceString: true,
-          },
-          {
-            value: sanitizeExcelOutputCell(item.errorReason),
-            style: STYLE.REF_BODY_TEXT_AT,
-            forceString: true,
-          },
-          {
-            value: sanitizeExcelOutputCell(item.correctiveGuidance),
-            style: STYLE.REF_BODY_TEXT_AT,
-            forceString: true,
-          },
-        ],
-      })),
-    ],
-    freezeRows: 1,
-    autoFilterRef: `A1:E${Math.max(rejectedRows.length + 1, 2)}`,
-  };
+  const sheets: OoxmlSheetSpec[] = [];
 
-  return buildOoxmlWorkbookBuffer([errorSheet]);
+  if (rejectedRows.length > 0 || mediaFailures.length === 0) {
+    sheets.push({
+      name: "Import_Errors",
+      cols: [
+        { width: 18 },
+        { width: 26, style: STYLE.TEXT_AT },
+        { width: 34, style: STYLE.TEXT_AT },
+        { width: 52, style: STYLE.TEXT_AT },
+        { width: 54, style: STYLE.TEXT_AT },
+      ],
+      rows: [
+        {
+          height: 28,
+          cells: [
+            { value: "원본 행 번호 (Excel Row #)", style: STYLE.ERROR_HEADER },
+            { value: "제조사 SKU (Manufacturer SKU)", style: STYLE.ERROR_HEADER },
+            { value: "제품명 (Product Name)", style: STYLE.ERROR_HEADER },
+            { value: "오류 사유 (Error Reason)", style: STYLE.ERROR_HEADER },
+            { value: "수정 방법 안내 (Corrective Guidance)", style: STYLE.ERROR_HEADER },
+          ],
+        },
+        ...rejectedRows.map((item) => ({
+          height: 22,
+          cells: [
+            { value: item.excelRowNumber, style: STYLE.REF_BODY },
+            {
+              value: sanitizeExcelOutputCell(item.manufactureSku),
+              style: STYLE.REF_BODY_TEXT_AT,
+              forceString: true,
+            },
+            {
+              value: sanitizeExcelOutputCell(item.productName),
+              style: STYLE.REF_BODY_TEXT_AT,
+              forceString: true,
+            },
+            {
+              value: sanitizeExcelOutputCell(item.errorReason),
+              style: STYLE.REF_BODY_TEXT_AT,
+              forceString: true,
+            },
+            {
+              value: sanitizeExcelOutputCell(item.correctiveGuidance),
+              style: STYLE.REF_BODY_TEXT_AT,
+              forceString: true,
+            },
+          ],
+        })),
+      ],
+      freezeRows: 1,
+      autoFilterRef: `A1:E${Math.max(rejectedRows.length + 1, 2)}`,
+    });
+  }
+
+  if (mediaFailures.length > 0) {
+    sheets.push({
+      name: "Media_Failures",
+      cols: [
+        { width: 16 },
+        { width: 26, style: STYLE.TEXT_AT },
+        { width: 32, style: STYLE.TEXT_AT },
+        { width: 30, style: STYLE.TEXT_AT },
+        { width: 46, style: STYLE.TEXT_AT },
+        { width: 48, style: STYLE.TEXT_AT },
+        { width: 50, style: STYLE.TEXT_AT },
+      ],
+      rows: [
+        {
+          height: 28,
+          cells: [
+            { value: "행 번호 (Row #)", style: STYLE.ERROR_HEADER },
+            { value: "제조사 SKU (SKU)", style: STYLE.ERROR_HEADER },
+            { value: "생성된 상품명 (Product)", style: STYLE.ERROR_HEADER },
+            { value: "미디어 컬럼 (Column)", style: STYLE.ERROR_HEADER },
+            { value: "요청 URL (Source URL)", style: STYLE.ERROR_HEADER },
+            { value: "실패 사유 (Failure Reason)", style: STYLE.ERROR_HEADER },
+            { value: "조치 방법 (Corrective Action)", style: STYLE.ERROR_HEADER },
+          ],
+        },
+        ...mediaFailures.map((mf) => ({
+          height: 22,
+          cells: [
+            { value: mf.excelRowNumber, style: STYLE.REF_BODY },
+            {
+              value: sanitizeExcelOutputCell(mf.manufactureSku),
+              style: STYLE.REF_BODY_TEXT_AT,
+              forceString: true,
+            },
+            {
+              value: sanitizeExcelOutputCell(mf.productNameEn),
+              style: STYLE.REF_BODY_TEXT_AT,
+              forceString: true,
+            },
+            {
+              value: sanitizeExcelOutputCell(mf.columnHeader),
+              style: STYLE.REF_BODY_TEXT_AT,
+              forceString: true,
+            },
+            {
+              value: sanitizeExcelOutputCell(mf.url),
+              style: STYLE.REF_BODY_TEXT_AT,
+              forceString: true,
+            },
+            {
+              value: sanitizeExcelOutputCell(mf.errorReason),
+              style: STYLE.REF_BODY_TEXT_AT,
+              forceString: true,
+            },
+            {
+              value: sanitizeExcelOutputCell(mf.correctiveGuidance),
+              style: STYLE.REF_BODY_TEXT_AT,
+              forceString: true,
+            },
+          ],
+        })),
+      ],
+      freezeRows: 1,
+      autoFilterRef: `A1:G${Math.max(mediaFailures.length + 1, 2)}`,
+    });
+  }
+
+  return buildOoxmlWorkbookBuffer(sheets);
 }

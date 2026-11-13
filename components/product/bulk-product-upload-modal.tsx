@@ -5,11 +5,17 @@ import { useRouter } from "next/navigation";
 import {
   downloadBulkProductTemplateAction,
   executeBulkProductImportAction,
+  generateCombinedBulkErrorReportAction,
+  ingestBulkProductMediaBatchAction,
   validateBulkProductExcelAction,
 } from "@/lib/product/bulk-import-actions";
 import {
+  BULK_PRODUCT_COLUMNS,
   BULK_IMPORT_MAX_ROWS,
+  COMMON_BULK_ATTRIBUTES,
   type BulkImportExecutionResult,
+  type BulkMediaFailureItem,
+  type BulkPendingMediaTask,
   type BulkPreviewResult,
   type BulkValidatedRow,
 } from "@/lib/product/bulk-import-types";
@@ -21,10 +27,20 @@ interface BulkProductUploadModalProps {
 }
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
-type PreviewFilter = "ALL" | "VALID" | "WARNING" | "INVALID";
+type PreviewFilter =
+  | "ALL"
+  | "VALID"
+  | "WARNING"
+  | "INVALID"
+  | "CAT_ERR"
+  | "ATTR_ERR"
+  | "MEDIA_ERR";
+
+type ResultDetailTab = "PRODUCT_ERRORS" | "MEDIA_FAILURES";
 
 const PREVIEW_PAGE_SIZE = 5;
 const ERROR_RESULT_PAGE_SIZE = 4;
+const MEDIA_BATCH_PRODUCT_CHUNK = 5;
 
 const STEP_DEFINITIONS: { step: WizardStep; label: string }[] = [
   { step: 1, label: "1. 양식 받기" },
@@ -76,11 +92,28 @@ export function BulkProductUploadModal({
   const [submissionKey, setSubmissionKey] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [importResult, setImportResult] = useState<BulkImportExecutionResult | null>(null);
+
+  // Phase 2 chunked media ingestion state
+  const [isIngestingMedia, setIsIngestingMedia] = useState(false);
+  const [mediaProgress, setMediaProgress] = useState<{ done: number; total: number }>({
+    done: 0,
+    total: 0,
+  });
+  const [imagesImportedCount, setImagesImportedCount] = useState(0);
+  const [duplicateImagesSkippedCount, setDuplicateImagesSkippedCount] = useState(0);
+  const [mediaFailures, setMediaFailures] = useState<BulkMediaFailureItem[]>([]);
+  const [retryMediaTasks, setRetryMediaTasks] = useState<BulkPendingMediaTask[]>([]);
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
+
+  const [resultTab, setResultTab] = useState<ResultDetailTab>("PRODUCT_ERRORS");
   const [errorPage, setErrorPage] = useState<number>(1);
+  const [mediaFailurePage, setMediaFailurePage] = useState<number>(1);
 
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const isBusy = isValidating || isSubmitting || isIngestingMedia;
 
   const resetModalState = () => {
     setStep(1);
@@ -95,12 +128,21 @@ export function BulkProductUploadModal({
     setSubmissionKey("");
     setIsSubmitting(false);
     setImportResult(null);
+    setIsIngestingMedia(false);
+    setMediaProgress({ done: 0, total: 0 });
+    setImagesImportedCount(0);
+    setDuplicateImagesSkippedCount(0);
+    setMediaFailures([]);
+    setRetryMediaTasks([]);
+    setIsDownloadingReport(false);
+    setResultTab("PRODUCT_ERRORS");
     setErrorPage(1);
+    setMediaFailurePage(1);
     setErrorBanner(null);
   };
 
   const handleClose = () => {
-    if (isValidating || isSubmitting) return;
+    if (isBusy) return;
     if (importResult && importResult.createdCount > 0) {
       router.refresh();
     }
@@ -131,15 +173,17 @@ export function BulkProductUploadModal({
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".xlsx")) {
       setSelectedFile(null);
-      setErrorBanner("지원하지 않는 파일 형식입니다. .xlsx 형식의 Excel 파일만 업로드할 수 있습니다.");
+      setErrorBanner(
+        "지원하지 않는 파일 형식입니다. .xlsx 형식의 Excel 파일만 업로드할 수 있습니다."
+      );
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
       setSelectedFile(null);
       setErrorBanner("파일 크기가 허용 한도(10 MB)를 초과했습니다.");
-      return;
+    } else {
+      setSelectedFile(file);
     }
-    setSelectedFile(file);
   };
 
   const handleValidateFile = async () => {
@@ -173,8 +217,90 @@ export function BulkProductUploadModal({
     }
   };
 
+  const runChunkedMediaIngestion = async (
+    tasksToRun: BulkPendingMediaTask[],
+    initialVideoFailures: BulkMediaFailureItem[],
+    isRetryRun: boolean
+  ) => {
+    if (tasksToRun.length === 0) {
+      if (!isRetryRun && initialVideoFailures.length > 0) {
+        setResultTab("MEDIA_FAILURES");
+      }
+      return;
+    }
+
+    setIsIngestingMedia(true);
+    setMediaProgress({ done: 0, total: tasksToRun.length });
+
+    let newlyImportedImages = 0;
+    let newlySkippedDuplicates = 0;
+    const collectedImageFailures: BulkMediaFailureItem[] = [];
+    const collectedRetryTasks: BulkPendingMediaTask[] = [];
+
+    try {
+      for (let i = 0; i < tasksToRun.length; i += MEDIA_BATCH_PRODUCT_CHUNK) {
+        const chunk = tasksToRun.slice(i, i + MEDIA_BATCH_PRODUCT_CHUNK);
+        const batchRes = await ingestBulkProductMediaBatchAction(chunk);
+        if (batchRes.success) {
+          newlyImportedImages += batchRes.imagesImportedCount;
+          newlySkippedDuplicates += batchRes.duplicatesSkippedCount;
+          collectedImageFailures.push(...batchRes.failures);
+          collectedRetryTasks.push(...batchRes.retryTasks);
+        } else {
+          // Preserve retryability if a network/server error occurred mid-batch
+          for (const task of chunk) {
+            for (const u of task.imageUrls) {
+              collectedImageFailures.push({
+                excelRowNumber: task.excelRowNumber,
+                productId: task.productId,
+                manufactureSku: task.manufactureSku,
+                productNameEn: task.productNameEn,
+                columnHeader: u.columnHeader,
+                slotNumber: u.slotNumber,
+                url: u.url,
+                errorReason: batchRes.error || "배치 미디어 수집 요청이 실패했습니다.",
+                correctiveGuidance: "'실패 이미지 재시도' 버튼을 눌러 다시 시도해 주세요.",
+              });
+            }
+            collectedRetryTasks.push(task);
+          }
+        }
+        setMediaProgress({
+          done: Math.min(i + chunk.length, tasksToRun.length),
+          total: tasksToRun.length,
+        });
+        setImagesImportedCount((prev) =>
+          isRetryRun ? prev + batchRes.imagesImportedCount : newlyImportedImages
+        );
+        setDuplicateImagesSkippedCount((prev) =>
+          isRetryRun ? prev + batchRes.duplicatesSkippedCount : newlySkippedDuplicates
+        );
+      }
+
+      const combinedFailures = [...initialVideoFailures, ...collectedImageFailures].sort(
+        (a, b) => a.excelRowNumber - b.excelRowNumber || a.slotNumber - b.slotNumber
+      );
+      setMediaFailures(combinedFailures);
+      setRetryMediaTasks(collectedRetryTasks);
+      setMediaFailurePage(1);
+
+      if (
+        combinedFailures.length > 0 &&
+        (isRetryRun || (importResult?.rejectedRows.length ?? 0) === 0)
+      ) {
+        setResultTab("MEDIA_FAILURES");
+      }
+
+      if (newlyImportedImages > 0) {
+        router.refresh();
+      }
+    } finally {
+      setIsIngestingMedia(false);
+    }
+  };
+
   const handleConfirmImport = async () => {
-    if (!selectedFile || !previewResult?.summary || isSubmitting) return;
+    if (!selectedFile || !previewResult?.summary || isBusy) return;
     if (previewResult.summary.importableRows === 0) return;
 
     setErrorBanner(null);
@@ -189,26 +315,94 @@ export function BulkProductUploadModal({
         setErrorBanner(res.error || "상품 대량 등록 처리에 실패했습니다.");
         return;
       }
+
+      const initialVideoFailures = res.mediaFailures ?? [];
       setImportResult(res);
+      setImagesImportedCount(0);
+      setDuplicateImagesSkippedCount(0);
+      setMediaFailures(initialVideoFailures);
+      setRetryMediaTasks(res.pendingMediaTasks ?? []);
       setErrorPage(1);
+      setMediaFailurePage(1);
+      setResultTab(
+        res.rejectedRows.length > 0
+          ? "PRODUCT_ERRORS"
+          : initialVideoFailures.length > 0
+          ? "MEDIA_FAILURES"
+          : "PRODUCT_ERRORS"
+      );
       setStep(5);
+      setIsSubmitting(false);
+
       if (res.createdCount > 0) {
         router.refresh();
         onImportSuccess?.(res.createdCount);
       }
+
+      if ((res.pendingMediaTasks?.length ?? 0) > 0) {
+        await runChunkedMediaIngestion(
+          res.pendingMediaTasks,
+          initialVideoFailures,
+          false
+        );
+      }
     } catch (err: any) {
       setErrorBanner(err?.message || "상품 등록 중 예기치 않은 오류가 발생했습니다.");
-    } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleRetryFailedMedia = async () => {
+    if (isBusy || retryMediaTasks.length === 0) return;
+    setErrorBanner(null);
+    const preservedVideoFailures = mediaFailures.filter((f) => f.slotNumber === 11);
+    await runChunkedMediaIngestion(retryMediaTasks, preservedVideoFailures, true);
+  };
+
+  const handleDownloadCombinedReport = async () => {
+    if (!importResult || isDownloadingReport) return;
+    setIsDownloadingReport(true);
+    try {
+      // If no Phase-2 media failures changed since Phase-1, reuse prebuilt base64 directly
+      if (mediaFailures.length === 0 && importResult.errorReportBase64) {
+        triggerBase64XlsxDownload(
+          importResult.errorReportBase64,
+          importResult.errorReportFilename || "KSN_Bulk_Import_Report.xlsx"
+        );
+        return;
+      }
+
+      const reportRes = await generateCombinedBulkErrorReportAction({
+        rejectedRows: importResult.rejectedRows,
+        mediaFailures,
+      });
+      if (!reportRes.success || !reportRes.base64) {
+        setErrorBanner(reportRes.error || "오류·미디어 리포트를 생성하지 못했습니다.");
+        return;
+      }
+      triggerBase64XlsxDownload(
+        reportRes.base64,
+        reportRes.fileName || "KSN_Bulk_Import_Report.xlsx"
+      );
+    } catch (err: any) {
+      setErrorBanner(err?.message || "리포트 다운로드 중 오류가 발생했습니다.");
+    } finally {
+      setIsDownloadingReport(false);
     }
   };
 
   const filteredPreviewRows: BulkValidatedRow[] = (previewResult?.rows ?? []).filter((r) => {
     if (previewFilter === "ALL") return true;
+    if (previewFilter === "CAT_ERR") return r.hasCategoryError;
+    if (previewFilter === "ATTR_ERR") return r.hasCommonAttributeError;
+    if (previewFilter === "MEDIA_ERR") return r.hasMediaUrlError;
     return r.status === previewFilter;
   });
 
-  const totalPreviewPages = Math.max(1, Math.ceil(filteredPreviewRows.length / PREVIEW_PAGE_SIZE));
+  const totalPreviewPages = Math.max(
+    1,
+    Math.ceil(filteredPreviewRows.length / PREVIEW_PAGE_SIZE)
+  );
   const safePreviewPage = Math.min(previewPage, totalPreviewPages);
   const pagedPreviewRows = filteredPreviewRows.slice(
     (safePreviewPage - 1) * PREVIEW_PAGE_SIZE,
@@ -216,11 +410,24 @@ export function BulkProductUploadModal({
   );
 
   const rejectedList = importResult?.rejectedRows ?? [];
-  const totalErrorPages = Math.max(1, Math.ceil(rejectedList.length / ERROR_RESULT_PAGE_SIZE));
+  const totalErrorPages = Math.max(
+    1,
+    Math.ceil(rejectedList.length / ERROR_RESULT_PAGE_SIZE)
+  );
   const safeErrorPage = Math.min(errorPage, totalErrorPages);
   const pagedErrorRows = rejectedList.slice(
     (safeErrorPage - 1) * ERROR_RESULT_PAGE_SIZE,
     safeErrorPage * ERROR_RESULT_PAGE_SIZE
+  );
+
+  const totalMediaFailPages = Math.max(
+    1,
+    Math.ceil(mediaFailures.length / ERROR_RESULT_PAGE_SIZE)
+  );
+  const safeMediaFailPage = Math.min(mediaFailurePage, totalMediaFailPages);
+  const pagedMediaFailures = mediaFailures.slice(
+    (safeMediaFailPage - 1) * ERROR_RESULT_PAGE_SIZE,
+    safeMediaFailPage * ERROR_RESULT_PAGE_SIZE
   );
 
   return (
@@ -245,13 +452,13 @@ export function BulkProductUploadModal({
               상품 Excel 대량 등록
             </h2>
             <span className="rounded bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 shrink-0">
-              임시 등록 (Draft) · 최대 {BULK_IMPORT_MAX_ROWS}건
+              임시 등록 (Draft) · 총 {BULK_PRODUCT_COLUMNS.length}열 · 최대 {BULK_IMPORT_MAX_ROWS}건
             </span>
           </div>
           <button
             type="button"
             onClick={handleClose}
-            disabled={isValidating || isSubmitting}
+            disabled={isBusy}
             aria-label="대량 등록 창 닫기"
             className="rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 disabled:opacity-40 cursor-pointer shrink-0"
           >
@@ -284,7 +491,7 @@ export function BulkProductUploadModal({
           </div>
         </div>
 
-        {/* Body Content (Consistent height across steps, responsive scroll on small viewports) */}
+        {/* Body Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4 min-h-[340px] flex flex-col justify-between gap-3">
           <div className="space-y-3">
             {errorBanner && (
@@ -309,7 +516,7 @@ export function BulkProductUploadModal({
                       공식 Excel 업로드 양식 다운로드 (.xlsx)
                     </h3>
                     <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                      귀사의 활성 브랜드, 3단계 카테고리 코드, 국가, 허용 입력값 및 예시 행이 포함되어 있습니다.
+                      활성 브랜드, 1~3단계 연동 카테고리, 미디어 URL(이미지 10·영상 1), 공통 속성({COMMON_BULK_ATTRIBUTES.length}종) 및 기준 시트가 포함됩니다.
                     </p>
                   </div>
                   <button
@@ -337,18 +544,18 @@ export function BulkProductUploadModal({
                       <li>• <strong>브랜드 (Brand) *</strong> — 귀사에 등록된 활성 브랜드명</li>
                       <li>• <strong>제조사 SKU (Manufacturer SKU) *</strong> — 고유 상품 코드</li>
                       <li>• <strong>영문 제품명 (Product Name EN) *</strong> — 공식 영문 상품명</li>
-                      <li>• <strong>카테고리 (1Depth) *</strong> — 대분류 카테고리 (예: Skincare)</li>
+                      <li>• <strong>카테고리 (1Depth) *</strong> — 대분류 선택 시 2·3Depth 자동 연동</li>
                     </ul>
                   </div>
 
                   <div className="rounded-lg border border-zinc-200 p-3.5 dark:border-zinc-800 space-y-1.5">
                     <div className="font-bold text-zinc-900 dark:text-white">
-                      작성 안내 및 임시 등록 (Draft) 정책
+                      선택 입력 항목 ({BULK_PRODUCT_COLUMNS.length - 4}개) 및 등록 정책
                     </div>
                     <ul className="space-y-1 text-zinc-600 dark:text-zinc-400">
-                      <li>• 세부 카테고리, 바코드(UPC/EAN), 가격, 물류 규격 등 48개 선택 항목 지원</li>
-                      <li>• 제조사 SKU 및 바코드의 선행 <code className="font-mono">0</code> 유지를 위해 텍스트 서식 기본 적용</li>
-                      <li>• 등록 상품은 이미지·속성 보완 전까지 <strong>임시 등록 (Draft)</strong> 상태로 보호됨</li>
+                      <li>• <strong>미디어 URL</strong>: 직접 다운로드 HTTPS 이미지(최대 10장) 및 소개 영상</li>
+                      <li>• <strong>공통 속성</strong>: 유통기한·제형·피부타입 등 (복수 선택은 <code className="font-mono">;</code> 구분)</li>
+                      <li>• 모든 상품은 <strong>임시 등록 (Draft · 리테일러 비노출)</strong> 상태로 안전 생성</li>
                     </ul>
                   </div>
                 </div>
@@ -363,7 +570,7 @@ export function BulkProductUploadModal({
                     작성 완료된 Excel 파일 업로드 (.xlsx)
                   </h3>
                   <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                    최대 {BULK_IMPORT_MAX_ROWS}개 행 · 10 MB 이하 · 서버 사전 검증 적용
+                    최대 {BULK_IMPORT_MAX_ROWS}개 행 · 10 MB 이하 · 기존 52열 및 신규 86열 양식 호환
                   </span>
                 </div>
 
@@ -421,27 +628,98 @@ export function BulkProductUploadModal({
 
             {/* STEP 3: 데이터 검증 및 미리보기 */}
             {step === 3 && previewResult?.summary && (
-              <div className="space-y-2.5">
-                {/* Compact Header + Filter Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2 min-w-0 text-xs">
-                    <span className="font-bold text-zinc-900 dark:text-white truncate max-w-[240px]">
+              <div className="space-y-2">
+                {/* Concise Diagnostic Summary Strip */}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-1.5 text-[11px] dark:border-zinc-800 dark:bg-zinc-950/40">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    <span className="font-bold text-zinc-900 dark:text-white truncate max-w-[200px]">
                       {previewResult.fileName}
                     </span>
                     {previewResult.summary.exampleRowsSkipped > 0 && (
-                      <span className="rounded bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                        예시 행 자동 제외됨
+                      <span className="rounded bg-zinc-200/70 px-1.5 py-0.5 text-[10px] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        예시 행 제외
                       </span>
                     )}
+                    <span className="text-zinc-500 dark:text-zinc-400">
+                      이미지 URL <strong>{previewResult.summary.totalImageUrlsCount}</strong>건 · 영상{" "}
+                      <strong>{previewResult.summary.rowsWithVideoCount}</strong>건 · 공통속성{" "}
+                      <strong>{previewResult.summary.rowsWithCommonAttrsCount}</strong>행
+                    </span>
                   </div>
 
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewFilter(
+                          previewFilter === "CAT_ERR" ? "ALL" : "CAT_ERR"
+                        );
+                        setPreviewPage(1);
+                      }}
+                      className={`rounded px-1.5 py-0.5 font-semibold cursor-pointer ${
+                        previewFilter === "CAT_ERR"
+                          ? "bg-rose-600 text-white"
+                          : previewResult.summary.categoryErrorRows > 0
+                          ? "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
+                          : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                      }`}
+                    >
+                      카테고리 오류 {previewResult.summary.categoryErrorRows}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewFilter(
+                          previewFilter === "ATTR_ERR" ? "ALL" : "ATTR_ERR"
+                        );
+                        setPreviewPage(1);
+                      }}
+                      className={`rounded px-1.5 py-0.5 font-semibold cursor-pointer ${
+                        previewFilter === "ATTR_ERR"
+                          ? "bg-rose-600 text-white"
+                          : previewResult.summary.commonAttributeErrorRows > 0
+                          ? "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
+                          : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                      }`}
+                    >
+                      공통 속성 오류 {previewResult.summary.commonAttributeErrorRows}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewFilter(
+                          previewFilter === "MEDIA_ERR" ? "ALL" : "MEDIA_ERR"
+                        );
+                        setPreviewPage(1);
+                      }}
+                      className={`rounded px-1.5 py-0.5 font-semibold cursor-pointer ${
+                        previewFilter === "MEDIA_ERR"
+                          ? "bg-rose-600 text-white"
+                          : previewResult.summary.mediaUrlErrorRows > 0
+                          ? "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
+                          : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                      }`}
+                    >
+                      이미지 URL 오류 {previewResult.summary.mediaUrlErrorRows}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Primary Status Filter Tabs */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-1">
                     {(
                       [
                         { id: "ALL", label: `전체 (${previewResult.summary.totalRows})` },
                         { id: "VALID", label: `정상 (${previewResult.summary.validRows})` },
-                        { id: "WARNING", label: `확인 필요 (${previewResult.summary.warningRows})` },
-                        { id: "INVALID", label: `오류 (${previewResult.summary.invalidRows})` },
+                        {
+                          id: "WARNING",
+                          label: `확인 필요 (${previewResult.summary.warningRows})`,
+                        },
+                        {
+                          id: "INVALID",
+                          label: `오류 (${previewResult.summary.invalidRows})`,
+                        },
                       ] as { id: PreviewFilter; label: string }[]
                     ).map((tab) => (
                       <button
@@ -461,19 +739,26 @@ export function BulkProductUploadModal({
                       </button>
                     ))}
                   </div>
+                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    등록 가능 <strong>{previewResult.summary.importableRows}</strong>건 · 제외{" "}
+                    <strong className="text-rose-600 dark:text-rose-400">
+                      {previewResult.summary.invalidRows}
+                    </strong>
+                    건
+                  </span>
                 </div>
 
-                {/* Bounded Paginated Table (Zero Horizontal Overflow, Zero Nested Desktop Scrollbar) */}
+                {/* Bounded Paginated Table (Zero Horizontal Overflow) */}
                 <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
                   <table className="w-full table-fixed text-left text-xs border-collapse">
                     <thead className="bg-zinc-100 dark:bg-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-700">
                       <tr>
-                        <th className="px-2.5 py-2 w-12">행</th>
-                        <th className="px-2 py-2 w-20">상태</th>
-                        <th className="px-2.5 py-2 w-36">브랜드 / SKU</th>
-                        <th className="px-2.5 py-2 w-44">영문 제품명</th>
-                        <th className="px-2.5 py-2 w-28 hidden sm:table-cell">카테고리</th>
-                        <th className="px-2.5 py-2">검증 결과 및 사유</th>
+                        <th className="px-2 py-1.5 w-11">행</th>
+                        <th className="px-2 py-1.5 w-18">상태</th>
+                        <th className="px-2.5 py-1.5 w-34">브랜드 / SKU</th>
+                        <th className="px-2.5 py-1.5 w-40">영문 제품명</th>
+                        <th className="px-2 py-1.5 w-32 hidden sm:table-cell">카테고리 / 부가</th>
+                        <th className="px-2.5 py-1.5">검증 결과 및 사유</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -481,19 +766,30 @@ export function BulkProductUploadModal({
                         <tr>
                           <td
                             colSpan={6}
-                            className="px-4 py-8 text-center text-xs text-zinc-500 dark:text-zinc-400"
+                            className="px-4 py-7 text-center text-xs text-zinc-500 dark:text-zinc-400"
                           >
                             선택한 필터에 해당하는 행이 없습니다.
                           </td>
                         </tr>
                       ) : (
                         pagedPreviewRows.map((row) => {
+                          const extraParts: string[] = [];
+                          if (row.imageUrlCount > 0) extraParts.push(`이미지 ${row.imageUrlCount}`);
+                          if (row.hasVideoUrl) extraParts.push("영상 1");
+                          if (row.commonAttributeCount > 0)
+                            extraParts.push(`속성 ${row.commonAttributeCount}`);
+
+                          const validSummary =
+                            extraParts.length > 0
+                              ? `등록 가능 (${extraParts.join(" · ")})`
+                              : "임시 등록 (Draft) 가능";
+
                           const detailText =
                             row.status === "INVALID"
                               ? row.errors.join(" · ")
                               : row.status === "WARNING"
                               ? row.warnings.join(" · ")
-                              : "임시 등록 (Draft) 가능";
+                              : validSummary;
 
                           return (
                             <tr
@@ -506,10 +802,10 @@ export function BulkProductUploadModal({
                                   : ""
                               }
                             >
-                              <td className="px-2.5 py-2 font-mono font-bold text-zinc-600 dark:text-zinc-400 align-top">
+                              <td className="px-2 py-1.5 font-mono font-bold text-zinc-600 dark:text-zinc-400 align-top">
                                 #{row.excelRowNumber}
                               </td>
-                              <td className="px-2 py-2 align-top">
+                              <td className="px-2 py-1.5 align-top">
                                 {row.status === "VALID" && (
                                   <span className="inline-flex rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                                     정상
@@ -527,33 +823,44 @@ export function BulkProductUploadModal({
                                 )}
                               </td>
                               <td
-                                className="px-2.5 py-2 align-top"
+                                className="px-2.5 py-1.5 align-top"
                                 title={`${row.rawBrand || "(미입력)"} / ${row.rawManufactureSku || "(미입력)"}`}
                               >
                                 <div className="truncate font-semibold text-zinc-800 dark:text-zinc-200">
-                                  {row.rawBrand || <span className="text-rose-500">(브랜드 누락)</span>}
+                                  {row.rawBrand || (
+                                    <span className="text-rose-500">(브랜드 누락)</span>
+                                  )}
                                 </div>
                                 <div className="truncate font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
-                                  {row.rawManufactureSku || <span className="text-rose-500">(SKU 누락)</span>}
+                                  {row.rawManufactureSku || (
+                                    <span className="text-rose-500">(SKU 누락)</span>
+                                  )}
                                 </div>
                               </td>
                               <td
-                                className="px-2.5 py-2 align-top text-zinc-800 dark:text-zinc-200"
+                                className="px-2.5 py-1.5 align-top text-zinc-800 dark:text-zinc-200"
                                 title={row.rawProductNameEn || ""}
                               >
                                 <div className="line-clamp-2 break-words">
-                                  {row.rawProductNameEn || <span className="text-rose-500">(제품명 누락)</span>}
+                                  {row.rawProductNameEn || (
+                                    <span className="text-rose-500">(제품명 누락)</span>
+                                  )}
                                 </div>
                               </td>
                               <td
-                                className="px-2.5 py-2 align-top text-zinc-600 dark:text-zinc-400 hidden sm:table-cell"
+                                className="px-2 py-1.5 align-top text-zinc-600 dark:text-zinc-400 hidden sm:table-cell"
                                 title={row.normalizedCategoryPath || row.rawCategory1Depth || ""}
                               >
-                                <div className="line-clamp-2 break-words">
+                                <div className="truncate font-medium">
                                   {row.normalizedCategoryPath || row.rawCategory1Depth || "-"}
                                 </div>
+                                {extraParts.length > 0 && (
+                                  <div className="truncate text-[10px] text-zinc-500">
+                                    {extraParts.join(" · ")}
+                                  </div>
+                                )}
                               </td>
-                              <td className="px-2.5 py-2 align-top" title={detailText}>
+                              <td className="px-2.5 py-1.5 align-top" title={detailText}>
                                 {row.status === "INVALID" ? (
                                   <div className="line-clamp-2 break-words text-rose-700 dark:text-rose-400">
                                     {detailText}
@@ -580,8 +887,13 @@ export function BulkProductUploadModal({
                 {totalPreviewPages > 1 && (
                   <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 pt-0.5">
                     <span>
-                      총 {filteredPreviewRows.length}건 중 {(safePreviewPage - 1) * PREVIEW_PAGE_SIZE + 1}–
-                      {Math.min(safePreviewPage * PREVIEW_PAGE_SIZE, filteredPreviewRows.length)}건 표시
+                      총 {filteredPreviewRows.length}건 중{" "}
+                      {(safePreviewPage - 1) * PREVIEW_PAGE_SIZE + 1}–
+                      {Math.min(
+                        safePreviewPage * PREVIEW_PAGE_SIZE,
+                        filteredPreviewRows.length
+                      )}
+                      건 표시
                     </span>
                     <div className="flex items-center gap-1.5">
                       <button
@@ -598,7 +910,9 @@ export function BulkProductUploadModal({
                       <button
                         type="button"
                         disabled={safePreviewPage >= totalPreviewPages}
-                        onClick={() => setPreviewPage((p) => Math.min(totalPreviewPages, p + 1))}
+                        onClick={() =>
+                          setPreviewPage((p) => Math.min(totalPreviewPages, p + 1))
+                        }
                         className="rounded border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
                       >
                         다음
@@ -617,194 +931,411 @@ export function BulkProductUploadModal({
                     임시 등록 (Draft) 실행 전 최종 확인
                   </h3>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    검증을 통과한 상품만 등록되며, 오류가 있는 행은 제외 후 결과 화면에서 Excel로 다운로드할 수 있습니다.
+                    검증을 통과한 상품만 생성되며, 외부 이미지 다운로드는 상품 생성 직후 분리 실행되어 일부 URL 실패 시에도 상품 데이터는 안전하게 보존됩니다.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="rounded-lg bg-zinc-50/70 p-3.5 border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                  <div className="rounded-lg bg-zinc-50/70 p-3 border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">
                     <div className="text-zinc-500 dark:text-zinc-400">등록 예정 상품</div>
-                    <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                    <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
                       {previewResult.summary.importableRows}건
                     </div>
                     <div className="text-[11px] text-zinc-500 mt-0.5">
-                      정상 {previewResult.summary.validRows}건 · 확인 필요 {previewResult.summary.warningRows}건
+                      정상 {previewResult.summary.validRows} · 확인필요{" "}
+                      {previewResult.summary.warningRows}
                     </div>
                   </div>
 
-                  <div className="rounded-lg bg-zinc-50/70 p-3.5 border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">
-                    <div className="text-zinc-500 dark:text-zinc-400">제외되는 오류 행</div>
-                    <div className="text-xl font-extrabold text-rose-600 dark:text-rose-400 mt-0.5">
+                  <div className="rounded-lg bg-zinc-50/70 p-3 border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">
+                    <div className="text-zinc-500 dark:text-zinc-400">제외 오류 행</div>
+                    <div className="text-lg font-extrabold text-rose-600 dark:text-rose-400 mt-0.5">
                       {previewResult.summary.invalidRows}건
                     </div>
                     <div className="text-[11px] text-zinc-500 mt-0.5">
-                      5단계에서 오류 내역 Excel 제공
+                      카테고리 {previewResult.summary.categoryErrorRows} · 속성{" "}
+                      {previewResult.summary.commonAttributeErrorRows} · 미디어{" "}
+                      {previewResult.summary.mediaUrlErrorRows}
                     </div>
                   </div>
 
-                  <div className="rounded-lg bg-zinc-50/70 p-3.5 border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">
-                    <div className="text-zinc-500 dark:text-zinc-400">초기 등록 상태</div>
+                  <div className="rounded-lg bg-zinc-50/70 p-3 border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">
+                    <div className="text-zinc-500 dark:text-zinc-400">미디어 / 공통 속성</div>
                     <div className="text-sm font-extrabold text-zinc-900 dark:text-white mt-1">
-                      임시 등록 (Draft · 보완 대기)
+                      이미지 {previewResult.summary.totalImageUrlsCount} · 영상{" "}
+                      {previewResult.summary.rowsWithVideoCount}
                     </div>
                     <div className="text-[11px] text-zinc-500 mt-0.5">
-                      미검토 · 리테일러 허브 비노출
+                      공통 속성 입력 {previewResult.summary.rowsWithCommonAttrsCount}개 행
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-zinc-50/70 p-3 border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">
+                    <div className="text-zinc-500 dark:text-zinc-400">초기 등록 상태</div>
+                    <div className="text-sm font-extrabold text-zinc-900 dark:text-white mt-1">
+                      임시 등록 (Draft)
+                    </div>
+                    <div className="text-[11px] text-zinc-500 mt-0.5">
+                      미검토 · 리테일러 비노출
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-zinc-200 bg-zinc-50/40 px-4 py-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-400 space-y-1">
-                  <div>• 등록 시점에 서버에서 브랜드 소유권 및 SKU·바코드 중복 여부를 다시 한 번 검증합니다.</div>
-                  <div>• 이미 등록된 제조사 SKU는 절대 덮어쓰거나 수정하지 않습니다.</div>
-                  <div>• 등록 완료 후 상품 목록에서 개별 상품을 클릭하여 이미지 업로드 및 상세 속성을 보완할 수 있습니다.</div>
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50/40 px-4 py-2.5 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-400 space-y-1">
+                  <div>
+                    • 이미 등록된 제조사 SKU는 덮어쓰지 않으며, 공통 속성은 지정된 상품의 EAV 레코드에만 저장됩니다.
+                  </div>
+                  <div>
+                    • 규제 관련 상태(FDA·MoCRA·OTC·Drug Facts)는 브랜드 자체 기재 정보로 저장되며 공식 인증 승인으로 자동 전환되지 않습니다.
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* STEP 5: 등록 결과 */}
+            {/* STEP 5: 등록 결과 (상품 생성 + 분리된 미디어 수집 결과) */}
             {step === 5 && importResult && (
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                      상품 Excel 대량 등록 결과
+                      상품 Excel 대량 등록 및 미디어 수집 결과
                     </h3>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                       {importResult.createdCount > 0
-                        ? `${importResult.createdCount}개의 상품이 임시 등록 (Draft) 상태로 상품 목록에 추가되었습니다.`
+                        ? `${importResult.createdCount}개 상품이 Draft로 생성되었습니다 (공통 속성 ${importResult.commonAttributesSavedCount}건 저장).`
                         : "이번 업로드에서 신규 등록된 상품이 없습니다."}
                     </p>
                   </div>
 
-                  {importResult.rejectedCount > 0 && importResult.errorReportBase64 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        triggerBase64XlsxDownload(
-                          importResult.errorReportBase64!,
-                          importResult.errorReportFilename || "KSN_Bulk_Import_Errors.xlsx"
-                        )
-                      }
-                      className="shrink-0 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-950/70 cursor-pointer"
-                    >
-                      ⬇ 오류 내역 Excel 다운로드 ({importResult.rejectedCount}건)
-                    </button>
-                  )}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {!isIngestingMedia && retryMediaTasks.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleRetryFailedMedia}
+                        className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 cursor-pointer"
+                      >
+                        🔄 실패 이미지 재시도 (
+                        {retryMediaTasks.reduce((sum, t) => sum + t.imageUrls.length, 0)}건)
+                      </button>
+                    )}
+
+                    {!isIngestingMedia &&
+                      (importResult.rejectedCount > 0 || mediaFailures.length > 0) && (
+                        <button
+                          type="button"
+                          disabled={isDownloadingReport}
+                          onClick={handleDownloadCombinedReport}
+                          className="shrink-0 rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 cursor-pointer"
+                        >
+                          {isDownloadingReport
+                            ? "리포트 생성 중..."
+                            : `⬇ 오류·미디어 내역 Excel (${
+                                importResult.rejectedCount + mediaFailures.length
+                              }건)`}
+                        </button>
+                      )}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                  <div className="rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800">
-                    <div className="text-[11px] text-zinc-500">업로드 건수</div>
-                    <div className="text-base font-extrabold text-zinc-900 dark:text-white mt-0.5">
+                {/* Live Chunked Media Ingestion Progress Banner */}
+                {isIngestingMedia && (
+                  <div className="rounded-lg border border-sky-200 bg-sky-50/80 px-3.5 py-2 text-xs text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-300 flex items-center justify-between gap-3">
+                    <span className="font-semibold">
+                      외부 HTTPS 상품 이미지 수집 및 검증 중... ({mediaProgress.done} /{" "}
+                      {mediaProgress.total}개 상품 처리됨)
+                    </span>
+                    <span className="font-mono text-[11px]">
+                      저장 완료 {imagesImportedCount}장
+                    </span>
+                  </div>
+                )}
+
+                {/* Separated Summary Cards: Product Creation vs Media Ingestion */}
+                <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
+                  <div className="rounded-lg border border-zinc-200 p-2 dark:border-zinc-800">
+                    <div className="text-[11px] text-zinc-500">업로드 행</div>
+                    <div className="text-sm font-extrabold text-zinc-900 dark:text-white mt-0.5">
                       {importResult.totalUploadedRows}건
                     </div>
                   </div>
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-                    <div className="text-[11px] text-emerald-700 dark:text-emerald-400">정상 등록</div>
-                    <div className="text-base font-extrabold text-emerald-700 dark:text-emerald-400 mt-0.5">
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                    <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                      상품 생성
+                    </div>
+                    <div className="text-sm font-extrabold text-emerald-700 dark:text-emerald-400 mt-0.5">
                       {importResult.createdCount}건
                     </div>
                   </div>
-                  <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-2.5 dark:border-rose-900/50 dark:bg-rose-950/20">
-                    <div className="text-[11px] text-rose-700 dark:text-rose-400">미등록 (제외)</div>
-                    <div className="text-base font-extrabold text-rose-700 dark:text-rose-400 mt-0.5">
+                  <div className="rounded-lg border border-zinc-200 p-2 dark:border-zinc-800">
+                    <div className="text-[11px] text-zinc-500">공통 속성 저장</div>
+                    <div className="text-sm font-extrabold text-zinc-900 dark:text-white mt-0.5">
+                      {importResult.commonAttributesSavedCount}개
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-sky-200 bg-sky-50/40 p-2 dark:border-sky-900/50 dark:bg-sky-950/20">
+                    <div className="text-[11px] text-sky-700 dark:text-sky-400">
+                      이미지 · 영상
+                    </div>
+                    <div className="text-sm font-extrabold text-sky-700 dark:text-sky-400 mt-0.5">
+                      {imagesImportedCount}장 · {importResult.videosImportedCount}건
+                    </div>
+                    {duplicateImagesSkippedCount > 0 && (
+                      <div className="text-[10px] text-zinc-500">
+                        중복 제외 {duplicateImagesSkippedCount}장
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-2 dark:border-rose-900/50 dark:bg-rose-950/20">
+                    <div className="text-[11px] text-rose-700 dark:text-rose-400">
+                      상품 미등록
+                    </div>
+                    <div className="text-sm font-extrabold text-rose-700 dark:text-rose-400 mt-0.5">
                       {importResult.rejectedCount}건
                     </div>
                   </div>
-                  <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2.5 dark:border-amber-900/50 dark:bg-amber-950/20">
-                    <div className="text-[11px] text-amber-700 dark:text-amber-400">중복 건수</div>
-                    <div className="text-base font-extrabold text-amber-700 dark:text-amber-400 mt-0.5">
-                      {importResult.duplicateCount}건
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2 dark:border-amber-900/50 dark:bg-amber-950/20">
+                    <div className="text-[11px] text-amber-700 dark:text-amber-400">
+                      미디어 실패
                     </div>
-                  </div>
-                  <div className="rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800">
-                    <div className="text-[11px] text-zinc-500">검증 오류</div>
-                    <div className="text-base font-extrabold text-zinc-900 dark:text-white mt-0.5">
-                      {importResult.validationErrorCount}건
+                    <div className="text-sm font-extrabold text-amber-700 dark:text-amber-400 mt-0.5">
+                      {mediaFailures.length}건
                     </div>
                   </div>
                 </div>
 
-                {pagedErrorRows.length > 0 && (
+                {/* Tabbed Error / Media Failure Details */}
+                {(rejectedList.length > 0 || mediaFailures.length > 0) && (
                   <div className="space-y-1.5">
-                    <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-                      <table className="w-full table-fixed text-left text-xs border-collapse">
-                        <thead className="bg-zinc-100 dark:bg-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-700">
-                          <tr>
-                            <th className="px-2.5 py-1.5 w-12">행</th>
-                            <th className="px-2.5 py-1.5 w-32">제조사 SKU</th>
-                            <th className="px-2.5 py-1.5 w-40">제품명</th>
-                            <th className="px-2.5 py-1.5">오류 사유</th>
-                            <th className="px-2.5 py-1.5 hidden sm:table-cell">수정 안내</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                          {pagedErrorRows.map((r, idx) => (
-                            <tr
-                              key={`${r.excelRowNumber}-${idx}`}
-                              className="bg-rose-50/20 dark:bg-rose-950/10"
-                            >
-                              <td className="px-2.5 py-1.5 font-mono font-bold text-zinc-600 dark:text-zinc-400 align-top">
-                                #{r.excelRowNumber}
-                              </td>
-                              <td
-                                className="px-2.5 py-1.5 font-mono truncate text-zinc-800 dark:text-zinc-200 align-top"
-                                title={r.manufactureSku}
-                              >
-                                {r.manufactureSku || "-"}
-                              </td>
-                              <td
-                                className="px-2.5 py-1.5 truncate text-zinc-800 dark:text-zinc-200 align-top"
-                                title={r.productName}
-                              >
-                                {r.productName || "-"}
-                              </td>
-                              <td
-                                className="px-2.5 py-1.5 text-rose-700 dark:text-rose-400 align-top"
-                                title={r.errorReason}
-                              >
-                                <div className="line-clamp-2 break-words">{r.errorReason}</div>
-                              </td>
-                              <td
-                                className="px-2.5 py-1.5 text-zinc-600 dark:text-zinc-400 align-top hidden sm:table-cell"
-                                title={r.correctiveGuidance}
-                              >
-                                <div className="line-clamp-2 break-words">{r.correctiveGuidance}</div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setResultTab("PRODUCT_ERRORS")}
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-bold cursor-pointer ${
+                          resultTab === "PRODUCT_ERRORS"
+                            ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
+                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                        }`}
+                      >
+                        상품 미등록 오류 ({rejectedList.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setResultTab("MEDIA_FAILURES")}
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-bold cursor-pointer ${
+                          resultTab === "MEDIA_FAILURES"
+                            ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
+                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                        }`}
+                      >
+                        미디어 처리 실패 ({mediaFailures.length})
+                      </button>
                     </div>
 
-                    {totalErrorPages > 1 && (
-                      <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
-                        <span>
-                          오류 {rejectedList.length}건 중 {(safeErrorPage - 1) * ERROR_RESULT_PAGE_SIZE + 1}–
-                          {Math.min(safeErrorPage * ERROR_RESULT_PAGE_SIZE, rejectedList.length)}건
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            disabled={safeErrorPage <= 1}
-                            onClick={() => setErrorPage((p) => Math.max(1, p - 1))}
-                            className="rounded border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 cursor-pointer"
-                          >
-                            이전
-                          </button>
-                          <span className="font-mono font-semibold px-1">
-                            {safeErrorPage} / {totalErrorPages}
-                          </span>
-                          <button
-                            type="button"
-                            disabled={safeErrorPage >= totalErrorPages}
-                            onClick={() => setErrorPage((p) => Math.min(totalErrorPages, p + 1))}
-                            className="rounded border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 cursor-pointer"
-                          >
-                            다음
-                          </button>
+                    {resultTab === "PRODUCT_ERRORS" && (
+                      <>
+                        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                          <table className="w-full table-fixed text-left text-xs border-collapse">
+                            <thead className="bg-zinc-100 dark:bg-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-700">
+                              <tr>
+                                <th className="px-2.5 py-1.5 w-12">행</th>
+                                <th className="px-2.5 py-1.5 w-32">제조사 SKU</th>
+                                <th className="px-2.5 py-1.5 w-40">제품명</th>
+                                <th className="px-2.5 py-1.5">오류 사유</th>
+                                <th className="px-2.5 py-1.5 hidden sm:table-cell">수정 안내</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                              {pagedErrorRows.length === 0 ? (
+                                <tr>
+                                  <td
+                                    colSpan={5}
+                                    className="px-4 py-5 text-center text-xs text-zinc-500"
+                                  >
+                                    미등록된 상품 오류가 없습니다.
+                                  </td>
+                                </tr>
+                              ) : (
+                                pagedErrorRows.map((r, idx) => (
+                                  <tr
+                                    key={`${r.excelRowNumber}-${idx}`}
+                                    className="bg-rose-50/20 dark:bg-rose-950/10"
+                                  >
+                                    <td className="px-2.5 py-1.5 font-mono font-bold text-zinc-600 dark:text-zinc-400 align-top">
+                                      #{r.excelRowNumber}
+                                    </td>
+                                    <td
+                                      className="px-2.5 py-1.5 font-mono truncate text-zinc-800 dark:text-zinc-200 align-top"
+                                      title={r.manufactureSku}
+                                    >
+                                      {r.manufactureSku || "-"}
+                                    </td>
+                                    <td
+                                      className="px-2.5 py-1.5 truncate text-zinc-800 dark:text-zinc-200 align-top"
+                                      title={r.productName}
+                                    >
+                                      {r.productName || "-"}
+                                    </td>
+                                    <td
+                                      className="px-2.5 py-1.5 text-rose-700 dark:text-rose-400 align-top"
+                                      title={r.errorReason}
+                                    >
+                                      <div className="line-clamp-2 break-words">
+                                        {r.errorReason}
+                                      </div>
+                                    </td>
+                                    <td
+                                      className="px-2.5 py-1.5 text-zinc-600 dark:text-zinc-400 align-top hidden sm:table-cell"
+                                      title={r.correctiveGuidance}
+                                    >
+                                      <div className="line-clamp-2 break-words">
+                                        {r.correctiveGuidance}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
                         </div>
-                      </div>
+
+                        {totalErrorPages > 1 && (
+                          <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+                            <span>
+                              오류 {rejectedList.length}건 중{" "}
+                              {(safeErrorPage - 1) * ERROR_RESULT_PAGE_SIZE + 1}–
+                              {Math.min(
+                                safeErrorPage * ERROR_RESULT_PAGE_SIZE,
+                                rejectedList.length
+                              )}
+                              건
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                disabled={safeErrorPage <= 1}
+                                onClick={() => setErrorPage((p) => Math.max(1, p - 1))}
+                                className="rounded border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 cursor-pointer"
+                              >
+                                이전
+                              </button>
+                              <span className="font-mono font-semibold px-1">
+                                {safeErrorPage} / {totalErrorPages}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={safeErrorPage >= totalErrorPages}
+                                onClick={() =>
+                                  setErrorPage((p) => Math.min(totalErrorPages, p + 1))
+                                }
+                                className="rounded border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 cursor-pointer"
+                              >
+                                다음
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {resultTab === "MEDIA_FAILURES" && (
+                      <>
+                        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                          <table className="w-full table-fixed text-left text-xs border-collapse">
+                            <thead className="bg-zinc-100 dark:bg-zinc-800 text-[11px] font-bold text-zinc-600 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-700">
+                              <tr>
+                                <th className="px-2.5 py-1.5 w-12">행</th>
+                                <th className="px-2.5 py-1.5 w-32">생성된 SKU</th>
+                                <th className="px-2.5 py-1.5 w-38">대상 항목</th>
+                                <th className="px-2.5 py-1.5">미디어 실패 사유 (상품은 정상 생성됨)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                              {pagedMediaFailures.length === 0 ? (
+                                <tr>
+                                  <td
+                                    colSpan={4}
+                                    className="px-4 py-5 text-center text-xs text-zinc-500"
+                                  >
+                                    미디어 처리 실패 내역이 없습니다.
+                                  </td>
+                                </tr>
+                              ) : (
+                                pagedMediaFailures.map((m, idx) => (
+                                  <tr
+                                    key={`${m.productId}-${m.slotNumber}-${idx}`}
+                                    className="bg-amber-50/25 dark:bg-amber-950/10"
+                                  >
+                                    <td className="px-2.5 py-1.5 font-mono font-bold text-zinc-600 dark:text-zinc-400 align-top">
+                                      #{m.excelRowNumber}
+                                    </td>
+                                    <td
+                                      className="px-2.5 py-1.5 font-mono truncate text-zinc-800 dark:text-zinc-200 align-top"
+                                      title={m.manufactureSku}
+                                    >
+                                      {m.manufactureSku}
+                                    </td>
+                                    <td
+                                      className="px-2.5 py-1.5 truncate text-zinc-700 dark:text-zinc-300 align-top"
+                                      title={`${m.columnHeader} — ${m.url}`}
+                                    >
+                                      {m.columnHeader}
+                                    </td>
+                                    <td
+                                      className="px-2.5 py-1.5 text-amber-800 dark:text-amber-300 align-top"
+                                      title={`${m.errorReason} (${m.url})`}
+                                    >
+                                      <div className="line-clamp-2 break-words">
+                                        {m.errorReason}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {totalMediaFailPages > 1 && (
+                          <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+                            <span>
+                              미디어 실패 {mediaFailures.length}건 중{" "}
+                              {(safeMediaFailPage - 1) * ERROR_RESULT_PAGE_SIZE + 1}–
+                              {Math.min(
+                                safeMediaFailPage * ERROR_RESULT_PAGE_SIZE,
+                                mediaFailures.length
+                              )}
+                              건
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                disabled={safeMediaFailPage <= 1}
+                                onClick={() =>
+                                  setMediaFailurePage((p) => Math.max(1, p - 1))
+                                }
+                                className="rounded border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 cursor-pointer"
+                              >
+                                이전
+                              </button>
+                              <span className="font-mono font-semibold px-1">
+                                {safeMediaFailPage} / {totalMediaFailPages}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={safeMediaFailPage >= totalMediaFailPages}
+                                onClick={() =>
+                                  setMediaFailurePage((p) =>
+                                    Math.min(totalMediaFailPages, p + 1)
+                                  )
+                                }
+                                className="rounded border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 cursor-pointer"
+                              >
+                                다음
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
@@ -823,7 +1354,7 @@ export function BulkProductUploadModal({
                   setErrorBanner(null);
                   setStep(1);
                 }}
-                disabled={isValidating}
+                disabled={isBusy}
                 className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
               >
                 ← 양식 받기로
@@ -848,7 +1379,7 @@ export function BulkProductUploadModal({
                   setErrorBanner(null);
                   setStep(3);
                 }}
-                disabled={isSubmitting}
+                disabled={isBusy}
                 className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
               >
                 ← 검증 결과로
@@ -861,7 +1392,7 @@ export function BulkProductUploadModal({
               <button
                 type="button"
                 onClick={handleClose}
-                disabled={isValidating || isSubmitting}
+                disabled={isBusy}
                 className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer"
               >
                 취소
@@ -885,7 +1416,7 @@ export function BulkProductUploadModal({
               <button
                 type="button"
                 onClick={handleValidateFile}
-                disabled={!selectedFile || isValidating}
+                disabled={!selectedFile || isBusy}
                 className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
               >
                 {isValidating ? "데이터 검증 중..." : "데이터 검증 및 미리보기 →"}
@@ -911,7 +1442,7 @@ export function BulkProductUploadModal({
             {step === 4 && previewResult?.summary && (
               <button
                 type="button"
-                disabled={isSubmitting || previewResult.summary.importableRows === 0}
+                disabled={isBusy || previewResult.summary.importableRows === 0}
                 onClick={handleConfirmImport}
                 className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer shadow-2xs"
               >
@@ -924,10 +1455,11 @@ export function BulkProductUploadModal({
             {step === 5 && (
               <button
                 type="button"
+                disabled={isIngestingMedia}
                 onClick={handleClose}
-                className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
+                className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
               >
-                완료 및 목록 보기
+                {isIngestingMedia ? "이미지 수집 진행 중..." : "완료 및 목록 보기"}
               </button>
             )}
           </div>

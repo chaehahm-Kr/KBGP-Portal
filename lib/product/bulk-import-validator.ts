@@ -1,18 +1,27 @@
 import * as XLSX from "xlsx";
 import {
   ALLOWED_COLOR_MAPS,
+  BULK_IMAGE_URL_FIELD_KEYS,
   BULK_IMPORT_MAX_FILE_BYTES,
   BULK_IMPORT_MAX_ROWS,
+  BULK_MEDIA_MAX_IMAGES_PER_PRODUCT,
   BULK_PRODUCT_COLUMNS,
   BULK_TEMPLATE_EXAMPLE_SKU,
+  COMMON_BULK_ATTRIBUTES,
   type BulkColumnSpec,
+  type BulkCommonAttributeOptionSpec,
+  type BulkCommonAttributeSpec,
+  type BulkNormalizedAttributeEntry,
+  type BulkNormalizedImageUrlItem,
   type BulkNormalizedProductPayload,
   type BulkPreviewResult,
   type BulkReferenceBrand,
   type BulkReferenceCategory,
+  type BulkReferenceCommonAttribute,
   type BulkRowRawFieldKey,
   type BulkValidatedRow,
 } from "@/lib/product/bulk-import-types";
+import { validateHttpsMediaUrlSyntax } from "@/lib/product/bulk-media-url-utils";
 import {
   CATEGORY_TO_CODE_MAP,
   VOLUME_UNITS,
@@ -35,6 +44,7 @@ export interface BulkValidationContext {
   buffer: Buffer | Uint8Array;
   companyBrands: BulkReferenceBrand[];
   allCategories: BulkReferenceCategory[];
+  commonAttributes?: BulkReferenceCommonAttribute[];
   existingCompanySkus: Set<string>; // Uppercase trimmed SKUs in user's company
   existingUpcs: Set<string>;        // Trimmed UPCs visible in DB
   existingEans: Set<string>;        // Trimmed EANs visible in DB
@@ -83,44 +93,70 @@ const MULTILINE_TEXT_KEYS = new Set<BulkRowRawFieldKey>([
   "bulletPoint5",
 ]);
 
+const NA_ALIASES = new Set([
+  "na",
+  "n/a",
+  "not applicable",
+  "not_applicable",
+  "해당 없음",
+  "해당없음",
+]);
+
 const LEGACY_DEPTH1_ALIASES: Record<string, string> = {
   skincare: "SKINCARE",
   "skin care": "SKINCARE",
   "스킨케어": "SKINCARE",
+  "스킨케어 (skincare)": "SKINCARE",
   hair_scalp: "HAIR_CARE",
   hair_care: "HAIR_CARE",
   "hair care": "HAIR_CARE",
   "hair & scalp": "HAIR_CARE",
   "헤어케어": "HAIR_CARE",
+  "헤어케어 (hair care)": "HAIR_CARE",
   "헤어&스칼프": "HAIR_CARE",
   beauty_tools: "BEAUTY_TOOLS",
   "beauty tools": "BEAUTY_TOOLS",
   "뷰티툴": "BEAUTY_TOOLS",
+  "뷰티툴 (beauty tools)": "BEAUTY_TOOLS",
   "뷰티소품·툴": "BEAUTY_TOOLS",
   daily_care: "BODY_CARE",
   body_care: "BODY_CARE",
   "body care": "BODY_CARE",
   "daily care": "BODY_CARE",
   "바디케어": "BODY_CARE",
+  "바디케어 (body care)": "BODY_CARE",
   "데일리케어": "BODY_CARE",
   wellness_patch: "PERSONAL_CARE",
   personal_care: "PERSONAL_CARE",
   "personal care": "PERSONAL_CARE",
   "퍼스널케어": "PERSONAL_CARE",
+  "퍼스널케어 (personal care)": "PERSONAL_CARE",
   "웰니스·기능성패치": "PERSONAL_CARE",
   makeup: "MAKEUP",
   "메이크업": "MAKEUP",
+  "메이크업 (makeup)": "MAKEUP",
   sets_collections: "SETS_COLLECTIONS",
   "sets & collections": "SETS_COLLECTIONS",
   "세트/기획": "SETS_COLLECTIONS",
+  "세트/기획 (sets & collections)": "SETS_COLLECTIONS",
   other: "OTHER",
   "기타": "OTHER",
+  "기타 (other)": "OTHER",
 };
 
 function normalizeHeaderLabel(raw: string): string {
   return raw
     .replace(/[\u00A0\r\n\t]+/g, " ")
     .replace(/\*+$/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function normalizeLookupToken(raw: string): string {
+  return raw
+    .replace(/[\u00A0\r\n\t]+/g, " ")
+    .replace(/[–—―~]/g, "-")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
@@ -176,7 +212,7 @@ function extractCellString(
     return { value: String(cell.v ?? cell.w ?? "").trim(), hasFormula: false };
   }
 
-  if (key === "volumeValue" && typeof cell.v === "number") {
+  if (typeof cell.v === "number") {
     return { value: Number.isFinite(cell.v) ? String(cell.v) : "", hasFormula: false };
   }
 
@@ -208,7 +244,7 @@ function parseStrictBoolean(
   if (lower === "true" || lower === "yes" || lower === "y" || lower === "1" || lower === "예") {
     return { valid: true, value: true };
   }
-  if (lower === "false" || lower === "no" || lower === "n" || lower === "0" || lower === "아니오") {
+  if (lower === "false" || lower === "no" || lower === "n" || lower === "0" || lower === "아니오" || lower === "아니요") {
     return { valid: true, value: false };
   }
   return { valid: false, value: false };
@@ -222,14 +258,15 @@ function parseYesNoFlag(
   if (lower === "y" || lower === "yes" || lower === "true" || lower === "1" || lower === "예") {
     return { valid: true, value: "Y" };
   }
-  if (lower === "n" || lower === "no" || lower === "false" || lower === "0" || lower === "아니오") {
+  if (lower === "n" || lower === "no" || lower === "false" || lower === "0" || lower === "아니오" || lower === "아니요") {
     return { valid: true, value: null };
   }
   return { valid: false, value: null };
 }
 
 function parsePositiveDecimal(
-  val: string
+  val: string,
+  maxVal = 1_000_000
 ): { valid: boolean; value: number | null } {
   if (!val) return { valid: true, value: null };
   const trimmed = val.trim();
@@ -237,7 +274,7 @@ function parsePositiveDecimal(
     return { valid: false, value: null };
   }
   const num = Number(trimmed);
-  if (!Number.isFinite(num) || num <= 0 || num > 1_000_000) {
+  if (!Number.isFinite(num) || num <= 0 || num > maxVal) {
     return { valid: false, value: null };
   }
   return { valid: true, value: num };
@@ -288,19 +325,130 @@ function normalizeVolumeUnit(val: string): VolumeUnit | null {
   return null;
 }
 
+export function formatBilingualCategoryLabel(cat: BulkReferenceCategory): string {
+  const ko = (cat.name_ko || "").trim();
+  const en = (cat.name_en || "").trim();
+  if (ko && en && ko.toLowerCase() !== en.toLowerCase()) {
+    return `${ko} (${en})`;
+  }
+  return ko || en || cat.code;
+}
+
 function matchCategoryInList(
   input: string,
   candidates: BulkReferenceCategory[]
 ): BulkReferenceCategory | undefined {
   const trimmed = input.trim();
-  const lower = trimmed.toLowerCase();
+  const lower = trimmed.toLowerCase().replace(/\s+/g, " ");
   const upper = trimmed.toUpperCase();
-  return candidates.find(
-    (c) =>
-      c.code.toUpperCase() === upper ||
-      (c.name_en && c.name_en.trim().toLowerCase() === lower) ||
-      c.name_ko.trim().toLowerCase() === lower
-  );
+
+  return candidates.find((c) => {
+    const ko = c.name_ko.trim();
+    const en = (c.name_en || "").trim();
+    const codeUpper = c.code.toUpperCase();
+    const codeLower = c.code.toLowerCase();
+
+    if (codeUpper === upper || ko.toLowerCase() === lower) return true;
+    if (en && en.toLowerCase() === lower) return true;
+
+    // Support bilingual dropdown formats: "스킨케어 (Skincare)", "Skincare (스킨케어)", "스킨케어 (SKINCARE)"
+    if (ko && en) {
+      if (`${ko} (${en})`.toLowerCase() === lower) return true;
+      if (`${en} (${ko})`.toLowerCase() === lower) return true;
+    }
+    if (ko && `${ko} (${codeLower})` === lower) return true;
+    if (en && `${en.toLowerCase()} (${codeLower})` === lower) return true;
+    return false;
+  });
+}
+
+function buildEffectiveCommonAttributeSpecs(
+  liveAttrs?: BulkReferenceCommonAttribute[]
+): BulkCommonAttributeSpec[] {
+  if (!liveAttrs || liveAttrs.length === 0) {
+    return COMMON_BULK_ATTRIBUTES;
+  }
+
+  const liveByCode = new Map<string, BulkReferenceCommonAttribute>();
+  for (const item of liveAttrs) {
+    if (item.isActive !== false) {
+      liveByCode.set(item.code.toUpperCase(), item);
+    }
+  }
+
+  return COMMON_BULK_ATTRIBUTES.map((spec) => {
+    const live = liveByCode.get(spec.code.toUpperCase());
+    if (!live || live.options.length === 0) {
+      return spec;
+    }
+
+    const staticByOptionCode = new Map<string, BulkCommonAttributeOptionSpec>();
+    for (const opt of spec.options) {
+      staticByOptionCode.set(opt.optionCode.toUpperCase(), opt);
+    }
+
+    const mergedOptions: BulkCommonAttributeOptionSpec[] = live.options.map((lo) => {
+      const staticOpt = staticByOptionCode.get(lo.optionCode.toUpperCase());
+      return {
+        optionCode: lo.optionCode,
+        optionKo: lo.optionKo || staticOpt?.optionKo || lo.optionCode,
+        optionEn: lo.optionEn || staticOpt?.optionEn || lo.optionCode,
+        aliases: staticOpt?.aliases,
+        adminOnlyOption:
+          staticOpt?.adminOnlyOption ?? lo.optionCode.toUpperCase() === "ADMIN_VERIFIED",
+      };
+    });
+
+    return {
+      ...spec,
+      allowNa: live.allowNa,
+      allowOther: live.allowOther,
+      options: mergedOptions,
+    };
+  });
+}
+
+function parseOtherFreeTextToken(
+  token: string
+): { isOtherPrefix: boolean; customText: string } {
+  const trimmed = token.trim();
+  const match = /^(?:other|기타)\s*[:：]\s*(.+)$/i.exec(trimmed);
+  if (match) {
+    return { isOtherPrefix: true, customText: match[1].trim() };
+  }
+  return { isOtherPrefix: false, customText: "" };
+}
+
+function matchAttributeOptionToken(
+  rawToken: string,
+  options: BulkCommonAttributeOptionSpec[]
+): BulkCommonAttributeOptionSpec | undefined {
+  const norm = normalizeLookupToken(rawToken);
+  if (!norm) return undefined;
+
+  return options.find((opt) => {
+    const codeNorm = normalizeLookupToken(opt.optionCode);
+    const koNorm = normalizeLookupToken(opt.optionKo);
+    const enNorm = normalizeLookupToken(opt.optionEn);
+
+    if (norm === codeNorm || norm === koNorm || norm === enNorm) {
+      return true;
+    }
+    if (koNorm && enNorm) {
+      if (norm === `${koNorm} (${enNorm})` || norm === `${enNorm} (${koNorm})`) {
+        return true;
+      }
+    }
+    if (koNorm && norm === `${koNorm} (${codeNorm})`) return true;
+    if (enNorm && norm === `${enNorm} (${codeNorm})`) return true;
+
+    if (opt.aliases) {
+      for (const a of opt.aliases) {
+        if (normalizeLookupToken(a) === norm) return true;
+      }
+    }
+    return false;
+  });
 }
 
 export function sanitizeExcelOutputCell(val: string | number | null | undefined): string {
@@ -380,7 +528,7 @@ export function parseAndValidateBulkProductWorkbook(
 
   const range = XLSX.utils.decode_range(sheet["!ref"]);
 
-  // Build alias -> spec lookup (supports Korean-first bilingual headers, English V1 headers, and stripped '*')
+  // Build alias -> spec lookup (supports R2 86-col, R1 Korean-first 52-col, and V1 English 52-col templates)
   const aliasToSpec = new Map<string, BulkColumnSpec>();
   for (const spec of BULK_PRODUCT_COLUMNS) {
     aliasToSpec.set(normalizeHeaderLabel(spec.header), spec);
@@ -390,7 +538,7 @@ export function parseAndValidateBulkProductWorkbook(
     }
   }
 
-  // Scan top rows (up to first 5 rows) to locate the column header row (supports Row 1 group banner + Row 2 headers as well as Row 1 headers)
+  // Scan top rows (up to first 5 rows) to locate column header row
   let headerRowIdx = range.s.r;
   let bestMatchedCount = -1;
   const maxHeaderScanRow = Math.min(range.e.r, range.s.r + 4);
@@ -449,7 +597,6 @@ export function parseAndValidateBulkProductWorkbook(
     };
   }
 
-  // Extract non-empty rows after headerRowIdx to check row limits & example row skipping
   interface ExtractedRow {
     excelRowNumber: number;
     values: Record<BulkRowRawFieldKey, string>;
@@ -484,7 +631,6 @@ export function parseAndValidateBulkProductWorkbook(
 
     if (!hasAnyNonEmpty) continue;
 
-    // Auto-skip template example row if left unchanged by supplier
     const skuUpper = values.manufactureSku.trim().toUpperCase();
     const nameEnUpper = values.productNameEn.trim().toUpperCase();
     const nameKoTrimmed = values.productNameKo.trim();
@@ -499,7 +645,7 @@ export function parseAndValidateBulkProductWorkbook(
     }
 
     extractedRows.push({
-      excelRowNumber: r + 1, // 1-indexed Excel row number
+      excelRowNumber: r + 1,
       values,
       formulaHeaders,
     });
@@ -545,6 +691,9 @@ export function parseAndValidateBulkProductWorkbook(
     catByCode.set(c.code.toUpperCase(), c);
   }
 
+  // Effective Common Attributes (merges live DB options with static metadata & aliases)
+  const effectiveCommonAttrs = buildEffectiveCommonAttributeSpecs(ctx.commonAttributes);
+
   // Track first-seen in-file identifiers
   const seenSkuFirstRowIndex = new Map<string, { excelRowNumber: number; arrayIdx: number }>();
   const seenUpcFirstRowIndex = new Map<string, { excelRowNumber: number; arrayIdx: number }>();
@@ -559,11 +708,21 @@ export function parseAndValidateBulkProductWorkbook(
     const guidanceSet = new Set<string>();
     let isDuplicateError = false;
     let isValidationError = false;
+    let hasCategoryError = false;
+    let hasCommonAttributeError = false;
+    let hasMediaUrlError = false;
 
-    const addValidationError = (reason: string, guidance: string) => {
+    const addValidationError = (
+      reason: string,
+      guidance: string,
+      category?: "category" | "commonAttribute" | "mediaUrl"
+    ) => {
       errors.push(reason);
       guidanceSet.add(guidance);
       isValidationError = true;
+      if (category === "category") hasCategoryError = true;
+      if (category === "commonAttribute") hasCommonAttributeError = true;
+      if (category === "mediaUrl") hasMediaUrlError = true;
     };
 
     const addDuplicateError = (reason: string, guidance: string) => {
@@ -587,9 +746,18 @@ export function parseAndValidateBulkProductWorkbook(
       const isMulti = MULTILINE_TEXT_KEYS.has(spec.key);
       if (hasFormulaInjectionPrefix(rawVal, isMulti)) {
         const cleanCol = spec.header.replace(/\s*\*$/, "");
+        const errType =
+          spec.section === "Category" || spec.key === "category1Depth"
+            ? "category"
+            : spec.section === "Common Attributes"
+            ? "commonAttribute"
+            : spec.section === "Media"
+            ? "mediaUrl"
+            : undefined;
         addValidationError(
           `"${cleanCol}" 항목이 제한된 수식 문자(=, +, -, @)로 시작합니다.`,
-          `"${cleanCol}" 값 앞의 '=', '+', '-', '@' 문자를 제거해 주세요.`
+          `"${cleanCol}" 값 앞의 '=', '+', '-', '@' 문자를 제거해 주세요.`,
+          errType
         );
       }
     }
@@ -707,7 +875,7 @@ export function parseAndValidateBulkProductWorkbook(
       );
     }
 
-    // 4. Category Hierarchy (1Depth Required, 2Depth & 3Depth Optional)
+    // 4. Category Hierarchy (1Depth Required, 2Depth & 3Depth Optional — Strict Hierarchy Validation)
     const rawCat1 = values.category1Depth.trim();
     const rawCat2 = values.category2Depth.trim();
     const rawCat3 = values.category3Depth.trim();
@@ -719,7 +887,8 @@ export function parseAndValidateBulkProductWorkbook(
     if (!rawCat1) {
       addValidationError(
         "카테고리 (1Depth)는 필수 입력 항목입니다.",
-        "Categories 시트에서 유효한 1Depth 카테고리를 선택해 주세요 (예: Skincare, 스킨케어)."
+        "Categories 시트에서 유효한 1Depth 카테고리를 선택해 주세요 (예: 스킨케어 (Skincare), Skincare).",
+        "category"
       );
     } else if (hasCategoryMaster) {
       const aliasCode = LEGACY_DEPTH1_ALIASES[rawCat1.toLowerCase()];
@@ -729,13 +898,15 @@ export function parseAndValidateBulkProductWorkbook(
 
       if (!matchedD1) {
         addValidationError(
-          `유효하지 않은 카테고리 (1Depth) 값입니다: "${rawCat1}".`,
-          "Categories 시트에 안내된 1Depth 코드 또는 명칭을 입력해 주세요."
+          `[${excelRowNumber}행 · 카테고리 (1Depth)] 유효하지 않은 대분류 값입니다: "${rawCat1}".`,
+          "Categories 시트에 안내된 1Depth 코드 또는 명칭을 선택해 주세요.",
+          "category"
         );
       } else if (!matchedD1.is_active) {
         addValidationError(
-          `카테고리 (1Depth) "${matchedD1.name_ko || matchedD1.name_en || matchedD1.code}"은(는) 비활성 상태입니다.`,
-          "Categories 시트에서 활성 상태인 1Depth 카테고리를 선택해 주세요."
+          `[${excelRowNumber}행 · 카테고리 (1Depth)] "${matchedD1.name_ko || matchedD1.name_en || matchedD1.code}"은(는) 비활성 상태입니다.`,
+          "Categories 시트에서 활성 상태인 1Depth 카테고리를 선택해 주세요.",
+          "category"
         );
       } else {
         resolvedCategoryEnum = resolveRootCategoryEnum(matchedD1.code);
@@ -744,8 +915,9 @@ export function parseAndValidateBulkProductWorkbook(
 
         if (!rawCat2 && rawCat3) {
           addValidationError(
-            "카테고리 (3Depth) 입력 시 상위 카테고리 (2Depth)도 함께 입력해야 합니다.",
-            "해당 3Depth의 상위 2Depth 카테고리를 입력하거나 3Depth를 비워 두세요."
+            `[${excelRowNumber}행 · 카테고리 (2Depth/3Depth)] 3Depth 입력 시 상위 카테고리 (2Depth)도 함께 입력해야 합니다.`,
+            "해당 3Depth의 상위 2Depth 카테고리를 입력하거나 3Depth를 비워 두세요.",
+            "category"
           );
         } else if (rawCat2) {
           const childrenD2 = depth2All.filter((c) => c.parent_code === matchedD1.code);
@@ -758,19 +930,22 @@ export function parseAndValidateBulkProductWorkbook(
                 ? catByCode.get(otherParentD2.parent_code.toUpperCase())
                 : undefined;
               addValidationError(
-                `카테고리 (2Depth) "${rawCat2}"은(는) "${matchedD1.name_en || matchedD1.code}" 하위가 아닙니다 ("${actualParent?.name_en || otherParentD2.parent_code}" 소속).`,
-                "Categories 시트에서 동일한 상위·하위 계층의 카테고리를 입력해 주세요."
+                `[${excelRowNumber}행 · 카테고리 (2Depth)] "${rawCat2}"은(는) "${matchedD1.name_ko || matchedD1.name_en || matchedD1.code}" 하위가 아닙니다 ("${actualParent?.name_ko || actualParent?.name_en || otherParentD2.parent_code}" 소속).`,
+                "선택한 1Depth에 속하는 하위 2Depth 카테고리를 선택해 주세요.",
+                "category"
               );
             } else {
               addValidationError(
-                `"${matchedD1.name_en || matchedD1.code}" 하위에 유효하지 않은 카테고리 (2Depth) 값입니다: "${rawCat2}".`,
-                "Categories 시트에서 정확한 2Depth 코드 또는 명칭을 확인해 주세요."
+                `[${excelRowNumber}행 · 카테고리 (2Depth)] "${matchedD1.name_ko || matchedD1.name_en || matchedD1.code}" 하위에 존재하지 않는 값입니다: "${rawCat2}".`,
+                "Categories 시트에서 정확한 2Depth 코드 또는 명칭을 확인해 주세요.",
+                "category"
               );
             }
           } else if (!matchedD2.is_active) {
             addValidationError(
-              `카테고리 (2Depth) "${matchedD2.name_ko || matchedD2.name_en || matchedD2.code}"은(는) 비활성 상태입니다.`,
-              "활성 상태인 2Depth 카테고리를 선택해 주세요."
+              `[${excelRowNumber}행 · 카테고리 (2Depth)] "${matchedD2.name_ko || matchedD2.name_en || matchedD2.code}"은(는) 비활성 상태입니다.`,
+              "활성 상태인 2Depth 카테고리를 선택해 주세요.",
+              "category"
             );
           } else {
             resolvedCategoryCode = matchedD2.code;
@@ -780,8 +955,9 @@ export function parseAndValidateBulkProductWorkbook(
               const childrenD3 = depth3All.filter((c) => c.parent_code === matchedD2.code);
               if (matchedD2.is_final && childrenD3.length === 0) {
                 addValidationError(
-                  `카테고리 (2Depth) "${matchedD2.name_en || matchedD2.code}"은(는) 하위 3Depth가 없는 최종 카테고리입니다.`,
-                  "카테고리 (3Depth) 칸을 비워 두세요."
+                  `[${excelRowNumber}행 · 카테고리 (3Depth)] "${matchedD2.name_ko || matchedD2.name_en || matchedD2.code}"은(는) 하위 3Depth가 없는 최종 카테고리입니다.`,
+                  "카테고리 (3Depth) 칸을 비워 두세요.",
+                  "category"
                 );
               } else {
                 const matchedD3 = matchCategoryInList(rawCat3, childrenD3);
@@ -792,19 +968,22 @@ export function parseAndValidateBulkProductWorkbook(
                       ? catByCode.get(otherParentD3.parent_code.toUpperCase())
                       : undefined;
                     addValidationError(
-                      `카테고리 (3Depth) "${rawCat3}"은(는) "${matchedD2.name_en || matchedD2.code}" 하위가 아닙니다 ("${actualP2?.name_en || otherParentD3.parent_code}" 소속).`,
-                      "선택한 2Depth 카테고리에 속하는 3Depth 값을 입력해 주세요."
+                      `[${excelRowNumber}행 · 카테고리 (3Depth)] "${rawCat3}"은(는) "${matchedD2.name_ko || matchedD2.name_en || matchedD2.code}" 하위가 아닙니다 ("${actualP2?.name_ko || actualP2?.name_en || otherParentD3.parent_code}" 소속).`,
+                      "선택한 2Depth 카테고리에 속하는 하위 3Depth 값을 선택해 주세요.",
+                      "category"
                     );
                   } else {
                     addValidationError(
-                      `"${matchedD2.name_en || matchedD2.code}" 하위에 유효하지 않은 카테고리 (3Depth) 값입니다: "${rawCat3}".`,
-                      "Categories 시트에서 정확한 3Depth 코드 또는 명칭을 확인해 주세요."
+                      `[${excelRowNumber}행 · 카테고리 (3Depth)] "${matchedD2.name_ko || matchedD2.name_en || matchedD2.code}" 하위에 존재하지 않는 값입니다: "${rawCat3}".`,
+                      "Categories 시트에서 정확한 3Depth 코드 또는 명칭을 확인해 주세요.",
+                      "category"
                     );
                   }
                 } else if (!matchedD3.is_active) {
                   addValidationError(
-                    `카테고리 (3Depth) "${matchedD3.name_ko || matchedD3.name_en || matchedD3.code}"은(는) 비활성 상태입니다.`,
-                    "활성 상태인 3Depth 카테고리를 선택해 주세요."
+                    `[${excelRowNumber}행 · 카테고리 (3Depth)] "${matchedD3.name_ko || matchedD3.name_en || matchedD3.code}"은(는) 비활성 상태입니다.`,
+                    "활성 상태인 3Depth 카테고리를 선택해 주세요.",
+                    "category"
                   );
                 } else {
                   resolvedCategoryCode = matchedD3.code;
@@ -830,14 +1009,16 @@ export function parseAndValidateBulkProductWorkbook(
         normalizedCategoryPath = aliasCode;
       } else {
         addValidationError(
-          `유효하지 않은 카테고리 (1Depth) 값입니다: "${rawCat1}".`,
-          "Skincare, Hair Care, Beauty Tools, Body Care, Personal Care, Makeup, Sets & Collections, Other 중 하나를 입력해 주세요."
+          `[${excelRowNumber}행 · 카테고리 (1Depth)] 유효하지 않은 대분류 값입니다: "${rawCat1}".`,
+          "Skincare, Hair Care, Beauty Tools, Body Care, Personal Care, Makeup, Sets & Collections, Other 중 하나를 입력해 주세요.",
+          "category"
         );
       }
       if (rawCat2 || rawCat3) {
         addValidationError(
-          "현재 환경에서 2Depth / 3Depth 카테고리 마스터 정보를 사용할 수 없습니다.",
-          "2Depth 및 3Depth 항목을 비워 두세요."
+          `[${excelRowNumber}행 · 카테고리 (2Depth/3Depth)] 현재 환경에서 세부 카테고리 마스터 정보를 사용할 수 없습니다.`,
+          "2Depth 및 3Depth 항목을 비워 두세요.",
+          "category"
         );
       }
     }
@@ -1267,6 +1448,332 @@ export function parseAndValidateBulkProductWorkbook(
     const palletHeight = checkPositiveMeasure("palletHeight", "파렛트 높이(cm)");
     const palletWeight = checkPositiveMeasure("palletWeight", "파렛트 중량(kg)");
 
+    // 15. Media URLs (Main Image URL + Additional Image URL 2..10 + Product Video URL)
+    const normalizedImageUrls: BulkNormalizedImageUrlItem[] = [];
+    const seenRowImageUrls = new Set<string>();
+    const rawMainImg = values.mainImageUrl.trim();
+    const hasAnyAdditionalImg = BULK_IMAGE_URL_FIELD_KEYS.slice(1).some(
+      (k) => values[k].trim() !== ""
+    );
+
+    if (!rawMainImg && hasAnyAdditionalImg) {
+      addValidationError(
+        `[${excelRowNumber}행 · 대표 이미지 URL (Main Image URL)] 추가 이미지 URL 입력 시 대표 이미지 URL(position 0)은 필수입니다.`,
+        "대표 이미지 URL(Main Image URL) 칸에 첫 번째 대표 상품 이미지 HTTPS URL을 입력해 주세요.",
+        "mediaUrl"
+      );
+    }
+
+    BULK_IMAGE_URL_FIELD_KEYS.forEach((imgKey, slotIdx) => {
+      const rawUrl = values[imgKey].trim();
+      if (!rawUrl) return;
+
+      const slotNumber = slotIdx + 1;
+      const colLabel =
+        slotNumber === 1
+          ? "대표 이미지 URL (Main Image URL)"
+          : `추가 이미지 URL ${slotNumber} (Additional Image URL ${slotNumber})`;
+
+      const check = validateHttpsMediaUrlSyntax(rawUrl, "image");
+      if (!check.valid || !check.normalizedUrl) {
+        addValidationError(
+          `[${excelRowNumber}행 · ${colLabel}] ${check.errorReason || "유효하지 않은 이미지 URL입니다."}`,
+          check.correctiveGuidance || "https://로 시작하는 직접 이미지 URL(JPG, PNG, WEBP)을 입력해 주세요.",
+          "mediaUrl"
+        );
+        return;
+      }
+
+      if (seenRowImageUrls.has(check.normalizedUrl)) {
+        warnings.push(
+          `"${colLabel}"에 중복 입력된 이미지 URL이 자동 제외되어 중복 등록을 방지했습니다.`
+        );
+        return;
+      }
+
+      if (normalizedImageUrls.length < BULK_MEDIA_MAX_IMAGES_PER_PRODUCT) {
+        seenRowImageUrls.add(check.normalizedUrl);
+        normalizedImageUrls.push({
+          url: check.normalizedUrl,
+          columnHeader: colLabel,
+          slotNumber,
+        });
+      }
+    });
+
+    let resolvedVideoUrl: string | null = null;
+    const rawVideoUrl = values.productVideoUrl.trim();
+    if (rawVideoUrl) {
+      const vidCheck = validateHttpsMediaUrlSyntax(rawVideoUrl, "video");
+      if (!vidCheck.valid || !vidCheck.normalizedUrl) {
+        addValidationError(
+          `[${excelRowNumber}행 · 제품 동영상 URL (Product Video URL)] ${vidCheck.errorReason || "유효하지 않은 동영상 URL입니다."}`,
+          vidCheck.correctiveGuidance || "https://로 시작하는 공개 동영상 링크(YouTube, Vimeo 등)를 입력해 주세요.",
+          "mediaUrl"
+        );
+      } else {
+        resolvedVideoUrl = vidCheck.normalizedUrl;
+      }
+    }
+
+    // 16. Common Product Attributes (23 scope='COMMON' EAV attributes — strictly optional for Draft)
+    const normalizedCommonAttrs: BulkNormalizedAttributeEntry[] = [];
+    let parsedShelfLifeMonths: number | null = null;
+    let parsedMinRemainingMonths: number | null = null;
+
+    for (const attr of effectiveCommonAttrs) {
+      const rawCell = values[attr.fieldKey]?.trim() || "";
+      if (!rawCell) continue;
+
+      const colHeader = attr.header;
+
+      if (attr.inputType === "NUMBER_UNIT") {
+        const normLower = normalizeLookupToken(rawCell);
+        if (NA_ALIASES.has(normLower)) {
+          if (attr.allowNa) {
+            normalizedCommonAttrs.push({
+              attribute_code: attr.code,
+              value_json: "NA",
+              text_value: null,
+            });
+          } else {
+            addValidationError(
+              `[${excelRowNumber}행 · ${colHeader}] 해당 없음(N/A)을 선택할 수 없는 숫자 항목입니다 ("${rawCell}").`,
+              `${colHeader} 항목에 0보다 큰 개월 수 숫자를 입력하거나 비워 두세요.`,
+              "commonAttribute"
+            );
+          }
+          continue;
+        }
+
+        const parsedNum = parsePositiveDecimal(rawCell, 600);
+        if (!parsedNum.valid || parsedNum.value === null) {
+          addValidationError(
+            `[${excelRowNumber}행 · ${colHeader}] 유효하지 않은 숫자 값입니다 ("${rawCell}"). 1~600 범위의 양수 개월 수를 입력해 주세요.`,
+            `${colHeader} 항목에 단위 기호 없이 양수 숫자만 입력해 주세요 (예: 36).`,
+            "commonAttribute"
+          );
+          continue;
+        }
+
+        if (attr.code === "SHELF_LIFE_MONTHS") parsedShelfLifeMonths = parsedNum.value;
+        if (attr.code === "MIN_REMAINING_SHELF_LIFE") parsedMinRemainingMonths = parsedNum.value;
+
+        normalizedCommonAttrs.push({
+          attribute_code: attr.code,
+          value_json: String(parsedNum.value),
+          text_value: null,
+        });
+        continue;
+      }
+
+      if (attr.inputType === "YES_NO_NA" || attr.inputType === "SINGLE_SELECT") {
+        // Multi-value semicolon input in a single-select field must be rejected clearly
+        if (rawCell.includes(";")) {
+          addValidationError(
+            `[${excelRowNumber}행 · ${colHeader}] 단일 선택 항목에는 복수 값("${rawCell}")을 입력할 수 없습니다.`,
+            `Common_Attributes 시트에서 "${attr.nameKo}"의 허용 옵션 중 1개만 선택해 주세요.`,
+            "commonAttribute"
+          );
+          continue;
+        }
+
+        const otherParsed = parseOtherFreeTextToken(rawCell);
+        if (otherParsed.isOtherPrefix) {
+          if (!attr.allowOther) {
+            addValidationError(
+              `[${excelRowNumber}행 · ${colHeader}] 기타 직접 입력을 지원하지 않는 항목입니다 ("${rawCell}").`,
+              `Common_Attributes 시트에 안내된 허용 옵션 값 중 하나를 선택해 주세요.`,
+              "commonAttribute"
+            );
+          } else if (otherParsed.customText.length > 300) {
+            addValidationError(
+              `[${excelRowNumber}행 · ${colHeader}] 기타 상세 입력 내용은 최대 300자까지 허용됩니다.`,
+              "기타 상세 설명을 300자 이내로 줄여 주세요.",
+              "commonAttribute"
+            );
+          } else {
+            normalizedCommonAttrs.push({
+              attribute_code: attr.code,
+              value_json: "OTHER",
+              text_value: otherParsed.customText || null,
+            });
+          }
+          continue;
+        }
+
+        const matchedOpt = matchAttributeOptionToken(rawCell, attr.options);
+        if (matchedOpt) {
+          if (matchedOpt.adminOnlyOption) {
+            addValidationError(
+              `[${excelRowNumber}행 · ${colHeader}] "${matchedOpt.optionKo} (${matchedOpt.optionEn})" 상태는 관리자 검증 전용이므로 브랜드가 직접 지정할 수 없습니다.`,
+              `미검토(Not Reviewed), 진행 중(In Progress), 완료(Completed) 등 브랜드 자체 기재용 옵션을 선택해 주세요.`,
+              "commonAttribute"
+            );
+            continue;
+          }
+          normalizedCommonAttrs.push({
+            attribute_code: attr.code,
+            value_json: matchedOpt.optionCode,
+            text_value: null,
+          });
+          continue;
+        }
+
+        // Check generic N/A when allowNa is true and NOT_APPLICABLE was not already in options
+        const normLower = normalizeLookupToken(rawCell);
+        if (NA_ALIASES.has(normLower) && attr.allowNa) {
+          normalizedCommonAttrs.push({
+            attribute_code: attr.code,
+            value_json: "NA",
+            text_value: null,
+          });
+          continue;
+        }
+
+        const sampleAllowed = attr.options
+          .filter((o) => !o.adminOnlyOption)
+          .slice(0, 6)
+          .map((o) => `${o.optionKo}(${o.optionEn})`)
+          .join(", ");
+        addValidationError(
+          `[${excelRowNumber}행 · ${colHeader}] 허용되지 않는 옵션 값입니다: "${rawCell}".`,
+          `Common_Attributes 시트의 허용 값을 확인해 주세요 (예: ${sampleAllowed}).`,
+          "commonAttribute"
+        );
+        continue;
+      }
+
+      if (attr.inputType === "MULTI_SELECT") {
+        const rawTokens = rawCell
+          .split(";")
+          .map((t) => t.trim())
+          .filter((t) => t !== "");
+
+        if (rawTokens.length === 0) {
+          addValidationError(
+            `[${excelRowNumber}행 · ${colHeader}] 세미콜론(;)만 입력되어 유효한 옵션 값이 없습니다.`,
+            `유효한 옵션을 입력하거나 셀을 비워 두세요 (복수 선택 시 ';' 구분).`,
+            "commonAttribute"
+          );
+          continue;
+        }
+
+        const selectedCodes: string[] = [];
+        const customOtherTexts: string[] = [];
+        let sawStandaloneNa = false;
+        let attrFailed = false;
+
+        for (const token of rawTokens) {
+          const otherParsed = parseOtherFreeTextToken(token);
+          if (otherParsed.isOtherPrefix) {
+            if (!attr.allowOther) {
+              addValidationError(
+                `[${excelRowNumber}행 · ${colHeader}] 기타 직접 입력을 지원하지 않는 항목입니다 ("${token}").`,
+                `Common_Attributes 시트의 허용 옵션 값을 세미콜론(;)으로 구분하여 입력해 주세요.`,
+                "commonAttribute"
+              );
+              attrFailed = true;
+              break;
+            }
+            if (otherParsed.customText.length > 300) {
+              addValidationError(
+                `[${excelRowNumber}행 · ${colHeader}] 기타 상세 입력 내용은 최대 300자까지 허용됩니다.`,
+                "기타 상세 설명을 300자 이내로 줄여 주세요.",
+                "commonAttribute"
+              );
+              attrFailed = true;
+              break;
+            }
+            if (!selectedCodes.includes("OTHER")) {
+              selectedCodes.push("OTHER");
+            }
+            if (otherParsed.customText) {
+              customOtherTexts.push(otherParsed.customText);
+            }
+            continue;
+          }
+
+          const matchedOpt = matchAttributeOptionToken(token, attr.options);
+          if (matchedOpt) {
+            if (matchedOpt.adminOnlyOption) {
+              addValidationError(
+                `[${excelRowNumber}행 · ${colHeader}] "${token}"은(는) 관리자 전용 옵션입니다.`,
+                `Common_Attributes 시트의 브랜드 입력 허용 옵션을 사용해 주세요.`,
+                "commonAttribute"
+              );
+              attrFailed = true;
+              break;
+            }
+            if (!selectedCodes.includes(matchedOpt.optionCode)) {
+              selectedCodes.push(matchedOpt.optionCode);
+            }
+            continue;
+          }
+
+          const normLower = normalizeLookupToken(token);
+          if (NA_ALIASES.has(normLower) && attr.allowNa) {
+            sawStandaloneNa = true;
+            continue;
+          }
+
+          const commaHint = token.includes(",")
+            ? " 복수 옵션은 쉼표(,)가 아닌 세미콜론(;)으로 구분해야 합니다 (예: Dry Skin; Sensitive Skin)."
+            : "";
+          const sampleAllowed = attr.options
+            .filter((o) => !o.adminOnlyOption)
+            .slice(0, 5)
+            .map((o) => `${o.optionKo}(${o.optionEn})`)
+            .join("; ");
+          addValidationError(
+            `[${excelRowNumber}행 · ${colHeader}] 허용되지 않는 옵션 값입니다: "${token}".`,
+            `Common_Attributes 시트의 허용 옵션을 세미콜론(;)으로 구분해 입력해 주세요 (예: ${sampleAllowed}).${commaHint}`,
+            "commonAttribute"
+          );
+          attrFailed = true;
+          break;
+        }
+
+        if (attrFailed) continue;
+
+        const hasExplicitNaCode = selectedCodes.includes("NOT_APPLICABLE");
+        if ((sawStandaloneNa && selectedCodes.length > 0) || (hasExplicitNaCode && selectedCodes.length > 1)) {
+          addValidationError(
+            `[${excelRowNumber}행 · ${colHeader}] '해당 없음(Not Applicable)'은 다른 옵션과 동시에 선택할 수 없습니다.`,
+            "'해당 없음'만 단독으로 입력하거나 실제 해당되는 옵션들만 선택해 주세요.",
+            "commonAttribute"
+          );
+          continue;
+        }
+
+        if (sawStandaloneNa) {
+          normalizedCommonAttrs.push({
+            attribute_code: attr.code,
+            value_json: "NA",
+            text_value: null,
+          });
+        } else if (selectedCodes.length > 0) {
+          normalizedCommonAttrs.push({
+            attribute_code: attr.code,
+            value_json: selectedCodes,
+            text_value: customOtherTexts.length > 0 ? customOtherTexts.join(", ") : null,
+          });
+        }
+      }
+    }
+
+    if (
+      parsedShelfLifeMonths !== null &&
+      parsedMinRemainingMonths !== null &&
+      parsedMinRemainingMonths > parsedShelfLifeMonths
+    ) {
+      addValidationError(
+        `[${excelRowNumber}행 · 최소 잔여 유통기한] 최소 잔여 유통기한(${parsedMinRemainingMonths}개월)이 전체 유통기한(${parsedShelfLifeMonths}개월)보다 클 수 없습니다.`,
+        "최소 잔여 유통기한을 전체 유통기한 이하의 개월 수로 수정해 주세요.",
+        "commonAttribute"
+      );
+    }
+
     const isInvalid = errors.length > 0;
     const status = isInvalid ? "INVALID" : warnings.length > 0 ? "WARNING" : "VALID";
 
@@ -1321,6 +1828,9 @@ export function parseAndValidateBulkProductWorkbook(
             palette_depth: palletDepth,
             palette_height: palletHeight,
             palette_weight: palletWeight,
+            image_urls: normalizedImageUrls,
+            product_video_url: resolvedVideoUrl,
+            common_attributes: normalizedCommonAttrs,
           }
         : null;
 
@@ -1337,6 +1847,12 @@ export function parseAndValidateBulkProductWorkbook(
       correctiveGuidance: Array.from(guidanceSet),
       isDuplicateError,
       isValidationError,
+      hasCategoryError,
+      hasCommonAttributeError,
+      hasMediaUrlError,
+      imageUrlCount: normalizedImageUrls.length,
+      hasVideoUrl: Boolean(resolvedVideoUrl),
+      commonAttributeCount: normalizedCommonAttrs.length,
       payload,
     });
   }
@@ -1346,6 +1862,13 @@ export function parseAndValidateBulkProductWorkbook(
   let invalidRows = 0;
   let duplicateRows = 0;
   let validationErrorRows = 0;
+  let categoryErrorRows = 0;
+  let commonAttributeErrorRows = 0;
+  let mediaUrlErrorRows = 0;
+  let rowsWithMediaCount = 0;
+  let totalImageUrlsCount = 0;
+  let rowsWithVideoCount = 0;
+  let rowsWithCommonAttrsCount = 0;
 
   for (const row of validatedRows) {
     if (row.status === "VALID") validRows += 1;
@@ -1354,6 +1877,18 @@ export function parseAndValidateBulkProductWorkbook(
       invalidRows += 1;
       if (row.isDuplicateError) duplicateRows += 1;
       if (row.isValidationError) validationErrorRows += 1;
+      if (row.hasCategoryError) categoryErrorRows += 1;
+      if (row.hasCommonAttributeError) commonAttributeErrorRows += 1;
+      if (row.hasMediaUrlError) mediaUrlErrorRows += 1;
+    }
+
+    if (row.status !== "INVALID") {
+      if (row.imageUrlCount > 0 || row.hasVideoUrl) {
+        rowsWithMediaCount += 1;
+      }
+      totalImageUrlsCount += row.imageUrlCount;
+      if (row.hasVideoUrl) rowsWithVideoCount += 1;
+      if (row.commonAttributeCount > 0) rowsWithCommonAttrsCount += 1;
     }
   }
 
@@ -1368,6 +1903,13 @@ export function parseAndValidateBulkProductWorkbook(
       invalidRows,
       duplicateRows,
       validationErrorRows,
+      categoryErrorRows,
+      commonAttributeErrorRows,
+      mediaUrlErrorRows,
+      rowsWithMediaCount,
+      totalImageUrlsCount,
+      rowsWithVideoCount,
+      rowsWithCommonAttrsCount,
       exampleRowsSkipped,
     },
     rows: validatedRows,
