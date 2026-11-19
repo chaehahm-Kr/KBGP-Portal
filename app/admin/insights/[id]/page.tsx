@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, use } from "react";
 import Link from "next/link";
 import InsightPreviewModal from "@/components/admin/insights/insight-preview-modal";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 function formatFileSize(bytes: number): string {
   if (!bytes || bytes <= 0) return "0 KB";
@@ -149,11 +150,14 @@ export default function InsightEditorDetailPage({
         fd.append("card_description_en", pdfCardMeta.card_description_en);
       if (pdfCardMeta.button_label_en) fd.append("button_label_en", pdfCardMeta.button_label_en);
 
+      const payloadFd = await stageLargeFiles(fd);
       const res = await fetch(`/api/admin/insights/${id}/attachment`, {
         method: "POST",
-        body: fd,
+        body: payloadFd,
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({
+        error: `서버 응답 오류 (HTTP ${res.status})`,
+      }));
       if (!res.ok) {
         setPdfFeedback({
           type: "error",
