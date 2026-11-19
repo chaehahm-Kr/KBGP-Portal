@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675">
+  <defs>
+    <linearGradient id="ivoryPaper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f6f3ec"/>
+      <stop offset="100%" stop-color="#ebe6dc"/>
+    </linearGradient>
+    <pattern id="subtleLines" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#16171a" stroke-opacity="0.045" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="675" fill="url(#ivoryPaper)"/>
+  <rect width="1200" height="675" fill="url(#subtleLines)"/>
+  <!-- Navy Left Spine -->
+  <rect x="0" y="0" width="24" height="675" fill="#0d1526"/>
+
+  <!-- Editorial Frame -->
+  <rect x="76" y="56" width="1060" height="563" fill="none" stroke="#16171a" stroke-opacity="0.16" stroke-width="1"/>
+  <line x1="76" y1="132" x2="1136" y2="132" stroke="#16171a" stroke-opacity="0.14" stroke-width="1"/>
+  <line x1="76" y1="530" x2="1136" y2="530" stroke="#16171a" stroke-opacity="0.14" stroke-width="1"/>
+
+  <!-- Top Header Meta -->
+  <text x="108" y="102" fill="#0d1526" font-family="Pretendard, system-ui, -apple-system, sans-serif" font-size="15" font-weight="800" letter-spacing="4">K·SELECT NETWORK</text>
+  <text x="1104" y="102" text-anchor="end" fill="#52565e" font-family="Pretendard, system-ui, -apple-system, sans-serif" font-size="13" font-weight="700" letter-spacing="3">U.S. MARKET ENTRY • PRACTICAL GUIDE</text>
+
+  <!-- Main Editorial Typography -->
+  <rect x="108" y="182" width="52" height="4" fill="#0b2e8a"/>
+  <text x="108" y="226" fill="#0b2e8a" font-family="Pretendard, system-ui, -apple-system, sans-serif" font-size="15" font-weight="800" letter-spacing="3.5">ESTABLISHMENT IDENTIFIER • NOVEMBER 2026</text>
+  <text x="108" y="302" fill="#0d1526" font-family="Georgia, 'Times New Roman', serif" font-size="56" font-weight="700" letter-spacing="-0.5">FEI Number Lookup</text>
+  <text x="108" y="370" fill="#16171a" font-family="Georgia, 'Times New Roman', serif" font-size="54" font-weight="700" letter-spacing="-0.5">&amp; New Request Guide</text>
+  <text x="108" y="430" fill="#4b5059" font-family="Pretendard, system-ui, -apple-system, sans-serif" font-size="22" font-weight="500">Practical Workflow for Korean Cosmetic Manufacturers &amp; OEMs</text>
+
+  <!-- Right 4-Step Editorial Card -->
+  <g transform="translate(764, 174)">
+    <rect x="0" y="0" width="332" height="316" rx="6" fill="#0d1526"/>
+    <text x="30" y="42" fill="#8ea4c8" font-family="Pretendard, system-ui, sans-serif" font-size="11" font-weight="700" letter-spacing="2.5">4-STEP VERIFICATION</text>
+    <line x1="30" y1="58" x2="302" y2="58" stroke="#f4f0e8" stroke-opacity="0.15"/>
+
+    <text x="30" y="92" fill="#6094ff" font-family="Pretendard, system-ui, sans-serif" font-size="13" font-weight="800">01</text>
+    <text x="64" y="92" fill="#f4f0e8" font-family="Pretendard, system-ui, sans-serif" font-size="14" font-weight="600">FEI Search Portal Access</text>
+
+    <text x="30" y="136" fill="#6094ff" font-family="Pretendard, system-ui, sans-serif" font-size="13" font-weight="800">02</text>
+    <text x="64" y="136" fill="#f4f0e8" font-family="Pretendard, system-ui, sans-serif" font-size="14" font-weight="600">Physical Facility Address Check</text>
+
+    <text x="30" y="180" fill="#6094ff" font-family="Pretendard, system-ui, sans-serif" font-size="13" font-weight="800">03</text>
+    <text x="64" y="180" fill="#f4f0e8" font-family="Pretendard, system-ui, sans-serif" font-size="14" font-weight="600">Lookup &amp; New FEI Email Template</text>
+
+    <text x="30" y="224" fill="#6094ff" font-family="Pretendard, system-ui, sans-serif" font-size="13" font-weight="800">04</text>
+    <text x="64" y="224" fill="#f4f0e8" font-family="Pretendard, system-ui, sans-serif" font-size="14" font-weight="600">Cosmetics Direct Integration</text>
+
+    <rect x="30" y="252" width="272" height="40" rx="4" fill="#f4f0e8" fill-opacity="0.12"/>
+    <text x="166" y="277" text-anchor="middle" fill="#f4f0e8" font-family="Pretendard, system-ui, sans-serif" font-size="12" font-weight="700" letter-spacing="1.8">DOWNLOADABLE PDF • 5 PAGES</text>
+  </g>
+
+  <!-- Bottom Strip -->
+  <text x="108" y="582" fill="#52565e" font-family="Pretendard, system-ui, -apple-system, sans-serif" font-size="13" font-weight="700" letter-spacing="2">FEI SEARCH PORTAL • PHYSICAL ADDRESS MATCH • COSMETICS DIRECT</text>
+  <text x="1104" y="582" text-anchor="end" fill="#0d1526" font-family="Pretendard, system-ui, -apple-system, sans-serif" font-size="13" font-weight="800" letter-spacing="2">5P PRACTICAL PDF</text>
+</svg>
