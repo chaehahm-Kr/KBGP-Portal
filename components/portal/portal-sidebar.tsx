@@ -51,8 +51,14 @@ export default function PortalSidebar({
     return pathname.startsWith("/portal/orders");
   });
 
+  const isHelpSupportPath = (p: string) =>
+    p.startsWith("/portal/announcements") ||
+    p.startsWith("/portal/resources") ||
+    p.startsWith("/portal/help") ||
+    p.startsWith("/portal/support");
+
   const [isHelpOpen, setIsHelpOpen] = useState(() => {
-    return pathname.startsWith("/portal/help") || pathname.startsWith("/portal/support");
+    return isHelpSupportPath(pathname);
   });
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(() => {
@@ -76,7 +82,7 @@ export default function PortalSidebar({
     if (pathname.startsWith("/portal/orders")) {
       setIsOrdersOpen(true);
     }
-    if (pathname.startsWith("/portal/help") || pathname.startsWith("/portal/support")) {
+    if (isHelpSupportPath(pathname)) {
       setIsHelpOpen(true);
     }
   }, [pathname]);
@@ -99,6 +105,8 @@ export default function PortalSidebar({
       icon: SupportIcon,
       category: "support",
       subItems: [
+        { name: "공지사항", href: "/portal/announcements", category: "support" },
+        { name: "자료실", href: "/portal/resources", category: "support" },
         { name: "Help Center", href: "/portal/help", category: "support" },
         { name: "문의 지원", href: "/portal/support", category: "support" },
       ],
@@ -149,7 +157,7 @@ export default function PortalSidebar({
 
           if (item.subItems) {
             const isGroupActive = item.name === "Help & Support"
-              ? (pathname.startsWith("/portal/help") || pathname.startsWith("/portal/support"))
+              ? isHelpSupportPath(pathname)
               : pathname.startsWith("/portal/orders");
             const isOpen = item.name === "Help & Support" ? isHelpOpen : isOrdersOpen;
             const toggleOpen = () => {

@@ -179,6 +179,7 @@ export default function Sidebar({
     Products: false,
     Purchasing: false,
     Finance: false,
+    "Brand Communications": false,
     "Retail Network": false,
     "Sales & Performance": false,
     "Tasks & Communication": false,
@@ -206,6 +207,7 @@ export default function Sidebar({
       Products: false,
       Purchasing: false,
       Finance: false,
+      "Brand Communications": false,
       "Retail Network": false,
       "Sales & Performance": false,
       "Tasks & Communication": false,
@@ -237,6 +239,7 @@ export default function Sidebar({
 
     const isBrandInquiries = pathname.startsWith("/admin/partner-inquiries") && queryType !== "retailer";
     const isHubInquiries = pathname.startsWith("/admin/partner-inquiries") && queryType === "retailer";
+    const isBrandComms = pathname.startsWith("/admin/brand-communications");
 
     const isCompanies = pathname.startsWith("/admin/companies") || pathname.startsWith("/admin/brands");
     const isTrading = pathname.startsWith("/admin/products/trading");
@@ -267,7 +270,7 @@ export default function Sidebar({
       pathname.startsWith("/admin/staff");
 
     // Automatically expand parent section without collapsing other sections
-    if (isBrandApps || isCompanies || isBrandProducts || isPurchasing || isBrandFinance || isBrandInquiries) {
+    if (isBrandApps || isCompanies || isBrandProducts || isPurchasing || isBrandFinance || isBrandInquiries || isBrandComms) {
       setExpandedSections((prev) => ({ ...prev, brand: true }));
     }
     if (isHubApps || isTrading || isRetailNetwork || isOrderProcessing || isReceivables || isContent || isSales || isHubInquiries) {
@@ -283,6 +286,7 @@ export default function Sidebar({
       Products: isBrandProducts || prev.Products,
       Purchasing: isPurchasing || prev.Purchasing,
       Finance: isBrandFinance || prev.Finance,
+      "Brand Communications": isBrandComms || prev["Brand Communications"],
       "Retail Network": isRetailNetwork || prev["Retail Network"],
       "Sales & Performance": isSales || prev["Sales & Performance"],
       "Tasks & Communication": isTasks || prev["Tasks & Communication"],
@@ -357,6 +361,14 @@ export default function Sidebar({
       name: "Brand Inquiries",
       icon: SupportIcon,
       href: "/admin/partner-inquiries?type=brand",
+    },
+    {
+      name: "Brand Communications",
+      icon: KnowledgeIcon,
+      subItems: [
+        { name: "Announcements", href: "/admin/brand-communications/announcements" },
+        { name: "Resources", href: "/admin/brand-communications/resources" },
+      ],
     },
   ];
 
