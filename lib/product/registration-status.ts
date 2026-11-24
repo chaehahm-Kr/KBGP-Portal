@@ -463,8 +463,8 @@ export function evaluateProductRegistrationStatus(
     missingItemsPush({
       key: "manufacture_sku",
       section: "기본 정보",
-      label: "제조사 SKU",
-      displayTag: "[기본 정보: 제조사 SKU]",
+      label: "브랜드 SKU",
+      displayTag: "[기본 정보: 브랜드 SKU]",
       tab: "basic",
       targetId: "manufactureSku-field",
       inputName: "manufactureSku",

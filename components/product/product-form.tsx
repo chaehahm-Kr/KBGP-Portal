@@ -244,7 +244,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
         errors.category = "임시 저장을 위해 카테고리를 선택해 주세요.";
       }
       if (!manufactureSku.trim()) {
-        errors.manufactureSku = "임시 저장을 위해 제조사 SKU를 입력해 주세요.";
+        errors.manufactureSku = "임시 저장을 위해 브랜드 SKU를 입력해 주세요.";
       }
       if (!nameEn.trim()) {
         errors.nameEn = "임시 저장을 위해 영문 제품명을 입력해 주세요.";
@@ -311,7 +311,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
       errors.category = "필수 항목 \"카테고리\"를 선택해 주세요.";
     }
     if (!manufactureSku.trim()) {
-      errors.manufactureSku = "필수 항목 \"제조사 SKU\"를 입력해 주세요.";
+      errors.manufactureSku = "필수 항목 \"브랜드 SKU\"를 입력해 주세요.";
     }
     if (!nameEn.trim()) {
       errors.nameEn = "필수 항목 \"영문 제품명\"을 입력해 주세요.";
@@ -511,7 +511,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="manufactureSku" className={labelClass}>
-                제조사 SKU (Manufacture SKU) <RequiredAsterisk />
+                브랜드 SKU (Brand SKU) <RequiredAsterisk />
               </label>
               <input
                 id="manufactureSku"

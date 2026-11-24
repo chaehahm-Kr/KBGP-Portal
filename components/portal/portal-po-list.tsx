@@ -515,7 +515,7 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="PO 번호, 상품명, Letusto SKU, 제조사 SKU 검색..."
+              placeholder="PO 번호, 상품명, Letusto SKU, 브랜드 SKU 검색..."
               className="w-full pl-9 pr-8 py-2 rounded-lg border border-zinc-200 bg-zinc-50 text-xs text-zinc-900 focus:bg-white focus:border-zinc-400 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white dark:focus:border-zinc-600"
             />
             {searchTerm && (

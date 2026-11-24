@@ -4,7 +4,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { resolveProductName } from "@/lib/product/name-resolver";
 import type { ProductComplianceReviewItem, ComplianceReviewStatus } from "@/lib/compliance/types";
-import { ComplianceClient, type ComplianceProductItem } from "@/components/admin/products/compliance-client";
+import {
+  ComplianceCenterClient,
+  type ComplianceFacilityItem,
+  type ComplianceProductRow,
+} from "@/components/admin/products/compliance-center-client";
+import type { ComplianceProductItem } from "@/components/admin/products/compliance-client";
 
 export const metadata: Metadata = {
   title: "Product Compliance | K SELECT NETWORK Admin",
@@ -306,17 +311,160 @@ export default async function AdminProductCompliancePage() {
     };
   });
 
+  // 10. Fetch manufacturing facilities with compliance
+  let facilitiesData: any[] = [];
+  try {
+    const { data: rawOrigins, error: originErr } = await admin
+      .from("company_shipping_origins")
+      .select("*, manufacturing_facility_compliance(*)")
+      .in("location_type", ["MANUFACTURING_FACILITY", "SHIPPING_AND_MANUFACTURING"])
+      .order("name", { ascending: true });
+
+    if (!originErr && rawOrigins) {
+      facilitiesData = rawOrigins;
+    } else {
+      const { data: fallbackOrigins } = await admin
+        .from("company_shipping_origins")
+        .select("*")
+        .in("location_type", ["MANUFACTURING_FACILITY", "SHIPPING_AND_MANUFACTURING"])
+        .order("name", { ascending: true });
+      facilitiesData = fallbackOrigins || [];
+    }
+  } catch (err) {
+    console.warn("Facilities query fallback:", err);
+  }
+
+  // 11. Fetch product regulatory compliance records (V1)
+  const productRegulatoryMap = new Map<string, any>();
+  try {
+    const { data: rawComp, error: compErr } = await admin
+      .from("product_regulatory_compliance")
+      .select("*");
+    if (!compErr && rawComp) {
+      rawComp.forEach((c: any) => productRegulatoryMap.set(c.product_id, c));
+    }
+  } catch (err) {
+    console.warn("Product regulatory compliance query fallback:", err);
+  }
+
+  // 12. Fetch product facility links
+  const productFacilityLinksMap = new Map<string, { primaryFacilityId: string | null; additionalFacilityIds: string[] }>();
+  try {
+    const { data: rawLinks, error: linkErr } = await admin
+      .from("product_manufacturing_facilities")
+      .select("product_id, facility_id, is_primary");
+    if (!linkErr && rawLinks) {
+      rawLinks.forEach((l: any) => {
+        if (!productFacilityLinksMap.has(l.product_id)) {
+          productFacilityLinksMap.set(l.product_id, { primaryFacilityId: null, additionalFacilityIds: [] });
+        }
+        const entry = productFacilityLinksMap.get(l.product_id)!;
+        if (l.is_primary) {
+          entry.primaryFacilityId = l.facility_id;
+        } else {
+          entry.additionalFacilityIds.push(l.facility_id);
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("Product facility links query fallback:", err);
+  }
+
+  // Facility name lookup map
+  const facilityNameMap = new Map<string, string>();
+  const complianceFacilities: ComplianceFacilityItem[] = facilitiesData.map((f: any) => {
+    const comp = Array.isArray(f.manufacturing_facility_compliance)
+      ? f.manufacturing_facility_compliance[0]
+      : f.manufacturing_facility_compliance || null;
+    const compName = companyMap.get(f.company_id)?.name || "(미지정 회사)";
+    facilityNameMap.set(f.id, f.name);
+
+    return {
+      id: f.id,
+      company_id: f.company_id,
+      company_name: compName,
+      name: f.name,
+      location_type: f.location_type || "MANUFACTURING_FACILITY",
+      facility_code: f.facility_code || null,
+      manufacturer_legal_name_en: f.manufacturer_legal_name_en || null,
+      manufacturer_name_ko: f.manufacturer_name_ko || null,
+      country: f.country || "KR",
+      city: f.city || "",
+      address_line1: f.address_line1 || "",
+      fei_status: comp?.fei_status || "UNKNOWN",
+      fei_number: comp?.fei_number || null,
+      mocra_facility_status: comp?.mocra_facility_status || "UNKNOWN",
+      mocra_next_renewal_date: comp?.mocra_next_renewal_date || null,
+      otc_facility_status: comp?.otc_facility_status || "UNKNOWN",
+      otc_next_renewal_date: comp?.otc_next_renewal_date || null,
+      verification_status: comp?.verification_status || "UNREVIEWED",
+      import_readiness_status: comp?.import_readiness_status || "NOT_EVALUATED",
+    };
+  });
+
+  const complianceProducts: ComplianceProductRow[] = products.map((p) => {
+    const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
+    const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
+    const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
+    const authoritativeName = resolveProductName(p);
+    const firstImagePath = firstImageByProductId.get(p.id) || null;
+    const photoUrl = firstImagePath ? signedUrlMap.get(firstImagePath) || null : null;
+    const company = companyMap.get(p.company_id);
+    const brand = brandMap.get(p.brand_id);
+    const v1Comp = productRegulatoryMap.get(p.id);
+    const links = productFacilityLinksMap.get(p.id);
+    const primaryFacName = links?.primaryFacilityId ? facilityNameMap.get(links.primaryFacilityId) || null : null;
+    const additionalFacNames = (links?.additionalFacilityIds || [])
+      .map((id) => facilityNameMap.get(id))
+      .filter(Boolean) as string[];
+
+    return {
+      id: p.id,
+      name: authoritativeName,
+      name_en: p.name_en || null,
+      brand_name: brand?.name || "(미지정 브랜드)",
+      company_id: p.company_id,
+      company_name: company?.name || "(미지정 회사)",
+      brand_sku: effectiveManufactureSku,
+      letusto_sku: effectiveLetustoSku,
+      photo_url: photoUrl,
+      us_classification: v1Comp?.us_classification || "UNDETERMINED",
+      otc_applicability: v1Comp?.otc_applicability || null,
+      mocra_listing_status: v1Comp?.mocra_listing_status || "UNKNOWN",
+      mocra_listing_number: v1Comp?.mocra_listing_number || null,
+      mocra_next_renewal_date: v1Comp?.mocra_next_renewal_date || null,
+      otc_listing_status: v1Comp?.otc_listing_status || "UNKNOWN",
+      otc_ndc_number: v1Comp?.otc_ndc_number || null,
+      otc_next_renewal_date: v1Comp?.otc_next_renewal_date || null,
+      drug_facts_status: v1Comp?.drug_facts_status || "UNKNOWN",
+      verification_status: v1Comp?.verification_status || "UNREVIEWED",
+      import_readiness_status: v1Comp?.import_readiness_status || "NOT_EVALUATED",
+      primary_facility_name: primaryFacName,
+      additional_facility_names: additionalFacNames,
+    };
+  });
+
   const availableBrands = (brands ?? []).map((b) => ({ id: b.id, name: b.name }));
   const availableCompanies = (companies ?? []).map((c) => ({ id: c.id, name: c.name }));
-  const availableCategories = (dbCategories ?? []).filter((c) => c.depth === 1 || !c.parent_code).map((c) => ({ code: c.code, name_ko: c.name_ko }));
 
   return (
     <div className="flex-1 w-full p-4 sm:p-6 space-y-6">
-      <ComplianceClient
-        products={resolvedProducts}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-4">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-950 dark:text-white">
+            ADMIN Compliance Center (미국 규제 및 인허가 관리 센터)
+          </h1>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+            미국 MoCRA 제품·시설 리스팅, FDA FEI 발급 상태, OTC NDC 등록 및 연례 갱신 일정을 통합 모니터링합니다.
+          </p>
+        </div>
+      </div>
+
+      <ComplianceCenterClient
+        products={complianceProducts}
+        facilities={complianceFacilities}
         brands={availableBrands}
         companies={availableCompanies}
-        categories={availableCategories}
       />
     </div>
   );

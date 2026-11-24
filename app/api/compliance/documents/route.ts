@@ -48,6 +48,7 @@ export async function GET(req: NextRequest) {
   let query = admin
     .from("compliance_evidence_documents")
     .select("id, company_id, target_type, facility_id, product_id, document_category, file_name, mime_type, file_size, sha256, storage_path, created_at, uploaded_by")
+    .eq("target_type", targetType)
     .order("created_at", { ascending: false });
 
   if (targetType === "FACILITY") {
@@ -62,6 +63,9 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query;
   if (error) {
+    if (error.code === "42P01" || error.message?.includes("does not exist")) {
+      return NextResponse.json({ documents: [] });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

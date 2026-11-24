@@ -307,7 +307,7 @@ export function AdminProductCreateForm({ companies, brands }: AdminProductCreate
 
           <div>
             <label htmlFor="manufactureSku" className={labelClass}>
-              제조사 SKU (Manufacture SKU) *
+              브랜드 SKU (Brand SKU) *
             </label>
             <input
               id="manufactureSku"

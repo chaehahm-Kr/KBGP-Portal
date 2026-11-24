@@ -283,7 +283,7 @@ export function ReceivingForm({
               <thead>
                 <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-150 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-350">
                   <th className="px-4 py-2.5">Letusto SKU</th>
-                  <th className="px-4 py-2.5">제조사 SKU</th>
+                  <th className="px-4 py-2.5">브랜드 SKU</th>
                   <th className="px-4 py-2.5">제품명</th>
                   <th className="px-4 py-2.5 text-right w-20">선적 수량</th>
                   <th className="px-4 py-2.5 text-right w-20">기입고 수량</th>

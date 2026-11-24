@@ -603,7 +603,7 @@ export function PurchaseOrdersList({
                 <tr className="border-b border-zinc-200 bg-zinc-50/60 text-zinc-600 font-bold dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300">
                   <th className="px-4 py-3.5 whitespace-nowrap">이미지</th>
                   <th className="px-4 py-3.5 whitespace-nowrap">Letusto SKU</th>
-                  <th className="px-4 py-3.5 whitespace-nowrap">제조사 SKU</th>
+                  <th className="px-4 py-3.5 whitespace-nowrap">브랜드 SKU</th>
                   <th className="px-4 py-3.5 whitespace-nowrap min-w-[180px]">Product Name</th>
                   <th className="px-4 py-3.5 whitespace-nowrap">Supplier</th>
                   <th className="px-4 py-3.5 whitespace-nowrap">PO Number</th>
