@@ -16,10 +16,12 @@ for (const line of envLocalContent.split(/\r?\n/)) {
 const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL || "https://shzfrppdobpmrstcjfqu.supabase.co";
 const anonKey = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+const targetBase = (process.env.QA_TARGET_URL || "http://localhost:3005").trim();
+
 async function runBrowserQa() {
   console.log("================================================================================");
   console.log("ADM-KNOWLEDGE-DISTRIBUTION-001: COMPREHENSIVE BROWSER QA SUITE");
-  console.log("Target Server: http://localhost:3005");
+  console.log("Target Server:", targetBase);
   console.log("================================================================================\n");
 
   const artifactDir = "C:\\Users\\ChaeHahm\\.gemini\\antigravity\\brain\\730f6e70-61e4-47de-8a28-291a9d425b30";
@@ -52,17 +54,19 @@ async function runBrowserQa() {
     locale: "ko-KR",
   });
 
+  const cookieDomain = targetBase.includes("localhost") ? "localhost" : "admin.kselectnetwork.com";
+
   await context.addCookies([
     {
       name: `sb-${projectRef}-auth-token`,
       value: cookieValue,
-      domain: "localhost",
+      domain: cookieDomain,
       path: "/",
     },
     {
       name: `admin-sb-${projectRef}-auth-token`,
       value: cookieValue,
-      domain: "localhost",
+      domain: cookieDomain,
       path: "/",
     },
   ]);
@@ -82,10 +86,26 @@ async function runBrowserQa() {
 
   try {
     // -------------------------------------------------------------------------
+    // Step 1.5: UI Login via /admin/login if needed
+    // -------------------------------------------------------------------------
+    console.log(`[Step 1.5] Checking login at ${targetBase}/admin/login...`);
+    await page.goto(`${targetBase}/admin/login`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForTimeout(1000);
+
+    const emailInput = page.locator('input[type="email"], input[name="email"], input#email');
+    if ((await emailInput.count()) > 0) {
+      console.log("   Filling login form as qa-admin-test@letusto.com...");
+      await emailInput.fill("qa-admin-test@letusto.com");
+      await page.locator('input[type="password"], input[name="password"], input#password').fill("Password123!@#");
+      await page.locator('button[type="submit"]').click();
+      await page.waitForTimeout(4000);
+      console.log("   Current URL after login:", page.url());
+    }
+    // -------------------------------------------------------------------------
     // Step 2: Navigate to Knowledge Detail (kno-brand-policy-v10)
     // -------------------------------------------------------------------------
-    console.log("\n[Step 2] Navigating to /admin/knowledge/kno-brand-policy-v10...");
-    await page.goto("http://localhost:3005/admin/knowledge/kno-brand-policy-v10", {
+    console.log(`\n[Step 2] Navigating to ${targetBase}/admin/knowledge/kno-brand-policy-v10...`);
+    await page.goto(`${targetBase}/admin/knowledge/kno-brand-policy-v10`, {
       waitUntil: "networkidle",
       timeout: 30000,
     });
@@ -175,7 +195,7 @@ async function runBrowserQa() {
     // -------------------------------------------------------------------------
     console.log("\n[Step 6] Navigating to isolated test fixture for save & reload persistence QA...");
     // Let's create an isolated fixture via API
-    const fixtureCreateRes = await fetch("http://localhost:3005/api/admin/knowledge", {
+    const fixtureCreateRes = await fetch(`${targetBase}/api/admin/knowledge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -193,7 +213,7 @@ async function runBrowserQa() {
     const fixtureId = fixtureData.item.id;
     console.log("Created fixture with ID:", fixtureId);
 
-    await page.goto(`http://localhost:3005/admin/knowledge/${fixtureId}`, {
+    await page.goto(`${targetBase}/admin/knowledge/${fixtureId}`, {
       waitUntil: "networkidle",
       timeout: 30000,
     });
