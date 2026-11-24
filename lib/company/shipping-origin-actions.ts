@@ -16,15 +16,20 @@ import {
   isManufacturingCapableLocation,
   type ManufacturingFacilityComplianceRecord,
 } from "@/lib/compliance/v1-types";
+import { isComplianceV1Enabled } from "@/lib/compliance/v1-feature-gate";
 
 /**
  * DATA-JSON-CLEAN-003: 출고지는 company_shipping_origins 테이블(0137)만 저장소다.
  * KSN-CMP-004: 출고지 및 제조시설 통합 관리 확장 (0200)
  */
-const ORIGIN_TABLE_COLUMNS = [
+const LEGACY_ORIGIN_COLUMNS = [
   "id", "company_id", "name", "is_default", "contact_name", "phone", "email", "country",
   "address_line1", "address_line2", "city", "state_province", "postal_code", "status", "notes",
   "created_at", "updated_at", "created_by", "updated_by",
+] as const;
+
+const ORIGIN_TABLE_COLUMNS = [
+  ...LEGACY_ORIGIN_COLUMNS,
   "location_type", "is_default_manufacturing", "facility_code",
   "manufacturer_legal_name_en", "manufacturer_name_ko", "contact_name_en",
 ] as const;
@@ -32,10 +37,12 @@ const ORIGIN_TABLE_COLUMNS = [
 /**
  * 테이블에 쓸 칸만 남긴다. 목록 조회 때 덧붙는 warehouse_* 또는 compliance 같은 표시용 값이 섞이면
  * update 가 "column does not exist" 로 조용히 실패해 테이블만 예전 값으로 남는다.
+ * Feature Gate: 릴리즈 전에는 레거시 컬럼만 저장하여 0200 미적용 프로덕션 DB와 100% 호환 보장.
  */
 function toOriginRow(record: CompanyShippingOrigin): Record<string, unknown> {
   const row: Record<string, unknown> = {};
-  for (const col of ORIGIN_TABLE_COLUMNS) {
+  const activeCols = isComplianceV1Enabled() ? ORIGIN_TABLE_COLUMNS : LEGACY_ORIGIN_COLUMNS;
+  for (const col of activeCols) {
     if ((record as any)[col] !== undefined) row[col] = (record as any)[col];
   }
   return row;

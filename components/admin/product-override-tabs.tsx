@@ -37,6 +37,7 @@ import {
 import { updateProductSuppliers } from "@/lib/purchase-order/actions";
 import { CategoryAttributeForm, type CategoryAttributeFormHandle, type CategoryCompletionStatus } from "@/components/product/category-attribute-form";
 import { ProductRegulatoryComplianceTab } from "@/components/product/product-regulatory-compliance-tab";
+import { isComplianceV1Enabled } from "@/lib/compliance/v1-feature-gate";
 import { ProductChangeHistoryTab } from "@/components/product/product-change-history-tab";
 import type { ProductChangeLogItem } from "@/lib/product/audit";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
@@ -1404,8 +1405,8 @@ export function ProductOverrideTabs({
         ovMatrix
       );
 
-      // KSN-CMP-004: Save product manufacturing facilities if modified
-      if (isFacilityDirty) {
+      // KSN-CMP-004: Save product manufacturing facilities if modified and feature gate is active
+      if (isFacilityDirty && isComplianceV1Enabled()) {
         const facRes = await setProductManufacturingFacilitiesAction(product.id, {
           primaryFacilityId,
           additionalFacilityIds,
@@ -1687,7 +1688,7 @@ export function ProductOverrideTabs({
               : "border-transparent text-zinc-400 hover:text-zinc-650"
           }`}
         >
-          규제 및 인허가
+          {isComplianceV1Enabled() ? "규제 및 인허가" : "인허가 & 보증서"}
         </button>
         <button
           onClick={() => setActiveTab("curation")}
@@ -2244,17 +2245,19 @@ export function ProductOverrideTabs({
             </div>
 
             {/* [신규 카드]: 제조사 및 제조시설 정보 (MoCRA / FDA) */}
-            <div id="primary-facility-field" className="mt-6">
-              <ProductFacilitySelector
-                productId={product.id}
-                companyId={effectiveCompanyId}
-                primaryFacilityId={primaryFacilityId}
-                additionalFacilityIds={additionalFacilityIds}
-                onChange={handleFacilityChange}
-                isGrandfathered={Boolean((product as any).compliance_facility_grandfathered)}
-                manageOriginsUrl={effectiveCompanyId ? `/admin/companies/${effectiveCompanyId}?tab=shipping-origin` : undefined}
-              />
-            </div>
+            {isComplianceV1Enabled() && (
+              <div id="primary-facility-field" className="mt-6">
+                <ProductFacilitySelector
+                  productId={product.id}
+                  companyId={effectiveCompanyId}
+                  primaryFacilityId={primaryFacilityId}
+                  additionalFacilityIds={additionalFacilityIds}
+                  onChange={handleFacilityChange}
+                  isGrandfathered={Boolean((product as any).compliance_facility_grandfathered)}
+                  manageOriginsUrl={effectiveCompanyId ? `/admin/companies/${effectiveCompanyId}?tab=shipping-origin` : undefined}
+                />
+              </div>
+            )}
           </div>
         )}
 

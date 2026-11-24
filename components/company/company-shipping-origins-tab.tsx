@@ -37,6 +37,7 @@ import {
   adminVerifyFacilityComplianceAction,
   getFacilityLinkedProductsAction,
 } from "@/lib/compliance/v1-facility-actions";
+import { isComplianceV1Enabled } from "@/lib/compliance/v1-feature-gate";
 
 interface CompanyShippingOriginsTabProps {
   companyId: string;
@@ -730,47 +731,49 @@ export function CompanyShippingOriginsTab({
             className="inline-flex items-center justify-center gap-1.5 rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 shadow-sm transition-colors cursor-pointer self-start sm:self-auto"
           >
             <span>+</span>
-            <span>출고지 / 제조시설 추가</span>
+            <span>{isComplianceV1Enabled() ? "출고지 / 제조시설 추가" : "출고지 추가"}</span>
           </button>
         )}
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-zinc-150 dark:border-zinc-850 pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveFilter("ALL")}
-          className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-            activeFilter === "ALL"
-              ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
-              : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-          }`}
-        >
-          전체 ({origins.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveFilter("SHIPPING")}
-          className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-            activeFilter === "SHIPPING"
-              ? "bg-blue-600 text-white"
-              : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-          }`}
-        >
-          출고지 ({shippingCount})
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveFilter("MANUFACTURING")}
-          className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-            activeFilter === "MANUFACTURING"
-              ? "bg-indigo-600 text-white"
-              : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-          }`}
-        >
-          제조시설 ({mfgCount})
-        </button>
-      </div>
+      {/* Filter Tabs (Enabled in Compliance V1) */}
+      {isComplianceV1Enabled() && (
+        <div className="flex items-center gap-2 border-b border-zinc-150 dark:border-zinc-850 pb-2">
+          <button
+            type="button"
+            onClick={() => setActiveFilter("ALL")}
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+              activeFilter === "ALL"
+                ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
+                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+            }`}
+          >
+            전체 ({origins.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("SHIPPING")}
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+              activeFilter === "SHIPPING"
+                ? "bg-blue-600 text-white"
+                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+            }`}
+          >
+            출고지 ({shippingCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("MANUFACTURING")}
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+              activeFilter === "MANUFACTURING"
+                ? "bg-indigo-600 text-white"
+                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+            }`}
+          >
+            제조시설 ({mfgCount})
+          </button>
+        </div>
+      )}
 
       {/* List of Locations */}
       {filteredOrigins.length === 0 ? (
@@ -1130,73 +1133,75 @@ export function CompanyShippingOriginsTab({
             )}
 
             <form onSubmit={handleSaveOrigin} className="space-y-4 text-xs">
-              {/* Location Type Selection */}
-              <div>
-                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  장소 유형 (Location Type) <span className="text-rose-500">*</span>
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <label
-                    className={`flex flex-col p-2.5 rounded-lg border cursor-pointer transition-all ${
-                      formLocationType === "SHIPPING_ORIGIN"
-                        ? "border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 ring-1 ring-blue-500"
-                        : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="location_type"
-                      value="SHIPPING_ORIGIN"
-                      checked={formLocationType === "SHIPPING_ORIGIN"}
-                      onChange={() => setFormLocationType("SHIPPING_ORIGIN")}
-                      className="sr-only"
-                    />
-                    <span className="font-bold text-xs text-zinc-900 dark:text-white">출고지 (Shipping)</span>
-                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">제품 보관 및 출고 전용</span>
+              {/* Location Type Selection (Compliance V1 feature-gated) */}
+              {isComplianceV1Enabled() && (
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                    장소 유형 (Location Type) <span className="text-rose-500">*</span>
                   </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label
+                      className={`flex flex-col p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        formLocationType === "SHIPPING_ORIGIN"
+                          ? "border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 ring-1 ring-blue-500"
+                          : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="location_type"
+                        value="SHIPPING_ORIGIN"
+                        checked={formLocationType === "SHIPPING_ORIGIN"}
+                        onChange={() => setFormLocationType("SHIPPING_ORIGIN")}
+                        className="sr-only"
+                      />
+                      <span className="font-bold text-xs text-zinc-900 dark:text-white">출고지 (Shipping)</span>
+                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">제품 보관 및 출고 전용</span>
+                    </label>
 
-                  <label
-                    className={`flex flex-col p-2.5 rounded-lg border cursor-pointer transition-all ${
-                      formLocationType === "MANUFACTURING_FACILITY"
-                        ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 ring-1 ring-indigo-500"
-                        : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="location_type"
-                      value="MANUFACTURING_FACILITY"
-                      checked={formLocationType === "MANUFACTURING_FACILITY"}
-                      onChange={() => setFormLocationType("MANUFACTURING_FACILITY")}
-                      className="sr-only"
-                    />
-                    <span className="font-bold text-xs text-zinc-900 dark:text-white">제조시설 (Manufacturing)</span>
-                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">제품 생산 전용 (MoCRA/FDA)</span>
-                  </label>
+                    <label
+                      className={`flex flex-col p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        formLocationType === "MANUFACTURING_FACILITY"
+                          ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 ring-1 ring-indigo-500"
+                          : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="location_type"
+                        value="MANUFACTURING_FACILITY"
+                        checked={formLocationType === "MANUFACTURING_FACILITY"}
+                        onChange={() => setFormLocationType("MANUFACTURING_FACILITY")}
+                        className="sr-only"
+                      />
+                      <span className="font-bold text-xs text-zinc-900 dark:text-white">제조시설 (Manufacturing)</span>
+                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">제품 생산 전용 (MoCRA/FDA)</span>
+                    </label>
 
-                  <label
-                    className={`flex flex-col p-2.5 rounded-lg border cursor-pointer transition-all ${
-                      formLocationType === "SHIPPING_AND_MANUFACTURING"
-                        ? "border-teal-500 bg-teal-50/50 dark:bg-teal-950/30 ring-1 ring-teal-500"
-                        : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="location_type"
-                      value="SHIPPING_AND_MANUFACTURING"
-                      checked={formLocationType === "SHIPPING_AND_MANUFACTURING"}
-                      onChange={() => setFormLocationType("SHIPPING_AND_MANUFACTURING")}
-                      className="sr-only"
-                    />
-                    <span className="font-bold text-xs text-zinc-900 dark:text-white">출고지 겸 제조시설 (Both)</span>
-                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">생산 후 직접 출고하는 시설</span>
-                  </label>
+                    <label
+                      className={`flex flex-col p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        formLocationType === "SHIPPING_AND_MANUFACTURING"
+                          ? "border-teal-500 bg-teal-50/50 dark:bg-teal-950/30 ring-1 ring-teal-500"
+                          : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="location_type"
+                        value="SHIPPING_AND_MANUFACTURING"
+                        checked={formLocationType === "SHIPPING_AND_MANUFACTURING"}
+                        onChange={() => setFormLocationType("SHIPPING_AND_MANUFACTURING")}
+                        className="sr-only"
+                      />
+                      <span className="font-bold text-xs text-zinc-900 dark:text-white">출고지 겸 제조시설 (Both)</span>
+                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">생산 후 직접 출고하는 시설</span>
+                    </label>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Manufacturing Legal Name Section (Only when manufacturing capable) */}
-              {isManufacturingCapableLocation(formLocationType) && (
+              {isComplianceV1Enabled() && isManufacturingCapableLocation(formLocationType) && (
                 <div className="p-3 bg-indigo-50/40 dark:bg-indigo-950/20 rounded-lg border border-indigo-150 dark:border-indigo-900/60 space-y-3">
                   <span className="text-[11px] font-bold text-indigo-900 dark:text-indigo-300 block">
                     제조사 법인명 (MoCRA / FDA 등록 일치 정보)
@@ -1452,8 +1457,8 @@ export function CompanyShippingOriginsTab({
                 </div>
               </div>
 
-              {/* Manufacturing Compliance Regulatory Details Section */}
-              {isManufacturingCapableLocation(formLocationType) && (
+              {/* Manufacturing Compliance Regulatory Details Section (Compliance V1 feature-gated) */}
+              {isComplianceV1Enabled() && isManufacturingCapableLocation(formLocationType) && (
                 <div className="space-y-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-indigo-900 dark:text-indigo-300 uppercase tracking-wider block">

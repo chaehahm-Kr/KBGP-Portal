@@ -21,6 +21,7 @@ import {
   validateFacilityComplianceDeclaration,
   type FacilityComplianceDeclarationInput,
 } from "./v1-validators";
+import { requireComplianceV1MutationAllowed } from "./v1-feature-gate";
 
 async function resolveActorContext(requestedCompanyId?: string) {
   const role = await getCallerAppRole();
@@ -240,9 +241,14 @@ export async function upsertCompanyLocationAction(
   input: UpsertCompanyLocationInput
 ): Promise<
   | { ok: true; location: CompanyLocationRecord; propagatedProductsCount: number }
-  | { ok: false; error: string }
+  | { ok: false; error: string; errorCode?: string }
 > {
   try {
+    const gate = requireComplianceV1MutationAllowed();
+    if (!gate.allowed && isManufacturingCapableLocation(input.location_type)) {
+      return { ok: false, error: gate.error, errorCode: gate.errorCode };
+    }
+
     const actor = await resolveActorContext(input.company_id);
     const companyId = actor.companyId;
     if (!companyId) return { ok: false, error: "회사 ID가 필요합니다." };
@@ -416,9 +422,12 @@ export async function saveFacilityComplianceDeclarationAction(
   input: FacilityComplianceDeclarationInput
 ): Promise<
   | { ok: true; compliance: ManufacturingFacilityComplianceRecord; propagatedProductsCount: number }
-  | { ok: false; error: string }
+  | { ok: false; error: string; errorCode?: string }
 > {
   try {
+    const gate = requireComplianceV1MutationAllowed();
+    if (!gate.allowed) return { ok: false, error: gate.error, errorCode: gate.errorCode };
+
     const validation = validateFacilityComplianceDeclaration(input);
     if (!validation.valid) {
       return { ok: false, error: validation.errors[0] };
@@ -527,8 +536,11 @@ export async function adminVerifyFacilityComplianceAction(
     private_admin_note?: string | null;
     correction_request?: string | null;
   }
-): Promise<{ ok: true; compliance: ManufacturingFacilityComplianceRecord } | { ok: false; error: string }> {
+): Promise<{ ok: true; compliance: ManufacturingFacilityComplianceRecord } | { ok: false; error: string; errorCode?: string }> {
   try {
+    const gate = requireComplianceV1MutationAllowed();
+    if (!gate.allowed) return { ok: false, error: gate.error, errorCode: gate.errorCode };
+
     const actor = await resolveActorContext();
     if (!actor.isAdmin || !actor.canVerify) {
       return { ok: false, error: "권한이 없습니다. 승인 권한이 있는 ADMIN만 검증 상태를 변경할 수 있습니다." };

@@ -42,6 +42,7 @@ import {
 import { ConfirmForm } from "@/components/common/confirm-form";
 import { AddCertificateForm } from "@/components/product/add-certificate-form";
 import { ProductRegulatoryComplianceTab } from "@/components/product/product-regulatory-compliance-tab";
+import { isComplianceV1Enabled } from "@/lib/compliance/v1-feature-gate";
 import { LogisticsHelpModal, type LogisticsHelpSectionKey } from "@/components/product/logistics-help-modal";
 import { validatePrice } from "@/lib/validation/global-validators";
 import { CountrySelect } from "@/components/shared/country-select";
@@ -1302,8 +1303,8 @@ export function ProductDetailTabs({
         return { success: false, error: res.error };
       }
 
-      // KSN-CMP-004: Save product manufacturing facilities if modified
-      if (isFacilityDirty) {
+      // KSN-CMP-004: Save product manufacturing facilities if modified and feature gate is active
+      if (isFacilityDirty && isComplianceV1Enabled()) {
         const facRes = await setProductManufacturingFacilitiesAction(product.id, {
           primaryFacilityId,
           additionalFacilityIds,
@@ -1774,7 +1775,7 @@ export function ProductDetailTabs({
             { id: "price", label: "가격 정보", isDirty: isPriceDirty },
             { id: "logistics", label: "로지스틱스", isDirty: isLogisticsDirty },
             { id: "media", label: "미디어 (이미지/비디오)", isDirty: isMediaDirty },
-            { id: "certs", label: "규제 및 인허가", isDirty: false }
+            { id: "certs", label: isComplianceV1Enabled() ? "규제 및 인허가" : "인허가 & 보증서", isDirty: false }
           ].map((tab) => {
             const missingList = getMissingFieldsList();
             const hasError = missingList.some((item) => item.tab === tab.id);
@@ -2408,18 +2409,20 @@ export function ProductDetailTabs({
           </div>
 
           {/* [신규 카드]: 제조사 및 제조시설 정보 (MoCRA / FDA) */}
-          <div id="primary-facility-field">
-            <ProductFacilitySelector
-              productId={product.id}
-              companyId={effectiveCompanyId}
-              primaryFacilityId={primaryFacilityId}
-              additionalFacilityIds={additionalFacilityIds}
-              onChange={handleFacilityChange}
-              readOnly={readOnly}
-              isGrandfathered={Boolean((product as any).compliance_facility_grandfathered)}
-              manageOriginsUrl="/portal/company/info?tab=shipping-origin"
-            />
-          </div>
+          {isComplianceV1Enabled() && (
+            <div id="primary-facility-field">
+              <ProductFacilitySelector
+                productId={product.id}
+                companyId={effectiveCompanyId}
+                primaryFacilityId={primaryFacilityId}
+                additionalFacilityIds={additionalFacilityIds}
+                onChange={handleFacilityChange}
+                readOnly={readOnly}
+                isGrandfathered={Boolean((product as any).compliance_facility_grandfathered)}
+                manageOriginsUrl="/portal/company/info?tab=shipping-origin"
+              />
+            </div>
+          )}
         </div>
 
         {/* Tab Panel 2: 카테고리 & 속성 */}
@@ -3783,15 +3786,54 @@ export function ProductDetailTabs({
         </div>
       </div>
 
-      {/* Tab Panel 5: 규제 및 인허가 (Regulatory & Compliance) */}
+      {/* Tab Panel 5: 규제 및 인허가 (Regulatory & Compliance) / 인허가 & 보증서 (Legacy) */}
       <div className={activeTab === "certs" ? "space-y-6" : "hidden"}>
-        <ProductRegulatoryComplianceTab
-          productId={product.id}
-          companyId={product.company_id}
-          isAdmin={false}
-          readOnly={readOnly}
-          product={product}
-        />
+        {isComplianceV1Enabled() ? (
+          <ProductRegulatoryComplianceTab
+            productId={product.id}
+            companyId={product.company_id}
+            isAdmin={false}
+            readOnly={readOnly}
+            product={product}
+          />
+        ) : (
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
+              인허가 및 보증 문서 관리
+            </h2>
+            
+            {certificateRows.length === 0 ? (
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 py-6 text-center">등록된 보증서 또는 인허가 증빙 자료가 없습니다.</p>
+            ) : (
+              <ul className="space-y-3 mt-4">
+                {certificateRows.map((cert, i) => (
+                  <li key={cert.id} className="flex items-center gap-3 text-xs border border-zinc-150 dark:border-zinc-800/80 p-3 rounded-lg bg-zinc-50/20 shadow-sm">
+                    <span className="rounded bg-zinc-100 dark:bg-zinc-850 px-2.5 py-0.5 font-bold text-[10px] text-zinc-600 dark:text-zinc-350 shrink-0">
+                      {CERTIFICATE_TYPE_LABEL[cert.certificate_type as CertificateType] || cert.certificate_type}
+                    </span>
+                    {certificateUrls[i] ? (
+                      <a
+                        href={certificateUrls[i]!}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-zinc-900 dark:text-white font-bold underline underline-offset-2 hover:text-zinc-600 flex-1 truncate"
+                      >
+                        {cert.original_filename ?? "파일 보기"}
+                      </a>
+                    ) : (
+                      <span className="text-zinc-400 flex-1 truncate">{cert.original_filename}</span>
+                    )}
+                    <span className="text-[10px] font-bold text-zinc-400 shrink-0 font-mono">Version {cert.version}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="mt-6 border-t border-zinc-100 dark:border-zinc-800 pt-6">
+              <AddCertificateForm action={addProductCertificate.bind(null, product.id)} readOnly={readOnly} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Save Button Row */}

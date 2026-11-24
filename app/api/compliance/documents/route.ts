@@ -8,6 +8,7 @@ import {
   COMPLIANCE_DOCUMENT_CATEGORIES,
   type ComplianceDocumentCategory,
 } from "@/lib/compliance/v1-types";
+import { requireComplianceV1MutationAllowed } from "@/lib/compliance/v1-feature-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -87,6 +88,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = requireComplianceV1MutationAllowed();
+  if (!gate.allowed) {
+    return NextResponse.json({ error: gate.error, errorCode: gate.errorCode }, { status: 403 });
+  }
+
   const caller = await resolveApiCaller();
   if (!caller) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

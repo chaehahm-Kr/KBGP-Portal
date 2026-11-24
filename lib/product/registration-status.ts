@@ -1,4 +1,5 @@
 import { evaluatePrimaryFacilityRegistrationRule } from "@/lib/compliance/v1-validators";
+import { isPrimaryFacilityEnforced } from "@/lib/compliance/v1-feature-gate";
 
 // Single Source of Truth for Product Statuses across Admin and Brand Portal
 
@@ -608,7 +609,10 @@ export function evaluateProductRegistrationStatus(
       hasPrimaryFacility: Boolean(input.complianceFacility.hasPrimaryFacility),
       isGrandfathered: Boolean(input.complianceFacility.isGrandfathered),
       isExplicitFinalSubmission: Boolean(input.complianceFacility.isExplicitFinalSubmission),
-      enforcePrimaryFacility: Boolean(input.complianceFacility.enforcePrimaryFacility),
+      enforcePrimaryFacility:
+        input.complianceFacility.enforcePrimaryFacility !== undefined
+          ? Boolean(input.complianceFacility.enforcePrimaryFacility)
+          : isPrimaryFacilityEnforced(),
     });
 
     if (facEval.isMissingRequired) {

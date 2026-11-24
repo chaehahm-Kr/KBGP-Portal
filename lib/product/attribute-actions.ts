@@ -7,6 +7,7 @@ import { verifyAdminSession, verifyPortalSession, getCallerAppRole } from "@/lib
 import { recordProductChangeLog, formatAuditValue } from "@/lib/product/audit";
 import { resolveRootCategoryEnum } from "@/lib/product/types";
 import { RELOCATED_REGULATORY_ATTRIBUTE_CODES } from "@/lib/product/attribute-completion";
+import { isRegulatoryAttributeRelocated } from "@/lib/compliance/v1-feature-gate";
 
 async function getEffectiveClient(customClient?: any) {
   if (customClient) return customClient;
@@ -175,7 +176,7 @@ export async function getCategoryAttributes(
   }));
 
   const filterAttributes = (attrs: AttributeMasterItem[]) =>
-    options?.includeRelocatedRegulatory
+    options?.includeRelocatedRegulatory || !isRegulatoryAttributeRelocated()
       ? attrs
       : attrs.filter((a) => !RELOCATED_REGULATORY_ATTRIBUTE_CODES.includes(a.code as any));
 

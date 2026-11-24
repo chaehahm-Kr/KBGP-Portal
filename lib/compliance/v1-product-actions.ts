@@ -19,6 +19,7 @@ import {
   validateProductRegulatoryDeclaration,
   type ProductRegulatoryDeclarationInput,
 } from "./v1-validators";
+import { requireComplianceV1MutationAllowed } from "./v1-feature-gate";
 
 async function resolveProductActor(productId: string) {
   const admin = createAdminClient();
@@ -183,8 +184,11 @@ export async function setProductManufacturingFacilitiesAction(
     primaryFacilityId: string | null;
     additionalFacilityIds?: string[];
   }
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string; errorCode?: string }> {
   try {
+    const gate = requireComplianceV1MutationAllowed();
+    if (!gate.allowed) return { ok: false, error: gate.error, errorCode: gate.errorCode };
+
     const actor = await resolveProductActor(productId);
     const admin = createAdminClient();
 
@@ -203,7 +207,7 @@ export async function setProductManufacturingFacilitiesAction(
     if (allIds.length > 0) {
       const { data: locs, error: locErr } = await admin
         .from("company_shipping_origins")
-        .select("id, company_id, location_type")
+        .select("id, company_id, location_type, status")
         .in("id", allIds);
 
       if (locErr) return { ok: false, error: locErr.message };
@@ -216,6 +220,9 @@ export async function setProductManufacturingFacilitiesAction(
         }
         if (!isManufacturingCapableLocation(loc.location_type)) {
           return { ok: false, error: "출고지 전용 장소는 제조시설로 연결할 수 없습니다." };
+        }
+        if (loc.status === "inactive") {
+          return { ok: false, error: "비활성화된 제조시설은 새로 연결할 수 없습니다." };
         }
       }
     }
@@ -315,8 +322,11 @@ export async function getProductRegulatoryComplianceAction(productId: string): P
 export async function saveProductRegulatoryDeclarationAction(
   productId: string,
   input: ProductRegulatoryDeclarationInput
-): Promise<{ ok: true; compliance: ProductRegulatoryComplianceRecord } | { ok: false; error: string }> {
+): Promise<{ ok: true; compliance: ProductRegulatoryComplianceRecord } | { ok: false; error: string; errorCode?: string }> {
   try {
+    const gate = requireComplianceV1MutationAllowed();
+    if (!gate.allowed) return { ok: false, error: gate.error, errorCode: gate.errorCode };
+
     const actor = await resolveProductActor(productId);
     const validation = validateProductRegulatoryDeclaration(input, { isAdmin: actor.isAdmin });
     if (!validation.valid) {
@@ -405,8 +415,11 @@ export async function adminVerifyProductComplianceAction(
     private_admin_note?: string | null;
     correction_request?: string | null;
   }
-): Promise<{ ok: true; compliance: ProductRegulatoryComplianceRecord } | { ok: false; error: string }> {
+): Promise<{ ok: true; compliance: ProductRegulatoryComplianceRecord } | { ok: false; error: string; errorCode?: string }> {
   try {
+    const gate = requireComplianceV1MutationAllowed();
+    if (!gate.allowed) return { ok: false, error: gate.error, errorCode: gate.errorCode };
+
     const actor = await resolveProductActor(productId);
     if (!actor.isAdmin || !actor.canVerify) {
       return { ok: false, error: "권한이 없습니다. 승인 권한이 있는 ADMIN만 검증 상태를 변경할 수 있습니다." };

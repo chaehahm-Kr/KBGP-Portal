@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyPortalSession } from "@/lib/auth/dal";
+import { isRegulatoryAttributeRelocated } from "@/lib/compliance/v1-feature-gate";
 
 async function getEffectiveClient(customClient?: any) {
   if (customClient) return customClient;
@@ -125,12 +126,14 @@ export async function getProductCategoryCompletion(
     }
   }
 
-  // Combine unique category attributes (prevent common duplication), excluding relocated regulatory attributes
+  // Combine unique category attributes (prevent common duplication), excluding relocated regulatory attributes if active
   const commonCodes = new Set(commonAttrs.map((a: any) => a.code));
   const uniqueProfileAttrs = profileAttrs.filter((a) => !commonCodes.has(a.code));
-  const allCategoryAttrs = [...commonAttrs, ...uniqueProfileAttrs].filter(
-    (a) => !RELOCATED_REGULATORY_ATTRIBUTE_CODES.includes(a.code as any)
-  );
+  const allCategoryAttrs = isRegulatoryAttributeRelocated()
+    ? [...commonAttrs, ...uniqueProfileAttrs].filter(
+        (a) => !RELOCATED_REGULATORY_ATTRIBUTE_CODES.includes(a.code as any)
+      )
+    : [...commonAttrs, ...uniqueProfileAttrs];
 
   // 4. Fetch Product's Saved Attribute Values
   const { data: savedValues } = await supabase
