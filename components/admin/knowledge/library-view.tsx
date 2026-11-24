@@ -91,32 +91,61 @@ export default function LibraryView() {
   };
 
   const getAudienceBadges = (audience: string[] = []) => {
-    if (audience.length === 0) return <span className="text-zinc-400 text-xs">-</span>;
-    return (
-      <div className="flex flex-wrap gap-1">
-        {audience.map((aud) => {
-          let label = aud;
-          let colorClass = "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
-          if (aud === "INTERNAL" || aud === "ADMIN / MANAGEMENT") {
-            label = "Internal";
-            colorClass = "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700";
-          } else if (aud === "BRAND") {
-            label = "Brand";
-            colorClass = "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800";
-          } else if (aud === "RETAIL" || aud === "RETAILER") {
-            label = "Retail";
-            colorClass = "bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800";
-          } else if (aud === "PUBLIC") {
-            label = "Public";
-            colorClass = "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800";
-          }
+    const rawList = Array.isArray(audience) ? audience : [];
+    const normalized = rawList.map((aud) => (typeof aud === "string" ? aud.trim().toUpperCase() : ""));
 
-          return (
-            <span key={aud} className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${colorClass}`}>
-              {label}
-            </span>
-          );
-        })}
+    const isInternal = normalized.some((aud) => aud === "INTERNAL" || aud === "ADMIN / MANAGEMENT");
+    const isBrand = normalized.some((aud) => aud === "BRAND");
+    const isRetail = normalized.some((aud) => aud === "RETAIL" || aud === "RETAILER");
+
+    const targets = [
+      {
+        key: "internal",
+        label: "Internal",
+        active: isInternal,
+        activeClass:
+          "bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800/80 dark:text-slate-200 dark:border-slate-700 shadow-2xs",
+        activeIconClass: "text-slate-700 dark:text-slate-300",
+      },
+      {
+        key: "brand",
+        label: "Brand",
+        active: isBrand,
+        activeClass:
+          "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 shadow-2xs",
+        activeIconClass: "text-blue-600 dark:text-blue-400",
+      },
+      {
+        key: "retail",
+        label: "Retail",
+        active: isRetail,
+        activeClass:
+          "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800 shadow-2xs",
+        activeIconClass: "text-purple-600 dark:text-purple-400",
+      },
+    ];
+
+    return (
+      <div className="inline-flex items-center gap-1.5 flex-nowrap" data-testid="audience-indicators">
+        {targets.map((tgt) => (
+          <span
+            key={tgt.key}
+            data-audience={tgt.key}
+            data-active={tgt.active ? "true" : "false"}
+            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold border transition-all ${
+              tgt.active
+                ? tgt.activeClass
+                : "bg-zinc-50 text-zinc-400 border-zinc-200/60 dark:bg-zinc-900/40 dark:text-zinc-600 dark:border-zinc-800/60 opacity-60 font-medium"
+            }`}
+          >
+            {tgt.active ? (
+              <span className={`font-bold text-[10px] leading-none ${tgt.activeIconClass}`}>✓</span>
+            ) : (
+              <span className="text-zinc-400 dark:text-zinc-600 text-[10px] leading-none select-none">—</span>
+            )}
+            <span>{tgt.label}</span>
+          </span>
+        ))}
       </div>
     );
   };
@@ -363,7 +392,7 @@ export default function LibraryView() {
                     </td>
 
                     {/* Audience */}
-                    <td className="py-3.5 px-3">
+                    <td className="py-3.5 px-3 whitespace-nowrap">
                       {getAudienceBadges(item.audience)}
                     </td>
 
