@@ -132,18 +132,28 @@ export async function PATCH(
     // 4. General Item Update / Audience Update
     const prevItem = { ...item };
     const newAudience = body.audience !== undefined ? body.audience : item.audience;
-    const isAudienceChanged = JSON.stringify(prevItem.audience) !== JSON.stringify(newAudience);
+    const isAudienceChanged = body.audience !== undefined && (
+      JSON.stringify([...(prevItem.audience || [])].sort()) !== JSON.stringify([...(newAudience || [])].sort())
+    );
 
     const hasExternalAudience = (newAudience || []).some((a: string) =>
       ["BRAND", "RETAILER", "PUBLIC"].includes(a)
     );
 
-    let requires_external_approval = item.requires_external_approval;
-    let external_review_status = item.external_review_status;
+    let requires_external_approval = body.requires_external_approval !== undefined
+      ? Boolean(body.requires_external_approval)
+      : item.requires_external_approval;
+    let external_review_status = body.external_review_status !== undefined
+      ? body.external_review_status
+      : item.external_review_status;
 
     if (hasExternalAudience && !item.requires_external_approval) {
       requires_external_approval = true;
-      external_review_status = "REQUESTED";
+      if (item.status === "PUBLISHED") {
+        external_review_status = "APPROVED";
+      } else {
+        external_review_status = "REQUESTED";
+      }
     }
 
     const updatedModule = body.module !== undefined

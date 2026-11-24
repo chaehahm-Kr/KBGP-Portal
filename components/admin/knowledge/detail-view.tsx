@@ -69,6 +69,7 @@ export default function DetailView({ id }: { id: string }) {
   // No Update Needed Modal (Section 12 Governance)
   const [noUpdateModal, setNoUpdateModal] = useState(false);
   const [noUpdateReason, setNoUpdateReason] = useState("");
+  const [savingAudience, setSavingAudience] = useState(false);
 
   useEffect(() => {
     fetchDetail();
@@ -232,6 +233,37 @@ export default function DetailView({ id }: { id: string }) {
   };
 
   const handleSaveEdit = async () => {
+    const current = (editForm.audience !== undefined ? editForm.audience : item?.audience) || [];
+    if (current.length === 0) {
+      alert("최소 1개 이상의 배포 대상(Audience)을 유지해야 합니다.");
+      return;
+    }
+
+    const savedInternalCheck = (item?.audience || []).some(a => ["INTERNAL", "ADMIN / MANAGEMENT"].includes(a.toUpperCase()));
+    const savedBrandCheck = (item?.audience || []).some(a => a.toUpperCase() === "BRAND");
+    const savedRetailCheck = (item?.audience || []).some(a => ["RETAIL", "RETAILER"].includes(a.toUpperCase()));
+
+    const isInternalNow = current.some(a => ["INTERNAL", "ADMIN / MANAGEMENT"].includes(a.toUpperCase()));
+    const isBrandNow = current.some(a => a.toUpperCase() === "BRAND");
+    const isRetailNow = current.some(a => ["RETAIL", "RETAILER"].includes(a.toUpperCase()));
+
+    const isExpanding = (!savedBrandCheck && isBrandNow) || (!savedRetailCheck && isRetailNow) || (!savedInternalCheck && isInternalNow);
+    if (item?.status === "PUBLISHED" && isExpanding) {
+      const expandedNames = [
+        !savedInternalCheck && isInternalNow ? "Internal / Admin" : null,
+        !savedBrandCheck && isBrandNow ? "Brand Portal" : null,
+        !savedRetailCheck && isRetailNow ? "Retail Portal" : null,
+      ].filter(Boolean).join(", ");
+
+      const confirmed = confirm(
+        `[확인 필요] 이 문서는 현재 공식 배포(PUBLISHED) 상태입니다.\n\n` +
+        `배포 대상이 신규 확장됩니다: [${expandedNames}]\n\n` +
+        `배포 대상을 확장하면 해당 포털 사용자에게 이 지식 항목이 즉시 열람 가능한 상태로 전환됩니다.\n\n` +
+        `계속 진행하시겠습니까?`
+      );
+      if (!confirmed) return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch(`/api/admin/knowledge/${id}`, {
@@ -251,6 +283,63 @@ export default function DetailView({ id }: { id: string }) {
       alert("저장 중 오류가 발생했습니다.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveAudienceOnly = async () => {
+    const current = (editForm.audience !== undefined ? editForm.audience : item?.audience) || [];
+    if (current.length === 0) {
+      alert("최소 1개 이상의 배포 대상(Audience)을 선택해야 합니다.");
+      return;
+    }
+
+    const savedInternalCheck = (item?.audience || []).some(a => ["INTERNAL", "ADMIN / MANAGEMENT"].includes(a.toUpperCase()));
+    const savedBrandCheck = (item?.audience || []).some(a => a.toUpperCase() === "BRAND");
+    const savedRetailCheck = (item?.audience || []).some(a => ["RETAIL", "RETAILER"].includes(a.toUpperCase()));
+
+    const isInternalNow = current.some(a => ["INTERNAL", "ADMIN / MANAGEMENT"].includes(a.toUpperCase()));
+    const isBrandNow = current.some(a => a.toUpperCase() === "BRAND");
+    const isRetailNow = current.some(a => ["RETAIL", "RETAILER"].includes(a.toUpperCase()));
+
+    const isExpanding = (!savedBrandCheck && isBrandNow) || (!savedRetailCheck && isRetailNow) || (!savedInternalCheck && isInternalNow);
+    if (item?.status === "PUBLISHED" && isExpanding) {
+      const expandedNames = [
+        !savedInternalCheck && isInternalNow ? "Internal / Admin" : null,
+        !savedBrandCheck && isBrandNow ? "Brand Portal" : null,
+        !savedRetailCheck && isRetailNow ? "Retail Portal" : null,
+      ].filter(Boolean).join(", ");
+
+      const confirmed = confirm(
+        `[확인 필요] 이 문서는 현재 공식 배포(PUBLISHED) 상태입니다.\n\n` +
+        `배포 대상이 신규 확장됩니다: [${expandedNames}]\n\n` +
+        `배포 대상을 확장하면 해당 포털 사용자에게 이 지식 항목이 즉시 열람 가능한 상태로 전환됩니다.\n\n` +
+        `계속 진행하시겠습니까?`
+      );
+      if (!confirmed) return;
+    }
+
+    setSavingAudience(true);
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audience: current,
+          update_reason: "Distribution audience updated from Publication & Distribution tab"
+        })
+      });
+
+      if (res.ok) {
+        alert("배포 대상 설정이 성공적으로 저장되었습니다.");
+        await fetchDetail();
+      } else {
+        const err = await res.json();
+        alert(`배포 대상 저장 실패: ${err.error || "오류가 발생했습니다."}`);
+      }
+    } catch (e: any) {
+      alert(`배포 대상 저장 중 오류가 발생했습니다: ${e?.message || e}`);
+    } finally {
+      setSavingAudience(false);
     }
   };
 
@@ -360,21 +449,6 @@ export default function DetailView({ id }: { id: string }) {
     }
   };
 
-  const toggleAudience = (aud: AudienceType) => {
-    const current = (editForm.audience || item?.audience || []) as AudienceType[];
-    let updated: AudienceType[];
-    if (current.includes(aud)) {
-      if (current.length === 1) {
-        alert("최소 1개 이상의 배포 대상(Audience)을 유지해야 합니다.");
-        return;
-      }
-      updated = current.filter(a => a !== aud);
-    } else {
-      updated = [...current, aud];
-    }
-    setEditForm({ ...editForm, audience: updated });
-  };
-
   if (loading) {
     return (
       <div className="space-y-6">
@@ -416,9 +490,62 @@ export default function DetailView({ id }: { id: string }) {
     }
   };
 
-  const hasInternal = item.audience?.some(a => ["INTERNAL", "ADMIN / MANAGEMENT"].includes(a.toUpperCase()));
-  const hasBrand = item.audience?.some(a => a.toUpperCase() === "BRAND");
-  const hasRetail = item.audience?.some(a => ["RETAIL", "RETAILER"].includes(a.toUpperCase()));
+  const currentAudience = (editForm?.audience !== undefined ? editForm.audience : item.audience) || [];
+
+  const hasInternal = currentAudience.some(a => ["INTERNAL", "ADMIN / MANAGEMENT"].includes(a.toUpperCase()));
+  const hasBrand = currentAudience.some(a => a.toUpperCase() === "BRAND");
+  const hasRetail = currentAudience.some(a => ["RETAIL", "RETAILER"].includes(a.toUpperCase()));
+
+  const savedInternal = (item.audience || []).some(a => ["INTERNAL", "ADMIN / MANAGEMENT"].includes(a.toUpperCase()));
+  const savedBrand = (item.audience || []).some(a => a.toUpperCase() === "BRAND");
+  const savedRetail = (item.audience || []).some(a => ["RETAIL", "RETAILER"].includes(a.toUpperCase()));
+
+  const isAudienceDirty = (
+    hasInternal !== savedInternal ||
+    hasBrand !== savedBrand ||
+    hasRetail !== savedRetail
+  );
+
+  const toggleAudience = (aud: AudienceType) => {
+    const current = [...currentAudience];
+    let updated: AudienceType[];
+
+    if (aud === "INTERNAL") {
+      if (hasInternal) {
+        if (!hasBrand && !hasRetail) {
+          alert("최소 1개 이상의 배포 대상(Audience)을 유지해야 합니다.");
+          return;
+        }
+        updated = current.filter(a => !["INTERNAL", "ADMIN / MANAGEMENT"].includes(a.toUpperCase()));
+      } else {
+        updated = [...current, "INTERNAL"];
+      }
+    } else if (aud === "BRAND") {
+      if (hasBrand) {
+        if (!hasInternal && !hasRetail) {
+          alert("최소 1개 이상의 배포 대상(Audience)을 유지해야 합니다.");
+          return;
+        }
+        updated = current.filter(a => a.toUpperCase() !== "BRAND");
+      } else {
+        updated = [...current, "BRAND"];
+      }
+    } else if (aud === "RETAILER") {
+      if (hasRetail) {
+        if (!hasInternal && !hasBrand) {
+          alert("최소 1개 이상의 배포 대상(Audience)을 유지해야 합니다.");
+          return;
+        }
+        updated = current.filter(a => !["RETAILER", "RETAIL"].includes(a.toUpperCase()));
+      } else {
+        updated = [...current, "RETAILER"];
+      }
+    } else {
+      updated = current;
+    }
+
+    setEditForm(prev => ({ ...prev, audience: updated }));
+  };
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -801,47 +928,115 @@ export default function DetailView({ id }: { id: string }) {
 
           {/* Distribution Audience Grid */}
           <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm space-y-6">
-            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
               <div>
                 <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
                   Audience Distribution Boundary
                 </h2>
                 <p className="text-xs text-zinc-500 mt-0.5">
-                  공식 배포(PUBLISHED) 상태의 지식이 조회될 수 있는 사용자 권한 및 포털 배포 경계입니다.
+                  체크박스를 클릭하여 배포 대상을 변경할 수 있습니다. (공식 배포 PUBLISHED 상태의 문서만 해당 포털에 노출됩니다)
                 </p>
               </div>
-              {isEditing && (
-                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
-                  체크박스를 클릭하여 배포 대상을 변경할 수 있습니다.
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {isAudienceDirty ? (
+                  <span className="rounded-full bg-amber-100 dark:bg-amber-950 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 animate-pulse">
+                    ⚠️ 저장되지 않은 배포 변경사항 있음
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                    현재 설정 동기화됨
+                  </span>
+                )}
+              </div>
             </div>
+
+            {/* Pending Unsaved Distribution Changes Banner */}
+            {isAudienceDirty && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-950/40 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl select-none">⚠️</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                        배포 대상 변경 대기 중 (Unsaved Distribution Changes)
+                      </h4>
+                      <span className="rounded bg-amber-200/80 dark:bg-amber-900 px-2 py-0.5 text-[10px] font-mono font-bold text-amber-900 dark:text-amber-200">
+                        PENDING
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1 font-mono">
+                      기존: [{(item.audience || []).join(", ")}] &rarr; 변경: [{currentAudience.join(", ")}]
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setEditForm(prev => ({ ...prev, audience: item.audience }))}
+                    className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 cursor-pointer shadow-xs"
+                  >
+                    취소 (원래대로)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveAudienceOnly}
+                    disabled={savingAudience}
+                    className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-blue-700 cursor-pointer shadow-xs transition-colors"
+                  >
+                    {savingAudience ? "저장 중..." : "배포 설정 저장 (Save Distribution)"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Internal / Admin */}
               <div
-                onClick={() => isEditing && toggleAudience("INTERNAL")}
-                className={`p-5 rounded-xl border transition-all ${
-                  isEditing ? "cursor-pointer hover:border-slate-400" : ""
-                } ${
+                onClick={() => toggleAudience("INTERNAL")}
+                className={`p-5 rounded-xl border transition-all cursor-pointer relative ${
                   hasInternal
-                    ? "border-slate-300 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-900/50 ring-1 ring-slate-400/30"
-                    : "border-zinc-200 bg-zinc-50/30 opacity-50 dark:border-zinc-800 dark:bg-zinc-950/30"
+                    ? "border-slate-400 bg-slate-50/90 dark:border-slate-600 dark:bg-slate-900/60 ring-2 ring-slate-400/40 shadow-xs"
+                    : "border-zinc-200 bg-zinc-50/40 opacity-60 dark:border-zinc-800 dark:bg-zinc-950/40 hover:opacity-90 hover:border-zinc-300"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🛡️</span>
-                    <span className="font-bold text-xs text-zinc-900 dark:text-white">Internal / Admin</span>
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="checkbox-aud-internal"
+                      checked={hasInternal}
+                      onChange={() => toggleAudience("INTERNAL")}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 rounded border-zinc-300 text-slate-800 focus:ring-slate-500 cursor-pointer"
+                    />
+                    <label htmlFor="checkbox-aud-internal" className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <span className="text-lg">🛡️</span>
+                      <span className="font-bold text-xs text-zinc-900 dark:text-white">Internal / Admin</span>
+                    </label>
                   </div>
                   {hasInternal ? (
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                      ✓ 배포 활성 (Active)
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                        ✓ 배포 활성 (Active)
+                      </span>
+                      {hasInternal !== savedInternal && (
+                        <span className="rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-[9px] font-bold px-1.5 py-0.5">
+                          신규
+                        </span>
+                      )}
+                    </div>
                   ) : (
-                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800">
-                      — 미배포 (Inactive)
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800">
+                        — 미배포 (Inactive)
+                      </span>
+                      {hasInternal !== savedInternal && (
+                        <span className="rounded bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200 text-[9px] font-bold px-1.5 py-0.5">
+                          해제 대기
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
                 <p className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
@@ -854,33 +1049,60 @@ export default function DetailView({ id }: { id: string }) {
 
               {/* Brand Portal */}
               <div
-                onClick={() => isEditing && toggleAudience("BRAND")}
-                className={`p-5 rounded-xl border transition-all ${
-                  isEditing ? "cursor-pointer hover:border-blue-400" : ""
-                } ${
+                onClick={() => toggleAudience("BRAND")}
+                className={`p-5 rounded-xl border transition-all cursor-pointer relative ${
                   hasBrand
-                    ? "border-blue-300 bg-blue-50/60 dark:border-blue-700 dark:bg-blue-950/30 ring-1 ring-blue-400/30"
-                    : "border-zinc-200 bg-zinc-50/30 opacity-50 dark:border-zinc-800 dark:bg-zinc-950/30"
+                    ? "border-blue-400 bg-blue-50/70 dark:border-blue-600 dark:bg-blue-950/40 ring-2 ring-blue-400/40 shadow-xs"
+                    : "border-zinc-200 bg-zinc-50/40 opacity-60 dark:border-zinc-800 dark:bg-zinc-950/40 hover:opacity-90 hover:border-zinc-300"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🏢</span>
-                    <span className="font-bold text-xs text-zinc-900 dark:text-white">Brand Portal</span>
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="checkbox-aud-brand"
+                      checked={hasBrand}
+                      onChange={() => toggleAudience("BRAND")}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <label htmlFor="checkbox-aud-brand" className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <span className="text-lg">🏢</span>
+                      <span className="font-bold text-xs text-zinc-900 dark:text-white">Brand Portal</span>
+                    </label>
                   </div>
                   {hasBrand ? (
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                      ✓ 배포 활성 (Active)
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                        ✓ 배포 활성 (Active)
+                      </span>
+                      {hasBrand !== savedBrand && (
+                        <span className="rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-[9px] font-bold px-1.5 py-0.5">
+                          신규
+                        </span>
+                      )}
+                    </div>
                   ) : (
-                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800">
-                      — 미배포 (Inactive)
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800">
+                        — 미배포 (Inactive)
+                      </span>
+                      {hasBrand !== savedBrand && (
+                        <span className="rounded bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200 text-[9px] font-bold px-1.5 py-0.5">
+                          해제 대기
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
                 <p className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
                   브랜드사 파트너 포털 및 브랜드 헬프 센터 배포 대상입니다.
                 </p>
+                {item.is_sensitive_internal && (
+                  <div className="mt-2 rounded bg-rose-50 dark:bg-rose-950/40 p-1.5 text-[10px] text-rose-700 dark:text-rose-300 font-semibold border border-rose-200 dark:border-rose-800">
+                    🔒 보안 격리: 민감 사내 문서(Sensitive Internal)로 설정되어 외부 배포가 원천 차단됩니다.
+                  </div>
+                )}
                 <div className="mt-3 text-[10px] font-mono text-zinc-500">
                   Distribution: {hasBrand && item.status === "PUBLISHED" && !item.is_sensitive_internal ? "YES (Eligible)" : "NO"}
                 </div>
@@ -888,33 +1110,60 @@ export default function DetailView({ id }: { id: string }) {
 
               {/* Retail Portal */}
               <div
-                onClick={() => isEditing && toggleAudience("RETAILER")}
-                className={`p-5 rounded-xl border transition-all ${
-                  isEditing ? "cursor-pointer hover:border-purple-400" : ""
-                } ${
+                onClick={() => toggleAudience("RETAILER")}
+                className={`p-5 rounded-xl border transition-all cursor-pointer relative ${
                   hasRetail
-                    ? "border-purple-300 bg-purple-50/60 dark:border-purple-700 dark:bg-purple-950/30 ring-1 ring-purple-400/30"
-                    : "border-zinc-200 bg-zinc-50/30 opacity-50 dark:border-zinc-800 dark:bg-zinc-950/30"
+                    ? "border-purple-400 bg-purple-50/70 dark:border-purple-600 dark:bg-purple-950/40 ring-2 ring-purple-400/40 shadow-xs"
+                    : "border-zinc-200 bg-zinc-50/40 opacity-60 dark:border-zinc-800 dark:bg-zinc-950/40 hover:opacity-90 hover:border-zinc-300"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🛒</span>
-                    <span className="font-bold text-xs text-zinc-900 dark:text-white">Retail Portal</span>
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="checkbox-aud-retailer"
+                      checked={hasRetail}
+                      onChange={() => toggleAudience("RETAILER")}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 rounded border-zinc-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                    />
+                    <label htmlFor="checkbox-aud-retailer" className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <span className="text-lg">🛒</span>
+                      <span className="font-bold text-xs text-zinc-900 dark:text-white">Retail Portal</span>
+                    </label>
                   </div>
                   {hasRetail ? (
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                      ✓ 배포 활성 (Active)
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                        ✓ 배포 활성 (Active)
+                      </span>
+                      {hasRetail !== savedRetail && (
+                        <span className="rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-[9px] font-bold px-1.5 py-0.5">
+                          신규
+                        </span>
+                      )}
+                    </div>
                   ) : (
-                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800">
-                      — 미배포 (Inactive)
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800">
+                        — 미배포 (Inactive)
+                      </span>
+                      {hasRetail !== savedRetail && (
+                        <span className="rounded bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200 text-[9px] font-bold px-1.5 py-0.5">
+                          해제 대기
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
                 <p className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
                   미국 리테일러/바이어 포털 및 리테일 헬프 센터 배포 대상입니다.
                 </p>
+                {item.is_sensitive_internal && (
+                  <div className="mt-2 rounded bg-rose-50 dark:bg-rose-950/40 p-1.5 text-[10px] text-rose-700 dark:text-rose-300 font-semibold border border-rose-200 dark:border-rose-800">
+                    🔒 보안 격리: 민감 사내 문서(Sensitive Internal)로 설정되어 외부 배포가 원천 차단됩니다.
+                  </div>
+                )}
                 <div className="mt-3 text-[10px] font-mono text-zinc-500">
                   Distribution: {hasRetail && item.status === "PUBLISHED" && !item.is_sensitive_internal ? "YES (Eligible)" : "NO"}
                 </div>
@@ -1378,15 +1627,20 @@ export default function DetailView({ id }: { id: string }) {
               <p className="py-6 text-center text-zinc-400">활동 기록이 없습니다.</p>
             ) : (
               auditLogs.map((log) => (
-                <div key={log.id} className="py-3 flex items-center justify-between">
+                <div key={log.id} className="py-3 flex items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-zinc-900 dark:text-white">{log.action}</span>
                       <span className="text-zinc-400 text-[11px]">&bull; {log.user_name || "Admin"}</span>
                     </div>
                     {log.reason && <p className="text-zinc-500 text-[11px] mt-0.5">{log.reason}</p>}
+                    {log.action === "AUDIENCE_UPDATED" && (log.previous_value?.audience || log.new_value?.audience) && (
+                      <p className="text-blue-600 dark:text-blue-400 text-[11px] font-mono mt-1">
+                        배포 대상 변경: [{Array.isArray(log.previous_value?.audience) ? (log.previous_value.audience as string[]).join(", ") : "None"}] &rarr; [{Array.isArray(log.new_value?.audience) ? (log.new_value.audience as string[]).join(", ") : "None"}]
+                      </p>
+                    )}
                   </div>
-                  <span className="text-zinc-400 text-[11px]">{new Date(log.created_at).toLocaleString()}</span>
+                  <span className="text-zinc-400 text-[11px] shrink-0">{new Date(log.created_at).toLocaleString()}</span>
                 </div>
               ))
             )}
