@@ -55,6 +55,29 @@ export default async function StaffManagementPage() {
     `)
     .order("created_at", { ascending: true });
 
+  // 1b. Read-only check of Supabase Auth ban state to detect any DB/Auth desync (ADM-STAFF-DEACT-001-R1)
+  const staffWithAuthSync = await Promise.all(
+    (staff || []).map(async (s) => {
+      try {
+        const { data: authRes } = await admin.auth.admin.getUserById(s.id);
+        const bannedUntil = authRes?.user?.banned_until || null;
+        const isAuthBanned = Boolean(
+          bannedUntil && new Date(bannedUntil).getTime() > Date.now()
+        );
+        const expectedBanned = s.status === "suspended" || s.status === "locked";
+        return {
+          ...s,
+          auth_desynced: isAuthBanned !== expectedBanned,
+        };
+      } catch {
+        return {
+          ...s,
+          auth_desynced: false,
+        };
+      }
+    })
+  );
+
   // 2. Fetch departments and job titles
   const { data: departments } = await admin
     .from("departments")
@@ -121,7 +144,7 @@ export default async function StaffManagementPage() {
       {/* Main Drag-Resizable Workspace Component */}
       <StaffWorkspace
         currentUserId={session.userId}
-        initialStaff={staff || []}
+        initialStaff={staffWithAuthSync}
         departments={departments || []}
         jobTitles={jobTitles || []}
         auditLogs={auditLogs}

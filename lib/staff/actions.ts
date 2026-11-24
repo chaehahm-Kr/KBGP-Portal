@@ -500,8 +500,9 @@ export async function updateStaffStatusAction(
     }
 
     const isDeactivating = newStatus === "suspended" || newStatus === "locked";
+    let targetIsSuperAdmin = false;
 
-    // Prevent deactivating the last active Super Admin
+    // Prevent deactivating the last active Super Admin (Pre-check)
     if (isDeactivating) {
       const [activeSuperStaffRes, superRolesRes] = await Promise.all([
         admin
@@ -512,7 +513,7 @@ export async function updateStaffStatusAction(
       ]);
 
       const superRoleIds = new Set((superRolesRes.data ?? []).map((r) => r.staff_id));
-      const targetIsSuperAdmin =
+      targetIsSuperAdmin =
         oldData.base_role === "super_admin" || superRoleIds.has(targetId);
 
       if (targetIsSuperAdmin) {
@@ -539,6 +540,7 @@ export async function updateStaffStatusAction(
     };
 
     // Idempotent handling: if already in requested status, still ensure Auth state is synchronized
+    // WITHOUT changing DB status (e.g. reconciling suspended DB + unbanned Auth without temporarily activating)
     if (oldData.status === newStatus) {
       try {
         if (isDeactivating) {
@@ -548,14 +550,36 @@ export async function updateStaffStatusAction(
         }
       } catch (syncErr: any) {
         console.error("[ADM-STAFF-DEACT-001] Idempotent Auth sync failed:", syncErr);
+        const rawMsg = syncErr?.message || "";
         return {
           ok: false,
-          error:
-            syncErr?.message ||
-            "인증 시스템(Auth) 상태 동기화에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+          error: rawMsg.includes("[SECURITY GUARD]")
+            ? "보안 보호 계정에 대한 테스트/자동화 요청이 차단되었습니다."
+            : "인증 시스템(Auth) 상태 동기화에 실패했습니다. 잠시 후 다시 시도해 주세요.",
         };
       }
+
+      await logAudit({
+        actorId: session.userId,
+        targetId,
+        actionType: "status_sync",
+        oldValues: {
+          status: oldData.status,
+          name: oldData.name,
+          email: oldData.email,
+        },
+        newValues: {
+          status: newStatus,
+          name: oldData.name,
+          email: oldData.email,
+          auth_banned: isDeactivating,
+          reconciled: true,
+        },
+        reason: reason?.trim() || "기존 상태 유지 Auth 동기화(Reconciliation)",
+      });
+
       revalidatePath("/admin/staff");
+      revalidatePath("/admin", "layout");
       return {
         ok: true,
         status: newStatus,
@@ -563,7 +587,7 @@ export async function updateStaffStatusAction(
         message:
           newStatus === "active"
             ? "이미 활성 상태인 계정입니다. 인증 상태를 최신으로 동기화했습니다."
-            : "이미 비활성 상태인 계정입니다. 로그인 차단 상태를 최신으로 동기화했습니다.",
+            : "기존 비활성(suspended) 상태를 유지한 채 Supabase Auth 로그인 차단 상태를 동기화했습니다.",
       };
     }
 
@@ -579,6 +603,35 @@ export async function updateStaffStatusAction(
         ok: false,
         error: "데이터베이스 계정 상태 변경에 실패했습니다. 잠시 후 다시 시도해 주세요.",
       };
+    }
+
+    // 1b. Concurrent race-condition guard for last active Super Admin:
+    // Re-verify at least 1 active Super Admin remains AFTER DB update; if not, immediately roll back BEFORE Auth ban.
+    if (isDeactivating && targetIsSuperAdmin) {
+      const [postActiveStaffRes, postSuperRolesRes] = await Promise.all([
+        admin
+          .from("staff_members")
+          .select("id, base_role, status")
+          .eq("status", "active"),
+        admin.from("staff_roles").select("staff_id").eq("role", "super_admin"),
+      ]);
+      const postSuperRoleIds = new Set((postSuperRolesRes.data ?? []).map((r) => r.staff_id));
+      const remainingActiveSuperAdmins = (postActiveStaffRes.data ?? []).filter(
+        (s) => s.base_role === "super_admin" || postSuperRoleIds.has(s.id)
+      );
+      if (remainingActiveSuperAdmins.length === 0) {
+        console.warn(
+          `[ADM-STAFF-DEACT-001-R1] Concurrent last Super Admin deactivation detected for ${targetId}; rolling back to ${oldData.status}.`
+        );
+        await admin
+          .from("staff_members")
+          .update({ status: oldData.status })
+          .eq("id", targetId);
+        return {
+          ok: false,
+          error: "동시 요청으로 인해 마지막 활성 Super Admin 보호 정책이 작동하여 비활성화가 취소되었습니다.",
+        };
+      }
     }
 
     // 2. Sync Supabase Auth (ban / unban). On failure, immediately roll back DB status!

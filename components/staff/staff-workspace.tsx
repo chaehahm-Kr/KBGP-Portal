@@ -33,6 +33,7 @@ type StaffMember = {
   must_change_password: boolean;
   last_login_at: string | null;
   created_at: string;
+  auth_desynced?: boolean;
 };
 
 type Department = {
@@ -381,7 +382,7 @@ export function StaffWorkspace({
           return;
         }
         setStaffList(prev =>
-          prev.map(s => s.id === targetId ? { ...s, status } : s)
+          prev.map(s => s.id === targetId ? { ...s, status, auth_desynced: false } : s)
         );
         setSuccessMsg(
           (result && result.ok && result.message) ||
@@ -923,14 +924,27 @@ export function StaffWorkspace({
                     {isActionPending ? "처리 중..." : "🚫 즉시 비활성화"}
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    disabled={isActionPending}
-                    onClick={() => handleStatusToggle("active")}
-                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold rounded-lg cursor-pointer"
-                  >
-                    {isActionPending ? "처리 중..." : "✓ 활성화"}
-                  </button>
+                  <>
+                    {activeStaff.auth_desynced && (
+                      <button
+                        type="button"
+                        disabled={isActionPending}
+                        title="DB 비활성 상태를 유지한 채 Supabase Auth 로그인 차단 상태를 즉시 동기화합니다."
+                        onClick={() => handleStatusToggle(activeStaff.status)}
+                        className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold rounded-lg cursor-pointer"
+                      >
+                        {isActionPending ? "처리 중..." : "🔄 Auth 상태 동기화"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={isActionPending}
+                      onClick={() => handleStatusToggle("active")}
+                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold rounded-lg cursor-pointer"
+                    >
+                      {isActionPending ? "처리 중..." : "✓ 활성화"}
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={handlePasswordReset}
