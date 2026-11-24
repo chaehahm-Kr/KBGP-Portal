@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { 
   type StaffRole, 
   type StaffStatus, 
@@ -68,7 +69,11 @@ type StaffWorkspaceProps = {
   updatePermissions: (targetId: string, baseRole: StaffRole, menuPermissions: StaffMenuPermissions, reason: string) => Promise<void>;
   updateBasicInfo: (targetId: string, data: any, reason: string) => Promise<void>;
   updateOrgInfo: (targetId: string, data: any, reason: string) => Promise<void>;
-  updateStatus: (targetId: string, status: StaffStatus, reason: string) => Promise<void>;
+  updateStatus: (
+    targetId: string,
+    status: StaffStatus,
+    reason: string
+  ) => Promise<{ ok: true; status: StaffStatus; message: string; alreadyInStatus?: boolean } | { ok: false; error: string } | void>;
   resetPassword: (targetId: string, reason: string) => Promise<string>;
   reinviteStaff: (targetId: string) => Promise<void>;
   addDept: (name: string) => Promise<Department>;
@@ -97,6 +102,7 @@ export function StaffWorkspace({
   toggleTitle,
   deleteStaff,
 }: StaffWorkspaceProps) {
+  const router = useRouter();
   // Panel resizing states
   const [leftWidth, setLeftWidth] = useState(380);
   const [rightWidth, setRightWidth] = useState(420);
@@ -233,10 +239,14 @@ export function StaffWorkspace({
       setHireDate("");
       setPermissions(null);
     }
+  }, [selectedStaffId, staffList, activeStaff]);
+
+  // Clear banner messages only when switching to a different staff member (not on list refresh!)
+  useEffect(() => {
     setErrorMsg("");
     setSuccessMsg("");
     setActionReason("");
-  }, [selectedStaffId, staffList, activeStaff]);
+  }, [selectedStaffId]);
 
   // Handle Base Role changes (auto-populate defaults)
   const handleBaseRoleChange = (role: StaffRole) => {
@@ -355,7 +365,7 @@ export function StaffWorkspace({
 
   // Toggle Account status
   const handleStatusToggle = async (status: StaffStatus) => {
-    if (!activeStaff) return;
+    if (!activeStaff || isActionPending) return;
     const targetId = activeStaff.id;
     setErrorMsg("");
     setSuccessMsg("");
@@ -365,14 +375,22 @@ export function StaffWorkspace({
 
     startAction(async () => {
       try {
-        await updateStatus(targetId, status, reasonPrompt);
+        const result = await updateStatus(targetId, status, reasonPrompt);
+        if (result && result.ok === false) {
+          setErrorMsg(result.error || "계정 상태 변경에 실패했습니다.");
+          return;
+        }
         setStaffList(prev =>
           prev.map(s => s.id === targetId ? { ...s, status } : s)
         );
-        setSuccessMsg(`계정 상태를 [${STAFF_STATUS_LABEL[status]}]로 성공적으로 변경했습니다.`);
+        setSuccessMsg(
+          (result && result.ok && result.message) ||
+            `계정 상태를 [${STAFF_STATUS_LABEL[status]}]로 성공적으로 변경했습니다.`
+        );
         setActionReason("");
+        router.refresh();
       } catch (err: any) {
-        setErrorMsg(err.message || "계정 상태 변경 실패.");
+        setErrorMsg(err?.message || "계정 상태 변경에 실패했습니다.");
       }
     });
   };
@@ -892,17 +910,26 @@ export function StaffWorkspace({
               <div className="flex gap-1 select-none">
                 {activeStaff.status === "active" ? (
                   <button
+                    type="button"
+                    disabled={isActionPending || activeStaff.id === currentUserId}
+                    title={
+                      activeStaff.id === currentUserId
+                        ? "본인 계정은 직접 비활성화할 수 없습니다."
+                        : "계정을 즉시 비활성화하고 로그인 및 세션을 차단합니다."
+                    }
                     onClick={() => handleStatusToggle("suspended")}
-                    className="px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-lg cursor-pointer"
+                    className="px-2.5 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold rounded-lg cursor-pointer"
                   >
-                    🚫 즉시 비활성화
+                    {isActionPending ? "처리 중..." : "🚫 즉시 비활성화"}
                   </button>
                 ) : (
                   <button
+                    type="button"
+                    disabled={isActionPending}
                     onClick={() => handleStatusToggle("active")}
-                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg cursor-pointer"
+                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold rounded-lg cursor-pointer"
                   >
-                    ✓ 활성화
+                    {isActionPending ? "처리 중..." : "✓ 활성화"}
                   </button>
                 )}
                 <button

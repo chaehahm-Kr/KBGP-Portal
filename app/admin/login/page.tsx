@@ -7,7 +7,14 @@ export const metadata: Metadata = {
   title: "관리자 로그인 | Korea Select Network",
 };
 
-export default function AdminLoginPage() {
+export default async function AdminLoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ reason?: string }>;
+}) {
+  const resolvedParams = searchParams ? await searchParams : {};
+  const isInactiveNotice = resolvedParams?.reason === "account_inactive";
+
   return (
     <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-2xl space-y-6 backdrop-blur-sm">
       {/* KSN Premium Logo & Title */}
@@ -22,6 +29,12 @@ export default function AdminLoginPage() {
         </div>
         <p className="text-[11px] text-zinc-400 font-medium">Letusto 내부 직원 전용 백엔드 관리 시스템</p>
       </div>
+
+      {isInactiveNotice && (
+        <div className="rounded-lg border border-red-500/40 bg-red-950/50 px-3.5 py-2.5 text-xs font-medium text-red-200">
+          계정이 비활성화(이용 정지)되어 접근이 차단되었습니다. 관리자에게 문의해 주세요.
+        </div>
+      )}
 
       <div className="border-t border-zinc-800 pt-6">
         <LoginForm

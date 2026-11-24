@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { requireSuperAdmin, verifyAdminSession } from "@/lib/auth/dal";
+import { checkSuperAdminActionSession, requireSuperAdmin, verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_ROLE_PERMISSIONS, type StaffRole, type StaffStatus, type StaffMenuPermissions } from "./types";
@@ -449,58 +449,210 @@ export async function updateStaffBasicInfoAction(
   revalidatePath("/admin/staff");
 }
 
+export type StaffStatusActionResult =
+  | { ok: true; status: StaffStatus; message: string; alreadyInStatus?: boolean }
+  | { ok: false; error: string };
+
 /**
  * 직원 상태를 토글합니다 (비활성화, 재활성화, 퇴사(퇴사 처리는 비활성화로 간주))
+ * ADM-STAFF-DEACT-001:
+ * - 구조화된 결과({ ok, error, status, message })를 반환하여 Production 빌드에서 일반 오류로 마스킹되지 않도록 함.
+ * - DB와 Supabase Auth(ban_duration) 간 부분 성공 시 자동 롤백으로 상태 불일치 방지.
+ * - 본인 비활성화, 마지막 활성 Super Admin 비활성화, 비권한자 요청, 중복 실행 방지.
  */
 export async function updateStaffStatusAction(
   targetId: string,
   newStatus: StaffStatus,
   reason: string
-) {
-  const session = await requireSuperAdmin();
+): Promise<StaffStatusActionResult> {
+  try {
+    const authCheck = await checkSuperAdminActionSession();
+    if (!authCheck.ok) {
+      return { ok: false, error: authCheck.error };
+    }
+    const session = authCheck.session;
 
-  if (targetId === session.userId) {
-    throw new Error("본인 계정의 상태는 직접 비활성화하거나 수정할 수 없습니다.");
+    if (!targetId) {
+      return { ok: false, error: "대상 직원 ID가 올바르지 않습니다." };
+    }
+
+    if (targetId === session.userId) {
+      return {
+        ok: false,
+        error: "본인 계정의 상태는 직접 비활성화하거나 수정할 수 없습니다.",
+      };
+    }
+
+    const admin = createAdminClient();
+    const { data: oldData, error: fetchError } = await admin
+      .from("staff_members")
+      .select("id, name, email, status, base_role")
+      .eq("id", targetId)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error("[ADM-STAFF-DEACT-001] Failed to load target staff:", fetchError);
+      return { ok: false, error: "직원 정보를 조회하는 중 오류가 발생했습니다." };
+    }
+
+    if (!oldData) {
+      return { ok: false, error: "직원 정보를 찾을 수 없습니다." };
+    }
+
+    const isDeactivating = newStatus === "suspended" || newStatus === "locked";
+
+    // Prevent deactivating the last active Super Admin
+    if (isDeactivating) {
+      const [activeSuperStaffRes, superRolesRes] = await Promise.all([
+        admin
+          .from("staff_members")
+          .select("id, base_role, status")
+          .eq("status", "active"),
+        admin.from("staff_roles").select("staff_id").eq("role", "super_admin"),
+      ]);
+
+      const superRoleIds = new Set((superRolesRes.data ?? []).map((r) => r.staff_id));
+      const targetIsSuperAdmin =
+        oldData.base_role === "super_admin" || superRoleIds.has(targetId);
+
+      if (targetIsSuperAdmin) {
+        const otherActiveSuperAdmins = (activeSuperStaffRes.data ?? []).filter(
+          (s) =>
+            s.id !== targetId &&
+            (s.base_role === "super_admin" || superRoleIds.has(s.id))
+        );
+        if (otherActiveSuperAdmins.length === 0) {
+          return {
+            ok: false,
+            error: "마지막 활성 Super Admin 계정은 비활성화할 수 없습니다.",
+          };
+        }
+      }
+    }
+
+    const { deactivateUserSessions, reactivateUserSessions } = await import(
+      "@/lib/auth/admin-actions"
+    );
+    const authGuardOptions = {
+      actorEmail: session.email,
+      allowAuthorizedSuperAdmin: true,
+    };
+
+    // Idempotent handling: if already in requested status, still ensure Auth state is synchronized
+    if (oldData.status === newStatus) {
+      try {
+        if (isDeactivating) {
+          await deactivateUserSessions(targetId, authGuardOptions);
+        } else if (newStatus === "active") {
+          await reactivateUserSessions(targetId, authGuardOptions);
+        }
+      } catch (syncErr: any) {
+        console.error("[ADM-STAFF-DEACT-001] Idempotent Auth sync failed:", syncErr);
+        return {
+          ok: false,
+          error:
+            syncErr?.message ||
+            "인증 시스템(Auth) 상태 동기화에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        };
+      }
+      revalidatePath("/admin/staff");
+      return {
+        ok: true,
+        status: newStatus,
+        alreadyInStatus: true,
+        message:
+          newStatus === "active"
+            ? "이미 활성 상태인 계정입니다. 인증 상태를 최신으로 동기화했습니다."
+            : "이미 비활성 상태인 계정입니다. 로그인 차단 상태를 최신으로 동기화했습니다.",
+      };
+    }
+
+    // 1. Update DB status
+    const { error: dbError } = await admin
+      .from("staff_members")
+      .update({ status: newStatus })
+      .eq("id", targetId);
+
+    if (dbError) {
+      console.error("[ADM-STAFF-DEACT-001] DB status update failed:", dbError);
+      return {
+        ok: false,
+        error: "데이터베이스 계정 상태 변경에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+      };
+    }
+
+    // 2. Sync Supabase Auth (ban / unban). On failure, immediately roll back DB status!
+    try {
+      if (isDeactivating) {
+        await deactivateUserSessions(targetId, authGuardOptions);
+      } else if (newStatus === "active") {
+        await reactivateUserSessions(targetId, authGuardOptions);
+      }
+    } catch (authErr: any) {
+      console.error(
+        `[ADM-STAFF-DEACT-001] Auth sync failed for ${targetId} (${oldData.email}); rolling back DB status to ${oldData.status}:`,
+        authErr
+      );
+      const { error: rollbackError } = await admin
+        .from("staff_members")
+        .update({ status: oldData.status })
+        .eq("id", targetId);
+
+      if (rollbackError) {
+        console.error(
+          `[ADM-STAFF-DEACT-001] CRITICAL: Rollback failed for ${targetId}:`,
+          rollbackError
+        );
+      }
+
+      const rawMsg = authErr?.message || "";
+      const friendlyError = rawMsg.includes("[SECURITY GUARD]")
+        ? "보안 보호 계정에 대한 테스트/자동화 요청이 차단되었습니다."
+        : "인증 서버(Auth) 세션 차단 동기화에 실패하여 계정 상태를 원래대로 복구했습니다. 잠시 후 다시 시도해 주세요.";
+
+      return { ok: false, error: friendlyError };
+    }
+
+    // 3. Record complete audit log (actor, timestamp, before/after status, reason)
+    const normalizedReason =
+      reason?.trim() ||
+      (isDeactivating ? "관리자 요청 즉시 비활성화 처리" : "관리자 요청 계정 재활성화 처리");
+
+    await logAudit({
+      actorId: session.userId,
+      targetId,
+      actionType: "status_change",
+      oldValues: {
+        status: oldData.status,
+        name: oldData.name,
+        email: oldData.email,
+      },
+      newValues: {
+        status: newStatus,
+        name: oldData.name,
+        email: oldData.email,
+        auth_banned: isDeactivating,
+      },
+      reason: normalizedReason,
+    });
+
+    revalidatePath("/admin/staff");
+    revalidatePath("/admin", "layout");
+
+    return {
+      ok: true,
+      status: newStatus,
+      message: isDeactivating
+        ? `[${oldData.name || oldData.email}] 계정을 비활성화하고 로그인 및 세션 접근을 차단했습니다.`
+        : `[${oldData.name || oldData.email}] 계정을 다시 활성화했습니다. 이제 정상적으로 로그인할 수 있습니다.`,
+    };
+  } catch (err: any) {
+    console.error("[ADM-STAFF-DEACT-001] Unexpected error in updateStaffStatusAction:", err);
+    return {
+      ok: false,
+      error: "직원 계정 상태 변경 중 예기치 않은 오류가 발생했습니다. 서버 로그를 확인해 주세요.",
+    };
   }
-
-  const admin = createAdminClient();
-  const { data: oldData } = await admin
-    .from("staff_members")
-    .select("status")
-    .eq("id", targetId)
-    .maybeSingle();
-
-  if (!oldData) {
-    throw new Error("직원 정보를 찾을 수 없습니다.");
-  }
-
-  const { error } = await admin
-    .from("staff_members")
-    .update({ status: newStatus })
-    .eq("id", targetId);
-
-  if (error) {
-    throw new Error("계정 상태 변경 실패: " + error.message);
-  }
-
-  // If status is suspended or locked, force logout sessions
-  const { deactivateUserSessions, reactivateUserSessions } = await import("@/lib/auth/admin-actions");
-  if (newStatus === "suspended" || newStatus === "locked") {
-    await deactivateUserSessions(targetId);
-  } else if (newStatus === "active") {
-    await reactivateUserSessions(targetId);
-  }
-
-  await logAudit({
-    actorId: session.userId,
-    targetId,
-    actionType: "status_change",
-    oldValues: oldData,
-    newValues: { status: newStatus },
-    reason,
-  });
-
-  revalidatePath("/admin/staff");
 }
 
 /**

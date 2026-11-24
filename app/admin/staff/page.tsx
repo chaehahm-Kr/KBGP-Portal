@@ -17,6 +17,8 @@ import {
 } from "@/lib/staff/actions";
 import { StaffWorkspace } from "@/components/staff/staff-workspace";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "직원 및 권한 관리 | 관리자 콘솔",
 };

@@ -19,13 +19,44 @@ export function isProtectedProductionEmail(email?: string | null): boolean {
 }
 
 /**
+ * Identifies automated QA / test accounts that must never mutate protected production accounts.
+ */
+export function isQaTestActorEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  return (
+    normalized.startsWith("qa-") ||
+    normalized.includes("+qa") ||
+    normalized.includes("kbgp-verify") ||
+    normalized.includes("test@")
+  );
+}
+
+export interface AuthMutationGuardOptions {
+  /** Email of the authenticated Super Admin performing a deliberate UI action */
+  actorEmail?: string | null;
+  /** Explicitly permits a real (non-QA) Super Admin to perform authorized staff lifecycle actions */
+  allowAuthorizedSuperAdmin?: boolean;
+}
+
+/**
  * Asserts that the target email or user ID is NOT a protected production account before running destructive operations.
+ * Real (non-QA) Super Admins performing deliberate staff status changes may pass allowAuthorizedSuperAdmin: true.
  */
 export async function assertNotProtectedProductionAccount(
   emailOrUserId: string,
-  operation: string
+  operation: string,
+  options?: AuthMutationGuardOptions
 ): Promise<void> {
   if (!emailOrUserId) return;
+
+  if (
+    options?.allowAuthorizedSuperAdmin === true &&
+    options.actorEmail &&
+    !isQaTestActorEmail(options.actorEmail)
+  ) {
+    return;
+  }
 
   const target = emailOrUserId.trim().toLowerCase();
   
@@ -62,8 +93,9 @@ export async function assertNotProtectedProductionAccount(
 export async function safeAdminAuthMutation<T>(
   targetEmailOrUserId: string,
   operation: string,
-  mutator: () => Promise<T>
+  mutator: () => Promise<T>,
+  options?: AuthMutationGuardOptions
 ): Promise<T> {
-  await assertNotProtectedProductionAccount(targetEmailOrUserId, operation);
+  await assertNotProtectedProductionAccount(targetEmailOrUserId, operation, options);
   return await mutator();
 }

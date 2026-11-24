@@ -68,6 +68,17 @@ async function login(
           : "이메일 인증이 아직 완료되지 않았습니다. 가입 시 받으신 이메일의 링크를 먼저 확인해주세요.",
       };
     }
+
+    if (
+      error.code === "user_banned" ||
+      error.message?.toLowerCase().includes("banned")
+    ) {
+      return {
+        error: area === "retailer"
+          ? "This account has been deactivated. Please contact your administrator."
+          : "비활성화(이용 정지)된 계정입니다. 관리자에게 문의해 주세요.",
+      };
+    }
     
     // Server / Network / Timeout / 5xx system failure (do NOT count toward password lockout)
     if (
@@ -177,10 +188,10 @@ async function login(
       .eq("id", data.user.id)
       .maybeSingle();
 
-    if (staffMember && staffMember.status === "suspended") {
+    if (!staffMember || staffMember.status === "suspended" || staffMember.status === "locked") {
       await supabase.auth.signOut();
       return {
-        error: "이용이 정지된 관리자 계정입니다.",
+        error: "비활성화(이용 정지)된 관리자 계정입니다. 관리자에게 문의해 주세요.",
       };
     }
   } else if (area === "retailer") {

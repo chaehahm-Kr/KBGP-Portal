@@ -290,20 +290,90 @@ export const verifyPendingAdminSession = cache(async () => {
  */
 export const requireSuperAdmin = cache(async (): Promise<VerifiedSession> => {
   const session = await verifyAdminSession();
-  const supabase = await createClient();
+  const adminClient = createAdminClient();
 
-  const { data: roles } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("staff_id", session.userId);
+  const [staffRes, rolesRes] = await Promise.all([
+    adminClient
+      .from("staff_members")
+      .select("base_role, status")
+      .eq("id", session.userId)
+      .maybeSingle(),
+    adminClient
+      .from("staff_roles")
+      .select("role")
+      .eq("staff_id", session.userId),
+  ]);
 
-  const isSuperAdmin = (roles ?? []).some((r) => r.role === "super_admin");
-  if (!isSuperAdmin) {
+  const isActiveStaff = staffRes.data?.status === "active";
+  const isSuperAdmin =
+    staffRes.data?.base_role === "super_admin" ||
+    (rolesRes.data ?? []).some((r) => r.role === "super_admin");
+
+  if (!isActiveStaff || !isSuperAdmin) {
     redirect("/admin");
   }
 
   return session;
 });
+
+/**
+ * Non-redirecting Super Admin session verifier for Server Actions that return
+ * structured { ok: false, error } responses instead of redirecting/throwing.
+ */
+export async function checkSuperAdminActionSession(): Promise<
+  { ok: true; session: VerifiedSession } | { ok: false; error: string }
+> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return { ok: false, error: "인증 세션이 만료되었습니다. 다시 로그인해 주세요." };
+    }
+
+    const adminClient = createAdminClient();
+    const [profileRes, staffRes, rolesRes] = await Promise.all([
+      adminClient.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+      adminClient
+        .from("staff_members")
+        .select("status, base_role")
+        .eq("id", user.id)
+        .maybeSingle(),
+      adminClient.from("staff_roles").select("role").eq("staff_id", user.id),
+    ]);
+
+    if (!profileRes.data || profileRes.data.role !== "admin") {
+      return { ok: false, error: "관리자 권한이 없습니다." };
+    }
+
+    if (!staffRes.data || staffRes.data.status !== "active") {
+      return { ok: false, error: "비활성화된 계정으로는 이 작업을 수행할 수 없습니다." };
+    }
+
+    const isSuperAdmin =
+      staffRes.data.base_role === "super_admin" ||
+      (rolesRes.data ?? []).some((r) => r.role === "super_admin");
+
+    if (!isSuperAdmin) {
+      return { ok: false, error: "권한이 없습니다. Super Admin만 직원 계정 상태를 변경할 수 있습니다." };
+    }
+
+    return {
+      ok: true,
+      session: {
+        userId: user.id,
+        email: user.email ?? "",
+        role: "admin",
+      },
+    };
+  } catch (err) {
+    console.error("[ADM-STAFF-DEACT-001] checkSuperAdminActionSession error:", err);
+    return { ok: false, error: "권한 검증 중 서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." };
+  }
+}
 
 export type StaffBaseRole = "super_admin" | "admin" | "account_manager" | string;
 export type StaffMenuAction = "view" | "create" | "edit" | "delete" | "approve" | "impersonate";
