@@ -69,7 +69,7 @@ export async function getPortalProductDetail(
       palette_carton_qty, palette_width, palette_depth, palette_height, palette_weight,
       container_20ft_qty, container_20ft_weight, container_20ft_cbm,
       container_40fthc_qty, container_40fthc_weight, container_40fthc_cbm, category_code,
-      selection_status, sales_status, trading_status, status, deleted_at, company_id
+      selection_status, sales_status, trading_status, status, deleted_at, company_id, compliance_facility_grandfathered
     `)
     .eq("id", productId)
     .eq("company_id", companyId)
@@ -212,6 +212,14 @@ export async function getPortalProductDetail(
   const adminOverrides = (product.price_additional_info as any)?.admin_overrides || null;
   const effectiveDeletedAt = product.deleted_at || (product.price_additional_info as any)?.deleted_at || null;
 
+  // Check primary manufacturing facility
+  const { data: primaryMfgLink } = await supabase
+    .from("product_manufacturing_facilities")
+    .select("facility_id")
+    .eq("product_id", product.id)
+    .eq("is_primary", true)
+    .maybeSingle();
+
   const registrationEvaluation = evaluateProductRegistrationStatus({
     id: product.id,
     name: product.name,
@@ -246,6 +254,11 @@ export async function getPortalProductDetail(
     adminOverrides,
     hasImages: imageRows.length > 0,
     categoryCompletion: initialCategoryCompletion,
+    complianceFacility: {
+      hasPrimaryFacility: Boolean(primaryMfgLink?.facility_id),
+      isGrandfathered: Boolean(product.compliance_facility_grandfathered),
+      enforcePrimaryFacility: false, // inactive until KSN-CMP-010
+    },
   });
 
   return {

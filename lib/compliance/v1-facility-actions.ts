@@ -605,3 +605,41 @@ export async function adminVerifyFacilityComplianceAction(
     return { ok: false, error: err?.message || "제조시설 검증 저장 오류" };
   }
 }
+
+/**
+ * Returns products linked to a manufacturing facility.
+ * Used to guard against deletion/incompatible type change and display affected products.
+ */
+export async function getFacilityLinkedProductsAction(facilityId: string): Promise<{
+  ok: true;
+  count: number;
+  products: Array<{
+    id: string;
+    sku: string;
+    name_ko: string | null;
+    name_en: string;
+    is_primary: boolean;
+  }>;
+} | { ok: false; error: string }> {
+  try {
+    const admin = createAdminClient();
+    const { data: links, error } = await admin
+      .from("product_manufacturing_facilities")
+      .select("product_id, is_primary, products(id, manufacture_sku, name, name_en)")
+      .eq("facility_id", facilityId);
+
+    if (error) return { ok: false, error: error.message };
+
+    const products = (links || []).map((l: any) => ({
+      id: l.product_id,
+      sku: l.products?.manufacture_sku || "",
+      name_ko: l.products?.name || null,
+      name_en: l.products?.name_en || "",
+      is_primary: Boolean(l.is_primary),
+    }));
+
+    return { ok: true, count: products.length, products };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "연결 제품 조회 실패" };
+  }
+}

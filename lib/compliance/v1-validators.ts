@@ -7,8 +7,10 @@ import {
   OTC_FACILITY_STATUSES,
   OTC_LISTING_STATUSES,
   US_REGULATORY_CLASSIFICATIONS,
+  isManufacturingCapableLocation,
   type DrugFactsStatus,
   type FeiIssuanceStatus,
+  type LocationType,
   type MocraFacilityStatus,
   type MocraListingStatus,
   type OtcApplicability,
@@ -16,6 +18,7 @@ import {
   type OtcListingStatus,
   type UsRegulatoryClassification,
 } from "./v1-types";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 export interface FacilityComplianceDeclarationInput {
   fei_status: FeiIssuanceStatus;
@@ -254,4 +257,62 @@ export function evaluatePrimaryFacilityRegistrationRule(params: {
     return { isMissingRequired: false, showNonBlockingReminder: true };
   }
   return { isMissingRequired: true, showNonBlockingReminder: false };
+}
+
+export interface ShippingOriginValidationInput {
+  name: string;
+  country: string;
+  address_line1: string;
+  city: string;
+  postal_code: string;
+  email?: string | null;
+  location_type?: LocationType | null;
+  manufacturer_legal_name_en?: string | null;
+  contact_name?: string | null;
+  contact_name_en?: string | null;
+  phone?: string | null;
+}
+
+/**
+ * Validates shipping origin and manufacturing facility input fields.
+ */
+export function validateShippingOriginInput(input: ShippingOriginValidationInput): void {
+  if (!input.name || !input.name.trim()) {
+    throw new Error("장소명은 필수 입력 항목입니다.");
+  }
+  if (!input.country || !formatCanonicalCountryName(input.country)) {
+    throw new Error("국가는 필수 선택 항목입니다.");
+  }
+  if (!input.address_line1 || !input.address_line1.trim()) {
+    throw new Error("주소 1은 필수 입력 항목입니다.");
+  }
+  if (!input.city || !input.city.trim()) {
+    throw new Error("도시는 필수 입력 항목입니다.");
+  }
+  if (!input.postal_code || !input.postal_code.trim()) {
+    throw new Error("우편번호(Postal / ZIP Code)는 필수 입력 항목입니다.");
+  }
+  if (input.email && input.email.trim()) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(input.email.trim())) {
+      throw new Error("유효한 이메일 주소를 입력해주세요.");
+    }
+  }
+
+  // KSN-CMP-004: Manufacturing Facility Required Fields
+  if (isManufacturingCapableLocation(input.location_type)) {
+    if (!input.manufacturer_legal_name_en || !input.manufacturer_legal_name_en.trim()) {
+      throw new Error("제조시설은 제조사 정식 영문명(Legal Name in English)이 필수입니다.");
+    }
+    const hasContact = (input.contact_name && input.contact_name.trim()) || (input.contact_name_en && input.contact_name_en.trim());
+    if (!hasContact) {
+      throw new Error("제조시설 담당자명(Contact Name)은 필수 입력 항목입니다.");
+    }
+    if (!input.phone || !input.phone.trim()) {
+      throw new Error("제조시설 연락처 전화번호(Phone)는 필수 입력 항목입니다.");
+    }
+    if (!input.email || !input.email.trim()) {
+      throw new Error("제조시설 이메일(Email)은 필수 입력 항목입니다.");
+    }
+  }
 }

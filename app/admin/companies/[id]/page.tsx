@@ -25,7 +25,7 @@ export default async function AdminCompanyDetailPage({
   try {
     const { id } = await params;
     const session = await verifyAdminSession();
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data: company } = await supabase
       .from("companies")
@@ -351,7 +351,7 @@ export default async function AdminCompanyDetailPage({
       .order("created_at", { ascending: true });
 
     // Fetch shipping origins
-    const shippingOrigins = await getCompanyShippingOrigins(id);
+    const shippingOrigins = await getCompanyShippingOrigins(id, { includeManufacturingOnly: true });
 
     const { hasImpersonationPermission } = await import("@/lib/auth/impersonation-actions");
     const canImpersonate = await hasImpersonationPermission(session.userId);

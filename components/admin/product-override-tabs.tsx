@@ -43,6 +43,11 @@ import { evaluateProductRegistrationStatus, type MissingFieldItem } from "@/lib/
 import type { CategoryCompletionResult } from "@/lib/product/attribute-completion";
 import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
 import { LogisticsHelpModal, type LogisticsHelpSectionKey } from "@/components/product/logistics-help-modal";
+import { ProductFacilitySelector } from "@/components/product/product-facility-selector";
+import {
+  getProductManufacturingFacilitiesAction,
+  setProductManufacturingFacilitiesAction,
+} from "@/lib/compliance/v1-product-actions";
 import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface PendingImageFile {
@@ -82,6 +87,7 @@ interface ProductOverrideTabsProps {
   activeSuppliers?: { id: string; name: string }[];
   mappedSupplierIds?: string[];
   changeLogs?: ProductChangeLogItem[];
+  companyId?: string;
 }
 
 export function ProductOverrideTabs({
@@ -107,6 +113,7 @@ export function ProductOverrideTabs({
   activeSuppliers = [],
   mappedSupplierIds = [],
   changeLogs = [],
+  companyId,
 }: ProductOverrideTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -115,6 +122,32 @@ export function ProductOverrideTabs({
     ? "category_attributes" 
     : (tabQuery && ["basic", "price", "logistics", "media", "certs", "curation", "history"].includes(tabQuery) ? tabQuery : "basic");
   const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs" | "curation" | "history">(initialTab as any);
+
+  // KSN-CMP-004: Product Manufacturing Facilities State
+  const effectiveCompanyId = product.company_id || (product as any).brands?.company_id || companyId || "";
+  const [primaryFacilityId, setPrimaryFacilityId] = useState<string | null>(null);
+  const [additionalFacilityIds, setAdditionalFacilityIds] = useState<string[]>([]);
+  const [isFacilityDirty, setIsFacilityDirty] = useState(false);
+
+  useEffect(() => {
+    if (product.id) {
+      getProductManufacturingFacilitiesAction(product.id).then((res) => {
+        if (res.ok) {
+          setPrimaryFacilityId(res.primaryFacilityId);
+          setAdditionalFacilityIds(res.additionalFacilityIds);
+        }
+      });
+    }
+  }, [product.id]);
+
+  const handleFacilityChange = useCallback(
+    (selection: { primaryFacilityId: string | null; additionalFacilityIds: string[] }) => {
+      setPrimaryFacilityId(selection.primaryFacilityId);
+      setAdditionalFacilityIds(selection.additionalFacilityIds);
+      setIsFacilityDirty(true);
+    },
+    []
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1206,7 +1239,7 @@ export function ProductOverrideTabs({
   ]);
 
   const isMediaDirty = pendingImages.length > 0;
-  const isAnyDirty = isBasicDirty || isCategoryDirty || isPriceDirty || isLogisticsDirty || isCurationDirty || isMediaDirty;
+  const isAnyDirty = isBasicDirty || isCategoryDirty || isPriceDirty || isLogisticsDirty || isCurationDirty || isMediaDirty || isFacilityDirty;
 
   const handleSave = async (): Promise<{ success: boolean; error?: string }> => {
     setStatusMessage(null);
@@ -1369,6 +1402,20 @@ export function ProductOverrideTabs({
         },
         ovMatrix
       );
+
+      // KSN-CMP-004: Save product manufacturing facilities if modified
+      if (isFacilityDirty) {
+        const facRes = await setProductManufacturingFacilitiesAction(product.id, {
+          primaryFacilityId,
+          additionalFacilityIds,
+        });
+        if (!facRes.ok) {
+          setStatusMessage({ type: "error", text: facRes.error || "제조시설 정보 저장 실패" });
+          return { success: false, error: facRes.error };
+        }
+        setIsFacilityDirty(false);
+      }
+
       setStatusMessage({ type: "success", text: "어드민 변경사항이 성공적으로 저장되었습니다." });
       router.refresh();
       return { success: true };
@@ -2193,6 +2240,19 @@ export function ProductOverrideTabs({
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* [신규 카드]: 제조사 및 제조시설 정보 (MoCRA / FDA) */}
+            <div id="primary-facility-field" className="mt-6">
+              <ProductFacilitySelector
+                productId={product.id}
+                companyId={effectiveCompanyId}
+                primaryFacilityId={primaryFacilityId}
+                additionalFacilityIds={additionalFacilityIds}
+                onChange={handleFacilityChange}
+                isGrandfathered={Boolean((product as any).compliance_facility_grandfathered)}
+                manageOriginsUrl={effectiveCompanyId ? `/admin/companies/${effectiveCompanyId}?tab=shipping-origin` : undefined}
+              />
             </div>
           </div>
         )}

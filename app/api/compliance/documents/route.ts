@@ -27,6 +27,61 @@ async function resolveApiCaller() {
   return null;
 }
 
+export async function GET(req: NextRequest) {
+  const caller = await resolveApiCaller();
+  if (!caller) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const targetType = String(searchParams.get("target_type") || "").toUpperCase();
+  const targetId = String(searchParams.get("target_id") || "").trim();
+
+  if (!targetId || (targetType !== "FACILITY" && targetType !== "PRODUCT")) {
+    return NextResponse.json(
+      { error: "target_type (FACILITY|PRODUCT) and target_id are required." },
+      { status: 400 }
+    );
+  }
+
+  const admin = createAdminClient();
+  let query = admin
+    .from("compliance_evidence_documents")
+    .select("id, company_id, target_type, facility_id, product_id, document_category, file_name, mime_type, file_size, sha256, storage_path, created_at, uploaded_by")
+    .order("created_at", { ascending: false });
+
+  if (targetType === "FACILITY") {
+    query = query.eq("facility_id", targetId);
+  } else {
+    query = query.eq("product_id", targetId);
+  }
+
+  if (!caller.isAdmin && caller.companyId) {
+    query = query.eq("company_id", caller.companyId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const docs = data || [];
+  const signedDocs = await Promise.all(
+    docs.map(async (doc) => {
+      let downloadUrl: string | null = null;
+      if (doc.storage_path) {
+        const { data: signed } = await admin.storage
+          .from(BUCKET)
+          .createSignedUrl(doc.storage_path, 3600);
+        downloadUrl = signed?.signedUrl || null;
+      }
+      return { ...doc, download_url: downloadUrl };
+    })
+  );
+
+  return NextResponse.json({ documents: signedDocs }, { status: 200 });
+}
+
 export async function POST(req: NextRequest) {
   const caller = await resolveApiCaller();
   if (!caller) {

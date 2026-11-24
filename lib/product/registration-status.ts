@@ -1,3 +1,5 @@
+import { evaluatePrimaryFacilityRegistrationRule } from "@/lib/compliance/v1-validators";
+
 // Single Source of Truth for Product Statuses across Admin and Brand Portal
 
 export type SelectionStatus =
@@ -286,6 +288,12 @@ export interface ProductRegistrationEvaluationInput {
     requiredAttributesComplete: boolean;
     missingRequiredAttributes?: { code: string; nameKo: string }[];
   } | null;
+  complianceFacility?: {
+    hasPrimaryFacility: boolean;
+    isGrandfathered?: boolean;
+    isExplicitFinalSubmission?: boolean;
+    enforcePrimaryFacility?: boolean;
+  } | null;
 }
 
 export interface MissingFieldItem {
@@ -305,6 +313,7 @@ export interface ProductRegistrationEvaluationResult {
   statusLabel: string;
   missingFields: string[];
   missingFieldItems: MissingFieldItem[];
+  facilityReminder?: boolean;
 }
 
 function safeString(val: any): string {
@@ -592,6 +601,30 @@ export function evaluateProductRegistrationStatus(
     });
   }
 
+  // 11. Manufacturing Facility (MoCRA / FDA)
+  let facilityReminder = false;
+  if (input.complianceFacility) {
+    const facEval = evaluatePrimaryFacilityRegistrationRule({
+      hasPrimaryFacility: Boolean(input.complianceFacility.hasPrimaryFacility),
+      isGrandfathered: Boolean(input.complianceFacility.isGrandfathered),
+      isExplicitFinalSubmission: Boolean(input.complianceFacility.isExplicitFinalSubmission),
+      enforcePrimaryFacility: Boolean(input.complianceFacility.enforcePrimaryFacility),
+    });
+
+    if (facEval.isMissingRequired) {
+      missingItemsPush({
+        key: "primary_facility",
+        section: "기본 정보",
+        label: "주 제조시설 (Primary Facility)",
+        displayTag: "[기본 정보: 주 제조시설]",
+        tab: "basic",
+        targetId: "primary-facility-field",
+        inputName: "primaryFacilityId",
+      });
+    }
+    facilityReminder = facEval.showNonBlockingReminder;
+  }
+
   function missingItemsPush(item: MissingFieldItem) {
     missingFieldItems.push(item);
     missingFields.push(`${item.section}: ${item.label}`);
@@ -606,5 +639,6 @@ export function evaluateProductRegistrationStatus(
     statusLabel: isDraft ? REGISTRATION_STATUS_LABELS.DRAFT : REGISTRATION_STATUS_LABELS.COMPLETE,
     missingFields,
     missingFieldItems,
+    facilityReminder,
   };
 }

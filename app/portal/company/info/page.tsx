@@ -162,8 +162,8 @@ export default async function PortalCompanyInfoPage() {
     .or(`company_id.eq.${membership.companyId},company_id.is.null`)
     .order("created_at", { ascending: true });
 
-  // Fetch shipping origins
-  const shippingOrigins = await getCompanyShippingOrigins(membership.companyId);
+  // Fetch shipping origins and manufacturing facilities
+  const shippingOrigins = await getCompanyShippingOrigins(membership.companyId, { includeManufacturingOnly: true });
   const canEditCompanyInfo = isCompanyAdmin || (await hasMenuPermission("company_info", "write"));
   const canWriteAgreements = isCompanyAdmin || (await hasPortalPermission("agreements", "write"));
 

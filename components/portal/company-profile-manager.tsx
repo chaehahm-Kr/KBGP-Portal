@@ -791,7 +791,7 @@ export function CompanyProfileManager({
                   : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
               }`}
             >
-              출고지 정보
+              출고지 및 제조시설
             </button>
             {canReadBankInfo ? (
               <button

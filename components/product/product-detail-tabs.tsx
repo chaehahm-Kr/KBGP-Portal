@@ -48,6 +48,11 @@ import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 import { type CategoryCompletionResult } from "@/lib/product/attribute-completion";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { ProductFacilitySelector } from "@/components/product/product-facility-selector";
+import {
+  getProductManufacturingFacilitiesAction,
+  setProductManufacturingFacilitiesAction,
+} from "@/lib/compliance/v1-product-actions";
 import {
   SELECTION_STATUS_LABELS,
   SELECTION_STATUS_STYLES,
@@ -160,6 +165,32 @@ export function ProductDetailTabs({
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [categoryCompletion, setCategoryCompletion] = useState<CategoryCompletionResult | null>(initialCategoryCompletion || null);
   const categoryAttrRef = React.useRef<CategoryAttributeFormHandle>(null);
+
+  // KSN-CMP-004: Product Manufacturing Facilities State
+  const effectiveCompanyId = (product as any).brands?.company_id || (product as any).company_id || "";
+  const [primaryFacilityId, setPrimaryFacilityId] = useState<string | null>(null);
+  const [additionalFacilityIds, setAdditionalFacilityIds] = useState<string[]>([]);
+  const [isFacilityDirty, setIsFacilityDirty] = useState(false);
+
+  useEffect(() => {
+    if (product.id) {
+      getProductManufacturingFacilitiesAction(product.id).then((res) => {
+        if (res.ok) {
+          setPrimaryFacilityId(res.primaryFacilityId);
+          setAdditionalFacilityIds(res.additionalFacilityIds);
+        }
+      });
+    }
+  }, [product.id]);
+
+  const handleFacilityChange = React.useCallback(
+    (selection: { primaryFacilityId: string | null; additionalFacilityIds: string[] }) => {
+      setPrimaryFacilityId(selection.primaryFacilityId);
+      setAdditionalFacilityIds(selection.additionalFacilityIds);
+      setIsFacilityDirty(true);
+    },
+    []
+  );
 
   const handleCompletionChange = React.useCallback((status: any) => {
     setCategoryCompletion((prev) => {
@@ -1111,7 +1142,7 @@ export function ProductDetailTabs({
   );
 
   const isMediaDirty = pendingImages.length > 0;
-  const isAnyDirty = isBasicDirty || isCategoryDirty || isPriceDirty || isLogisticsDirty || isMediaDirty;
+  const isAnyDirty = isBasicDirty || isCategoryDirty || isPriceDirty || isLogisticsDirty || isMediaDirty || isFacilityDirty;
 
   const handleTabChange = (targetTab: "basic" | "category_attributes" | "price" | "logistics" | "media" | "certs") => {
     if (pendingImages.length > 0 && activeTab === "media" && targetTab !== "media") {
@@ -1267,6 +1298,20 @@ export function ProductDetailTabs({
         setStatusMessage({ type: "error", text: res.error });
         window.scrollTo({ top: 0, behavior: "smooth" });
         return { success: false, error: res.error };
+      }
+
+      // KSN-CMP-004: Save product manufacturing facilities if modified
+      if (isFacilityDirty) {
+        const facRes = await setProductManufacturingFacilitiesAction(product.id, {
+          primaryFacilityId,
+          additionalFacilityIds,
+        });
+        if (!facRes.ok) {
+          setStatusMessage({ type: "error", text: facRes.error || "제조시설 정보 저장 실패" });
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return { success: false, error: facRes.error };
+        }
+        setIsFacilityDirty(false);
       }
 
       // Update initial baseline snapshots
@@ -2358,6 +2403,20 @@ export function ProductDetailTabs({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* [신규 카드]: 제조사 및 제조시설 정보 (MoCRA / FDA) */}
+          <div id="primary-facility-field">
+            <ProductFacilitySelector
+              productId={product.id}
+              companyId={effectiveCompanyId}
+              primaryFacilityId={primaryFacilityId}
+              additionalFacilityIds={additionalFacilityIds}
+              onChange={handleFacilityChange}
+              readOnly={readOnly}
+              isGrandfathered={Boolean((product as any).compliance_facility_grandfathered)}
+              manageOriginsUrl="/portal/company/info?tab=shipping-origin"
+            />
           </div>
         </div>
 

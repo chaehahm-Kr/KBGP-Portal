@@ -1073,8 +1073,8 @@ export function CompanyDetailManager({
     },
     {
       key: "shipping-origin",
-      labelKo: "출고지 정보",
-      labelEn: "Shipping Origin Information",
+      labelKo: "출고지 및 제조시설",
+      labelEn: "Shipping Origins & Manufacturing Facilities",
       icon: WarehousesIcon,
     },
     {
