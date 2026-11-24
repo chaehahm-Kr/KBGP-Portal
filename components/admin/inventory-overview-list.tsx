@@ -472,7 +472,7 @@ export function InventoryOverviewList({
                 <th className="w-8 px-3 py-3.5 text-center"></th>
                 <th className="px-4 py-3.5 whitespace-nowrap">사진</th>
                 <th className="px-4 py-3.5 whitespace-nowrap font-mono">Letusto SKU</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">제조사 SKU</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">브랜드 SKU</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">제품명</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">회사 / 브랜드</th>
                 <th className="px-4 py-3.5 whitespace-nowrap text-right">보유재고</th>

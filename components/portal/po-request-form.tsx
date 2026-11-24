@@ -388,7 +388,7 @@ export function PoRequestForm({
             <div className="relative flex-1">
               <input
                 type="text"
-                placeholder="추가할 제품명, Letusto SKU, 제조사 SKU 검색..."
+                placeholder="추가할 제품명, Letusto SKU, 브랜드 SKU 검색..."
                 value={searchProdTerm}
                 onChange={(e) => setSearchProdTerm(e.target.value)}
                 className="w-full rounded-lg border border-zinc-200 p-2.5 bg-zinc-50 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950 text-xs font-medium"
@@ -444,7 +444,7 @@ export function PoRequestForm({
               <thead>
                 <tr className="bg-zinc-50/70 text-zinc-500 font-bold border-b border-zinc-200 dark:bg-zinc-950/50 dark:border-zinc-800 dark:text-zinc-400">
                   <th className="px-3.5 py-3">Letusto SKU</th>
-                  <th className="px-3.5 py-3">제조사 SKU</th>
+                  <th className="px-3.5 py-3">브랜드 SKU</th>
                   <th className="px-3.5 py-3">제품명</th>
                   <th className="px-3.5 py-3 w-28 text-right">요청 수량 *</th>
                   <th className="px-3.5 py-3 w-36 text-right">예상 FOB 단가 *</th>
@@ -754,7 +754,7 @@ function PortalProductBrowseModal({
                 <th className="px-3 py-2.5 w-10 text-center">선택</th>
                 <th className="px-3 py-2.5">제품명</th>
                 <th className="px-3 py-2.5">Letusto SKU</th>
-                <th className="px-3 py-2.5">제조사 SKU</th>
+                <th className="px-3 py-2.5">브랜드 SKU</th>
                 <th className="px-3 py-2.5">포장 단위</th>
                 <th className="px-3 py-2.5 text-right">참고 FOB 단가</th>
               </tr>

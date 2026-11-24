@@ -27,6 +27,42 @@ async function resolveApiCaller() {
   return null;
 }
 
+export async function GET(req: NextRequest) {
+  const caller = await resolveApiCaller();
+  if (!caller) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const targetType = String(searchParams.get("target_type") || "").toUpperCase();
+  const targetId = String(searchParams.get("target_id") || "").trim();
+
+  if (targetType !== "FACILITY" && targetType !== "PRODUCT") {
+    return NextResponse.json({ error: "target_type must be FACILITY or PRODUCT." }, { status: 400 });
+  }
+  if (!targetId) {
+    return NextResponse.json({ error: "target_id is required." }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+  const col = targetType === "FACILITY" ? "facility_id" : "product_id";
+  const { data, error } = await admin
+    .from("compliance_evidence_documents")
+    .select("id, target_type, facility_id, product_id, document_category, file_name, mime_type, file_size, sha256, created_at")
+    .eq(col, targetId)
+    .eq("target_type", targetType)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (error.code === "42P01" || error.message?.includes("does not exist")) {
+      return NextResponse.json({ documents: [] });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ documents: data || [] });
+}
+
 export async function POST(req: NextRequest) {
   const caller = await resolveApiCaller();
   if (!caller) {

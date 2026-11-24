@@ -41,6 +41,7 @@ import {
 } from "@/lib/product/actions";
 import { ConfirmForm } from "@/components/common/confirm-form";
 import { AddCertificateForm } from "@/components/product/add-certificate-form";
+import { ProductRegulatoryComplianceTab } from "@/components/product/product-regulatory-compliance-tab";
 import { LogisticsHelpModal, type LogisticsHelpSectionKey } from "@/components/product/logistics-help-modal";
 import { validatePrice } from "@/lib/validation/global-validators";
 import { CountrySelect } from "@/components/shared/country-select";
@@ -71,6 +72,7 @@ const MISSING_FIELD_TAB_MAP: Record<string, { tab: string; inputName: string }> 
   "카테고리 필수 속성": { tab: "category_attributes", inputName: "categoryAttributes" },
   "영문 제품명": { tab: "basic", inputName: "nameEn" },
   "제조사 SKU": { tab: "basic", inputName: "manufactureSku" },
+  "브랜드 SKU": { tab: "basic", inputName: "manufactureSku" },
   "원산지": { tab: "basic", inputName: "origin" },
   "소비자 판매가": { tab: "price", inputName: "priceKrwRetail" },
   "FOB 수출 가격": { tab: "price", inputName: "priceUsdFob" },
@@ -1446,7 +1448,7 @@ export function ProductDetailTabs({
 - 브랜드: ${brandName || "-"}
 - 제품명(한글): ${name || "-"}
 - 제품명(영문): ${nameEn || "-"}
-- 제조사 SKU: ${manufactureSku || "-"}
+- 브랜드 SKU: ${manufactureSku || "-"}
 - Letusto SKU: ${effectiveLetustoSku || "-"}
 - UPC / EAN: ${upc || ean || "-"}
 - 카테고리: ${currentCategoryLabel}
@@ -1467,7 +1469,7 @@ export function ProductDetailTabs({
 - 브랜드: ${brandName || "-"}
 - 제품명(한글): ${name || "-"}
 - 제품명(영문): ${nameEn || "-"}
-- 제조사 SKU: ${manufactureSku || "-"}
+- 브랜드 SKU: ${manufactureSku || "-"}
 - Letusto SKU: ${effectiveLetustoSku || "-"}
 - UPC: ${upc || "미발급/미입력"}
 - EAN: ${ean || "미발급/미입력"}
@@ -1588,7 +1590,7 @@ export function ProductDetailTabs({
                 </span>
                 <span className="opacity-40">•</span>
                 <span>
-                  제조사 SKU: <strong className="text-zinc-700 dark:text-zinc-300 font-mono font-bold">{effectiveManufactureSku || manufactureSku || product.manufacture_sku || "-"}</strong>
+                  브랜드 SKU: <strong className="text-zinc-700 dark:text-zinc-300 font-mono font-bold">{effectiveManufactureSku || manufactureSku || product.manufacture_sku || "-"}</strong>
                 </span>
               </p>
 
@@ -1727,7 +1729,7 @@ export function ProductDetailTabs({
             { id: "price", label: "가격 정보", isDirty: isPriceDirty },
             { id: "logistics", label: "로지스틱스", isDirty: isLogisticsDirty },
             { id: "media", label: "미디어 (이미지/비디오)", isDirty: isMediaDirty },
-            { id: "certs", label: "인허가 & 보증서", isDirty: false }
+            { id: "certs", label: "규제 및 인허가", isDirty: false }
           ].map((tab) => {
             const missingList = getMissingFieldsList();
             const hasError = missingList.some((item) => item.tab === tab.id);
@@ -1767,14 +1769,14 @@ export function ProductDetailTabs({
             
             <div className="grid gap-6 sm:grid-cols-2">
               <div id="manufactureSku-field">
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제조사 SKU (Manufacture SKU) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">브랜드 SKU (Brand SKU) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="manufactureSku"
                   type="text"
                   value={manufactureSku} 
                   onChange={(e) => setManufactureSku(sanitizeSku(e.target.value))}
                   onBlur={(e) => setManufactureSku(trimSkuSeparators(e.target.value))}
-                  placeholder="제조사의 실제 SKU 코드"
+                  placeholder="브랜드의 실제 SKU 코드"
                   className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none font-mono ${!manufactureSku.trim() ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 />
                 <p className="text-[10px] text-zinc-400 dark:text-zinc-550 mt-1 leading-normal">
@@ -3722,44 +3724,15 @@ export function ProductDetailTabs({
         </div>
       </div>
 
-      {/* Tab Panel 5: 인허가 & 보증서 */}
+      {/* Tab Panel 5: 규제 및 인허가 (Regulatory & Compliance) */}
       <div className={activeTab === "certs" ? "space-y-6" : "hidden"}>
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-          <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-            인허가 및 보증 문서 관리
-          </h2>
-          
-          {certificateRows.length === 0 ? (
-            <p className="text-xs text-zinc-400 dark:text-zinc-500 py-6 text-center">등록된 보증서 또는 인허가 증빙 자료가 없습니다.</p>
-          ) : (
-            <ul className="space-y-3 mt-4">
-              {certificateRows.map((cert, i) => (
-                <li key={cert.id} className="flex items-center gap-3 text-xs border border-zinc-150 dark:border-zinc-800/80 p-3 rounded-lg bg-zinc-50/20 shadow-sm">
-                  <span className="rounded bg-zinc-100 dark:bg-zinc-850 px-2.5 py-0.5 font-bold text-[10px] text-zinc-600 dark:text-zinc-350 shrink-0">
-                    {CERTIFICATE_TYPE_LABEL[cert.certificate_type as CertificateType] || cert.certificate_type}
-                  </span>
-                  {certificateUrls[i] ? (
-                    <a
-                      href={certificateUrls[i]!}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-zinc-900 dark:text-white font-bold underline underline-offset-2 hover:text-zinc-600 flex-1 truncate"
-                    >
-                      {cert.original_filename ?? "파일 보기"}
-                    </a>
-                  ) : (
-                    <span className="text-zinc-400 flex-1 truncate">{cert.original_filename}</span>
-                  )}
-                  <span className="text-[10px] font-bold text-zinc-400 shrink-0 font-mono">Version {cert.version}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <div className="mt-6 border-t border-zinc-100 dark:border-zinc-800 pt-6">
-            <AddCertificateForm action={addProductCertificate.bind(null, product.id)} readOnly={readOnly} />
-          </div>
-        </div>
+        <ProductRegulatoryComplianceTab
+          productId={product.id}
+          companyId={product.company_id}
+          isAdmin={false}
+          readOnly={readOnly}
+          product={product}
+        />
       </div>
 
       {/* Bottom Save Button Row */}

@@ -121,7 +121,12 @@ export async function getProductManufacturingFacilitiesAction(productId: string)
       .order("is_primary", { ascending: false })
       .order("created_at", { ascending: true });
 
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      if (error.code === "42P01" || error.message?.includes("does not exist")) {
+        return { ok: true, primaryFacilityId: null, additionalFacilityIds: [], facilities: [] };
+      }
+      return { ok: false, error: error.message };
+    }
 
     const facilityIds = (links || []).map((l: any) => l.facility_id);
     if (facilityIds.length === 0) {
@@ -286,7 +291,12 @@ export async function getProductRegulatoryComplianceAction(productId: string): P
       .eq("product_id", productId)
       .maybeSingle();
 
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      if (error.code === "42P01" || error.message?.includes("does not exist")) {
+        return { ok: true, compliance: null, isGrandfathered: actor.isGrandfathered };
+      }
+      return { ok: false, error: error.message };
+    }
     return {
       ok: true,
       compliance: (data as ProductRegulatoryComplianceRecord) || null,
@@ -494,9 +504,43 @@ export async function getComplianceAdminNotesAction(params: {
       .eq(col, params.targetId)
       .order("created_at", { ascending: false });
 
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      if (error.code === "42P01" || error.message?.includes("does not exist")) {
+        return { ok: true, notes: [] };
+      }
+      return { ok: false, error: error.message };
+    }
     return { ok: true, notes: data || [] };
   } catch (err: any) {
     return { ok: false, error: err?.message || "내부 메모 조회 실패" };
+  }
+}
+
+/**
+ * Loads compliance evidence documents for a product.
+ */
+export async function getProductComplianceDocumentsAction(productId: string): Promise<
+  | { ok: true; documents: any[] }
+  | { ok: false; error: string }
+> {
+  try {
+    await resolveProductActor(productId);
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("compliance_evidence_documents")
+      .select("id, target_type, facility_id, product_id, document_category, file_name, mime_type, file_size, sha256, created_at")
+      .eq("product_id", productId)
+      .eq("target_type", "PRODUCT")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      if (error.code === "42P01" || error.message?.includes("does not exist")) {
+        return { ok: true, documents: [] };
+      }
+      return { ok: false, error: error.message };
+    }
+    return { ok: true, documents: data || [] };
+  } catch (err: any) {
+    return { ok: true, documents: [] };
   }
 }

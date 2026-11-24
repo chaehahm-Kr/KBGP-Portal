@@ -336,7 +336,7 @@ export function PortalProductsList({ initialProducts, hasBrand, canCreateProduct
             </span>
             <input
               type="text"
-              placeholder="제품명, Letusto SKU, 제조사 SKU, 브랜드명 등으로 검색..."
+              placeholder="제품명, Letusto SKU, 브랜드 SKU, 브랜드명 등으로 검색..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full rounded-lg border border-zinc-200 py-2.5 pl-10 pr-4 text-xs outline-none bg-zinc-50/50 focus:border-zinc-950 focus:bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-white dark:focus:bg-zinc-900 transition-all"
@@ -470,7 +470,7 @@ export function PortalProductsList({ initialProducts, hasBrand, canCreateProduct
                 </th>
                 <th className="px-2 py-3 w-12 text-center whitespace-nowrap">사진</th>
                 <th className="px-2.5 py-3 whitespace-nowrap">Letusto SKU</th>
-                <th className="px-2.5 py-3 whitespace-nowrap">제조사 SKU</th>
+                <th className="px-2.5 py-3 whitespace-nowrap">브랜드 SKU</th>
                 <th className="px-3.5 py-3 min-w-[240px]">제품명</th>
                 <th className="px-2.5 py-3 whitespace-nowrap max-w-[100px]">브랜드</th>
                 <th className="px-3 py-3 min-w-[140px] max-w-[180px]">카테고리 / 속성</th>

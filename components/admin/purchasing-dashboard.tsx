@@ -558,7 +558,7 @@ export function PurchasingDashboard({ initialData }: PurchasingDashboardProps) {
               📦 Product Order Summary (제품별 주문 및 잔여 입고 현황)
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              Letusto SKU 및 Manufacturer SKU 기준 제품별 집계 (지정되지 않은 Letusto SKU는 '지정 대기'로 표시)
+              Letusto SKU 및 Brand SKU 기준 제품별 집계 (지정되지 않은 Letusto SKU는 '지정 대기'로 표시)
             </p>
           </div>
           <input
@@ -576,7 +576,7 @@ export function PurchasingDashboard({ initialData }: PurchasingDashboardProps) {
               <tr>
                 <th className="px-3 py-3 text-center">이미지</th>
                 <th className="px-4 py-3">Letusto SKU</th>
-                <th className="px-4 py-3">Manufacturer SKU</th>
+                <th className="px-4 py-3">Brand SKU</th>
                 <th className="px-4 py-3">제품명 (Product Name)</th>
                 <th className="px-4 py-3">공급사</th>
                 <th className="px-3 py-3 text-right">총 주문수량</th>

@@ -12,6 +12,13 @@ async function getEffectiveClient(customClient?: any) {
   }
 }
 
+export const RELOCATED_REGULATORY_ATTRIBUTE_CODES = [
+  "FDA_STATUS",
+  "MOCRA_STATUS",
+  "OTC_STATUS",
+  "DRUG_FACTS_STATUS",
+] as const;
+
 export interface CategoryCompletionResult {
   categoryComplete: boolean;
   requiredAttributesComplete: boolean;
@@ -118,10 +125,12 @@ export async function getProductCategoryCompletion(
     }
   }
 
-  // Combine unique category attributes (prevent common duplication)
+  // Combine unique category attributes (prevent common duplication), excluding relocated regulatory attributes
   const commonCodes = new Set(commonAttrs.map((a: any) => a.code));
   const uniqueProfileAttrs = profileAttrs.filter((a) => !commonCodes.has(a.code));
-  const allCategoryAttrs = [...commonAttrs, ...uniqueProfileAttrs];
+  const allCategoryAttrs = [...commonAttrs, ...uniqueProfileAttrs].filter(
+    (a) => !RELOCATED_REGULATORY_ATTRIBUTE_CODES.includes(a.code as any)
+  );
 
   // 4. Fetch Product's Saved Attribute Values
   const { data: savedValues } = await supabase
@@ -362,4 +371,76 @@ export async function getBatchProductCategoryCompletions(
   });
 
   return results;
+}
+
+export interface RegulatoryCompletionResult {
+  isComplete: boolean;
+  usClassification: string;
+  verificationStatus: string;
+  mocraListingStatus: string;
+  otcListingStatus: string;
+  drugFactsStatus: string;
+  missingItems: string[];
+  completionPercent: number;
+}
+
+/**
+ * Calculates separate regulatory compliance completeness.
+ * Maintains standalone regulatory completeness independent from general category attributes.
+ */
+export async function getProductRegulatoryCompletion(
+  productId: string,
+  customClient?: any
+): Promise<RegulatoryCompletionResult> {
+  const supabase = await getEffectiveClient(customClient);
+  const { data, error } = await supabase
+    .from("product_regulatory_compliance")
+    .select("*")
+    .eq("product_id", productId)
+    .maybeSingle();
+
+  if (error && (error.code === "42P01" || error.message?.includes("does not exist"))) {
+    return {
+      isComplete: false,
+      usClassification: "UNDETERMINED",
+      verificationStatus: "UNREVIEWED",
+      mocraListingStatus: "UNKNOWN",
+      otcListingStatus: "UNKNOWN",
+      drugFactsStatus: "UNKNOWN",
+      missingItems: ["미국 규제 분류 미지정"],
+      completionPercent: 0,
+    };
+  }
+
+  const missingItems: string[] = [];
+  if (!data || data.us_classification === "UNDETERMINED") {
+    missingItems.push("미국 규제 분류 미지정");
+  }
+  if (data?.us_classification === "COSMETIC" || data?.us_classification === "COSMETIC_OTC_DUAL") {
+    if (!data.mocra_listing_status || data.mocra_listing_status === "UNKNOWN") {
+      missingItems.push("MoCRA 리스팅 상태 미확인");
+    }
+  }
+  if (data?.us_classification === "OTC_DRUG" || data?.us_classification === "COSMETIC_OTC_DUAL") {
+    if (!data.otc_listing_status || data.otc_listing_status === "UNKNOWN") {
+      missingItems.push("OTC 리스팅 상태 미확인");
+    }
+  }
+
+  const isComplete = missingItems.length === 0 && Boolean(data && data.us_classification !== "UNDETERMINED");
+  const completionPercent =
+    !data || data.us_classification === "UNDETERMINED"
+      ? 0
+      : Math.max(0, 100 - missingItems.length * 25);
+
+  return {
+    isComplete,
+    usClassification: data?.us_classification || "UNDETERMINED",
+    verificationStatus: data?.verification_status || "UNREVIEWED",
+    mocraListingStatus: data?.mocra_listing_status || "UNKNOWN",
+    otcListingStatus: data?.otc_listing_status || "UNKNOWN",
+    drugFactsStatus: data?.drug_facts_status || "UNKNOWN",
+    missingItems,
+    completionPercent,
+  };
 }

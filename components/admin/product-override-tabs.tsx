@@ -36,6 +36,7 @@ import {
 } from "@/lib/product/admin-actions";
 import { updateProductSuppliers } from "@/lib/purchase-order/actions";
 import { CategoryAttributeForm, type CategoryAttributeFormHandle, type CategoryCompletionStatus } from "@/components/product/category-attribute-form";
+import { ProductRegulatoryComplianceTab } from "@/components/product/product-regulatory-compliance-tab";
 import { ProductChangeHistoryTab } from "@/components/product/product-change-history-tab";
 import type { ProductChangeLogItem } from "@/lib/product/audit";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
@@ -1450,7 +1451,7 @@ export function ProductOverrideTabs({
             <span className="opacity-40">•</span>
             <span>Letusto SKU: <strong className="text-indigo-650 dark:text-indigo-400 font-mono font-bold">{ovLetustoSku || product.letusto_sku || "지정 대기 중"}</strong></span>
             <span className="opacity-40">•</span>
-            <span>제조사 SKU: <strong className="text-zinc-700 dark:text-zinc-300 font-mono font-bold">{ovManufactureSku || product.manufacture_sku || "-"}</strong></span>
+            <span>브랜드 SKU: <strong className="text-zinc-700 dark:text-zinc-300 font-mono font-bold">{ovManufactureSku || product.manufacture_sku || "-"}</strong></span>
             <span className="opacity-40">•</span>
             <span>제조사: <Link href={`/admin/companies/${product.company_id}`} className="text-zinc-700 dark:text-zinc-300 font-bold hover:underline hover:text-zinc-950 dark:hover:text-white transition-colors">{companyName}</Link></span>
             <span className="opacity-40">•</span>
@@ -1639,7 +1640,7 @@ export function ProductOverrideTabs({
               : "border-transparent text-zinc-400 hover:text-zinc-650"
           }`}
         >
-          인허가 & 보증서
+          규제 및 인허가
         </button>
         <button
           onClick={() => setActiveTab("curation")}
@@ -1776,7 +1777,7 @@ export function ProductOverrideTabs({
                 {/* Manufacture SKU */}
                 <div className="space-y-1">
                   <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
-                    제조사 SKU <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                    브랜드 SKU <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="p-2 rounded bg-zinc-50 border border-zinc-150 text-zinc-500 dark:bg-zinc-950/40 dark:border-zinc-850 font-mono">
@@ -1788,7 +1789,7 @@ export function ProductOverrideTabs({
                       id="manufactureSku-field" value={ovManufactureSku}
                       onChange={(e) => setOvManufactureSku(sanitizeSku(e.target.value))}
                       onBlur={(e) => setOvManufactureSku(trimSkuSeparators(e.target.value))}
-                      placeholder="제조사 SKU 오버라이드..."
+                      placeholder="브랜드 SKU 오버라이드..."
                       className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-mono"
                     />
                   </div>
@@ -3594,185 +3595,16 @@ export function ProductOverrideTabs({
           </div>
         )}
 
-        {/* Certifications Tab */}
+        {/* Regulatory & Compliance Tab */}
         {activeTab === "certs" && (
           <div className="space-y-6">
-            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <div className="flex justify-between items-center border-b border-zinc-100 pb-2 dark:border-zinc-800">
-                <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
-                  원료 및 인허가 보증서 관리
-                </h3>
-                {mediaPending && (
-                  <span className="text-[10px] text-indigo-650 dark:text-indigo-400 font-bold animate-pulse">
-                    처리 중...
-                  </span>
-                )}
-              </div>
-
-              {mediaError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-semibold dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-450">
-                  ⚠️ {mediaError}
-                </div>
-              )}
-
-              {/* Special files: Ingredient Certs */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-bold text-zinc-850 dark:text-white">성분 표 및 인증서 (Ingredients Sheets)</h4>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* KO Sheet */}
-                  <div className="p-4 rounded-lg border border-zinc-150 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/40 text-xs space-y-3">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase block">성분 인증 증빙 서류 (국문)</span>
-                    {ingredientsFileUrl ? (
-                      <div className="flex items-center justify-between">
-                        <a href={ingredientsFileUrl} target="_blank" rel="noreferrer" className="inline-block rounded bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] px-3 py-1.5 font-bold shadow-sm transition-all duration-150">
-                          국문 서류 다운로드 ↗
-                        </a>
-                        <button
-                          type="button"
-                          disabled={mediaPending}
-                          onClick={() => handleIngredientsDelete("ko")}
-                          className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer disabled:opacity-50"
-                        >
-                          파일 삭제
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-zinc-400 italic block py-1">첨부된 국문 성분 인증 서류가 없습니다.</span>
-                    )}
-
-                    <div className="pt-2 border-t border-zinc-200/50 dark:border-zinc-800/50">
-                      <label className="text-[9px] font-bold text-zinc-500 block mb-1">국문 서류 업로드/갱신</label>
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,application/pdf"
-                        disabled={mediaPending}
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files.length > 0) {
-                            handleIngredientsUpload("ko", e.target.files[0]);
-                          }
-                        }}
-                        className="block w-full text-[10px] text-zinc-500 dark:text-zinc-400 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 cursor-pointer disabled:opacity-50"
-                      />
-                    </div>
-                  </div>
-
-                  {/* EN Sheet */}
-                  <div className="p-4 rounded-lg border border-zinc-150 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/40 text-xs space-y-3">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase block">성분 인증 증빙 서류 (영문)</span>
-                    {ingredientsFileUrlEn ? (
-                      <div className="flex items-center justify-between">
-                        <a href={ingredientsFileUrlEn} target="_blank" rel="noreferrer" className="inline-block rounded bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] px-3 py-1.5 font-bold shadow-sm transition-all duration-150">
-                          영문 서류 다운로드 ↗
-                        </a>
-                        <button
-                          type="button"
-                          disabled={mediaPending}
-                          onClick={() => handleIngredientsDelete("en")}
-                          className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer disabled:opacity-50"
-                        >
-                          파일 삭제
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-zinc-400 italic block py-1">첨부된 영문 성분 인증 서류가 없습니다.</span>
-                    )}
-
-                    <div className="pt-2 border-t border-zinc-200/50 dark:border-zinc-800/50">
-                      <label className="text-[9px] font-bold text-zinc-500 block mb-1">영문 서류 업로드/갱신</label>
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,application/pdf"
-                        disabled={mediaPending}
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files.length > 0) {
-                            handleIngredientsUpload("en", e.target.files[0]);
-                          }
-                        }}
-                        className="block w-full text-[10px] text-zinc-500 dark:text-zinc-400 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 cursor-pointer disabled:opacity-50"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Plain Ingredients Text (Original) */}
-                <div className="pt-2">
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase block mb-1">전성분 기입 텍스트 (국문 원본)</span>
-                  <div className="p-3 bg-zinc-50 border border-zinc-150 rounded text-xs text-zinc-600 dark:bg-zinc-950/30 dark:border-zinc-850 leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap font-mono">
-                    {product.ingredients_text || "전성분 기입 텍스트가 존재하지 않습니다."}
-                  </div>
-                </div>
-              </div>
-
-              {/* General Certificates List */}
-              <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 space-y-4">
-                <h4 className="text-xs font-bold text-zinc-850 dark:text-white">보증서 인증 파일 목록 ({certificateRows.length}개)</h4>
-                {certificateRows.length > 0 ? (
-                  <div className="space-y-2">
-                    {certificateRows.map((cert, idx) => {
-                      const url = certificateUrls[idx];
-                      return (
-                        <div key={cert.id} className="p-3 rounded-md border border-zinc-150 bg-zinc-50/20 dark:border-zinc-800 dark:bg-zinc-950/20 flex items-center justify-between gap-4 text-xs">
-                          <div className="space-y-0.5">
-                            <span className="inline-block rounded bg-zinc-100 text-zinc-700 px-1.5 py-0.5 text-[9px] font-bold dark:bg-zinc-800 dark:text-zinc-350 mr-1.5 border border-zinc-200 dark:border-zinc-750">
-                              {CERTIFICATE_TYPE_LABEL[cert.certificate_type as CertificateType] || cert.certificate_type}
-                            </span>
-                            <span className="font-semibold text-zinc-800 dark:text-zinc-200">{cert.original_filename || "인허가 보증서 파일"}</span>
-                            <span className="text-[10px] text-zinc-400 ml-1.5 font-mono">v{cert.version}</span>
-                          </div>
-                          {url && (
-                            <a href={url} target="_blank" rel="noreferrer" className="text-xs font-bold text-indigo-650 hover:underline dark:text-indigo-400 whitespace-nowrap">
-                              파일 다운로드 ↗
-                            </a>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-400 italic py-3 text-center">업로드된 추가 보증서 서류가 없습니다.</p>
-                )}
-
-                {/* Upload new Certificate */}
-                <form
-                  onSubmit={handleCertificateUpload}
-                  className="border-t border-zinc-100 dark:border-zinc-850 pt-4 space-y-3"
-                >
-                  <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450 block">
-                    인허가/보증서 신규 파일 등록
-                  </label>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <select
-                      value={certTypeInput}
-                      onChange={(e) => setCertTypeInput(e.target.value)}
-                      disabled={mediaPending}
-                      className="rounded border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950 disabled:opacity-50"
-                    >
-                      <option value="ingredient_certification">성분 분석 인증서 (Ingredients Sheets)</option>
-                      <option value="fda_registration">FDA 등록 증빙 (FDA Registration)</option>
-                      <option value="trademark">상표 등록증 (Trademark)</option>
-                      <option value="other">기타 인증서/보증서 (Other)</option>
-                    </select>
-
-                    <div className="flex-1 flex gap-2">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,application/pdf"
-                        disabled={mediaPending}
-                        className="block flex-1 text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 cursor-pointer disabled:opacity-50"
-                      />
-                      <button
-                        type="submit"
-                        disabled={mediaPending}
-                        className="rounded-lg border border-zinc-300 px-4 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-850 cursor-pointer disabled:opacity-50"
-                      >
-                        문서 업로드
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            </div>
+            <ProductRegulatoryComplianceTab
+              productId={product.id}
+              companyId={product.company_id}
+              isAdmin={true}
+              readOnly={false}
+              product={product}
+            />
           </div>
         )}
 
@@ -4179,7 +4011,7 @@ export function ProductOverrideTabs({
               <div className="flex flex-wrap gap-2 text-zinc-500 dark:text-zinc-400 font-mono text-[11px]">
                 <span>Letusto SKU: <strong className="text-zinc-800 dark:text-zinc-200">{product.letusto_sku || "N/A"}</strong></span>
                 <span>•</span>
-                <span>제조사 SKU: <strong className="text-zinc-800 dark:text-zinc-200">{product.manufacture_sku || "N/A"}</strong></span>
+                <span>브랜드 SKU: <strong className="text-zinc-800 dark:text-zinc-200">{product.manufacture_sku || "N/A"}</strong></span>
               </div>
             </div>
 

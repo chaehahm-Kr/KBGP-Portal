@@ -188,7 +188,7 @@ export default async function AdminCompanyDetailPage({
       if (!effectiveBrandId) missingFields.push("브랜드");
       if (!p.category_code || completenessRate < 100) missingFields.push("카테고리");
       if (!(effectiveNameEn || "").trim()) missingFields.push("영문 제품명");
-      if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
+      if (!(effectiveManufactureSku || "").trim()) missingFields.push("브랜드 SKU");
       if (!(effectiveOrigin || "").trim()) missingFields.push("원산지");
       if (Number(effectivePriceKrwRetail) <= 0) missingFields.push("소비자 판매가");
       if (Number(effectivePriceUsdFob) <= 0) missingFields.push("FOB 수출 가격");

@@ -614,7 +614,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
               <tr className="border-b border-zinc-200 bg-zinc-50/70 text-zinc-600 font-bold dark:border-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-300">
                 <th className="px-2 py-2.5 whitespace-nowrap w-[48px]">사진</th>
                 <th className="px-2 py-2.5 whitespace-nowrap">Letusto SKU</th>
-                <th className="px-2 py-2.5 whitespace-nowrap">제조사 SKU</th>
+                <th className="px-2 py-2.5 whitespace-nowrap">브랜드 SKU</th>
                 <th
                   onClick={() => handleSort("name")}
                   className="px-2 py-2.5 whitespace-nowrap cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none min-w-[140px]"

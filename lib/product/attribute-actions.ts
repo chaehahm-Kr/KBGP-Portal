@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyAdminSession, verifyPortalSession, getCallerAppRole } from "@/lib/auth/dal";
 import { recordProductChangeLog, formatAuditValue } from "@/lib/product/audit";
 import { resolveRootCategoryEnum } from "@/lib/product/types";
+import { RELOCATED_REGULATORY_ATTRIBUTE_CODES } from "@/lib/product/attribute-completion";
 
 async function getEffectiveClient(customClient?: any) {
   if (customClient) return customClient;
@@ -112,7 +113,8 @@ export interface AttributeMasterItem {
  */
 export async function getCategoryAttributes(
   categoryCode: string | null,
-  customClient?: any
+  customClient?: any,
+  options?: { includeRelocatedRegulatory?: boolean }
 ): Promise<{
   profileCode: string | null;
   profileName: string | null;
@@ -172,12 +174,17 @@ export async function getCategoryAttributes(
       })),
   }));
 
+  const filterAttributes = (attrs: AttributeMasterItem[]) =>
+    options?.includeRelocatedRegulatory
+      ? attrs
+      : attrs.filter((a) => !RELOCATED_REGULATORY_ATTRIBUTE_CODES.includes(a.code as any));
+
   // 만약 카테고리가 미지정이면 공통 속성만 반환
   if (!categoryCode) {
     return {
       profileCode: null,
       profileName: null,
-      attributes: commonAttributes,
+      attributes: filterAttributes(commonAttributes),
     };
   }
 
@@ -193,7 +200,7 @@ export async function getCategoryAttributes(
     return {
       profileCode: null,
       profileName: null,
-      attributes: commonAttributes,
+      attributes: filterAttributes(commonAttributes),
     };
   }
 
@@ -281,7 +288,7 @@ export async function getCategoryAttributes(
   return {
     profileCode,
     profileName: profileMeta?.name_ko || profileCode,
-    attributes: [...commonAttributes, ...profileAttributes],
+    attributes: filterAttributes([...commonAttributes, ...profileAttributes]),
   };
 }
 

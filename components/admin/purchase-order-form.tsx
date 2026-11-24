@@ -945,7 +945,7 @@ export function PurchaseOrderForm({
                 type="text"
                 placeholder={
                   supplierId
-                    ? "추가할 제품명, Letusto SKU, 제조사 SKU 검색..."
+                    ? "추가할 제품명, Letusto SKU, 브랜드 SKU 검색..."
                     : "공급사를 먼저 선택해 주세요..."
                 }
                 value={searchProductTerm}
@@ -1026,7 +1026,7 @@ export function PurchaseOrderForm({
               <thead>
                 <tr className="bg-zinc-50/70 text-zinc-500 font-bold border-b border-zinc-200 dark:bg-zinc-950/50 dark:border-zinc-800 dark:text-zinc-400">
                   <th className="px-3.5 py-3">Letusto SKU</th>
-                  <th className="px-3.5 py-3">제조사 SKU</th>
+                  <th className="px-3.5 py-3">브랜드 SKU</th>
                   <th className="px-3.5 py-3">제품명</th>
                   <th className="px-3.5 py-3 w-28 text-right">발주수량 *</th>
                   <th className="px-3.5 py-3 w-40 text-right">FOB 단가 ({currency}) *</th>
@@ -1570,7 +1570,7 @@ function ProductBrowseModal({
                 <th className="px-4 py-3">제품명 / 상세 정보</th>
                 <th className="px-4 py-3 w-28">브랜드</th>
                 <th className="px-4 py-3 w-28">카테고리</th>
-                <th className="px-4 py-3 w-28">제조사 SKU</th>
+                <th className="px-4 py-3 w-28">브랜드 SKU</th>
                 <th className="px-4 py-3 w-28">Letusto SKU</th>
                 <th className="px-4 py-3 w-28">박스 규격</th>
                 <th className="px-4 py-3 w-32 text-right">FOB 단가 ({currency})</th>
