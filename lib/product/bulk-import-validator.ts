@@ -8,6 +8,7 @@ import {
   BULK_IMPORT_MAX_ROWS,
   BULK_MEDIA_MAX_IMAGES_PER_PRODUCT,
   BULK_PRODUCT_COLUMNS,
+  BULK_PRODUCT_COLUMNS_V1,
   BULK_TEMPLATE_EXAMPLE_SKU,
   COMMON_BULK_ATTRIBUTES,
   COMMON_BULK_ATTRIBUTES_V1,
@@ -758,8 +759,15 @@ export function parseAndValidateBulkProductWorkbook(
   const range = XLSX.utils.decode_range(sheet["!ref"]);
 
   // Build alias -> spec lookup (supports V1 99-col, R2 86-col, R1 Korean-first 52-col, and V1 English 52-col templates)
+  // Overlay active-mode columns last so shared headers (e.g. FDA Related Status, Drug Facts Status)
+  // deterministically resolve to V1 regulatory fields when V1 is enabled and legacy attributes when OFF.
+  const isV1HeaderMode = ctx.isComplianceV1 ?? isComplianceV1Enabled();
   const aliasToSpec = new Map<string, BulkColumnSpec>();
-  for (const spec of ALL_KNOWN_BULK_COLUMNS) {
+  const orderedSpecs = [
+    ...ALL_KNOWN_BULK_COLUMNS,
+    ...(isV1HeaderMode ? BULK_PRODUCT_COLUMNS_V1 : BULK_PRODUCT_COLUMNS),
+  ];
+  for (const spec of orderedSpecs) {
     aliasToSpec.set(normalizeHeaderLabel(spec.header), spec);
     aliasToSpec.set(normalizeHeaderLabel(spec.headerEn), spec);
     for (const alias of spec.aliases) {
@@ -2622,9 +2630,8 @@ export function parseAndValidateBulkProductWorkbook(
     let resolvedRegulatoryCompliance: any = null;
 
     if (isV1) {
-      const hasNewRegulatoryValues =
+      const hasV1OnlyRegulatoryValues =
         values.usClassification.trim() !== "" ||
-        values.fdaStatus.trim() !== "" ||
         values.mocraListingStatus.trim() !== "" ||
         values.mocraListingNumber.trim() !== "" ||
         values.mocraListedAt.trim() !== "" ||
@@ -2636,14 +2643,23 @@ export function parseAndValidateBulkProductWorkbook(
         values.otcNdcNumber.trim() !== "" ||
         values.otcNaReason.trim() !== "" ||
         values.otcListedAt.trim() !== "" ||
-        values.otcNextRenewalDate.trim() !== "" ||
-        values.drugFactsStatus.trim() !== "";
+        values.otcNextRenewalDate.trim() !== "";
 
-      const hasLegacyRegulatoryValues =
-        values.attrFdaStatus.trim() !== "" ||
+      const hasLegacyOnlyRegulatoryValues =
         values.attrMocraStatus.trim() !== "" ||
         values.attrOtcStatus.trim() !== "" ||
+        values.attrFdaStatus.trim() !== "" ||
         values.attrDrugFactsStatus.trim() !== "";
+
+      const hasNewRegulatoryValues =
+        hasV1OnlyRegulatoryValues ||
+        (!hasLegacyOnlyRegulatoryValues &&
+          (values.fdaStatus.trim() !== "" || values.drugFactsStatus.trim() !== ""));
+
+      const hasLegacyRegulatoryValues =
+        hasLegacyOnlyRegulatoryValues ||
+        (!hasV1OnlyRegulatoryValues &&
+          (values.attrFdaStatus.trim() !== "" || values.attrDrugFactsStatus.trim() !== ""));
 
       if (hasNewRegulatoryValues) {
         hasRegulatory = true;
@@ -2762,11 +2778,13 @@ export function parseAndValidateBulkProductWorkbook(
         }
       } else if (hasLegacyRegulatoryValues) {
         hasRegulatory = true;
+        const legacyFdaRaw = values.attrFdaStatus || values.fdaStatus;
+        const legacyDrugFactsRaw = values.attrDrugFactsStatus || values.drugFactsStatus;
         const legacyRes = mapLegacyRegulatoryValues({
-          fdaStatus: resolveLegacyAttributeCode(values.attrFdaStatus, "attrFdaStatus") || undefined,
+          fdaStatus: resolveLegacyAttributeCode(legacyFdaRaw, "attrFdaStatus") || undefined,
           mocraStatus: resolveLegacyAttributeCode(values.attrMocraStatus, "attrMocraStatus") || undefined,
           otcStatus: resolveLegacyAttributeCode(values.attrOtcStatus, "attrOtcStatus") || undefined,
-          drugFactsStatus: resolveLegacyAttributeCode(values.attrDrugFactsStatus, "attrDrugFactsStatus") || undefined,
+          drugFactsStatus: resolveLegacyAttributeCode(legacyDrugFactsRaw, "attrDrugFactsStatus") || undefined,
         });
 
         for (const warn of legacyRes.review_warnings || []) {
