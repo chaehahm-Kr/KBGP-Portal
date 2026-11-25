@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import {
+  ALL_KNOWN_BULK_COLUMNS,
   ALLOWED_COLOR_MAPS,
   BULK_ERROR_CATEGORY_LABELS_KO,
   BULK_IMAGE_URL_FIELD_KEYS,
@@ -9,6 +10,7 @@ import {
   BULK_PRODUCT_COLUMNS,
   BULK_TEMPLATE_EXAMPLE_SKU,
   COMMON_BULK_ATTRIBUTES,
+  COMMON_BULK_ATTRIBUTES_V1,
   type BulkCellValidationIssue,
   type BulkColumnSpec,
   type BulkCommonAttributeOptionSpec,
@@ -21,6 +23,7 @@ import {
   type BulkReferenceBrand,
   type BulkReferenceCategory,
   type BulkReferenceCommonAttribute,
+  type BulkReferenceManufacturingFacility,
   type BulkRowRawFieldKey,
   type BulkUploadedColumnMeta,
   type BulkValidatedRow,
@@ -42,6 +45,181 @@ import {
   isValidCanonicalCountry,
 } from "@/lib/constants/countries";
 import { validatePrice } from "@/lib/validation/global-validators";
+import {
+  mapLegacyRegulatoryValues,
+  type UsRegulatoryClassification,
+  type MocraListingStatus,
+  type OtcApplicability,
+  type OtcListingStatus,
+  type DrugFactsStatus,
+} from "@/lib/compliance/v1-types";
+import {
+  validateProductRegulatoryDeclaration,
+  type ProductRegulatoryDeclarationInput,
+} from "@/lib/compliance/v1-validators";
+import { isComplianceV1Enabled } from "@/lib/compliance/v1-feature-gate";
+
+export function parseCanonicalUsClassification(raw: string): UsRegulatoryClassification | null {
+  const norm = raw.trim().toUpperCase();
+  if (!norm) return null;
+  if (norm.includes("COSMETIC") && (norm.includes("OTC") || norm.includes("DUAL") || norm.includes("복합"))) {
+    return "COSMETIC_OTC_DUAL";
+  }
+  if (norm.includes("COSMETIC") || norm.includes("화장품")) return "COSMETIC";
+  if (norm.includes("OTC") || norm.includes("의약품") || norm.includes("DRUG")) return "OTC_DRUG";
+  if (
+    norm.includes("NOT_APPLICABLE") ||
+    norm.includes("해당 없음") ||
+    norm.includes("해당없음") ||
+    norm === "NA" ||
+    norm === "N/A"
+  ) {
+    return "NOT_APPLICABLE";
+  }
+  if (
+    norm.includes("UNDETERMINED") ||
+    norm.includes("미분류") ||
+    norm.includes("미결정") ||
+    norm.includes("UNKNOWN")
+  ) {
+    return "UNDETERMINED";
+  }
+  return null;
+}
+
+export function parseCanonicalMocraListingStatus(raw: string): MocraListingStatus | null {
+  const norm = raw.trim().toUpperCase();
+  if (!norm) return null;
+  if (norm.includes("LISTED") || norm.includes("완료") || norm.includes("등록")) return "LISTED";
+  if (norm.includes("IN_PROGRESS") || norm.includes("진행")) return "IN_PROGRESS";
+  if (norm.includes("NOT_STARTED") || norm.includes("미진행") || norm.includes("미시작")) return "NOT_STARTED";
+  if (norm.includes("EXEMPT") || norm.includes("면제")) return "EXEMPT_SMALL_BUSINESS";
+  if (
+    norm.includes("NOT_APPLICABLE") ||
+    norm.includes("해당 없음") ||
+    norm.includes("해당없음") ||
+    norm === "NA" ||
+    norm === "N/A"
+  ) {
+    return "NOT_APPLICABLE";
+  }
+  if (norm.includes("UNKNOWN") || norm.includes("미확인")) return "UNKNOWN";
+  return null;
+}
+
+export function parseCanonicalOtcApplicability(raw: string): OtcApplicability | null {
+  const norm = raw.trim().toUpperCase();
+  if (!norm) return null;
+  if (
+    norm.includes("APPLICABLE") &&
+    !norm.includes("NOT") &&
+    !norm.includes("비해당") &&
+    !norm.includes("해당 없음") &&
+    !norm.includes("해당없음")
+  ) {
+    return "APPLICABLE";
+  }
+  if (
+    norm.includes("NOT_APPLICABLE") ||
+    norm.includes("해당 없음") ||
+    norm.includes("해당없음") ||
+    norm.includes("비해당") ||
+    norm === "NA" ||
+    norm === "N/A"
+  ) {
+    return "NOT_APPLICABLE";
+  }
+  if (norm.includes("DUAL") || norm.includes("복합") || norm.includes("EVALUATION") || norm.includes("검토")) {
+    return "DUAL_REVIEW_REQUIRED";
+  }
+  if (norm.includes("UNKNOWN") || norm.includes("미확인")) return "UNKNOWN";
+  return null;
+}
+
+export function parseCanonicalOtcListingStatus(raw: string): OtcListingStatus | null {
+  const norm = raw.trim().toUpperCase();
+  if (!norm) return null;
+  if (norm.includes("LISTED") || norm.includes("완료") || norm.includes("등록")) return "LISTED";
+  if (norm.includes("IN_PROGRESS") || norm.includes("진행")) return "IN_PROGRESS";
+  if (norm.includes("NOT_STARTED") || norm.includes("미진행") || norm.includes("미시작")) return "NOT_STARTED";
+  if (
+    norm.includes("NOT_APPLICABLE") ||
+    norm.includes("해당 없음") ||
+    norm.includes("해당없음") ||
+    norm.includes("비해당") ||
+    norm === "NA" ||
+    norm === "N/A"
+  ) {
+    return "NOT_APPLICABLE";
+  }
+  if (norm.includes("UNKNOWN") || norm.includes("미확인")) return "UNKNOWN";
+  return null;
+}
+
+export function parseCanonicalDrugFactsStatus(raw: string): DrugFactsStatus | null {
+  const norm = raw.trim().toUpperCase();
+  if (!norm) return null;
+  if (
+    norm.includes("VERIFIED") ||
+    norm.includes("승인") ||
+    norm.includes("확인 완료") ||
+    norm.includes("검증")
+  ) {
+    return "VERIFIED";
+  }
+  if (norm.includes("READY") || norm.includes("작성 완료") || norm.includes("준비 완료")) return "READY";
+  if (
+    norm.includes("DRAFT") ||
+    norm.includes("PENDING") ||
+    norm.includes("초안") ||
+    norm.includes("준비 중") ||
+    norm.includes("준비중")
+  ) {
+    return "DRAFT";
+  }
+  if (norm.includes("NOT_STARTED") || norm.includes("미진행") || norm.includes("미시작")) return "NOT_STARTED";
+  if (
+    norm.includes("NOT_APPLICABLE") ||
+    norm.includes("해당 없음") ||
+    norm.includes("해당없음") ||
+    norm.includes("비해당") ||
+    norm === "NA" ||
+    norm === "N/A"
+  ) {
+    return "NOT_APPLICABLE";
+  }
+  if (norm.includes("UNKNOWN") || norm.includes("미확인")) return "UNKNOWN";
+  return null;
+}
+
+export function parseCanonicalDualApplicable(raw: string): boolean | null {
+  const norm = raw.trim().toUpperCase();
+  if (!norm) return null;
+  if (
+    norm.includes("TRUE") ||
+    norm === "Y" ||
+    norm === "YES" ||
+    (norm.includes("해당") &&
+      !norm.includes("해당 없음") &&
+      !norm.includes("해당없음") &&
+      !norm.includes("NOT"))
+  ) {
+    return true;
+  }
+  if (
+    norm.includes("FALSE") ||
+    norm === "N" ||
+    norm === "NO" ||
+    norm.includes("해당 없음") ||
+    norm.includes("해당없음") ||
+    norm.includes("NOT_APPLICABLE") ||
+    norm === "NA" ||
+    norm === "N/A"
+  ) {
+    return false;
+  }
+  return null;
+}
 
 export interface BulkValidationContext {
   fileName: string;
@@ -49,9 +227,11 @@ export interface BulkValidationContext {
   companyBrands: BulkReferenceBrand[];
   allCategories: BulkReferenceCategory[];
   commonAttributes?: BulkReferenceCommonAttribute[];
+  manufacturingFacilities?: BulkReferenceManufacturingFacility[];
   existingCompanySkus: Set<string>; // Uppercase trimmed SKUs in user's company
   existingUpcs: Set<string>;        // Trimmed UPCs visible in DB
   existingEans: Set<string>;        // Trimmed EANs visible in DB
+  isComplianceV1?: boolean;
 }
 
 const NUMERIC_FIELD_KEYS = new Set<BulkRowRawFieldKey>([
@@ -84,6 +264,10 @@ const TEXT_IDENTIFIER_FIELD_KEYS = new Set<BulkRowRawFieldKey>([
   "manufactureSku",
   "upc",
   "ean",
+  "primaryFacilityCode",
+  "additionalFacilityCodes",
+  "mocraListingNumber",
+  "otcNdcNumber",
 ]);
 
 const MULTILINE_TEXT_KEYS = new Set<BulkRowRawFieldKey>([
@@ -367,10 +551,12 @@ function matchCategoryInList(
 }
 
 function buildEffectiveCommonAttributeSpecs(
-  liveAttrs?: BulkReferenceCommonAttribute[]
+  liveAttrs?: BulkReferenceCommonAttribute[],
+  isV1?: boolean
 ): BulkCommonAttributeSpec[] {
+  const baseSpecs = isV1 ? COMMON_BULK_ATTRIBUTES_V1 : COMMON_BULK_ATTRIBUTES;
   if (!liveAttrs || liveAttrs.length === 0) {
-    return COMMON_BULK_ATTRIBUTES;
+    return baseSpecs;
   }
 
   const liveByCode = new Map<string, BulkReferenceCommonAttribute>();
@@ -380,7 +566,7 @@ function buildEffectiveCommonAttributeSpecs(
     }
   }
 
-  return COMMON_BULK_ATTRIBUTES.map((spec) => {
+  return baseSpecs.map((spec) => {
     const live = liveByCode.get(spec.code.toUpperCase());
     if (!live) {
       return spec;
@@ -484,6 +670,16 @@ function matchAttributeOptionToken(
   });
 }
 
+function resolveLegacyAttributeCode(val: string, fieldKey: BulkRowRawFieldKey): string {
+  if (!val || !val.trim()) return "";
+  const trimmed = val.trim();
+  const spec = COMMON_BULK_ATTRIBUTES.find((a) => a.fieldKey === fieldKey);
+  if (!spec) return trimmed;
+  const match = matchAttributeOptionToken(trimmed, spec.options);
+  if (match) return match.optionCode;
+  return trimmed;
+}
+
 export function sanitizeExcelOutputCell(val: string | number | null | undefined): string {
   if (val === null || val === undefined) return "";
   const str = String(val);
@@ -561,9 +757,9 @@ export function parseAndValidateBulkProductWorkbook(
 
   const range = XLSX.utils.decode_range(sheet["!ref"]);
 
-  // Build alias -> spec lookup (supports R2 86-col, R1 Korean-first 52-col, and V1 English 52-col templates)
+  // Build alias -> spec lookup (supports V1 99-col, R2 86-col, R1 Korean-first 52-col, and V1 English 52-col templates)
   const aliasToSpec = new Map<string, BulkColumnSpec>();
-  for (const spec of BULK_PRODUCT_COLUMNS) {
+  for (const spec of ALL_KNOWN_BULK_COLUMNS) {
     aliasToSpec.set(normalizeHeaderLabel(spec.header), spec);
     aliasToSpec.set(normalizeHeaderLabel(spec.headerEn), spec);
     for (const alias of spec.aliases) {
@@ -597,7 +793,7 @@ export function parseAndValidateBulkProductWorkbook(
     BulkRowRawFieldKey,
     { spec: BulkColumnSpec; canonicalIdx: number }
   >();
-  BULK_PRODUCT_COLUMNS.forEach((spec, canonicalIdx) => {
+  ALL_KNOWN_BULK_COLUMNS.forEach((spec, canonicalIdx) => {
     specByKey.set(spec.key, { spec, canonicalIdx });
   });
 
@@ -664,7 +860,7 @@ export function parseAndValidateBulkProductWorkbook(
     const formulaHeaders: string[] = [];
     let hasAnyNonEmpty = false;
 
-    for (const spec of BULK_PRODUCT_COLUMNS) {
+    for (const spec of ALL_KNOWN_BULK_COLUMNS) {
       const colIdx = colIndexByKey.get(spec.key);
       if (colIdx === undefined) {
         values[spec.key] = "";
@@ -759,8 +955,10 @@ export function parseAndValidateBulkProductWorkbook(
           .join(", ")
       : "스킨케어 (Skincare), 헤어케어 (Hair Care), 메이크업 (Makeup), 바디케어 (Body Care), 퍼스널케어 (Personal Care), 뷰티툴 (Beauty Tools), 세트/기획 (Sets & Collections), 기타 (Other)";
 
+  const isV1 = ctx.isComplianceV1 ?? isComplianceV1Enabled();
+
   // Effective Common Attributes (merges live DB options with static metadata & aliases)
-  const effectiveCommonAttrs = buildEffectiveCommonAttributeSpecs(ctx.commonAttributes);
+  const effectiveCommonAttrs = buildEffectiveCommonAttributeSpecs(ctx.commonAttributes, isV1);
 
   // Helper to resolve uploaded column index, letter, and header for any fieldKey
   const resolveColumnMeta = (fieldKey: BulkRowRawFieldKey) => {
@@ -884,7 +1082,7 @@ export function parseAndValidateBulkProductWorkbook(
       }
     }
 
-    for (const spec of BULK_PRODUCT_COLUMNS) {
+    for (const spec of ALL_KNOWN_BULK_COLUMNS) {
       const rawVal = values[spec.key];
       if (!rawVal) continue;
       if (NUMERIC_FIELD_KEYS.has(spec.key)) continue;
@@ -2303,6 +2501,296 @@ export function parseAndValidateBulkProductWorkbook(
       });
     }
 
+    // =========================================================================
+    // 17. Manufacturing Facilities Validation (KSN-CMP-008)
+    // =========================================================================
+    let hasFacilityError = false;
+    let hasFacility = false;
+    let resolvedPrimaryFacility: BulkReferenceManufacturingFacility | null = null;
+    const resolvedAdditionalFacilities: BulkReferenceManufacturingFacility[] = [];
+
+    const facilitiesList = ctx.manufacturingFacilities || [];
+    const facilityByCode = new Map<string, BulkReferenceManufacturingFacility>();
+    for (const f of facilitiesList) {
+      if (f.facility_code) {
+        facilityByCode.set(f.facility_code.trim().toUpperCase(), f);
+      }
+    }
+
+    if (isV1) {
+      const rawPrimaryFac = values.primaryFacilityCode.trim();
+      if (rawPrimaryFac) {
+        const match = facilityByCode.get(rawPrimaryFac.toUpperCase());
+        if (!match) {
+          hasFacilityError = true;
+          addCellError({
+            fieldKey: "primaryFacilityCode",
+            category: "OTHER_VALIDATION",
+            reason: `[${excelRowNumber}행 · 주 제조시설 코드] 등록되지 않았거나 귀사에 권한이 없는 제조시설 코드입니다: "${rawPrimaryFac}".`,
+            acceptedValues: "귀사에 등록된 활성 제조시설 코드 (예: MFG-001) 또는 빈칸",
+            guidance: "Manufacturing_Facilities 시트에 등록된 활성 제조시설 코드를 입력하거나 비워 두세요.",
+          });
+        } else if (match.is_active === false) {
+          hasFacilityError = true;
+          addCellError({
+            fieldKey: "primaryFacilityCode",
+            category: "OTHER_VALIDATION",
+            reason: `[${excelRowNumber}행 · 주 제조시설 코드] "${match.facility_code}"은(는) 비활성화된 제조시설입니다.`,
+            acceptedValues: "활성 상태인 제조시설 코드 또는 빈칸",
+            guidance: "활성 상태인 제조시설을 선택하거나 관리자에게 문의하세요.",
+          });
+        } else {
+          resolvedPrimaryFacility = match;
+          hasFacility = true;
+        }
+      }
+
+      const rawAdditionalFacs = values.additionalFacilityCodes.trim();
+      if (rawAdditionalFacs) {
+        const codes = rawAdditionalFacs
+          .split(";")
+          .map((c) => c.trim())
+          .filter((c) => c !== "");
+
+        const seenAdditionalCodes = new Set<string>();
+        for (const code of codes) {
+          const codeUpper = code.toUpperCase();
+          if (rawPrimaryFac && codeUpper === rawPrimaryFac.toUpperCase()) {
+            hasFacilityError = true;
+            addCellError({
+              fieldKey: "additionalFacilityCodes",
+              category: "OTHER_VALIDATION",
+              reason: `[${excelRowNumber}행 · 추가 제조시설 코드] 주 제조시설(${rawPrimaryFac})과 동일한 코드를 추가 제조시설에 중복 지정할 수 없습니다.`,
+              acceptedValues: "주 제조시설을 제외한 활성 제조시설 코드 (세미콜론 구분)",
+              guidance: "주 제조시설과 다른 고유 제조시설 코드를 입력하세요.",
+            });
+          }
+          if (seenAdditionalCodes.has(codeUpper)) {
+            hasFacilityError = true;
+            addCellError({
+              fieldKey: "additionalFacilityCodes",
+              category: "OTHER_VALIDATION",
+              reason: `[${excelRowNumber}행 · 추가 제조시설 코드] 중복된 제조시설 코드가 포함되어 있습니다: "${code}".`,
+              acceptedValues: "고유한 추가 제조시설 코드 목록 (세미콜론 구분)",
+              guidance: "중복 코드를 제거하고 세미콜론(;)으로 구분하여 입력하세요.",
+            });
+          }
+          seenAdditionalCodes.add(codeUpper);
+
+          const match = facilityByCode.get(codeUpper);
+          if (!match) {
+            hasFacilityError = true;
+            addCellError({
+              fieldKey: "additionalFacilityCodes",
+              category: "OTHER_VALIDATION",
+              reason: `[${excelRowNumber}행 · 추가 제조시설 코드] 등록되지 않았거나 귀사에 권한이 없는 제조시설 코드입니다: "${code}".`,
+              acceptedValues: "귀사에 등록된 활성 제조시설 코드 또는 빈칸",
+              guidance: "Manufacturing_Facilities 시트의 유효한 제조시설 코드를 확인하세요.",
+            });
+          } else if (match.is_active === false) {
+            hasFacilityError = true;
+            addCellError({
+              fieldKey: "additionalFacilityCodes",
+              category: "OTHER_VALIDATION",
+              reason: `[${excelRowNumber}행 · 추가 제조시설 코드] "${match.facility_code}"은(는) 비활성화된 제조시설입니다.`,
+              acceptedValues: "활성 상태인 제조시설 코드 또는 빈칸",
+              guidance: "활성 상태인 제조시설 코드를 입력하세요.",
+            });
+          } else {
+            resolvedAdditionalFacilities.push(match);
+            hasFacility = true;
+          }
+        }
+      }
+    }
+
+    const resolvedFacilities =
+      !hasFacilityError && (resolvedPrimaryFacility || resolvedAdditionalFacilities.length > 0)
+        ? {
+            primary_facility_id: resolvedPrimaryFacility?.id || null,
+            primary_facility_code: resolvedPrimaryFacility?.facility_code || null,
+            additional_facility_ids: resolvedAdditionalFacilities.map((f) => f.id),
+            additional_facility_codes: resolvedAdditionalFacilities.map((f) => f.facility_code),
+          }
+        : undefined;
+
+    // =========================================================================
+    // 18. Regulatory & Compliance Declaration Validation (KSN-CMP-008)
+    // =========================================================================
+    let hasRegulatoryError = false;
+    let hasRegulatory = false;
+    let resolvedRegulatoryCompliance: any = null;
+
+    if (isV1) {
+      const hasNewRegulatoryValues =
+        values.usClassification.trim() !== "" ||
+        values.fdaStatus.trim() !== "" ||
+        values.mocraListingStatus.trim() !== "" ||
+        values.mocraListingNumber.trim() !== "" ||
+        values.mocraListedAt.trim() !== "" ||
+        values.mocraNextRenewalDate.trim() !== "" ||
+        values.mocraExemptionReason.trim() !== "" ||
+        values.otcApplicability.trim() !== "" ||
+        values.otcDualMocraApplicable.trim() !== "" ||
+        values.otcListingStatus.trim() !== "" ||
+        values.otcNdcNumber.trim() !== "" ||
+        values.otcNaReason.trim() !== "" ||
+        values.otcListedAt.trim() !== "" ||
+        values.otcNextRenewalDate.trim() !== "" ||
+        values.drugFactsStatus.trim() !== "";
+
+      const hasLegacyRegulatoryValues =
+        values.attrFdaStatus.trim() !== "" ||
+        values.attrMocraStatus.trim() !== "" ||
+        values.attrOtcStatus.trim() !== "" ||
+        values.attrDrugFactsStatus.trim() !== "";
+
+      if (hasNewRegulatoryValues) {
+        hasRegulatory = true;
+        const parsedUsClass = parseCanonicalUsClassification(values.usClassification);
+        const parsedMocraStatus = parseCanonicalMocraListingStatus(values.mocraListingStatus);
+        const parsedOtcApp = parseCanonicalOtcApplicability(values.otcApplicability);
+        const parsedOtcStatus = parseCanonicalOtcListingStatus(values.otcListingStatus);
+        const parsedDrugFacts = parseCanonicalDrugFactsStatus(values.drugFactsStatus);
+        const parsedDualApp = parseCanonicalDualApplicable(values.otcDualMocraApplicable);
+
+        // Check if user entered unparseable non-empty strings
+        if (values.usClassification.trim() && !parsedUsClass) {
+          hasRegulatoryError = true;
+          addCellError({
+            fieldKey: "usClassification",
+            category: "OTHER_VALIDATION",
+            reason: `[${excelRowNumber}행 · 미국 규제 분류] 유효하지 않은 분류 값입니다: "${values.usClassification}".`,
+            acceptedValues: "일반 화장품 (Cosmetic), 일반의약품 (OTC Drug), 미분류 (Unknown) 등",
+            guidance: "Allowed_Values 시트의 규제 분류 옵션을 확인해 주세요.",
+          });
+        }
+        if (values.mocraListingStatus.trim() && !parsedMocraStatus) {
+          hasRegulatoryError = true;
+          addCellError({
+            fieldKey: "mocraListingStatus",
+            category: "OTHER_VALIDATION",
+            reason: `[${excelRowNumber}행 · MoCRA 리스팅 상태] 유효하지 않은 상태 값입니다: "${values.mocraListingStatus}".`,
+            acceptedValues: "리스팅 완료 (Listed), 미진행 (Not Started), 면제 (Exempt) 등",
+            guidance: "Allowed_Values 시트의 MoCRA 상태 옵션을 확인해 주세요.",
+          });
+        }
+        if (values.otcApplicability.trim() && !parsedOtcApp) {
+          hasRegulatoryError = true;
+          addCellError({
+            fieldKey: "otcApplicability",
+            category: "OTHER_VALIDATION",
+            reason: `[${excelRowNumber}행 · OTC 적용 여부] 유효하지 않은 값입니다: "${values.otcApplicability}".`,
+            acceptedValues: "해당 없음 (Not Applicable), OTC 해당 (Applicable) 등",
+            guidance: "Allowed_Values 시트의 OTC 적용 여부 옵션을 확인해 주세요.",
+          });
+        }
+        if (values.otcListingStatus.trim() && !parsedOtcStatus) {
+          hasRegulatoryError = true;
+          addCellError({
+            fieldKey: "otcListingStatus",
+            category: "OTHER_VALIDATION",
+            reason: `[${excelRowNumber}행 · OTC 리스팅 상태] 유효하지 않은 상태 값입니다: "${values.otcListingStatus}".`,
+            acceptedValues: "등록 완료 (Listed), 미진행 (Not Started), 해당 없음 (Not Applicable) 등",
+            guidance: "Allowed_Values 시트의 OTC 리스팅 상태 옵션을 확인해 주세요.",
+          });
+        }
+        if (values.drugFactsStatus.trim() && !parsedDrugFacts) {
+          hasRegulatoryError = true;
+          addCellError({
+            fieldKey: "drugFactsStatus",
+            category: "OTHER_VALIDATION",
+            reason: `[${excelRowNumber}행 · Drug Facts 상태] 유효하지 않은 상태 값입니다: "${values.drugFactsStatus}".`,
+            acceptedValues: "해당 없음 (Not Applicable), 작성 준비 중 (Pending), 작성 완료 (Ready)",
+            guidance: "Allowed_Values 시트의 Drug Facts 옵션을 확인해 주세요 (VERIFIED는 브랜드 지정 불가).",
+          });
+        }
+
+        // Check conflict with legacy values if both sets provided
+        if (hasLegacyRegulatoryValues) {
+          const resolvedOtcLegacy = resolveLegacyAttributeCode(values.attrOtcStatus, "attrOtcStatus").toUpperCase();
+          if (
+            resolvedOtcLegacy.includes("NOT_OTC") &&
+            parsedOtcApp === "APPLICABLE"
+          ) {
+            hasRegulatoryError = true;
+            addCellError({
+              fieldKey: "otcApplicability",
+              category: "OTHER_VALIDATION",
+              reason: `[${excelRowNumber}행 · OTC 규제 충돌] 신규 OTC 적용 컬럼("${values.otcApplicability}")과 레거시 속성("${values.attrOtcStatus}")의 값이 상충됩니다.`,
+              acceptedValues: "일관된 OTC 적용 여부 값",
+              guidance: "신규 규제 컬럼과 레거시 속성 컬럼 중 하나의 값을 일치시켜 주세요.",
+            });
+          }
+        }
+
+        const regInput: ProductRegulatoryDeclarationInput = {
+          us_classification: parsedUsClass || "UNDETERMINED",
+          otc_applicability: parsedOtcApp || "UNKNOWN",
+          otc_dual_mocra_applicable: parsedDualApp,
+          classification_rationale: null,
+          mocra_listing_status: parsedMocraStatus || "UNKNOWN",
+          mocra_listing_number: values.mocraListingNumber.trim() || null,
+          mocra_exemption_reason: values.mocraExemptionReason.trim() || null,
+          mocra_listed_at: values.mocraListedAt.trim() || null,
+          mocra_next_renewal_date: values.mocraNextRenewalDate.trim() || null,
+          otc_listing_status: parsedOtcStatus || "UNKNOWN",
+          otc_ndc_number: values.otcNdcNumber.trim() || null,
+          otc_na_reason: values.otcNaReason.trim() || null,
+          otc_listed_at: values.otcListedAt.trim() || null,
+          otc_next_renewal_date: values.otcNextRenewalDate.trim() || null,
+          drug_facts_status: parsedDrugFacts || "UNKNOWN",
+        };
+
+        const regVal = validateProductRegulatoryDeclaration(regInput, { isAdmin: false });
+        if (!regVal.valid) {
+          for (const err of regVal.errors) {
+            hasRegulatoryError = true;
+            addCellError({
+              fieldKey: "mocraListingStatus",
+              category: "OTHER_VALIDATION",
+              reason: `[${excelRowNumber}행 · 규제 준수] ${err}`,
+              acceptedValues: "규제 요건을 충족하는 입력값",
+              guidance: "MoCRA 번호, NDC 번호, 면제 사유 등 조건부 필수 항목을 확인해 주세요.",
+            });
+          }
+        } else {
+          resolvedRegulatoryCompliance = {
+            ...regInput,
+            fda_legacy_status: values.fdaStatus.trim() || null,
+          };
+        }
+      } else if (hasLegacyRegulatoryValues) {
+        hasRegulatory = true;
+        const legacyRes = mapLegacyRegulatoryValues({
+          fdaStatus: resolveLegacyAttributeCode(values.attrFdaStatus, "attrFdaStatus") || undefined,
+          mocraStatus: resolveLegacyAttributeCode(values.attrMocraStatus, "attrMocraStatus") || undefined,
+          otcStatus: resolveLegacyAttributeCode(values.attrOtcStatus, "attrOtcStatus") || undefined,
+          drugFactsStatus: resolveLegacyAttributeCode(values.attrDrugFactsStatus, "attrDrugFactsStatus") || undefined,
+        });
+
+        for (const warn of legacyRes.review_warnings || []) {
+          addCellWarning({
+            fieldKey: "attrMocraStatus",
+            category: "OTHER_VALIDATION",
+            reason: `[${excelRowNumber}행 · 레거시 규제 매핑] ${warn}`,
+            acceptedValues: "상세 검토 필요",
+            guidance: "상품 등록 후 규제 준수(Compliance) 탭에서 최신 상세 인허가 정보를 확인하고 보완해 주세요.",
+          });
+        }
+
+        resolvedRegulatoryCompliance = {
+          us_classification: legacyRes.us_classification,
+          otc_applicability: legacyRes.otc_applicability,
+          mocra_listing_status: legacyRes.mocra_listing_status,
+          otc_listing_status: legacyRes.otc_listing_status,
+          drug_facts_status: legacyRes.drug_facts_status,
+          fda_legacy_status: legacyRes.fda_legacy_status || values.attrFdaStatus || null,
+          legacy_migration_snapshot: legacyRes.original_snapshot,
+        };
+      }
+    }
+
     const isInvalid = errors.length > 0;
     const status = isInvalid ? "INVALID" : warnings.length > 0 ? "WARNING" : "VALID";
 
@@ -2360,6 +2848,8 @@ export function parseAndValidateBulkProductWorkbook(
             image_urls: normalizedImageUrls,
             product_video_url: resolvedVideoUrl,
             common_attributes: normalizedCommonAttrs,
+            facilities: resolvedFacilities,
+            regulatory_compliance: resolvedRegulatoryCompliance,
           }
         : null;
 
@@ -2382,6 +2872,10 @@ export function parseAndValidateBulkProductWorkbook(
       hasCategoryError,
       hasCommonAttributeError,
       hasMediaUrlError,
+      hasFacilityError,
+      hasRegulatoryError,
+      hasFacility,
+      hasRegulatory,
       imageUrlCount: normalizedImageUrls.length,
       hasVideoUrl: Boolean(resolvedVideoUrl),
       commonAttributeCount: normalizedCommonAttrs.length,
@@ -2397,6 +2891,10 @@ export function parseAndValidateBulkProductWorkbook(
   let categoryErrorRows = 0;
   let commonAttributeErrorRows = 0;
   let mediaUrlErrorRows = 0;
+  let facilityErrorRows = 0;
+  let regulatoryErrorRows = 0;
+  let rowsWithFacilityCount = 0;
+  let rowsWithRegulatoryCount = 0;
   let rowsWithMediaCount = 0;
   let totalImageUrlsCount = 0;
   let rowsWithVideoCount = 0;
@@ -2412,6 +2910,8 @@ export function parseAndValidateBulkProductWorkbook(
       if (row.hasCategoryError) categoryErrorRows += 1;
       if (row.hasCommonAttributeError) commonAttributeErrorRows += 1;
       if (row.hasMediaUrlError) mediaUrlErrorRows += 1;
+      if (row.hasFacilityError) facilityErrorRows += 1;
+      if (row.hasRegulatoryError) regulatoryErrorRows += 1;
     }
 
     if (row.status !== "INVALID") {
@@ -2421,6 +2921,8 @@ export function parseAndValidateBulkProductWorkbook(
       totalImageUrlsCount += row.imageUrlCount;
       if (row.hasVideoUrl) rowsWithVideoCount += 1;
       if (row.commonAttributeCount > 0) rowsWithCommonAttrsCount += 1;
+      if (row.hasFacility) rowsWithFacilityCount += 1;
+      if (row.hasRegulatory) rowsWithRegulatoryCount += 1;
     }
   }
 
@@ -2440,6 +2942,10 @@ export function parseAndValidateBulkProductWorkbook(
       categoryErrorRows,
       commonAttributeErrorRows,
       mediaUrlErrorRows,
+      facilityErrorRows,
+      regulatoryErrorRows,
+      rowsWithFacilityCount,
+      rowsWithRegulatoryCount,
       rowsWithMediaCount,
       totalImageUrlsCount,
       rowsWithVideoCount,

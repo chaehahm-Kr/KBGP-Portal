@@ -1,10 +1,14 @@
 import JSZip from "jszip";
 import {
+  ALL_KNOWN_BULK_COLUMNS,
   ALLOWED_COLOR_MAPS,
   BULK_IMPORT_MAX_ROWS,
   BULK_PRODUCT_COLUMNS,
+  BULK_PRODUCT_COLUMNS_LEGACY,
+  BULK_PRODUCT_COLUMNS_V1,
   BULK_TEMPLATE_EXAMPLE_SKU,
   COMMON_BULK_ATTRIBUTES,
+  COMMON_BULK_ATTRIBUTES_V1,
   type BulkCellValidationIssue,
   type BulkColumnSection,
   type BulkColumnSpec,
@@ -15,6 +19,7 @@ import {
   type BulkReferenceBrand,
   type BulkReferenceCategory,
   type BulkReferenceCommonAttribute,
+  type BulkReferenceManufacturingFacility,
   type BulkRejectedRowItem,
   type BulkRowRawFieldKey,
 } from "@/lib/product/bulk-import-types";
@@ -24,11 +29,14 @@ import {
   formatBilingualCategoryLabel,
   sanitizeExcelOutputCell,
 } from "@/lib/product/bulk-import-validator";
+import { isComplianceV1Enabled } from "@/lib/compliance/v1-feature-gate";
 
 export interface GenerateTemplateOptions {
   brands: BulkReferenceBrand[];
   categories: BulkReferenceCategory[];
   commonAttributes?: BulkReferenceCommonAttribute[];
+  manufacturingFacilities?: BulkReferenceManufacturingFacility[];
+  isComplianceV1?: boolean;
 }
 
 export interface GenerateAnnotatedErrorWorkbookOptions extends GenerateTemplateOptions {
@@ -913,6 +921,10 @@ function getColumnHeaderStyle(section: BulkColumnSection): number {
       return STYLE.HDR_LOGISTICS;
     case "Media":
       return STYLE.HDR_MEDIA;
+    case "Facilities":
+      return STYLE.HDR_CATEGORY;
+    case "Regulatory":
+      return STYLE.HDR_PRICING;
     case "Common Attributes":
       return STYLE.HDR_COMMON_ATTR;
   }
@@ -932,6 +944,10 @@ function getSectionNameKo(section: BulkColumnSection): string {
       return "물류 규격 (Logistics)";
     case "Media":
       return "미디어 URL (Media)";
+    case "Facilities":
+      return "제조시설 정보 (Facilities)";
+    case "Regulatory":
+      return "규제 및 인허가 (Regulatory)";
     case "Common Attributes":
       return "공통 속성 (Common Attributes)";
   }
@@ -940,9 +956,14 @@ function getSectionNameKo(section: BulkColumnSection): string {
 export async function generateBulkProductTemplateBuffer(
   options: GenerateTemplateOptions
 ): Promise<Buffer> {
+  const isV1 = options.isComplianceV1 ?? isComplianceV1Enabled();
+  const effectiveColumns = isV1 ? BULK_PRODUCT_COLUMNS_V1 : BULK_PRODUCT_COLUMNS_LEGACY;
   const activeBrands = options.brands.filter((b) => b.is_active !== false);
   const activeCategories = options.categories.filter((c) => c.is_active !== false);
-  const commonAttrs = resolveTemplateCommonAttributes(options.commonAttributes);
+  const rawCommonAttrs = resolveTemplateCommonAttributes(options.commonAttributes);
+  const commonAttrs = isV1
+    ? rawCommonAttrs.filter((a) => !a.isRegulatoryBrandReported)
+    : rawCommonAttrs;
 
   const sampleBrandName = activeBrands[0]?.name || "Your Active Brand Name";
   const sampleSkincareD1 =
@@ -1025,6 +1046,28 @@ export async function generateBulkProductTemplateBuffer(
     exampleByKey[attr.fieldKey] = attr.exampleValue;
   }
 
+  if (isV1) {
+    const firstFacility = options.manufacturingFacilities?.[0];
+    const secondFacility = options.manufacturingFacilities?.[1];
+    exampleByKey.primaryFacilityCode = firstFacility?.facility_code || "MFG-001";
+    exampleByKey.additionalFacilityCodes = secondFacility?.facility_code || "";
+    exampleByKey.usClassification = "일반 화장품 (Cosmetic)";
+    exampleByKey.fdaStatus = "미검토 (Not Reviewed)";
+    exampleByKey.mocraListingStatus = "리스팅 완료 (Listed)";
+    exampleByKey.mocraListingNumber = "CP-2026-00123";
+    exampleByKey.mocraListedAt = "2025-06-15";
+    exampleByKey.mocraNextRenewalDate = "2027-06-15";
+    exampleByKey.mocraExemptionReason = "";
+    exampleByKey.otcApplicability = "해당 없음 (Not Applicable)";
+    exampleByKey.otcDualMocraApplicable = "해당 없음 (Not Applicable)";
+    exampleByKey.otcListingStatus = "해당 없음 (Not Applicable)";
+    exampleByKey.otcNdcNumber = "";
+    exampleByKey.otcNaReason = "일반 화장품으로 OTC 비해당";
+    exampleByKey.otcListedAt = "";
+    exampleByKey.otcNextRenewalDate = "";
+    exampleByKey.drugFactsStatus = "해당 없음 (Not Applicable)";
+  }
+
   // Build Categories hierarchy + dependent dropdown lookup tables
   const {
     hierarchyRows: categoryRefRows,
@@ -1034,105 +1077,56 @@ export async function generateBulkProductTemplateBuffer(
   } = buildCategoryReferenceAndLookupTables(activeCategories);
 
   // =========================================================================
-  // 1. Products Sheet (Row 1 = Group Banners, Row 2 = 86 Headers, Row 3 = Example)
+  // 1. Products Sheet (Row 1 = Group Banners, Row 2 = Headers, Row 3 = Example)
   // =========================================================================
-  const groupBannerSpans: Array<{
+  const groupBannerSpansV1: Array<{
     startIdx: number;
     endIdx: number;
     label: string;
     style: number;
   }> = [
-    {
-      startIdx: 0,
-      endIdx: 3,
-      label: "★ 필수 입력 항목 (4개 필수 · Required)",
-      style: STYLE.GROUP_REQUIRED,
-    },
-    {
-      startIdx: 4,
-      endIdx: 5,
-      label: "세부 카테고리 · 연동 선택 (Category)",
-      style: STYLE.GROUP_CATEGORY,
-    },
-    {
-      startIdx: 6,
-      endIdx: 13,
-      label: "기본 정보 · 기본 스펙 (Basic Specs · 선택)",
-      style: STYLE.GROUP_BASIC,
-    },
-    {
-      startIdx: 14,
-      endIdx: 21,
-      label: "기본 정보 · 상세/성분 (Content & INCI · 선택)",
-      style: STYLE.GROUP_BASIC,
-    },
-    {
-      startIdx: 22,
-      endIdx: 29,
-      label: "기본 정보 · 바코드/판매처 (Barcodes & Links · 선택)",
-      style: STYLE.GROUP_BASIC,
-    },
-    {
-      startIdx: 30,
-      endIdx: 33,
-      label: "가격 정보 · 선택 (Pricing)",
-      style: STYLE.GROUP_PRICING,
-    },
-    {
-      startIdx: 34,
-      endIdx: 41,
-      label: "물류 규격 · 단품/포장 (Item & Package · 선택)",
-      style: STYLE.GROUP_LOGISTICS,
-    },
-    {
-      startIdx: 42,
-      endIdx: 51,
-      label: "물류 규격 · 카톤/파렛트 (Carton & Pallet · 선택)",
-      style: STYLE.GROUP_LOGISTICS,
-    },
-    {
-      startIdx: 52,
-      endIdx: 62,
-      label: "미디어 URL · 이미지 1~10 및 동영상 (Media URLs · 선택)",
-      style: STYLE.GROUP_MEDIA,
-    },
-    {
-      startIdx: 63,
-      endIdx: 66,
-      label: "공통 속성 · 유통/보관 (Shelf Life & Storage · 선택)",
-      style: STYLE.GROUP_COMMON_ATTR,
-    },
-    {
-      startIdx: 67,
-      endIdx: 70,
-      label: "공통 속성 · 패키지/제형 (Packaging & Format · 선택)",
-      style: STYLE.GROUP_COMMON_ATTR,
-    },
-    {
-      startIdx: 71,
-      endIdx: 73,
-      label: "공통 속성 · 대상 고객 (Target Customer · 선택)",
-      style: STYLE.GROUP_COMMON_ATTR,
-    },
-    {
-      startIdx: 74,
-      endIdx: 78,
-      label: "공통 속성 · 사용/주요고민 (Usage & Concerns · 선택)",
-      style: STYLE.GROUP_COMMON_ATTR,
-    },
-    {
-      startIdx: 79,
-      endIdx: 81,
-      label: "공통 속성 · 향 정보 (Fragrance · 선택)",
-      style: STYLE.GROUP_COMMON_ATTR,
-    },
-    {
-      startIdx: 82,
-      endIdx: 85,
-      label: "공통 속성 · 규제/등록 상태 (Regulatory · 브랜드 기재 · 선택)",
-      style: STYLE.GROUP_COMMON_ATTR,
-    },
+    { startIdx: 0, endIdx: 3, label: "★ 필수 입력 항목 (4개 필수 · Required)", style: STYLE.GROUP_REQUIRED },
+    { startIdx: 4, endIdx: 5, label: "세부 카테고리 · 연동 선택 (Category)", style: STYLE.GROUP_CATEGORY },
+    { startIdx: 6, endIdx: 13, label: "기본 정보 · 기본 스펙 (Basic Specs · 선택)", style: STYLE.GROUP_BASIC },
+    { startIdx: 14, endIdx: 21, label: "기본 정보 · 상세/성분 (Content & INCI · 선택)", style: STYLE.GROUP_BASIC },
+    { startIdx: 22, endIdx: 29, label: "기본 정보 · 바코드/판매처 (Barcodes & Links · 선택)", style: STYLE.GROUP_BASIC },
+    { startIdx: 30, endIdx: 33, label: "가격 정보 · 선택 (Pricing)", style: STYLE.GROUP_PRICING },
+    { startIdx: 34, endIdx: 41, label: "물류 규격 · 단품/포장 (Item & Package · 선택)", style: STYLE.GROUP_LOGISTICS },
+    { startIdx: 42, endIdx: 51, label: "물류 규격 · 카톤/파렛트 (Carton & Pallet · 선택)", style: STYLE.GROUP_LOGISTICS },
+    { startIdx: 52, endIdx: 62, label: "미디어 URL · 이미지 1~10 및 동영상 (Media URLs · 선택)", style: STYLE.GROUP_MEDIA },
+    { startIdx: 63, endIdx: 64, label: "제조시설 정보 (Manufacturing Facilities · 선택)", style: STYLE.GROUP_BASIC },
+    { startIdx: 65, endIdx: 79, label: "규제 및 인허가 (Regulatory & Compliance · 선택)", style: STYLE.GROUP_PRICING },
+    { startIdx: 80, endIdx: 83, label: "공통 속성 · 유통/보관 (Shelf Life & Storage · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+    { startIdx: 84, endIdx: 87, label: "공통 속성 · 패키지/제형 (Packaging & Format · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+    { startIdx: 88, endIdx: 90, label: "공통 속성 · 대상 고객 (Target Customer · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+    { startIdx: 91, endIdx: 95, label: "공통 속성 · 사용/주요고민 (Usage & Concerns · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+    { startIdx: 96, endIdx: 98, label: "공통 속성 · 향 정보 (Fragrance · 선택)", style: STYLE.GROUP_COMMON_ATTR },
   ];
+
+  const groupBannerSpansLegacy: Array<{
+    startIdx: number;
+    endIdx: number;
+    label: string;
+    style: number;
+  }> = [
+    { startIdx: 0, endIdx: 3, label: "★ 필수 입력 항목 (4개 필수 · Required)", style: STYLE.GROUP_REQUIRED },
+    { startIdx: 4, endIdx: 5, label: "세부 카테고리 · 연동 선택 (Category)", style: STYLE.GROUP_CATEGORY },
+    { startIdx: 6, endIdx: 13, label: "기본 정보 · 기본 스펙 (Basic Specs · 선택)", style: STYLE.GROUP_BASIC },
+    { startIdx: 14, endIdx: 21, label: "기본 정보 · 상세/성분 (Content & INCI · 선택)", style: STYLE.GROUP_BASIC },
+    { startIdx: 22, endIdx: 29, label: "기본 정보 · 바코드/판매처 (Barcodes & Links · 선택)", style: STYLE.GROUP_BASIC },
+    { startIdx: 30, endIdx: 33, label: "가격 정보 · 선택 (Pricing)", style: STYLE.GROUP_PRICING },
+    { startIdx: 34, endIdx: 41, label: "물류 규격 · 단품/포장 (Item & Package · 선택)", style: STYLE.GROUP_LOGISTICS },
+    { startIdx: 42, endIdx: 51, label: "물류 규격 · 카톤/파렛트 (Carton & Pallet · 선택)", style: STYLE.GROUP_LOGISTICS },
+    { startIdx: 52, endIdx: 62, label: "미디어 URL · 이미지 1~10 및 동영상 (Media URLs · 선택)", style: STYLE.GROUP_MEDIA },
+    { startIdx: 63, endIdx: 66, label: "공통 속성 · 유통/보관 (Shelf Life & Storage · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+    { startIdx: 67, endIdx: 70, label: "공통 속성 · 패키지/제형 (Packaging & Format · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+    { startIdx: 71, endIdx: 73, label: "공통 속성 · 대상 고객 (Target Customer · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+    { startIdx: 74, endIdx: 78, label: "공통 속성 · 사용/주요고민 (Usage & Concerns · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+    { startIdx: 79, endIdx: 81, label: "공통 속성 · 향 정보 (Fragrance · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+    { startIdx: 82, endIdx: 85, label: "공통 속성 · 규제/등록 상태 (Regulatory · 브랜드 기재 · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+  ];
+
+  const groupBannerSpans = isV1 ? groupBannerSpansV1 : groupBannerSpansLegacy;
 
   const groupBannerCells: OoxmlCellSpec[] = [];
   const productMerges: string[] = [];
@@ -1150,13 +1144,13 @@ export async function generateBulkProductTemplateBuffer(
     }
   }
 
-  const headerRowCells: OoxmlCellSpec[] = BULK_PRODUCT_COLUMNS.map((col) => ({
+  const headerRowCells: OoxmlCellSpec[] = effectiveColumns.map((col) => ({
     value: col.header,
     style: getColumnHeaderStyle(col.section),
     forceString: true,
   }));
 
-  const exampleRowCells: OoxmlCellSpec[] = BULK_PRODUCT_COLUMNS.map((col) => {
+  const exampleRowCells: OoxmlCellSpec[] = effectiveColumns.map((col) => {
     const rawVal = exampleByKey[col.key] ?? "";
     if (col.textFormat) {
       return {
@@ -1178,7 +1172,7 @@ export async function generateBulkProductTemplateBuffer(
     };
   });
 
-  const productCols: OoxmlColSpec[] = BULK_PRODUCT_COLUMNS.map((col) => ({
+  const productCols: OoxmlColSpec[] = effectiveColumns.map((col) => ({
     width: col.width,
     style: col.textFormat ? STYLE.TEXT_AT : undefined,
   }));
@@ -1236,6 +1230,101 @@ export async function generateBulkProductTemplateBuffer(
       allowOther: attr.allowOther,
     };
   });
+
+  const regulatoryDropdownColumns: Array<{
+    fieldKey: BulkRowRawFieldKey;
+    header: string;
+    values: string[];
+    promptTitle: string;
+    prompt: string;
+  }> = isV1
+    ? [
+        {
+          fieldKey: "usClassification",
+          header: "미국 규제 분류 (US Classification)",
+          values: [
+            "일반 화장품 (Cosmetic)",
+            "일반의약품 (OTC Drug)",
+            "건강기능식품 (Dietary Supplement)",
+            "의료기기 (Medical Device)",
+            "일반 공산품 (General Consumer Product)",
+            "미분류 (Unknown)",
+          ],
+          promptTitle: "미국 규제 분류",
+          prompt: "해당 제품의 미국 규제 분류를 선택하세요.",
+        },
+        {
+          fieldKey: "fdaStatus",
+          header: "FDA 관련 상태 (FDA Status)",
+          values: [
+            "미검토 (Not Reviewed)",
+            "검토 중 (Under Review)",
+            "FDA 등록/리스팅 (Registered / Listed)",
+            "해당 없음 (Not Applicable)",
+          ],
+          promptTitle: "FDA 관련 상태",
+          prompt: "브랜드 자체 관리 목적의 FDA 참고 상태를 선택하세요.",
+        },
+        {
+          fieldKey: "mocraListingStatus",
+          header: "MoCRA 제품 리스팅 상태 (MoCRA Listing Status)",
+          values: [
+            "미진행 (Not Started)",
+            "진행 중 (In Progress)",
+            "리스팅 완료 (Listed)",
+            "면제 (Exempt)",
+            "해당 없음 (Not Applicable)",
+          ],
+          promptTitle: "MoCRA 제품 리스팅 상태",
+          prompt: "MoCRA 제품 리스팅 상태를 선택하세요. (리스팅 완료 시 번호 필수)",
+        },
+        {
+          fieldKey: "otcApplicability",
+          header: "OTC 해당 여부 (OTC Applicability)",
+          values: [
+            "해당 없음 (Not Applicable)",
+            "OTC 해당 (Applicable)",
+            "검토 중 (Under Evaluation)",
+          ],
+          promptTitle: "OTC 해당 여부",
+          prompt: "해당 제품의 OTC 의약품 해당 여부를 선택하세요.",
+        },
+        {
+          fieldKey: "otcDualMocraApplicable",
+          header: "OTC-MoCRA 복합 적용 (Dual Status)",
+          values: [
+            "해당 없음 (Not Applicable)",
+            "복합 적용 해당 (Applicable)",
+            "미정 (Unknown)",
+          ],
+          promptTitle: "OTC-MoCRA 복합 적용 여부",
+          prompt: "화장품 및 OTC 복합 제품인 경우 동시 적용 여부를 선택하세요.",
+        },
+        {
+          fieldKey: "otcListingStatus",
+          header: "OTC 제품 리스팅 상태 (OTC Listing Status)",
+          values: [
+            "미진행 (Not Started)",
+            "진행 중 (In Progress)",
+            "등록 완료 (Listed)",
+            "해당 없음 (Not Applicable)",
+          ],
+          promptTitle: "OTC 제품 리스팅 상태",
+          prompt: "OTC 제품 리스팅 상태를 선택하세요. (등록 완료 시 NDC 필수)",
+        },
+        {
+          fieldKey: "drugFactsStatus",
+          header: "Drug Facts 상태 (Drug Facts Status)",
+          values: [
+            "해당 없음 (Not Applicable)",
+            "작성 준비 중 (Pending)",
+            "작성 완료 (Ready)",
+          ],
+          promptTitle: "Drug Facts 상태",
+          prompt: "OTC 라벨 Drug Facts 상태를 선택하세요. (VERIFIED는 관리자 전용)",
+        },
+      ]
+    : [];
 
   const buildProductValidationsForColumns = (
     colIdxByKey: Map<string, number>,
@@ -1300,10 +1389,10 @@ export async function generateBulkProductTemplateBuffer(
     addValidation("parentSku", `Allowed_Values!$F$2:$F$3`);
     addValidation("childSku", `Allowed_Values!$F$2:$F$3`);
 
-    // Attach dropdowns for ALL 20 Option-Based Common Attributes (Allowed_Values Cols G..Z)
+    // Attach dropdowns for Option-Based Common Attributes (Allowed_Values Cols G..)
     optionAttrDropdownColumns.forEach((colInfo, offsetIdx) => {
       if (colInfo.values.length === 0) return;
-      const allowedColLetter = encodeColLetter(6 + offsetIdx); // 6 = 'G' .. 25 = 'Z'
+      const allowedColLetter = encodeColLetter(6 + offsetIdx); // 6 = 'G'
       const { promptTitle, prompt } = resolveOptionAttributeValidationPrompt(colInfo.inputType);
 
       addValidation(
@@ -1314,11 +1403,36 @@ export async function generateBulkProductTemplateBuffer(
       );
     });
 
+    const activeFacilities = (options.manufacturingFacilities || []).filter(
+      (f) => f.is_active !== false
+    );
+    if (isV1 && activeFacilities.length > 0) {
+      addValidation(
+        "primaryFacilityCode",
+        `Manufacturing_Facilities!$A$2:$A$${activeFacilities.length + 1}`,
+        "주 제조시설 코드 (Primary Facility Code)",
+        "Manufacturing_Facilities 시트에 등록된 제조시설 코드 중 하나를 선택하세요. (Draft 등록 시 선택 사항)"
+      );
+    }
+
+    if (isV1) {
+      regulatoryDropdownColumns.forEach((colInfo, offsetIdx) => {
+        if (colInfo.values.length === 0) return;
+        const allowedColLetter = encodeColLetter(6 + optionAttrDropdownColumns.length + offsetIdx);
+        addValidation(
+          colInfo.fieldKey,
+          `Allowed_Values!$${allowedColLetter}$2:$${allowedColLetter}$${colInfo.values.length + 1}`,
+          colInfo.promptTitle,
+          colInfo.prompt
+        );
+      });
+    }
+
     return validations;
   };
 
   const canonicalColIndexByKey = new Map<string, number>();
-  BULK_PRODUCT_COLUMNS.forEach((col, idx) => canonicalColIndexByKey.set(col.key, idx));
+  effectiveColumns.forEach((col, idx) => canonicalColIndexByKey.set(col.key, idx));
 
   const maxValidationRow = BULK_IMPORT_MAX_ROWS + 3; // Row 1 Group + Row 2 Header + Row 3 Example + 500 rows
   const productValidations = buildProductValidationsForColumns(
@@ -1338,15 +1452,15 @@ export async function generateBulkProductTemplateBuffer(
     merges: productMerges,
     freezeRows: 2,
     activeCell: "A4",
-    autoFilterRef: `A2:${encodeCellAddress(3, BULK_PRODUCT_COLUMNS.length - 1)}`,
+    autoFilterRef: `A2:${encodeCellAddress(3, effectiveColumns.length - 1)}`,
     dataValidations: productValidations,
     defaultRowHeight: 20,
   };
 
   // =========================================================================
-  // 2. Instructions Sheet (Korean-first Bilingual Guidance for all 86 Columns)
+  // 2. Instructions Sheet (Korean-first Bilingual Guidance)
   // =========================================================================
-  const guideRules: [string, string][] = [
+  const guideRulesLegacy: [string, string][] = [
     [
       "1. 작성 시트 (Primary Sheet)",
       '"Products" 시트의 4행부터 1행당 1개 상품을 입력해 주세요. (1회 업로드 최대 500개 상품 지원 · 전체 86개 컬럼 / Enter one product per row starting at Row 4, max 500 rows).',
@@ -1381,12 +1495,57 @@ export async function generateBulkProductTemplateBuffer(
     ],
   ];
 
+  const guideRulesV1: [string, string][] = [
+    [
+      "1. 작성 시트 (Primary Sheet)",
+      '"Products" 시트의 4행부터 1행당 1개 상품을 입력해 주세요. (1회 업로드 최대 500개 상품 지원 · 전체 99개 컬럼 / Enter one product per row starting at Row 4, max 500 rows).',
+    ],
+    [
+      "2. 최소 필수 항목 4개 유지 (4 Required Fields Only)",
+      "초기 임시 등록(Draft)에는 [브랜드 *], [브랜드 SKU *], [영문 제품명 *], [카테고리 (1Depth) *] 4개 항목만 필수이며, 나머지 95개 항목(세부 카테고리, 기본/가격/물류, 미디어 URL 11개, 제조시설 2개, 규제 15개, 공통 속성 19개)은 모두 선택 입력입니다.",
+    ],
+    [
+      "3. 카테고리 1→2→3단계 연동 드롭다운 (Dependent Categories)",
+      "카테고리 (1Depth) 선택 시 하위 2Depth 목록만 자동 표시되며, 2Depth 선택 시 하위 3Depth 목록만 표시됩니다. 직접 코드/국문명/영문명을 입력해도 서버가 상위·하위 계층 정합성을 검증합니다.",
+    ],
+    [
+      "4. 이미지 및 동영상 URL 등록 (Media URLs)",
+      "대표 이미지 URL(position 0) 및 추가 이미지 URL 2~10은 직접 다운로드 가능한 HTTPS 이미지 URL(JPG, PNG, WEBP · 최대 10MB)을 입력해 주세요. 제품 동영상 URL은 YouTube/Vimeo 등 HTTPS 외부 링크를 지원합니다.",
+    ],
+    [
+      "5. 공통 속성 단일/복수 선택 · 기타 직접입력 안내 (Common Attributes)",
+      `단일 선택 항목(목록에서 1개만 선택 · 복수 입력 불가)과 복수 선택 항목(드롭다운에서 첫 번째 항목 선택 후 세미콜론 ';'으로 구분하여 추가 입력, 예: 건성 (Dry Skin); 민감성 (Sensitive Skin))을 구분해 입력해 주세요. ※ 주의: ${EXCEL_MULTI_SELECT_OVERWRITE_WARNING} 기타 허용(allow_other=true) 항목은 반드시 "기타: Cool" 또는 "Other: Cool" 형식으로 입력해 주세요.`,
+    ],
+    [
+      "6. 예시 행 자동 제외 & 텍스트(@) 서식 보존 (Brand SKU Text Format)",
+      `3행(${BULK_TEMPLATE_EXAMPLE_SKU})은 작성 참고용 예시 행으로 업로드 시 자동 제외됩니다. 브랜드 SKU, UPC(12자리), EAN(13자리), 제조시설 코드, MoCRA/NDC 번호는 선행 '0'과 하이픈(-) 보존을 위해 텍스트(@) 서식이 적용되어 있습니다.`,
+    ],
+    [
+      "7. 임시 등록 보호 및 제외 항목 안내",
+      "업로드된 상품은 미검토(UNREVIEWED) 및 리테일러 허브 비노출(hidden) 상태로 안전하게 보호됩니다. 인증서 파일 업로드 및 카테고리별 추가 프로필 속성(PROFILE)은 등록 후 상품 상세 화면에서 입력합니다.",
+    ],
+    [
+      "8. 수식 입력 금지 (Formula Security)",
+      "보안을 위해 셀 내 엑셀 수식(=SUM, =VLOOKUP, =HYPERLINK 등)은 허용되지 않습니다. 반드시 순수 값(텍스트/숫자)으로 입력된 .xlsx 파일을 업로드해 주세요.",
+    ],
+    [
+      "9. 제조시설 정보 입력 (Manufacturing Facilities)",
+      "주 제조시설 코드는 'Manufacturing_Facilities' 시트에 등록된 활성 제조시설 코드(예: MFG-001) 중 1개를 선택합니다. 추가 제조시설이 있는 경우 세미콜론(;)으로 구분(예: MFG-002;MFG-003)하여 입력해 주세요. 초기 Draft 등록 시에는 생략 가능하며, 정식 등록(Active) 전환 시에는 주 제조시설이 필수 지정되어야 합니다.",
+    ],
+    [
+      "10. 규제 및 인허가 정보 (Regulatory & Compliance)",
+      "미국 규제 분류(화장품/OTC 등), MoCRA 제품 리스팅 번호, OTC NDC 번호 등을 입력합니다. MoCRA 리스팅 상태가 '리스팅 완료(Listed)'인 경우 제품 리스팅 번호가 필수이며, OTC '등록 완료(Listed)'인 경우 NDC 번호가 필수입니다. 비면제 대상은 사유를 필히 기재해야 하며, Drug Facts는 브랜드 작성(READY)까지 등록 가능합니다(VERIFIED는 어드민 전용).",
+    ],
+  ];
+
+  const guideRules = isV1 ? guideRulesV1 : guideRulesLegacy;
+
   const instructionsRows: OoxmlRowSpec[] = [
     {
       height: 28,
       cells: [
         {
-          value: "K SELECT NETWORK — 상품 Excel 대량 등록 안내서 (Brand Product Bulk Upload Guide · 86 Columns)",
+          value: `K SELECT NETWORK — 상품 Excel 대량 등록 안내서 (Brand Product Bulk Upload Guide · ${effectiveColumns.length} Columns)`,
           style: STYLE.TITLE_BANNER,
         },
         { value: "", style: STYLE.TITLE_BANNER },
@@ -1421,7 +1580,7 @@ export async function generateBulkProductTemplateBuffer(
       height: 24,
       cells: [
         {
-          value: `■ 전체 ${BULK_PRODUCT_COLUMNS.length}개 컬럼 상세 규격 (${BULK_PRODUCT_COLUMNS.length} Column Specifications)`,
+          value: `■ 전체 ${effectiveColumns.length}개 컬럼 상세 규격 (${effectiveColumns.length} Column Specifications)`,
           style: STYLE.SECTION_HEADER,
         },
         { value: "", style: STYLE.SECTION_HEADER },
@@ -1440,7 +1599,7 @@ export async function generateBulkProductTemplateBuffer(
         { value: "입력 규칙 및 설명 (Validation & Format Guide)", style: STYLE.REF_HEADER },
       ],
     },
-    ...BULK_PRODUCT_COLUMNS.map((col) => {
+    ...effectiveColumns.map((col) => {
       const liveAttr = col.attributeCode
         ? commonAttrs.find((a) => a.code === col.attributeCode)
         : undefined;
@@ -1646,7 +1805,8 @@ export async function generateBulkProductTemplateBuffer(
     colorMaps.length,
     booleans.length,
     flags.length,
-    ...optionAttrDropdownColumns.map((c) => c.values.length)
+    ...optionAttrDropdownColumns.map((c) => c.values.length),
+    ...regulatoryDropdownColumns.map((c) => c.values.length)
   );
 
   const allowedHeaderCells: OoxmlCellSpec[] = [
@@ -1657,6 +1817,10 @@ export async function generateBulkProductTemplateBuffer(
     { value: "판매 여부 (Selling Online/Offline)", style: STYLE.REF_HEADER },
     { value: "상·하위 SKU 여부 (Parent/Child Flag)", style: STYLE.REF_HEADER },
     ...optionAttrDropdownColumns.map((c) => ({
+      value: c.header,
+      style: STYLE.REF_HEADER,
+    })),
+    ...regulatoryDropdownColumns.map((c) => ({
       value: c.header,
       style: STYLE.REF_HEADER,
     })),
@@ -1684,6 +1848,11 @@ export async function generateBulkProductTemplateBuffer(
           style: STYLE.REF_BODY,
           forceString: true,
         })),
+        ...regulatoryDropdownColumns.map((c) => ({
+          value: c.values[i] || "",
+          style: STYLE.REF_BODY,
+          forceString: true,
+        })),
       ],
     });
   }
@@ -1698,6 +1867,7 @@ export async function generateBulkProductTemplateBuffer(
       { width: 28 },
       { width: 28 },
       ...optionAttrDropdownColumns.map(() => ({ width: 30 })),
+      ...regulatoryDropdownColumns.map(() => ({ width: 30 })),
     ],
     rows: allowedRows,
     freezeRows: 1,
@@ -1866,7 +2036,80 @@ export async function generateBulkProductTemplateBuffer(
     autoFilterRef: `A1:G${commonAttrTableRows.length}`,
   };
 
-  return buildOoxmlWorkbookBuffer([
+  const activeFacilities = (options.manufacturingFacilities || []).filter(
+    (f) => f.is_active !== false
+  );
+
+  const facilityRows: OoxmlRowSpec[] = [
+    {
+      height: 26,
+      cells: [
+        { value: "제조시설 코드 (Facility Code)", style: STYLE.REF_HEADER },
+        { value: "영문 법인/제조사명 (Legal Name EN)", style: STYLE.REF_HEADER },
+        { value: "시설/사업장명 (Location Name)", style: STYLE.REF_HEADER },
+        { value: "국가 (Country)", style: STYLE.REF_HEADER },
+        { value: "도시 (City)", style: STYLE.REF_HEADER },
+        { value: "FEI 번호 (FEI Number)", style: STYLE.REF_HEADER },
+        { value: "FEI 발급 상태 (FEI Status)", style: STYLE.REF_HEADER },
+        { value: "MoCRA 시설 등록 상태 (MoCRA Status)", style: STYLE.REF_HEADER },
+        { value: "OTC 시설 등록 상태 (OTC Status)", style: STYLE.REF_HEADER },
+      ],
+    },
+  ];
+
+  if (activeFacilities.length > 0) {
+    for (const fac of activeFacilities) {
+      facilityRows.push({
+        height: 20,
+        cells: [
+          { value: fac.facility_code, style: STYLE.REF_BODY, forceString: true },
+          { value: sanitizeExcelOutputCell(fac.manufacturer_legal_name_en || (fac as any).facility_name_en || ""), style: STYLE.REF_BODY, forceString: true },
+          { value: sanitizeExcelOutputCell(fac.name || (fac as any).location_name || ""), style: STYLE.REF_BODY, forceString: true },
+          { value: fac.country || "", style: STYLE.REF_BODY, forceString: true },
+          { value: sanitizeExcelOutputCell(fac.city || ""), style: STYLE.REF_BODY, forceString: true },
+          { value: fac.fei_number || "", style: STYLE.REF_BODY, forceString: true },
+          { value: fac.fei_status || "", style: STYLE.REF_BODY, forceString: true },
+          { value: fac.mocra_facility_status || (fac as any).mocra_status || "", style: STYLE.REF_BODY, forceString: true },
+          { value: fac.otc_facility_status || (fac as any).otc_status || "", style: STYLE.REF_BODY, forceString: true },
+        ],
+      });
+    }
+  } else {
+    facilityRows.push({
+      height: 20,
+      cells: [
+        { value: "(등록된 제조시설이 없습니다 / No facilities registered)", style: STYLE.REF_BODY, forceString: true },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+        { value: "", style: STYLE.REF_BODY },
+      ],
+    });
+  }
+
+  const facilitiesSheetSpec: OoxmlSheetSpec = {
+    name: "Manufacturing_Facilities",
+    cols: [
+      { width: 24, style: STYLE.TEXT_AT },
+      { width: 34 },
+      { width: 28 },
+      { width: 16 },
+      { width: 20 },
+      { width: 20, style: STYLE.TEXT_AT },
+      { width: 24 },
+      { width: 28 },
+      { width: 28 },
+    ],
+    rows: facilityRows,
+    freezeRows: 1,
+    autoFilterRef: `A1:I${Math.max(facilityRows.length, 2)}`,
+  };
+
+  const workbookSheets: OoxmlSheetSpec[] = [
     productsSheetSpec,
     instructionsSheetSpec,
     brandsSheetSpec,
@@ -1874,7 +2117,13 @@ export async function generateBulkProductTemplateBuffer(
     countriesSheetSpec,
     allowedSheetSpec,
     commonAttributesSheetSpec,
-  ]);
+  ];
+
+  if (isV1) {
+    workbookSheets.push(facilitiesSheetSpec);
+  }
+
+  return buildOoxmlWorkbookBuffer(workbookSheets);
 }
 
 export async function generateAnnotatedErrorWorkbookBuffer(
@@ -1886,25 +2135,27 @@ export async function generateAnnotatedErrorWorkbookBuffer(
   const activeCategories = options.categories.filter((c) => c.is_active !== false);
   const commonAttrs = resolveTemplateCommonAttributes(options.commonAttributes);
 
+  const isV1 = options.isComplianceV1 ?? isComplianceV1Enabled();
   const specByKey = new Map<BulkRowRawFieldKey, BulkColumnSpec>();
-  for (const col of BULK_PRODUCT_COLUMNS) {
+  for (const col of ALL_KNOWN_BULK_COLUMNS) {
     specByKey.set(col.key, col);
   }
 
-  // Preserve exact uploaded column mappings & order (supports 86-col R2/R3, 52-col R1/V1, or custom subsets)
+  // Preserve exact uploaded column mappings & order (supports 99-col V1, 86-col R2/R3, 52-col R1/V1, or custom subsets)
+  const defaultCols = isV1 ? BULK_PRODUCT_COLUMNS_V1 : BULK_PRODUCT_COLUMNS_LEGACY;
   const effectiveCols: Array<{
     spec: BulkColumnSpec;
     header: string;
   }> =
     preview.uploadedColumns && preview.uploadedColumns.length > 0
       ? preview.uploadedColumns.map((uc) => {
-          const spec = specByKey.get(uc.key)!;
+          const spec = specByKey.get(uc.key) || defaultCols[0];
           return {
             spec,
             header: uc.header || spec.header,
           };
         })
-      : BULK_PRODUCT_COLUMNS.map((spec) => ({
+      : defaultCols.map((spec) => ({
           spec,
           header: spec.header,
         }));
@@ -1915,18 +2166,64 @@ export async function generateAnnotatedErrorWorkbookBuffer(
   });
 
   // Check whether original workbook used the 2-row header layout (Group Banner Row 1 + Column Header Row 2)
+  const isStandard99Order =
+    effectiveCols.length === BULK_PRODUCT_COLUMNS_V1.length &&
+    effectiveCols.every((c, idx) => c.spec.key === BULK_PRODUCT_COLUMNS_V1[idx].key);
   const isStandard86Order =
-    effectiveCols.length === BULK_PRODUCT_COLUMNS.length &&
-    effectiveCols.every((c, idx) => c.spec.key === BULK_PRODUCT_COLUMNS[idx].key);
+    effectiveCols.length === BULK_PRODUCT_COLUMNS_LEGACY.length &&
+    effectiveCols.every((c, idx) => c.spec.key === BULK_PRODUCT_COLUMNS_LEGACY[idx].key);
   const headerRowOneBased =
-    preview.headerRowNumber && preview.headerRowNumber >= 2 ? 2 : isStandard86Order ? 2 : 1;
+    preview.headerRowNumber && preview.headerRowNumber >= 2
+      ? 2
+      : isStandard99Order || isStandard86Order
+        ? 2
+        : 1;
   const hasGroupBannerRow = headerRowOneBased === 2;
 
   const productRowsArray: OoxmlRowSpec[] = [];
   const productMerges: string[] = [];
 
   if (hasGroupBannerRow) {
-    if (isStandard86Order) {
+    if (isStandard99Order) {
+      const groupBannerSpansV1: Array<{
+        startIdx: number;
+        endIdx: number;
+        label: string;
+        style: number;
+      }> = [
+        { startIdx: 0, endIdx: 3, label: "★ 필수 입력 항목 (4개 필수 · Required)", style: STYLE.GROUP_REQUIRED },
+        { startIdx: 4, endIdx: 5, label: "세부 카테고리 · 연동 선택 (Category)", style: STYLE.GROUP_CATEGORY },
+        { startIdx: 6, endIdx: 13, label: "기본 정보 · 기본 스펙 (Basic Specs · 선택)", style: STYLE.GROUP_BASIC },
+        { startIdx: 14, endIdx: 21, label: "기본 정보 · 상세/성분 (Content & INCI · 선택)", style: STYLE.GROUP_BASIC },
+        { startIdx: 22, endIdx: 29, label: "기본 정보 · 바코드/판매처 (Barcodes & Links · 선택)", style: STYLE.GROUP_BASIC },
+        { startIdx: 30, endIdx: 33, label: "가격 정보 · 선택 (Pricing)", style: STYLE.GROUP_PRICING },
+        { startIdx: 34, endIdx: 41, label: "물류 규격 · 단품/포장 (Item & Package · 선택)", style: STYLE.GROUP_LOGISTICS },
+        { startIdx: 42, endIdx: 51, label: "물류 규격 · 카톤/파렛트 (Carton & Pallet · 선택)", style: STYLE.GROUP_LOGISTICS },
+        { startIdx: 52, endIdx: 62, label: "미디어 URL · 이미지 1~10 및 동영상 (Media URLs · 선택)", style: STYLE.GROUP_MEDIA },
+        { startIdx: 63, endIdx: 64, label: "제조시설 정보 (Manufacturing Facilities · 선택)", style: STYLE.GROUP_BASIC },
+        { startIdx: 65, endIdx: 79, label: "규제 및 인허가 (Regulatory & Compliance · 선택)", style: STYLE.GROUP_PRICING },
+        { startIdx: 80, endIdx: 83, label: "공통 속성 · 유통/보관 (Shelf Life & Storage · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+        { startIdx: 84, endIdx: 87, label: "공통 속성 · 패키지/제형 (Packaging & Format · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+        { startIdx: 88, endIdx: 90, label: "공통 속성 · 대상 고객 (Target Customer · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+        { startIdx: 91, endIdx: 95, label: "공통 속성 · 사용/주요고민 (Usage & Concerns · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+        { startIdx: 96, endIdx: 98, label: "공통 속성 · 향 정보 (Fragrance · 선택)", style: STYLE.GROUP_COMMON_ATTR },
+      ];
+      const bannerCells: OoxmlCellSpec[] = [];
+      for (const span of groupBannerSpansV1) {
+        for (let i = span.startIdx; i <= span.endIdx; i++) {
+          bannerCells.push({
+            value: i === span.startIdx ? span.label : "",
+            style: span.style,
+          });
+        }
+        if (span.endIdx > span.startIdx) {
+          productMerges.push(
+            `${encodeCellAddress(1, span.startIdx)}:${encodeCellAddress(1, span.endIdx)}`
+          );
+        }
+      }
+      productRowsArray.push({ height: 24, cells: bannerCells });
+    } else if (isStandard86Order) {
       const groupBannerSpans: Array<{
         startIdx: number;
         endIdx: number;
@@ -2787,7 +3084,7 @@ export async function generateAnnotatedErrorWorkbookBuffer(
     autoFilterRef: `A1:G${commonAttrTableRows.length}`,
   };
 
-  return buildOoxmlWorkbookBuffer([
+  const annotatedSheets: OoxmlSheetSpec[] = [
     productsSheetSpec,
     errorSummarySheetSpec,
     instructionsSheetSpec,
@@ -2796,7 +3093,81 @@ export async function generateAnnotatedErrorWorkbookBuffer(
     countriesSheetSpec,
     allowedSheetSpec,
     commonAttributesSheetSpec,
-  ]);
+  ];
+
+  if (isV1 && options.manufacturingFacilities) {
+    const activeFacilities = options.manufacturingFacilities.filter((f) => f.is_active !== false);
+    const facilityRows: OoxmlRowSpec[] = [
+      {
+        height: 26,
+        cells: [
+          { value: "제조시설 코드 (Facility Code)", style: STYLE.REF_HEADER },
+          { value: "영문 법인/제조사명 (Legal Name EN)", style: STYLE.REF_HEADER },
+          { value: "시설/사업장명 (Location Name)", style: STYLE.REF_HEADER },
+          { value: "국가 (Country)", style: STYLE.REF_HEADER },
+          { value: "도시 (City)", style: STYLE.REF_HEADER },
+          { value: "FEI 번호 (FEI Number)", style: STYLE.REF_HEADER },
+          { value: "FEI 발급 상태 (FEI Status)", style: STYLE.REF_HEADER },
+          { value: "MoCRA 시설 등록 상태 (MoCRA Status)", style: STYLE.REF_HEADER },
+          { value: "OTC 시설 등록 상태 (OTC Status)", style: STYLE.REF_HEADER },
+        ],
+      },
+    ];
+
+    if (activeFacilities.length > 0) {
+      for (const fac of activeFacilities) {
+        facilityRows.push({
+          height: 20,
+          cells: [
+            { value: fac.facility_code, style: STYLE.REF_BODY, forceString: true },
+            { value: sanitizeExcelOutputCell(fac.manufacturer_legal_name_en || (fac as any).facility_name_en || ""), style: STYLE.REF_BODY, forceString: true },
+            { value: sanitizeExcelOutputCell(fac.name || (fac as any).location_name || ""), style: STYLE.REF_BODY, forceString: true },
+            { value: fac.country || "", style: STYLE.REF_BODY, forceString: true },
+            { value: sanitizeExcelOutputCell(fac.city || ""), style: STYLE.REF_BODY, forceString: true },
+            { value: fac.fei_number || "", style: STYLE.REF_BODY, forceString: true },
+            { value: fac.fei_status || "", style: STYLE.REF_BODY, forceString: true },
+            { value: fac.mocra_facility_status || (fac as any).mocra_status || "", style: STYLE.REF_BODY, forceString: true },
+            { value: fac.otc_facility_status || (fac as any).otc_status || "", style: STYLE.REF_BODY, forceString: true },
+          ],
+        });
+      }
+    } else {
+      facilityRows.push({
+        height: 20,
+        cells: [
+          { value: "(등록된 제조시설이 없습니다 / No facilities registered)", style: STYLE.REF_BODY, forceString: true },
+          { value: "", style: STYLE.REF_BODY },
+          { value: "", style: STYLE.REF_BODY },
+          { value: "", style: STYLE.REF_BODY },
+          { value: "", style: STYLE.REF_BODY },
+          { value: "", style: STYLE.REF_BODY },
+          { value: "", style: STYLE.REF_BODY },
+          { value: "", style: STYLE.REF_BODY },
+          { value: "", style: STYLE.REF_BODY },
+        ],
+      });
+    }
+
+    annotatedSheets.push({
+      name: "Manufacturing_Facilities",
+      cols: [
+        { width: 24, style: STYLE.TEXT_AT },
+        { width: 34 },
+        { width: 28 },
+        { width: 16 },
+        { width: 20 },
+        { width: 20, style: STYLE.TEXT_AT },
+        { width: 24 },
+        { width: 28 },
+        { width: 28 },
+      ],
+      rows: facilityRows,
+      freezeRows: 1,
+      autoFilterRef: `A1:I${Math.max(facilityRows.length, 2)}`,
+    });
+  }
+
+  return buildOoxmlWorkbookBuffer(annotatedSheets);
 }
 
 export async function generateBulkImportErrorBuffer(

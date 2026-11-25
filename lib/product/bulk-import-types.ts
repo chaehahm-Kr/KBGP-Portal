@@ -1,4 +1,12 @@
 import type { ProductCategory } from "@/lib/product/types";
+import type {
+  DrugFactsStatus,
+  LegacyRegulatoryInput,
+  MocraListingStatus,
+  OtcApplicability,
+  OtcListingStatus,
+  UsRegulatoryClassification,
+} from "@/lib/compliance/v1-types";
 
 export const BULK_IMPORT_MAX_ROWS = 500;
 export const BULK_IMPORT_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -36,6 +44,8 @@ export type BulkColumnSection =
   | "Pricing"
   | "Logistics"
   | "Media"
+  | "Facilities"
+  | "Regulatory"
   | "Common Attributes";
 
 export interface BulkColumnSpec {
@@ -145,6 +155,25 @@ export type BulkRowRawFieldKey =
   // Media URL Columns (+11, BA..BK)
   | BulkMediaImageFieldKey
   | "productVideoUrl"
+  // Manufacturing Facility Columns (+2)
+  | "primaryFacilityCode"
+  | "additionalFacilityCodes"
+  // Regulatory & Compliance Columns (+15)
+  | "usClassification"
+  | "fdaStatus"
+  | "mocraListingStatus"
+  | "mocraListingNumber"
+  | "mocraListedAt"
+  | "mocraNextRenewalDate"
+  | "mocraExemptionReason"
+  | "otcApplicability"
+  | "otcDualMocraApplicable"
+  | "otcListingStatus"
+  | "otcNdcNumber"
+  | "otcNaReason"
+  | "otcListedAt"
+  | "otcNextRenewalDate"
+  | "drugFactsStatus"
   // Common Attribute Columns (+23, BL..CH)
   | BulkCommonAttributeFieldKey;
 
@@ -864,6 +893,9 @@ export const COMMON_BULK_ATTRIBUTES: BulkCommonAttributeSpec[] = [
       "fda related status",
       "fda status",
       "fda_status",
+      "fda 등록/승인 상태 (fda status)",
+      "fda 등록/승인 상태",
+      "fda 등록/승인 상태 (fda registration status)",
     ],
     nameKo: "FDA 관련 상태",
     nameEn: "FDA Related Status",
@@ -889,7 +921,12 @@ export const COMMON_BULK_ATTRIBUTES: BulkCommonAttributeSpec[] = [
       { optionCode: "REVIEW_REQUIRED", optionKo: "검토 필요", optionEn: "Review Required" },
       { optionCode: "IN_PROGRESS", optionKo: "진행 중", optionEn: "In Progress" },
       { optionCode: "SUBMITTED", optionKo: "제출 완료", optionEn: "Submitted" },
-      { optionCode: "COMPLETED", optionKo: "완료", optionEn: "Completed" },
+      {
+        optionCode: "COMPLETED",
+        optionKo: "완료",
+        optionEn: "Completed",
+        aliases: ["등록 완료", "등록 완료 (Registered)", "Registered"],
+      },
       {
         optionCode: "ADMIN_VERIFIED",
         optionKo: "관리자 확인 완료",
@@ -909,6 +946,8 @@ export const COMMON_BULK_ATTRIBUTES: BulkCommonAttributeSpec[] = [
       "mocra related status",
       "mocra status",
       "mocra_status",
+      "mocra 준수 상태 (mocra status)",
+      "mocra 준수 상태",
     ],
     nameKo: "MoCRA 관련 상태",
     nameEn: "MoCRA Related Status",
@@ -936,6 +975,7 @@ export const COMMON_BULK_ATTRIBUTES: BulkCommonAttributeSpec[] = [
         optionCode: "FACILITY_PENDING",
         optionKo: "시설 등록 준비 중",
         optionEn: "Facility Registration Pending",
+        aliases: ["시설 등록 완료", "시설 등록 완료 (Facility Registered)", "Facility Registered"],
       },
       {
         optionCode: "PRODUCT_LISTING_PENDING",
@@ -961,6 +1001,9 @@ export const COMMON_BULK_ATTRIBUTES: BulkCommonAttributeSpec[] = [
       "otc 해당 여부",
       "otc status",
       "otc_status",
+      "otc 의약품 여부 (otc drug status)",
+      "otc 의약품 여부",
+      "otc drug status",
     ],
     nameKo: "OTC 해당 여부",
     nameEn: "OTC Status",
@@ -977,7 +1020,12 @@ export const COMMON_BULK_ATTRIBUTES: BulkCommonAttributeSpec[] = [
       "단일 선택 (브랜드 자체 기재 속성 — Not Reviewed, Not OTC, Potential OTC, OTC Required, In Progress, Completed -> EAV OTC_STATUS).",
     options: [
       { optionCode: "NOT_REVIEWED", optionKo: "미검토", optionEn: "Not Reviewed" },
-      { optionCode: "NOT_OTC", optionKo: "OTC 아님", optionEn: "Not OTC" },
+      {
+        optionCode: "NOT_OTC",
+        optionKo: "OTC 아님",
+        optionEn: "Not OTC",
+        aliases: ["해당 없음", "해당 없음 (Not OTC)", "Not OTC", "Not Applicable", "N/A", "NA"],
+      },
       { optionCode: "POTENTIAL_OTC", optionKo: "OTC 가능성 있음", optionEn: "Potential OTC" },
       { optionCode: "OTC_REQUIRED", optionKo: "OTC 적용", optionEn: "OTC Required" },
       { optionCode: "IN_PROGRESS", optionKo: "준비 중", optionEn: "In Progress" },
@@ -1099,7 +1147,7 @@ const COMMON_ATTRIBUTE_COLUMNS: BulkColumnSpec[] = COMMON_BULK_ATTRIBUTES.map((a
   attributeCode: attr.code,
 }));
 
-export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
+export const BASE_PRODUCT_COLUMNS: BulkColumnSpec[] = [
   // 1. REQUIRED (4) — Columns A..D
   {
     key: "brand",
@@ -1123,17 +1171,32 @@ export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
   },
   {
     key: "manufactureSku",
-    header: "제조사 SKU (Manufacturer SKU) *",
-    headerEn: "Manufacturer SKU *",
+    header: "브랜드 SKU (Brand SKU) *",
+    headerEn: "Brand SKU *",
     aliases: [
+      "브랜드 sku (brand sku) *",
+      "브랜드 sku (brand sku)",
+      "브랜드 sku / brand sku *",
+      "브랜드 sku / brand sku",
+      "브랜드 sku *",
+      "브랜드 sku",
+      "brand sku *",
+      "brand sku",
+      "brand_sku",
       "제조사 sku (manufacturer sku) *",
       "제조사 sku (manufacturer sku)",
+      "제조사 sku / manufacturer sku *",
+      "제조사 sku / manufacturer sku",
       "제조사 sku *",
       "제조사 sku",
-      "manufacturer sku",
+      "제조사품번",
+      "제조사 품번",
       "manufacturer sku *",
+      "manufacturer sku",
       "manufacture sku",
       "manufacture_sku",
+      "mfg sku",
+      "mfr sku",
       "sku",
     ],
     required: true,
@@ -1141,7 +1204,7 @@ export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
     dbColumn: "manufacture_sku",
     width: 33,
     textFormat: true,
-    description: "귀사 내 고유 제조사 SKU 코드 (영문/숫자/-/_ 조합, 텍스트 서식 유지 / Unique SKU code formatted as Text).",
+    description: "귀사 내 고유 브랜드 SKU 코드 (영문/숫자/-/_ 조합, 텍스트 서식 유지 / Unique Brand SKU code formatted as Text).",
   },
   {
     key: "productNameEn",
@@ -1830,12 +1893,416 @@ export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = [
     description: "적재 파렛트 총중량 (단위: kg, > 0).",
   },
 
-  // 6. OPTIONAL — MEDIA URLS (+11 Columns, BA..BK)
-  ...MEDIA_COLUMNS,
+];
 
-  // 7. OPTIONAL — COMMON PRODUCT ATTRIBUTES (+23 Columns, BL..CH)
+// ============================================================================
+// KSN-COMPLIANCE-V1: Manufacturing Facilities Column Group (2 Columns)
+// ============================================================================
+export const FACILITY_COLUMNS: BulkColumnSpec[] = [
+  {
+    key: "primaryFacilityCode",
+    header: "주 제조시설 코드 (Primary Facility Code)",
+    headerEn: "Primary Facility Code",
+    aliases: [
+      "주 제조시설 코드 (primary facility code)",
+      "주 제조시설 코드",
+      "주 제조시설코드",
+      "주제조시설 코드",
+      "주제조시설코드",
+      "주 제조시설",
+      "주제조시설",
+      "primary facility code",
+      "primary_facility_code",
+      "primary facility",
+      "primary_facility",
+      "primary mfg facility",
+      "facility code",
+      "facility_code",
+    ],
+    required: false,
+    section: "Facilities",
+    dbColumn: "product_manufacturing_facilities (is_primary: true)",
+    width: 34,
+    textFormat: true,
+    description:
+      "귀사에 등록된 활성 주 제조시설 코드 선택 (Manufacturing_Facilities 시트 참조 · 임시 등록 시 선택 가능, 정식 등록 시 필수).",
+  },
+  {
+    key: "additionalFacilityCodes",
+    header: "추가 제조시설 코드 (Additional Facility Codes)",
+    headerEn: "Additional Facility Codes",
+    aliases: [
+      "추가 제조시설 코드 (additional facility codes)",
+      "추가 제조시설 코드",
+      "추가 제조시설코드",
+      "추가제조시설 코드",
+      "추가제조시설코드",
+      "추가 제조시설",
+      "추가제조시설",
+      "additional facility codes",
+      "additional_facility_codes",
+      "additional facility code",
+      "additional_facility_code",
+      "additional facilities",
+      "additional_facilities",
+    ],
+    required: false,
+    section: "Facilities",
+    dbColumn: "product_manufacturing_facilities (is_primary: false)",
+    width: 38,
+    textFormat: true,
+    description:
+      "복수 제조시설 보유 시 세미콜론(;)으로 구분하여 입력 (예: MFG-002;MFG-003 · 귀사에 등록된 활성 제조시설 코드만 허용).",
+  },
+];
+
+// ============================================================================
+// KSN-COMPLIANCE-V1: Regulatory & Compliance Column Group (15 Columns)
+// ============================================================================
+export const REGULATORY_COLUMNS: BulkColumnSpec[] = [
+  {
+    key: "usClassification",
+    header: "미국 규제 분류 (US Regulatory Classification)",
+    headerEn: "US Regulatory Classification",
+    aliases: [
+      "미국 규제 분류 (us regulatory classification)",
+      "미국 규제 분류 (us classification)",
+      "미국 규제 분류",
+      "미국 규제구분",
+      "us regulatory classification",
+      "us classification",
+      "us_classification",
+      "classification",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.us_classification",
+    width: 34,
+    description:
+      "단일 선택 (미결정, 일반 화장품, OTC 의약품, 화장품/OTC 복합, 해당 없음 · Allowed_Values 시트 참조).",
+  },
+  {
+    key: "fdaStatus",
+    header: "FDA 관련 상태 (FDA Related Status)",
+    headerEn: "FDA Related Status",
+    aliases: [
+      "fda 관련 상태 (fda related status)",
+      "fda 관련 상태",
+      "fda related status",
+      "fda status",
+      "fda_status",
+      "fda_legacy_status",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.fda_legacy_status",
+    width: 28,
+    description:
+      "단일 선택 (브랜드 자체 기재 참고 상태 — 미검토, 해당 없음, 검토 필요, 진행 중, 제출 완료, 완료).",
+  },
+  {
+    key: "mocraListingStatus",
+    header: "MoCRA 제품 리스팅 상태 (MoCRA Product Listing Status)",
+    headerEn: "MoCRA Product Listing Status",
+    aliases: [
+      "mocra 제품 리스팅 상태 (mocra product listing status)",
+      "mocra 제품 리스팅 상태 (mocra listing status)",
+      "mocra 제품 리스팅 상태",
+      "mocra 리스팅 상태 (mocra listing status)",
+      "mocra 리스팅 상태",
+      "mocra product listing status",
+      "mocra listing status",
+      "mocra_listing_status",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.mocra_listing_status",
+    width: 34,
+    description:
+      "단일 선택 (미확인, 미시작, 진행 중, 리스팅 완료, 소기업 면제, 해당 없음 · 리스팅 완료 시 번호 필수).",
+  },
+  {
+    key: "mocraListingNumber",
+    header: "화장품 제품 리스팅 번호 (Cosmetic Product Listing Number)",
+    headerEn: "Cosmetic Product Listing Number",
+    aliases: [
+      "화장품 제품 리스팅 번호 (cosmetic product listing number)",
+      "화장품 제품 리스팅 번호",
+      "화장품 리스팅 번호 (cosmetic listing number)",
+      "화장품 리스팅 번호",
+      "mocra 리스팅 번호 (mocra listing number)",
+      "mocra 리스팅 번호",
+      "cosmetic product listing number",
+      "mocra product listing number",
+      "mocra listing number",
+      "mocra_listing_number",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.mocra_listing_number",
+    width: 36,
+    textFormat: true,
+    description:
+      "FDA MoCRA Cosmetic Product Listing Number (리스팅 완료 시 필수 입력 · 텍스트 서식 유지).",
+  },
+  {
+    key: "mocraListedAt",
+    header: "MoCRA 최초 리스팅 일자 (MoCRA Initial Listing Date)",
+    headerEn: "MoCRA Initial Listing Date",
+    aliases: [
+      "mocra 최초 리스팅 일자 (mocra initial listing date)",
+      "mocra 최초 리스팅 일자",
+      "mocra 리스팅 일자",
+      "mocra 리스팅 완료일 (mocra listed at)",
+      "mocra 리스팅 완료일",
+      "mocra initial listing date",
+      "mocra listed at",
+      "mocra_listed_at",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.mocra_listed_at",
+    width: 30,
+    description: "MoCRA 최초 리스팅 완료 일자 (YYYY-MM-DD 형식).",
+  },
+  {
+    key: "mocraNextRenewalDate",
+    header: "MoCRA 갱신/최종 변경 일자 (MoCRA Renewal Date)",
+    headerEn: "MoCRA Renewal Date",
+    aliases: [
+      "mocra 갱신/최종 변경 일자 (mocra renewal date)",
+      "mocra 갱신 일자",
+      "mocra 갱신/최종 변경 일자",
+      "mocra renewal date",
+      "mocra next renewal date",
+      "mocra_next_renewal_date",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.mocra_next_renewal_date",
+    width: 32,
+    description: "MoCRA 격년 갱신 예정일 또는 최근 업데이트 일자 (YYYY-MM-DD 형식).",
+  },
+  {
+    key: "mocraExemptionReason",
+    header: "MoCRA 면제/비대상 사유 (MoCRA Exemption/NA Reason)",
+    headerEn: "MoCRA Exemption/NA Reason",
+    aliases: [
+      "mocra 면제/비대상 사유 (mocra exemption/na reason)",
+      "mocra 면제/비대상 사유",
+      "mocra 면제 사유",
+      "mocra 비대상 사유",
+      "mocra exemption reason",
+      "mocra na reason",
+      "mocra_exemption_reason",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.mocra_exemption_reason",
+    width: 34,
+    description:
+      "MoCRA 소기업 면제(EXEMPT_SMALL_BUSINESS) 또는 해당 없음(NOT_APPLICABLE) 선택 시 필수 근거 사유.",
+  },
+  {
+    key: "otcApplicability",
+    header: "OTC 적용 여부 (OTC Applicability)",
+    headerEn: "OTC Applicability",
+    aliases: [
+      "otc 적용 여부 (otc applicability)",
+      "otc 적용 여부",
+      "otc 해당 여부",
+      "otc applicability",
+      "otc_applicability",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.otc_applicability",
+    width: 28,
+    description:
+      "단일 선택 (미확인, 해당, 해당 없음, 복합 검토 필요 · Allowed_Values 시트 참조).",
+  },
+  {
+    key: "otcDualMocraApplicable",
+    header: "OTC 복합 MoCRA 적용 여부 (OTC Dual MoCRA Applicable)",
+    headerEn: "OTC Dual MoCRA Applicable",
+    aliases: [
+      "otc 복합 mocra 적용 여부 (otc dual mocra applicable)",
+      "otc 복합 mocra 적용 여부",
+      "otc 복합 mocra 적용",
+      "otc dual mocra applicable",
+      "otc_dual_mocra_applicable",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.otc_dual_mocra_applicable",
+    width: 34,
+    description:
+      "COSMETIC_OTC_DUAL 복합 제품의 경우 MoCRA 동시 적용 여부 (TRUE, FALSE, 또는 해당 없음).",
+  },
+  {
+    key: "otcListingStatus",
+    header: "OTC 제품 리스팅 상태 (OTC Product Listing Status)",
+    headerEn: "OTC Product Listing Status",
+    aliases: [
+      "otc 제품 리스팅 상태 (otc product listing status)",
+      "otc 제품 리스팅 상태 (otc listing status)",
+      "otc 제품 리스팅 상태",
+      "otc 리스팅 상태 (otc listing status)",
+      "otc 리스팅 상태",
+      "otc product listing status",
+      "otc listing status",
+      "otc_listing_status",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.otc_listing_status",
+    width: 32,
+    description:
+      "단일 선택 (미확인, 해당 없음, 미시작, 진행 중, 리스팅 완료 · 리스팅 완료 시 NDC 번호 필수).",
+  },
+  {
+    key: "otcNdcNumber",
+    header: "NDC 번호 (NDC Number)",
+    headerEn: "NDC Number",
+    aliases: [
+      "ndc 번호 (ndc number)",
+      "ndc 번호 (otc ndc number)",
+      "ndc 번호",
+      "ndc number",
+      "ndc",
+      "otc ndc number",
+      "otc_ndc_number",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.otc_ndc_number",
+    width: 28,
+    textFormat: true,
+    description:
+      "FDA National Drug Code 번호 (OTC 리스팅 완료 시 필수 입력 · 4-4-2, 5-3-2, 5-4-1 또는 10/11자리 텍스트).",
+  },
+  {
+    key: "otcNaReason",
+    header: "OTC 비대상 사유 (OTC NA Reason)",
+    headerEn: "OTC NA Reason",
+    aliases: [
+      "otc 비대상 사유 (otc na reason)",
+      "otc 비대상 사유",
+      "otc 해당없음 사유",
+      "otc na reason",
+      "otc_na_reason",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.otc_na_reason",
+    width: 30,
+    description: "OTC 해당 없음(NOT_APPLICABLE) 선택 시 필수 근거 사유.",
+  },
+  {
+    key: "otcListedAt",
+    header: "OTC 최초 리스팅 일자 (OTC Initial Listing Date)",
+    headerEn: "OTC Initial Listing Date",
+    aliases: [
+      "otc 최초 리스팅 일자 (otc initial listing date)",
+      "otc 최초 리스팅 일자",
+      "otc 리스팅 일자",
+      "otc initial listing date",
+      "otc listed at",
+      "otc_listed_at",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.otc_listed_at",
+    width: 30,
+    description: "OTC 최초 NDC 리스팅 완료 일자 (YYYY-MM-DD 형식).",
+  },
+  {
+    key: "otcNextRenewalDate",
+    header: "OTC 갱신/최종 변경 일자 (OTC Renewal Date)",
+    headerEn: "OTC Renewal Date",
+    aliases: [
+      "otc 갱신/최종 변경 일자 (otc renewal date)",
+      "otc 갱신 일자",
+      "otc 갱신/최종 변경 일자",
+      "otc renewal date",
+      "otc next renewal date",
+      "otc_next_renewal_date",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.otc_next_renewal_date",
+    width: 32,
+    description: "OTC 연례 갱신 예정일 또는 최근 갱신 완료 일자 (YYYY-MM-DD 형식).",
+  },
+  {
+    key: "drugFactsStatus",
+    header: "Drug Facts 상태 (Drug Facts Status)",
+    headerEn: "Drug Facts Status",
+    aliases: [
+      "drug facts 상태 (drug facts status)",
+      "drug facts 라벨 상태 (drug facts status)",
+      "drug facts 라벨 상태",
+      "drug facts 상태",
+      "drug facts status",
+      "drug_facts_status",
+    ],
+    required: false,
+    section: "Regulatory",
+    dbColumn: "product_regulatory_compliance.drug_facts_status",
+    width: 28,
+    description:
+      "단일 선택 (미확인, 해당 없음, 미시작, 초안, 준비 완료 · '관리자 확인 완료(VERIFIED)'는 직접 지정 불가).",
+  },
+];
+
+export const COMMON_BULK_ATTRIBUTES_V1: BulkCommonAttributeSpec[] = COMMON_BULK_ATTRIBUTES.filter(
+  (a) => !a.isRegulatoryBrandReported
+);
+
+const COMMON_ATTRIBUTE_COLUMNS_V1: BulkColumnSpec[] = COMMON_BULK_ATTRIBUTES_V1.map((attr) => ({
+  key: attr.fieldKey,
+  header: attr.header,
+  headerEn: attr.headerEn,
+  aliases: attr.headerAliases,
+  required: false,
+  section: "Common Attributes",
+  dbColumn: `product_attribute_values (${attr.code})`,
+  width: attr.width,
+  description: attr.description,
+  attributeCode: attr.code,
+}));
+
+// Legacy 86-Column Template Architecture (R4 Compatibility)
+export const BULK_PRODUCT_COLUMNS_LEGACY: BulkColumnSpec[] = [
+  ...BASE_PRODUCT_COLUMNS,
+  ...MEDIA_COLUMNS,
   ...COMMON_ATTRIBUTE_COLUMNS,
 ];
+
+// Modern 99-Column Compliance V1 Template Architecture (KSN-CMP-008)
+export const BULK_PRODUCT_COLUMNS_V1: BulkColumnSpec[] = [
+  ...BASE_PRODUCT_COLUMNS,
+  ...MEDIA_COLUMNS,
+  ...FACILITY_COLUMNS,
+  ...REGULATORY_COLUMNS,
+  ...COMMON_ATTRIBUTE_COLUMNS_V1,
+];
+
+// Authoritative default exported column set (maintains 86-column baseline for backward compatibility)
+export const BULK_PRODUCT_COLUMNS: BulkColumnSpec[] = BULK_PRODUCT_COLUMNS_LEGACY;
+
+// Universal column set containing every supported column across legacy and V1 templates
+export const ALL_KNOWN_BULK_COLUMNS: BulkColumnSpec[] = [
+  ...BASE_PRODUCT_COLUMNS,
+  ...MEDIA_COLUMNS,
+  ...FACILITY_COLUMNS,
+  ...REGULATORY_COLUMNS,
+  ...COMMON_ATTRIBUTE_COLUMNS,
+];
+
+export function getBulkProductColumns(isV1: boolean = false): BulkColumnSpec[] {
+  return isV1 ? BULK_PRODUCT_COLUMNS_V1 : BULK_PRODUCT_COLUMNS_LEGACY;
+}
 
 export interface BulkReferenceBrand {
   id: string;
@@ -1874,6 +2341,20 @@ export interface BulkReferenceCommonAttribute {
   adminOnly: boolean;
   isActive: boolean;
   options: BulkReferenceCommonAttributeOption[];
+}
+
+export interface BulkReferenceManufacturingFacility {
+  id: string;
+  facility_code: string;
+  manufacturer_legal_name_en: string;
+  name: string;
+  country: string;
+  city: string;
+  fei_number: string | null;
+  fei_status: string;
+  mocra_facility_status: string;
+  otc_facility_status: string;
+  is_active: boolean;
 }
 
 export interface BulkNormalizedAttributeEntry {
@@ -1941,6 +2422,32 @@ export interface BulkNormalizedProductPayload {
   image_urls: BulkNormalizedImageUrlItem[];
   product_video_url: string | null;
   common_attributes: BulkNormalizedAttributeEntry[];
+  // KSN-COMPLIANCE-V1 Extensions
+  facilities?: {
+    primary_facility_id: string | null;
+    additional_facility_ids: string[];
+    primary_facility_code?: string | null;
+    additional_facility_codes?: string[];
+  };
+  regulatory_compliance?: {
+    us_classification: UsRegulatoryClassification;
+    otc_applicability: OtcApplicability;
+    otc_dual_mocra_applicable: boolean | null;
+    classification_rationale: string | null;
+    mocra_listing_status: MocraListingStatus;
+    mocra_listing_number: string | null;
+    mocra_exemption_reason: string | null;
+    mocra_listed_at: string | null;
+    mocra_next_renewal_date: string | null;
+    otc_listing_status: OtcListingStatus;
+    otc_ndc_number: string | null;
+    otc_na_reason: string | null;
+    otc_listed_at: string | null;
+    otc_next_renewal_date: string | null;
+    drug_facts_status: DrugFactsStatus;
+    fda_legacy_status: string | null;
+    legacy_migration_snapshot: LegacyRegulatoryInput | null;
+  };
 }
 
 export type BulkRowValidationStatus = "VALID" | "WARNING" | "INVALID";
@@ -2006,6 +2513,10 @@ export interface BulkValidatedRow {
   hasCategoryError: boolean;
   hasCommonAttributeError: boolean;
   hasMediaUrlError: boolean;
+  hasFacilityError: boolean;
+  hasRegulatoryError: boolean;
+  hasFacility: boolean;
+  hasRegulatory: boolean;
   imageUrlCount: number;
   hasVideoUrl: boolean;
   commonAttributeCount: number;
@@ -2023,10 +2534,14 @@ export interface BulkPreviewSummary {
   categoryErrorRows: number;
   commonAttributeErrorRows: number;
   mediaUrlErrorRows: number;
+  facilityErrorRows: number;
+  regulatoryErrorRows: number;
   rowsWithMediaCount: number;
   totalImageUrlsCount: number;
   rowsWithVideoCount: number;
   rowsWithCommonAttrsCount: number;
+  rowsWithFacilityCount: number;
+  rowsWithRegulatoryCount: number;
   exampleRowsSkipped: number;
 }
 
@@ -2090,6 +2605,8 @@ export interface BulkImportExecutionResult {
   validationErrorCount: number;
   commonAttributesSavedCount: number;
   videosImportedCount: number;
+  facilitiesLinkedCount?: number;
+  regulatoryDeclarationsSavedCount?: number;
   createdProductIds: string[];
   rejectedRows: BulkRejectedRowItem[];
   pendingMediaTasks: BulkPendingMediaTask[];

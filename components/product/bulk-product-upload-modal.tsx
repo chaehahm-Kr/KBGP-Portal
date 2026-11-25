@@ -13,6 +13,7 @@ import {
 import {
   BULK_ERROR_CATEGORY_LABELS_KO,
   BULK_PRODUCT_COLUMNS,
+  BULK_PRODUCT_COLUMNS_V1,
   BULK_IMPORT_MAX_ROWS,
   COMMON_BULK_ATTRIBUTES,
   type BulkCellValidationIssue,
@@ -23,6 +24,7 @@ import {
   type BulkPreviewResult,
   type BulkValidatedRow,
 } from "@/lib/product/bulk-import-types";
+import { isComplianceV1Enabled } from "@/lib/compliance/v1-feature-gate";
 
 interface BulkProductUploadModalProps {
   isOpen: boolean;
@@ -102,6 +104,10 @@ export function BulkProductUploadModal({
 }: BulkProductUploadModalProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const isV1 = isComplianceV1Enabled();
+  const totalCols = isV1 ? BULK_PRODUCT_COLUMNS_V1.length : BULK_PRODUCT_COLUMNS.length;
+  const optionalCols = totalCols - 4;
 
   const [step, setStep] = useState<WizardStep>(1);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
@@ -512,7 +518,7 @@ export function BulkProductUploadModal({
               상품 Excel 대량 등록
             </h2>
             <span className="rounded bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 shrink-0">
-              임시 등록 (Draft) · 총 {BULK_PRODUCT_COLUMNS.length}열 · 최대 {BULK_IMPORT_MAX_ROWS}건
+              임시 등록 (Draft) · 총 {totalCols}열 · 최대 {BULK_IMPORT_MAX_ROWS}건
             </span>
           </div>
           <button
@@ -602,7 +608,7 @@ export function BulkProductUploadModal({
                     </div>
                     <ul className="space-y-1 text-zinc-600 dark:text-zinc-400">
                       <li>• <strong>브랜드 (Brand) *</strong> — 귀사에 등록된 활성 브랜드명</li>
-                      <li>• <strong>제조사 SKU (Manufacturer SKU) *</strong> — 고유 상품 코드</li>
+                      <li>• <strong>브랜드 SKU (Brand SKU) *</strong> — 귀사 내 고유 상품 코드 (기존 제조사 SKU 완벽 호환)</li>
                       <li>• <strong>영문 제품명 (Product Name EN) *</strong> — 공식 영문 상품명</li>
                       <li>• <strong>카테고리 (1Depth) *</strong> — 대분류 선택 시 2·3Depth 자동 연동</li>
                     </ul>
@@ -610,11 +616,14 @@ export function BulkProductUploadModal({
 
                   <div className="rounded-lg border border-zinc-200 p-3.5 dark:border-zinc-800 space-y-1.5">
                     <div className="font-bold text-zinc-900 dark:text-white">
-                      선택 입력 항목 ({BULK_PRODUCT_COLUMNS.length - 4}개) 및 등록 정책
+                      선택 입력 항목 ({optionalCols}개) 및 등록 정책
                     </div>
                     <ul className="space-y-1 text-zinc-600 dark:text-zinc-400">
                       <li>• <strong>미디어 URL</strong>: 직접 다운로드 HTTPS 이미지(최대 10장) 및 소개 영상</li>
                       <li>• <strong>공통 속성</strong>: 한글 (영문) 드롭다운 제공 · 복수 선택은 <code className="font-mono">;</code> 구분 · 허용 속성은 <code className="font-mono">기타: 값</code> (<code className="font-mono">Other: Value</code>) 지원</li>
+                      {isV1 && (
+                        <li>• <strong>제조시설 & 규제 준수</strong>: 주/추가 제조시설 코드 연동 및 미국 MoCRA/OTC 인허가 규제 표준 선언</li>
+                      )}
                       <li>• 모든 상품은 <strong>임시 등록 (Draft · 리테일러 비노출)</strong> 상태로 안전 생성</li>
                     </ul>
                   </div>
@@ -630,7 +639,7 @@ export function BulkProductUploadModal({
                     작성 완료된 Excel 파일 업로드 (.xlsx)
                   </h3>
                   <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                    최대 {BULK_IMPORT_MAX_ROWS}개 행 · 10 MB 이하 · 기존 52열 및 신규 86열 양식 호환
+                    최대 {BULK_IMPORT_MAX_ROWS}개 행 · 10 MB 이하 · 기존 52/86열 및 최신 {totalCols}열 양식 완벽 호환
                   </span>
                 </div>
 
@@ -704,6 +713,12 @@ export function BulkProductUploadModal({
                       이미지 URL <strong>{previewResult.summary.totalImageUrlsCount}</strong>건 · 영상{" "}
                       <strong>{previewResult.summary.rowsWithVideoCount}</strong>건 · 공통속성{" "}
                       <strong>{previewResult.summary.rowsWithCommonAttrsCount}</strong>행
+                      {isV1 && (previewResult.summary.rowsWithFacilityCount ?? 0) > 0 && (
+                        <> · 시설 연동 <strong>{previewResult.summary.rowsWithFacilityCount}</strong>행</>
+                      )}
+                      {isV1 && (previewResult.summary.rowsWithRegulatoryCount ?? 0) > 0 && (
+                        <> · 규제 선언 <strong>{previewResult.summary.rowsWithRegulatoryCount}</strong>행</>
+                      )}
                     </span>
                   </div>
 
@@ -1240,6 +1255,16 @@ export function BulkProductUploadModal({
                       {importResult.rejectedCount}건
                     </div>
                   </div>
+                  {isV1 && ((importResult.facilitiesLinkedCount ?? 0) > 0 || (importResult.regulatoryDeclarationsSavedCount ?? 0) > 0) && (
+                    <div className="rounded-lg border border-teal-200 bg-teal-50/40 p-2 dark:border-teal-900/50 dark:bg-teal-950/20">
+                      <div className="text-[11px] text-teal-700 dark:text-teal-400">
+                        시설 · 규제 연동
+                      </div>
+                      <div className="text-sm font-extrabold text-teal-700 dark:text-teal-400 mt-0.5">
+                        시설 {importResult.facilitiesLinkedCount ?? 0}건 · 규제 {importResult.regulatoryDeclarationsSavedCount ?? 0}건
+                      </div>
+                    </div>
+                  )}
                   <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2 dark:border-amber-900/50 dark:bg-amber-950/20">
                     <div className="text-[11px] text-amber-700 dark:text-amber-400">
                       미디어 실패

@@ -4,6 +4,8 @@ import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { requirePortalPermission } from "@/lib/company/permissions";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isComplianceV1Enabled } from "@/lib/compliance/v1-feature-gate";
 import { recordProductChangeLog } from "@/lib/product/audit";
 import {
   BULK_IMPORT_MAX_FILE_BYTES,
@@ -17,6 +19,7 @@ import {
   type BulkReferenceBrand,
   type BulkReferenceCategory,
   type BulkReferenceCommonAttribute,
+  type BulkReferenceManufacturingFacility,
   type BulkRejectedRowItem,
 } from "@/lib/product/bulk-import-types";
 import { parseAndValidateBulkProductWorkbook } from "@/lib/product/bulk-import-validator";
@@ -51,11 +54,13 @@ function computeBatchFingerprint(companyId: string, skus: string[]): string {
 
 async function loadBulkValidationReferenceData(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  companyId: string
+  companyId: string,
+  isV1 = false
 ): Promise<{
   brands: BulkReferenceBrand[];
   categories: BulkReferenceCategory[];
   commonAttributes: BulkReferenceCommonAttribute[];
+  manufacturingFacilities?: BulkReferenceManufacturingFacility[];
   existingCompanySkus: Set<string>;
   existingUpcs: Set<string>;
   existingEans: Set<string>;
@@ -158,10 +163,56 @@ async function loadBulkValidationReferenceData(
     }
   }
 
+  let manufacturingFacilities: BulkReferenceManufacturingFacility[] | undefined = undefined;
+  if (isV1) {
+    try {
+      const admin = createAdminClient();
+      const { data: locRows, error: locErr } = await admin
+        .from("company_shipping_origins")
+        .select("id, facility_code, name, country, city, location_type, status, manufacturer_legal_name_en")
+        .eq("company_id", companyId)
+        .in("location_type", ["MANUFACTURING_FACILITY", "SHIPPING_AND_MANUFACTURING"])
+        .order("created_at", { ascending: true });
+
+      if (!locErr && locRows && locRows.length > 0) {
+        const facilityIds = locRows.map((r: any) => r.id);
+        const { data: compRows } = await admin
+          .from("manufacturing_facility_compliance")
+          .select("facility_id, fei_number, fei_status, mocra_facility_status, otc_facility_status")
+          .in("facility_id", facilityIds);
+
+        const compMap = new Map<string, any>((compRows || []).map((c: any) => [c.facility_id, c]));
+
+        manufacturingFacilities = locRows.map((loc: any) => {
+          const comp = compMap.get(loc.id);
+          return {
+            id: String(loc.id),
+            facility_code: String(loc.facility_code || ""),
+            manufacturer_legal_name_en: String(loc.manufacturer_legal_name_en || loc.name || ""),
+            name: String(loc.name || ""),
+            country: String(loc.country || "KR"),
+            city: String(loc.city || ""),
+            fei_number: comp?.fei_number || null,
+            fei_status: String(comp?.fei_status || "UNKNOWN"),
+            mocra_facility_status: String(comp?.mocra_facility_status || "UNKNOWN"),
+            otc_facility_status: String(comp?.otc_facility_status || "UNKNOWN"),
+            is_active: loc.status === "active",
+          };
+        });
+      } else {
+        manufacturingFacilities = [];
+      }
+    } catch (facErr) {
+      console.warn("[BulkImport] Failed to query manufacturing facilities:", facErr);
+      manufacturingFacilities = [];
+    }
+  }
+
   return {
     brands,
     categories,
     commonAttributes,
+    manufacturingFacilities,
     existingCompanySkus,
     existingUpcs,
     existingEans,
@@ -240,6 +291,8 @@ function emptyFailureResult(error: string, totalUploadedRows = 0): BulkImportExe
     validationErrorCount: 0,
     commonAttributesSavedCount: 0,
     videosImportedCount: 0,
+    facilitiesLinkedCount: 0,
+    regulatoryDeclarationsSavedCount: 0,
     createdProductIds: [],
     rejectedRows: [],
     pendingMediaTasks: [],
@@ -257,17 +310,18 @@ export async function downloadBulkProductTemplateAction(): Promise<{
   try {
     const { companyId } = await requirePortalPermission("products", "write");
     const supabase = await createClient();
+    const isV1 = isComplianceV1Enabled();
 
-    const { brands, categories, commonAttributes } = await loadBulkValidationReferenceData(
-      supabase,
-      companyId
-    );
+    const { brands, categories, commonAttributes, manufacturingFacilities } =
+      await loadBulkValidationReferenceData(supabase, companyId, isV1);
     const activeBrands = brands.filter((b) => b.is_active);
 
     const buffer = await generateBulkProductTemplateBuffer({
       brands,
       categories,
       commonAttributes,
+      manufacturingFacilities,
+      isComplianceV1: isV1,
     });
 
     const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -307,7 +361,8 @@ export async function validateBulkProductExcelAction(
     }
 
     const supabase = await createClient();
-    const refData = await loadBulkValidationReferenceData(supabase, companyId);
+    const isV1 = isComplianceV1Enabled();
+    const refData = await loadBulkValidationReferenceData(supabase, companyId, isV1);
 
     if (refData.brands.filter((b) => b.is_active).length === 0) {
       return {
@@ -324,9 +379,11 @@ export async function validateBulkProductExcelAction(
       companyBrands: refData.brands,
       allCategories: refData.categories,
       commonAttributes: refData.commonAttributes,
+      manufacturingFacilities: refData.manufacturingFacilities,
       existingCompanySkus: refData.existingCompanySkus,
       existingUpcs: refData.existingUpcs,
       existingEans: refData.existingEans,
+      isComplianceV1: isV1,
     });
 
     if (!preview.success || !preview.rows) {
@@ -402,7 +459,8 @@ export async function executeBulkProductImportAction(
     }
 
     // Server-side full re-validation against live database state
-    const refData = await loadBulkValidationReferenceData(supabase, companyId);
+    const isV1 = isComplianceV1Enabled();
+    const refData = await loadBulkValidationReferenceData(supabase, companyId, isV1);
     const arrayBuffer = await file.arrayBuffer();
     const revalidated = parseAndValidateBulkProductWorkbook({
       fileName: file.name,
@@ -410,9 +468,11 @@ export async function executeBulkProductImportAction(
       companyBrands: refData.brands,
       allCategories: refData.categories,
       commonAttributes: refData.commonAttributes,
+      manufacturingFacilities: refData.manufacturingFacilities,
       existingCompanySkus: refData.existingCompanySkus,
       existingUpcs: refData.existingUpcs,
       existingEans: refData.existingEans,
+      isComplianceV1: isV1,
     });
 
     if (!revalidated.success || !revalidated.rows || !revalidated.summary) {
@@ -545,9 +605,103 @@ export async function executeBulkProductImportAction(
 
     rejectedRows.sort((a, b) => a.excelRowNumber - b.excelRowNumber);
 
-    // 2. Save COMMON Product Attributes into product_attribute_values (RLS enforced, isolated per created product)
-    let commonAttributesSavedCount = 0;
+    // 2. KSN-CMP-008: Bind Manufacturing Facilities & Save Regulatory Compliance (under isV1 feature gate)
+    let facilitiesLinkedCount = 0;
+    let regulatoryDeclarationsSavedCount = 0;
     const nowIso = new Date().toISOString();
+
+    if (isV1 && createdProducts.length > 0) {
+      const admin = createAdminClient();
+      const successfullyLinkedProducts: typeof createdProducts = [];
+
+      for (const created of createdProducts) {
+        let failed = false;
+        let failureReason = "";
+
+        // 2.a Link manufacturing facilities via replace_product_manufacturing_facilities RPC
+        if (created.payload.facilities) {
+          const fac = created.payload.facilities;
+          const { error: rpcErr } = await admin.rpc("replace_product_manufacturing_facilities", {
+            p_product_id: created.id,
+            p_company_id: companyId,
+            p_primary_facility_id: fac.primary_facility_id,
+            p_additional_facility_ids: fac.additional_facility_ids || [],
+            p_actor_id: user.id,
+          });
+
+          if (rpcErr) {
+            failed = true;
+            failureReason = `제조시설 연결 실패: ${rpcErr.message}`;
+          } else {
+            facilitiesLinkedCount += 1;
+          }
+        }
+
+        // 2.b Save regulatory compliance declaration
+        if (!failed && created.payload.regulatory_compliance) {
+          const reg = created.payload.regulatory_compliance;
+          const { error: regErr } = await admin.from("product_regulatory_compliance").upsert(
+            {
+              product_id: created.id,
+              company_id: companyId,
+              us_classification: reg.us_classification,
+              otc_applicability: reg.otc_applicability || "UNKNOWN",
+              otc_dual_mocra_applicable: reg.otc_dual_mocra_applicable ?? null,
+              classification_rationale: null,
+              mocra_listing_status: reg.mocra_listing_status || "UNKNOWN",
+              mocra_listing_number: reg.mocra_listing_number || null,
+              mocra_exemption_reason: reg.mocra_exemption_reason || null,
+              mocra_listed_at: reg.mocra_listed_at || null,
+              mocra_next_renewal_date: reg.mocra_next_renewal_date || null,
+              otc_listing_status: reg.otc_listing_status || "UNKNOWN",
+              otc_ndc_number: reg.otc_ndc_number || null,
+              otc_na_reason: reg.otc_na_reason || null,
+              otc_listed_at: reg.otc_listed_at || null,
+              otc_next_renewal_date: reg.otc_next_renewal_date || null,
+              drug_facts_status: reg.drug_facts_status || "UNKNOWN",
+              fda_legacy_status: reg.fda_legacy_status || null,
+              legacy_migration_snapshot: reg.legacy_migration_snapshot || null,
+              verification_status: "UNREVIEWED",
+              import_readiness_status: "NOT_EVALUATED",
+              last_brand_submitted_at: nowIso,
+              updated_by: user.id,
+              updated_at: nowIso,
+            },
+            { onConflict: "product_id" }
+          );
+
+          if (regErr) {
+            failed = true;
+            failureReason = `규제 준수 정보 저장 실패: ${regErr.message}`;
+          } else {
+            regulatoryDeclarationsSavedCount += 1;
+          }
+        }
+
+        if (failed) {
+          console.error(`[BulkImport] Rolling back product ${created.id} due to: ${failureReason}`);
+          await admin.from("products").delete().eq("id", created.id);
+          validationErrorCount += 1;
+          rejectedRows.push({
+            excelRowNumber: created.excelRowNumber,
+            manufactureSku: created.sku,
+            productName: created.nameEn,
+            errorReason: failureReason,
+            correctiveGuidance: "제조시설 및 규제 정보 입력값을 확인한 후 다시 업로드해 주세요.",
+            isDuplicate: false,
+          });
+        } else {
+          successfullyLinkedProducts.push(created);
+        }
+      }
+
+      createdProducts.length = 0;
+      createdProducts.push(...successfullyLinkedProducts);
+      rejectedRows.sort((a, b) => a.excelRowNumber - b.excelRowNumber);
+    }
+
+    // 3. Save COMMON Product Attributes into product_attribute_values (RLS enforced, isolated per created product)
+    let commonAttributesSavedCount = 0;
     const allAttrRows: Array<{
       product_id: string;
       attribute_code: string;
@@ -729,6 +883,8 @@ export async function executeBulkProductImportAction(
       validationErrorCount,
       commonAttributesSavedCount,
       videosImportedCount,
+      facilitiesLinkedCount: isV1 ? facilitiesLinkedCount : undefined,
+      regulatoryDeclarationsSavedCount: isV1 ? regulatoryDeclarationsSavedCount : undefined,
       createdProductIds: createdProducts.map((c) => c.id),
       rejectedRows,
       pendingMediaTasks,
@@ -1136,7 +1292,8 @@ export async function downloadAnnotatedErrorWorkbookAction(
     }
 
     const supabase = await createClient();
-    const refData = await loadBulkValidationReferenceData(supabase, companyId);
+    const isV1 = isComplianceV1Enabled();
+    const refData = await loadBulkValidationReferenceData(supabase, companyId, isV1);
     const arrayBuffer = await file.arrayBuffer();
 
     const preview = parseAndValidateBulkProductWorkbook({
@@ -1145,9 +1302,11 @@ export async function downloadAnnotatedErrorWorkbookAction(
       companyBrands: refData.brands,
       allCategories: refData.categories,
       commonAttributes: refData.commonAttributes,
+      manufacturingFacilities: refData.manufacturingFacilities,
       existingCompanySkus: refData.existingCompanySkus,
       existingUpcs: refData.existingUpcs,
       existingEans: refData.existingEans,
+      isComplianceV1: isV1,
     });
 
     if (!preview.success || !preview.rows) {
@@ -1161,6 +1320,8 @@ export async function downloadAnnotatedErrorWorkbookAction(
       brands: refData.brands,
       categories: refData.categories,
       commonAttributes: refData.commonAttributes,
+      manufacturingFacilities: refData.manufacturingFacilities,
+      isComplianceV1: isV1,
       preview,
     });
 
