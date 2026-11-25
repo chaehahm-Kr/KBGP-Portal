@@ -21,6 +21,9 @@ let featureGateOverride: boolean | null = null;
  * Server and client compatible.
  */
 export function isComplianceV1Enabled(): boolean {
+  if (typeof window === "undefined" && process.env.COMPLIANCE_V1_SERVER_DISABLED === "true") {
+    return false;
+  }
   if (process.env.NODE_ENV !== "production" && featureGateOverride !== null) {
     return featureGateOverride;
   }

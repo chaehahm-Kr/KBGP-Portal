@@ -29,6 +29,7 @@ import {
   generateBulkProductTemplateBuffer,
 } from "@/lib/product/bulk-import-template";
 import { downloadVerifiedProductImage } from "@/lib/product/bulk-media-ingestor";
+import { applyComplianceV1PostCreateWrites } from "@/lib/product/bulk-import-compliance-compensation";
 
 // Server-side in-flight and short-TTL idempotency protection
 const inFlightBatchKeys = new Set<string>();
@@ -612,91 +613,36 @@ export async function executeBulkProductImportAction(
 
     if (isV1 && createdProducts.length > 0) {
       const admin = createAdminClient();
-      const successfullyLinkedProducts: typeof createdProducts = [];
+      const postCreate = await applyComplianceV1PostCreateWrites({
+        createdProducts,
+        companyId,
+        actorId: user.id,
+        nowIso,
+        writer: {
+          replaceProductManufacturingFacilities: async (rpcParams) => {
+            const { error } = await admin.rpc("replace_product_manufacturing_facilities", rpcParams);
+            return { error: error ? { message: error.message } : null };
+          },
+          upsertProductRegulatoryCompliance: async (row) => {
+            const { error } = await admin
+              .from("product_regulatory_compliance")
+              .upsert(row, { onConflict: "product_id" });
+            return { error: error ? { message: error.message } : null };
+          },
+          deleteOrphanedProduct: async (productId) => {
+            const { error } = await admin.from("products").delete().eq("id", productId);
+            return { error: error ? { message: error.message } : null };
+          },
+        },
+      });
 
-      for (const created of createdProducts) {
-        let failed = false;
-        let failureReason = "";
-
-        // 2.a Link manufacturing facilities via replace_product_manufacturing_facilities RPC
-        if (created.payload.facilities) {
-          const fac = created.payload.facilities;
-          const { error: rpcErr } = await admin.rpc("replace_product_manufacturing_facilities", {
-            p_product_id: created.id,
-            p_company_id: companyId,
-            p_primary_facility_id: fac.primary_facility_id,
-            p_additional_facility_ids: fac.additional_facility_ids || [],
-            p_actor_id: user.id,
-          });
-
-          if (rpcErr) {
-            failed = true;
-            failureReason = `제조시설 연결 실패: ${rpcErr.message}`;
-          } else {
-            facilitiesLinkedCount += 1;
-          }
-        }
-
-        // 2.b Save regulatory compliance declaration
-        if (!failed && created.payload.regulatory_compliance) {
-          const reg = created.payload.regulatory_compliance;
-          const { error: regErr } = await admin.from("product_regulatory_compliance").upsert(
-            {
-              product_id: created.id,
-              company_id: companyId,
-              us_classification: reg.us_classification,
-              otc_applicability: reg.otc_applicability || "UNKNOWN",
-              otc_dual_mocra_applicable: reg.otc_dual_mocra_applicable ?? null,
-              classification_rationale: null,
-              mocra_listing_status: reg.mocra_listing_status || "UNKNOWN",
-              mocra_listing_number: reg.mocra_listing_number || null,
-              mocra_exemption_reason: reg.mocra_exemption_reason || null,
-              mocra_listed_at: reg.mocra_listed_at || null,
-              mocra_next_renewal_date: reg.mocra_next_renewal_date || null,
-              otc_listing_status: reg.otc_listing_status || "UNKNOWN",
-              otc_ndc_number: reg.otc_ndc_number || null,
-              otc_na_reason: reg.otc_na_reason || null,
-              otc_listed_at: reg.otc_listed_at || null,
-              otc_next_renewal_date: reg.otc_next_renewal_date || null,
-              drug_facts_status: reg.drug_facts_status || "UNKNOWN",
-              fda_legacy_status: reg.fda_legacy_status || null,
-              legacy_migration_snapshot: reg.legacy_migration_snapshot || null,
-              verification_status: "UNREVIEWED",
-              import_readiness_status: "NOT_EVALUATED",
-              last_brand_submitted_at: nowIso,
-              updated_by: user.id,
-              updated_at: nowIso,
-            },
-            { onConflict: "product_id" }
-          );
-
-          if (regErr) {
-            failed = true;
-            failureReason = `규제 준수 정보 저장 실패: ${regErr.message}`;
-          } else {
-            regulatoryDeclarationsSavedCount += 1;
-          }
-        }
-
-        if (failed) {
-          console.error(`[BulkImport] Rolling back product ${created.id} due to: ${failureReason}`);
-          await admin.from("products").delete().eq("id", created.id);
-          validationErrorCount += 1;
-          rejectedRows.push({
-            excelRowNumber: created.excelRowNumber,
-            manufactureSku: created.sku,
-            productName: created.nameEn,
-            errorReason: failureReason,
-            correctiveGuidance: "제조시설 및 규제 정보 입력값을 확인한 후 다시 업로드해 주세요.",
-            isDuplicate: false,
-          });
-        } else {
-          successfullyLinkedProducts.push(created);
-        }
-      }
+      facilitiesLinkedCount = postCreate.facilitiesLinkedCount;
+      regulatoryDeclarationsSavedCount = postCreate.regulatoryDeclarationsSavedCount;
+      validationErrorCount += postCreate.validationErrorCountDelta;
+      rejectedRows.push(...postCreate.rejectedRows);
 
       createdProducts.length = 0;
-      createdProducts.push(...successfullyLinkedProducts);
+      createdProducts.push(...postCreate.survivingProducts);
       rejectedRows.sort((a, b) => a.excelRowNumber - b.excelRowNumber);
     }
 
