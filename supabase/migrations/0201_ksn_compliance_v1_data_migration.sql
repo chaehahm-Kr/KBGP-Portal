@@ -1,72 +1,192 @@
 -- ============================================================================
 -- Migration: 0201_ksn_compliance_v1_data_migration.sql
--- Project: KSN-COMPLIANCE-V1 (KSN-CMP-010 Stage B — Cutover Data Migration)
+-- Project: KSN-COMPLIANCE-V1 (KSN-CMP-010 Stage B — Additive Data Migration)
 -- Prerequisite: 0200_ksn_compliance_v1_foundation.sql MUST be applied first.
--- Safety: 100% IDEMPOTENT, NON-DESTRUCTIVE (zero DELETE, zero DROP).
+-- Safety:
+--   - 100% IDEMPOTENT and NON-DESTRUCTIVE (zero DELETE, zero DROP).
+--   - Safe to execute while the legacy Production app (or Gate-OFF app) is active.
+--   - Does NOT retire the 4 legacy attributes in public.attributes; attribute
+--     retirement is isolated in 0202_ksn_compliance_v1_retire_legacy_attributes.sql
+--     to run ONLY after NEXT_PUBLIC_COMPLIANCE_V1_ENABLED=true is live.
 -- ============================================================================
 
 begin;
 
 -- ----------------------------------------------------------------------------
--- 1. Selective Grandfathering for Pre-Cutover COMPLETE Products ONLY
---    Sets compliance_facility_grandfathered = true ONLY for non-deleted
---    products that already satisfy pre-cutover COMPLETE registration criteria
---    (basic info, 2Depth+ category, pricing, logistics, barcode, and >= 1 image).
---    DRAFT products remain compliance_facility_grandfathered = false.
+-- 1. Selective Grandfathering for Pre-Cutover Live COMPLETE Products ONLY
+--    Mirrors app/admin/products/page.tsx + evaluateProductRegistrationStatus():
+--      - Excludes soft-deleted products (deleted_at OR price_additional_info->>'deleted_at')
+--      - Respects price_additional_info->'admin_overrides' for all required fields
+--      - Requires active leaf category (categories.is_active = true AND is_final = true)
+--      - Requires valid 12-digit UPC or 13-digit EAN and >= 1 product_images row
+--      - Leaves all DRAFT and DELETED products with compliance_facility_grandfathered = false
 -- ----------------------------------------------------------------------------
+with effective_products as (
+  select
+    p.id,
+    p.brand_id,
+    p.category_code,
+    coalesce(
+      p.deleted_at::text,
+      nullif(btrim(coalesce(p.price_additional_info->>'deleted_at', '')), '')
+    ) as eff_deleted_at,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'manufacture_sku', '')), ''),
+      nullif(btrim(coalesce(p.manufacture_sku, '')), '')
+    ) as eff_sku,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'name_en', '')), ''),
+      nullif(btrim(coalesce(p.name_en, '')), '')
+    ) as eff_name_en,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'origin', '')), ''),
+      nullif(btrim(coalesce(p.origin, '')), '')
+    ) as eff_origin,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'how_to_use', '')), ''),
+      nullif(btrim(coalesce(p.how_to_use, '')), '')
+    ) as eff_how_to_use,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'upc', '')), ''),
+      nullif(btrim(coalesce(p.upc, '')), '')
+    ) as eff_upc,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'ean', '')), ''),
+      nullif(btrim(coalesce(p.ean, '')), '')
+    ) as eff_ean,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'price_krw_retail', '')), '')::numeric,
+      p.price_krw_retail,
+      0
+    ) as eff_price_krw,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'price_usd_fob', '')), '')::numeric,
+      p.price_usd_fob,
+      0
+    ) as eff_price_usd,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_width', '')), '')::numeric,
+      p.item_width,
+      0
+    ) as eff_item_w,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_depth', '')), '')::numeric,
+      p.item_depth,
+      0
+    ) as eff_item_d,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_height', '')), '')::numeric,
+      p.item_height,
+      0
+    ) as eff_item_h,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_weight', '')), '')::numeric,
+      p.item_weight,
+      0
+    ) as eff_item_wt,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_width', '')), '')::numeric,
+      p.package_width,
+      0
+    ) as eff_pkg_w,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_depth', '')), '')::numeric,
+      p.package_depth,
+      0
+    ) as eff_pkg_d,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_height', '')), '')::numeric,
+      p.package_height,
+      0
+    ) as eff_pkg_h,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_weight', '')), '')::numeric,
+      p.package_weight,
+      0
+    ) as eff_pkg_wt,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_pack_qty', '')), '')::numeric,
+      p.carton_pack_qty,
+      0
+    ) as eff_carton_qty,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_width', '')), '')::numeric,
+      p.carton_width,
+      0
+    ) as eff_carton_w,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_depth', '')), '')::numeric,
+      p.carton_depth,
+      0
+    ) as eff_carton_d,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_height', '')), '')::numeric,
+      p.carton_height,
+      0
+    ) as eff_carton_h,
+    coalesce(
+      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_weight', '')), '')::numeric,
+      p.carton_weight,
+      0
+    ) as eff_carton_wt
+  from public.products p
+  where p.compliance_facility_grandfathered = false
+)
 update public.products p
 set compliance_facility_grandfathered = true
-where p.deleted_at is null
-  and p.compliance_facility_grandfathered = false
-  and p.brand_id is not null
-  and nullif(btrim(coalesce(p.manufacture_sku, '')), '') is not null
-  and upper(btrim(p.manufacture_sku)) not like 'DRAFT-SKU-%'
-  and nullif(btrim(coalesce(p.name_en, '')), '') is not null
-  and upper(btrim(p.name_en)) not like '[DRAFT]%'
-  and nullif(btrim(coalesce(p.origin, '')), '') is not null
-  and nullif(btrim(coalesce(p.how_to_use, '')), '') is not null
+from effective_products ep
+where p.id = ep.id
+  and ep.eff_deleted_at is null
+  and ep.brand_id is not null
+  and ep.eff_sku is not null
+  and upper(ep.eff_sku) not like 'DRAFT-SKU-%'
+  and ep.eff_name_en is not null
+  and upper(ep.eff_name_en) not like '[DRAFT]%'
+  and ep.eff_origin is not null
+  and ep.eff_how_to_use is not null
   and (
-    nullif(btrim(coalesce(p.upc, '')), '') is not null
-    or nullif(btrim(coalesce(p.ean, '')), '') is not null
+    coalesce(ep.eff_upc, '') ~ '^[0-9]{12}$'
+    or coalesce(ep.eff_ean, '') ~ '^[0-9]{13}$'
   )
-  and coalesce(p.price_krw_retail, 0) > 0
-  and coalesce(p.price_usd_fob, 0) > 0
-  and coalesce(p.item_width, 0) > 0
-  and coalesce(p.item_depth, 0) > 0
-  and coalesce(p.item_height, 0) > 0
-  and coalesce(p.item_weight, 0) > 0
-  and coalesce(p.package_width, 0) > 0
-  and coalesce(p.package_depth, 0) > 0
-  and coalesce(p.package_height, 0) > 0
-  and coalesce(p.package_weight, 0) > 0
-  and coalesce(p.carton_pack_qty, 0) > 0
-  and coalesce(p.carton_width, 0) > 0
-  and coalesce(p.carton_depth, 0) > 0
-  and coalesce(p.carton_height, 0) > 0
-  and coalesce(p.carton_weight, 0) > 0
+  and ep.eff_price_krw > 0
+  and ep.eff_price_usd > 0
+  and ep.eff_item_w > 0
+  and ep.eff_item_d > 0
+  and ep.eff_item_h > 0
+  and ep.eff_item_wt > 0
+  and ep.eff_pkg_w > 0
+  and ep.eff_pkg_d > 0
+  and ep.eff_pkg_h > 0
+  and ep.eff_pkg_wt > 0
+  and ep.eff_carton_qty > 0
+  and ep.eff_carton_w > 0
+  and ep.eff_carton_d > 0
+  and ep.eff_carton_h > 0
+  and ep.eff_carton_wt > 0
   and exists (
     select 1
     from public.categories c
-    where c.code = p.category_code
-      and c.depth >= 2
+    where c.code = ep.category_code
+      and c.is_active = true
+      and c.is_final = true
   )
   and exists (
     select 1
     from public.product_images pi
-    where pi.product_id = p.id
+    where pi.product_id = ep.id
   );
 
 -- ----------------------------------------------------------------------------
 -- 2. Lossless Migration of Legacy Regulatory Attributes -> product_regulatory_compliance
 --    Reads FDA_STATUS, MOCRA_STATUS, OTC_STATUS, DRUG_FACTS_STATUS from
 --    public.product_attribute_values without deleting or modifying any source rows.
---    Conservative mapping:
+--    Conservative mapping with explicit reviewWarnings in legacy_migration_snapshot:
 --      - us_classification always starts as 'UNDETERMINED' for explicit review
 --      - NOT_OTC -> otc_applicability='NOT_APPLICABLE', otc_listing_status='NOT_APPLICABLE'
 --      - OTC / YES / APPLICABLE -> otc_applicability='APPLICABLE'
---      - DRUG_FACTS_STATUS READY/DRAFT/NOT_APPLICABLE mapped conservatively (never VERIFIED)
+--      - Legacy MoCRA values never auto-map to EXEMPT_SMALL_BUSINESS or LISTED
 --      - Exact FDA_STATUS preserved in fda_legacy_status
---      - All 4 raw legacy values preserved in legacy_migration_snapshot JSONB
+--      - All 4 raw legacy values + reviewWarnings preserved in legacy_migration_snapshot
 -- ----------------------------------------------------------------------------
 with legacy_pivot as (
   select
@@ -128,7 +248,20 @@ select
     'otcStatus', lp.otc_val,
     'drugFactsStatus', lp.drug_facts_val,
     'migratedAt', now(),
-    'migrationSource', '0201_ksn_compliance_v1_data_migration'
+    'migrationSource', '0201_ksn_compliance_v1_data_migration',
+    'reviewWarnings', to_jsonb(array_remove(array[
+      case when upper(coalesce(lp.otc_val, '')) in ('NOT_OTC', 'NO', 'NOT_APPLICABLE')
+        then 'Legacy OTC_STATUS=NOT_OTC mapped to otc_applicability=NOT_APPLICABLE; US classification left UNDETERMINED for explicit review.' end,
+      case when upper(coalesce(lp.otc_val, '')) in ('OTC', 'YES', 'APPLICABLE')
+        then 'Legacy OTC_STATUS indicates OTC applicability; confirm OTC_DRUG vs COSMETIC_OTC_DUAL and NDC listing.' end,
+      case when lp.mocra_val is not null and upper(lp.mocra_val) not in ('UNKNOWN', 'NOT_REVIEWED')
+        then 'Ambiguous legacy MOCRA_STATUS="' || lp.mocra_val || '" preserved in snapshot; confirm MoCRA listing status & listing number.' end,
+      case when lp.drug_facts_val is not null and upper(lp.drug_facts_val) not in ('NOT_REVIEWED', 'READY', 'DRAFT')
+        and not (upper(lp.drug_facts_val) = 'NOT_APPLICABLE' and upper(coalesce(lp.otc_val, '')) in ('NOT_OTC', 'NO', 'NOT_APPLICABLE'))
+        then 'Ambiguous legacy DRUG_FACTS_STATUS="' || lp.drug_facts_val || '" preserved for manual review.' end,
+      case when lp.fda_val is not null
+        then 'Original legacy FDA_STATUS="' || lp.fda_val || '" preserved verbatim in fda_legacy_status.' end
+    ], null))
   ) as legacy_migration_snapshot,
   'UNREVIEWED' as verification_status,
   'NOT_EVALUATED' as import_readiness_status,
@@ -136,15 +269,5 @@ select
   now()
 from legacy_pivot lp
 on conflict (product_id) do nothing;
-
--- ----------------------------------------------------------------------------
--- 3. Soft-Retire Legacy Regulatory Attributes from Category & Attributes
---    Preserves all historical product_attribute_values rows untouched.
---    Only executed during approved Stage B cutover.
--- ----------------------------------------------------------------------------
-update public.attributes
-set is_active = false
-where code in ('FDA_STATUS', 'MOCRA_STATUS', 'OTC_STATUS', 'DRUG_FACTS_STATUS')
-  and is_active = true;
 
 commit;
