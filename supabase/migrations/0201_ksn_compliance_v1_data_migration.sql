@@ -5,31 +5,19 @@
 -- Safety:
 --   - 100% IDEMPOTENT and NON-DESTRUCTIVE (zero DELETE, zero DROP).
 --   - Safe to execute while the legacy Production app (or Gate-OFF app) is active.
---   - Does NOT retire the 4 legacy attributes in public.attributes; attribute
---     retirement is isolated in 0202_ksn_compliance_v1_retire_legacy_attributes.sql
---     to run ONLY after NEXT_PUBLIC_COMPLIANCE_V1_ENABLED=true is live.
+--   - Uses actual Production soft-delete structure (price_additional_info->>'deleted_at').
+--   - Guards all admin_overrides numeric casts against non-numeric strings.
+--   - Does NOT retire the 4 legacy attributes in public.attributes (handled in 0202).
 -- ============================================================================
 
 begin;
 
--- ----------------------------------------------------------------------------
--- 1. Selective Grandfathering for Pre-Cutover Live COMPLETE Products ONLY
---    Mirrors app/admin/products/page.tsx + evaluateProductRegistrationStatus():
---      - Excludes soft-deleted products (deleted_at OR price_additional_info->>'deleted_at')
---      - Respects price_additional_info->'admin_overrides' for all required fields
---      - Requires active leaf category (categories.is_active = true AND is_final = true)
---      - Requires valid 12-digit UPC or 13-digit EAN and >= 1 product_images row
---      - Leaves all DRAFT and DELETED products with compliance_facility_grandfathered = false
--- ----------------------------------------------------------------------------
 with effective_products as (
   select
     p.id,
     p.brand_id,
     p.category_code,
-    coalesce(
-      p.deleted_at::text,
-      nullif(btrim(coalesce(p.price_additional_info->>'deleted_at', '')), '')
-    ) as eff_deleted_at,
+    nullif(btrim(coalesce(p.price_additional_info->>'deleted_at', '')), '') as eff_deleted_at,
     coalesce(
       nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'manufacture_sku', '')), ''),
       nullif(btrim(coalesce(p.manufacture_sku, '')), '')
@@ -55,79 +43,79 @@ with effective_products as (
       nullif(btrim(coalesce(p.ean, '')), '')
     ) as eff_ean,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'price_krw_retail', '')), '')::numeric,
-      p.price_krw_retail,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'price_krw_retail', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'price_krw_retail')::numeric end,
+      p.price_krw_retail, 0
     ) as eff_price_krw,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'price_usd_fob', '')), '')::numeric,
-      p.price_usd_fob,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'price_usd_fob', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'price_usd_fob')::numeric end,
+      p.price_usd_fob, 0
     ) as eff_price_usd,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_width', '')), '')::numeric,
-      p.item_width,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_width', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'item_width')::numeric end,
+      p.item_width, 0
     ) as eff_item_w,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_depth', '')), '')::numeric,
-      p.item_depth,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_depth', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'item_depth')::numeric end,
+      p.item_depth, 0
     ) as eff_item_d,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_height', '')), '')::numeric,
-      p.item_height,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_height', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'item_height')::numeric end,
+      p.item_height, 0
     ) as eff_item_h,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_weight', '')), '')::numeric,
-      p.item_weight,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'item_weight', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'item_weight')::numeric end,
+      p.item_weight, 0
     ) as eff_item_wt,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_width', '')), '')::numeric,
-      p.package_width,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_width', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'package_width')::numeric end,
+      p.package_width, 0
     ) as eff_pkg_w,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_depth', '')), '')::numeric,
-      p.package_depth,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_depth', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'package_depth')::numeric end,
+      p.package_depth, 0
     ) as eff_pkg_d,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_height', '')), '')::numeric,
-      p.package_height,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_height', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'package_height')::numeric end,
+      p.package_height, 0
     ) as eff_pkg_h,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_weight', '')), '')::numeric,
-      p.package_weight,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'package_weight', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'package_weight')::numeric end,
+      p.package_weight, 0
     ) as eff_pkg_wt,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_pack_qty', '')), '')::numeric,
-      p.carton_pack_qty,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_pack_qty', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'carton_pack_qty')::numeric end,
+      p.carton_pack_qty, 0
     ) as eff_carton_qty,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_width', '')), '')::numeric,
-      p.carton_width,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_width', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'carton_width')::numeric end,
+      p.carton_width, 0
     ) as eff_carton_w,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_depth', '')), '')::numeric,
-      p.carton_depth,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_depth', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'carton_depth')::numeric end,
+      p.carton_depth, 0
     ) as eff_carton_d,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_height', '')), '')::numeric,
-      p.carton_height,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_height', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'carton_height')::numeric end,
+      p.carton_height, 0
     ) as eff_carton_h,
     coalesce(
-      nullif(btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_weight', '')), '')::numeric,
-      p.carton_weight,
-      0
+      case when btrim(coalesce(p.price_additional_info->'admin_overrides'->>'carton_weight', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+        then btrim(p.price_additional_info->'admin_overrides'->>'carton_weight')::numeric end,
+      p.carton_weight, 0
     ) as eff_carton_wt
   from public.products p
   where p.compliance_facility_grandfathered = false
@@ -176,18 +164,6 @@ where p.id = ep.id
     where pi.product_id = ep.id
   );
 
--- ----------------------------------------------------------------------------
--- 2. Lossless Migration of Legacy Regulatory Attributes -> product_regulatory_compliance
---    Reads FDA_STATUS, MOCRA_STATUS, OTC_STATUS, DRUG_FACTS_STATUS from
---    public.product_attribute_values without deleting or modifying any source rows.
---    Conservative mapping with explicit reviewWarnings in legacy_migration_snapshot:
---      - us_classification always starts as 'UNDETERMINED' for explicit review
---      - NOT_OTC -> otc_applicability='NOT_APPLICABLE', otc_listing_status='NOT_APPLICABLE'
---      - OTC / YES / APPLICABLE -> otc_applicability='APPLICABLE'
---      - Legacy MoCRA values never auto-map to EXEMPT_SMALL_BUSINESS or LISTED
---      - Exact FDA_STATUS preserved in fda_legacy_status
---      - All 4 raw legacy values + reviewWarnings preserved in legacy_migration_snapshot
--- ----------------------------------------------------------------------------
 with legacy_pivot as (
   select
     pav.product_id,
