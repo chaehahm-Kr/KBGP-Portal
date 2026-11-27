@@ -219,7 +219,7 @@ export function ComplianceCenterClient({
             urgency: ev.urgency,
             labelKo: ev.labelKo,
             verificationStatus: f.verification_status,
-            detailUrl: `/admin/companies/${f.company_id}`,
+            detailUrl: `/admin/companies/${f.company_id}?tab=shipping-origin`,
           });
         }
       }
@@ -240,7 +240,7 @@ export function ComplianceCenterClient({
             urgency: ev.urgency,
             labelKo: ev.labelKo,
             verificationStatus: f.verification_status,
-            detailUrl: `/admin/companies/${f.company_id}`,
+            detailUrl: `/admin/companies/${f.company_id}?tab=shipping-origin`,
           });
         }
       }
@@ -710,7 +710,7 @@ export function ComplianceCenterClient({
                         </td>
                         <td className="px-4 py-3 text-right">
                           <Link
-                            href={`/admin/companies/${f.company_id}`}
+                            href={`/admin/companies/${f.company_id}?tab=shipping-origin`}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200"
                           >
                             <span>시설 관리</span>

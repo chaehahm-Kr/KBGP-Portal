@@ -713,7 +713,7 @@ export function ProductRegulatoryComplianceTab({
             </p>
             <div className="mt-4">
               <Link
-                href={isAdmin ? (companyId ? `/admin/companies/${companyId}` : "/admin/products/compliance") : "/portal/company/shipping"}
+                href={isAdmin ? (companyId ? `/admin/companies/${companyId}?tab=shipping-origin` : "/admin/products/compliance") : "/portal/company/info?tab=shipping-origin"}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 hover:opacity-90"
               >
                 <span>제조시설 관리 페이지로 이동</span>
@@ -751,7 +751,7 @@ export function ProductRegulatoryComplianceTab({
                       )}
                     </div>
                     <Link
-                      href={isAdmin ? `/admin/companies/${f.location.company_id}` : "/portal/company/shipping"}
+                      href={isAdmin ? `/admin/companies/${f.location.company_id}?tab=shipping-origin` : "/portal/company/info?tab=shipping-origin"}
                       className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white inline-flex items-center gap-1"
                     >
                       <span>시설 정보 보기</span>
