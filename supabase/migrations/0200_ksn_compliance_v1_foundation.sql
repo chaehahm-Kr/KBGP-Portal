@@ -1,14 +1,21 @@
 -- 0200_ksn_compliance_v1_foundation.sql
--- TASK ID: KSN-CMP-001-R1 (PROJECT: KSN-COMPLIANCE-V1)
--- Additive-only database foundation for Manufacturing Facilities,
+-- TASK ID: KSN-CMP-001-R1 / Hardened in KSN-CMP-010 (PROJECT: KSN-COMPLIANCE-V1)
+-- Additive-only, transactional database foundation for Manufacturing Facilities,
 -- Product-Facility Associations, Product Regulatory Compliance,
 -- Private Admin Notes, Evidence Documents, and Audit Logs.
 --
--- SAFETY GUARANTEES:
+-- SAFETY & SECURITY GUARANTEES:
+-- - Wrapped in BEGIN ... COMMIT for atomic all-or-nothing execution.
 -- - Zero destructive DDL (no DROP TABLE / DROP COLUMN / DELETE).
+-- - All SECURITY DEFINER RPCs explicitly REVOKE EXECUTE from PUBLIC, anon, authenticated
+--   and GRANT EXECUTE only to service_role, with internal caller/tenant/facility validation
+--   BEFORE any mutation and row-level locking (FOR UPDATE) against concurrent races.
+-- - Protects products.compliance_facility_grandfathered from direct client/authenticated
+--   PostgREST tampering via BEFORE INSERT OR UPDATE guard trigger.
 -- - Preserves products.manufacture_sku, company_shipping_origins, warehouses, po_requests,
 --   product_compliance_reviews (0174), and all existing regulatory Common Attributes.
--- - Does NOT activate new mandatory facility cutover or retire legacy attributes (handled in KSN-CMP-010).
+
+begin;
 
 -- ============================================================================
 -- 1. Extend public.company_shipping_origins (Unified Locations: Shipping + Manufacturing)
@@ -62,6 +69,19 @@ as $$
 declare
   v_seq integer;
 begin
+  if coalesce(auth.role(), '') <> 'service_role'
+     and not (auth.role() is null and session_user in ('postgres', 'supabase_admin', 'service_role')) then
+    raise exception 'Unauthorized caller for next_company_facility_code.';
+  end if;
+
+  if p_company_id is null then
+    raise exception 'Company ID is required for facility code generation.';
+  end if;
+
+  if not exists (select 1 from public.companies where id = p_company_id) then
+    raise exception 'Company not found for facility code generation.';
+  end if;
+
   insert into public.company_facility_code_sequences (company_id, last_seq, updated_at)
   values (p_company_id, 1, now())
   on conflict (company_id)
@@ -75,10 +95,40 @@ end;
 $$;
 
 -- ============================================================================
--- 2. Extend public.products with grandfathering flag (default false; cutover in KSN-CMP-010)
+-- 2. Extend public.products with grandfathering flag + anti-tamper guard trigger
 -- ============================================================================
 alter table public.products
   add column if not exists compliance_facility_grandfathered boolean not null default false;
+
+create or replace function public.guard_product_grandfather_flag()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if coalesce(auth.role(), '') = 'service_role'
+     or (auth.role() is null and session_user in ('postgres', 'supabase_admin', 'service_role')) then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' and coalesce(new.compliance_facility_grandfathered, false) = true then
+    raise exception 'Direct modification of compliance_facility_grandfathered is forbidden.';
+  end if;
+
+  if tg_op = 'UPDATE'
+     and new.compliance_facility_grandfathered is distinct from old.compliance_facility_grandfathered then
+    raise exception 'Direct modification of compliance_facility_grandfathered is forbidden.';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_guard_product_grandfather_flag on public.products;
+create trigger trg_guard_product_grandfather_flag
+  before insert or update on public.products
+  for each row execute function public.guard_product_grandfather_flag();
 
 -- ============================================================================
 -- 3. Manufacturing Facility Compliance (1:1 per Manufacturing Location)
@@ -240,7 +290,9 @@ create trigger trg_guard_company_location_mutations
   before update on public.company_shipping_origins
   for each row execute function public.guard_company_location_mutations();
 
--- Atomic RPC for replacing product manufacturing facilities in one transaction
+-- Atomic, pre-validated RPC for replacing product manufacturing facilities in one transaction
+-- Strictly validates caller role, actor identity, product-company ownership (with FOR UPDATE lock),
+-- and all requested facilities (ownership, manufacturing type, active status) BEFORE any DELETE.
 create or replace function public.replace_product_manufacturing_facilities(
   p_product_id uuid,
   p_company_id uuid,
@@ -254,8 +306,89 @@ security definer
 set search_path = public
 as $$
 declare
+  v_prod_company uuid;
+  v_fac_company uuid;
+  v_fac_type text;
+  v_fac_status text;
   v_add_id uuid;
 begin
+  -- 1. Authorized caller check (service_role / direct DB-owner SQL session only)
+  if coalesce(auth.role(), '') <> 'service_role'
+     and not (auth.role() is null and session_user in ('postgres', 'supabase_admin', 'service_role')) then
+    raise exception 'Unauthorized caller for replace_product_manufacturing_facilities.';
+  end if;
+
+  -- 2. Required parameters & actor identity check
+  if p_product_id is null or p_company_id is null then
+    raise exception 'Product ID and Company ID are required.';
+  end if;
+
+  if p_actor_id is null then
+    raise exception 'Actor identity (p_actor_id) is required.';
+  end if;
+
+  -- 3. Lock product row (prevents concurrent association races) & verify ownership BEFORE any DELETE
+  select b.company_id into v_prod_company
+  from public.products p
+  join public.brands b on b.id = p.brand_id
+  where p.id = p_product_id
+  for update of p;
+
+  if v_prod_company is null then
+    raise exception 'Product not found for manufacturing facility association.';
+  end if;
+
+  if v_prod_company <> p_company_id then
+    raise exception 'Cross-company product ownership mismatch.';
+  end if;
+
+  -- 4. Validate primary facility BEFORE any DELETE
+  if p_primary_facility_id is not null then
+    select company_id, location_type, coalesce(status, 'active')
+      into v_fac_company, v_fac_type, v_fac_status
+    from public.company_shipping_origins
+    where id = p_primary_facility_id;
+
+    if v_fac_company is null then
+      raise exception 'Primary manufacturing facility not found.';
+    end if;
+    if v_fac_company <> p_company_id then
+      raise exception 'Cross-company primary manufacturing facility is forbidden.';
+    end if;
+    if v_fac_type not in ('MANUFACTURING_FACILITY', 'SHIPPING_AND_MANUFACTURING') then
+      raise exception 'Shipping-only location cannot be assigned as primary manufacturing facility.';
+    end if;
+    if lower(v_fac_status) <> 'active' then
+      raise exception 'Inactive manufacturing facility cannot be assigned as primary.';
+    end if;
+  end if;
+
+  -- 5. Validate all additional facilities BEFORE any DELETE
+  if p_additional_facility_ids is not null then
+    foreach v_add_id in array p_additional_facility_ids loop
+      if v_add_id is not null and (p_primary_facility_id is null or v_add_id <> p_primary_facility_id) then
+        select company_id, location_type, coalesce(status, 'active')
+          into v_fac_company, v_fac_type, v_fac_status
+        from public.company_shipping_origins
+        where id = v_add_id;
+
+        if v_fac_company is null then
+          raise exception 'Additional manufacturing facility not found.';
+        end if;
+        if v_fac_company <> p_company_id then
+          raise exception 'Cross-company additional manufacturing facility is forbidden.';
+        end if;
+        if v_fac_type not in ('MANUFACTURING_FACILITY', 'SHIPPING_AND_MANUFACTURING') then
+          raise exception 'Shipping-only location cannot be assigned as additional manufacturing facility.';
+        end if;
+        if lower(v_fac_status) <> 'active' then
+          raise exception 'Inactive manufacturing facility cannot be assigned as additional.';
+        end if;
+      end if;
+    end loop;
+  end if;
+
+  -- 6. Safe atomic replacement (all validations passed and product row is locked)
   delete from public.product_manufacturing_facilities
   where product_id = p_product_id;
 
@@ -459,7 +592,7 @@ create index if not exists idx_compliance_audit_logs_target
   on public.compliance_audit_logs (target_type, facility_id, product_id, created_at desc);
 
 -- ============================================================================
--- 9. Row Level Security (ENABLE + FORCE) & Explicit Grants
+-- 9. Row Level Security (ENABLE + FORCE) & Strict Least-Privilege Grants
 -- ============================================================================
 alter table public.manufacturing_facility_compliance enable row level security;
 alter table public.manufacturing_facility_compliance force row level security;
@@ -489,7 +622,7 @@ create policy "compliance_evidence_docs_select"
   on public.compliance_evidence_documents for select to authenticated
   using (public.auth_is_admin() or public.auth_company_id() = company_id);
 
--- STRICT ADMIN-ONLY TABLES (Zero Brand Portal or Retailer direct DB access!)
+-- STRICT ADMIN-ONLY TABLES (Zero Brand Portal or Retailer direct DB access)
 alter table public.compliance_admin_notes enable row level security;
 alter table public.compliance_admin_notes force row level security;
 drop policy if exists "compliance_admin_notes_admin_select" on public.compliance_admin_notes;
@@ -503,6 +636,17 @@ drop policy if exists "compliance_audit_logs_admin_select" on public.compliance_
 create policy "compliance_audit_logs_admin_select"
   on public.compliance_audit_logs for select to authenticated
   using (public.auth_is_admin());
+
+-- Explicit Table Privileges (Revoke all from PUBLIC/anon; SELECT-only for authenticated; ALL for service_role)
+revoke all on
+  public.company_facility_code_sequences,
+  public.manufacturing_facility_compliance,
+  public.product_manufacturing_facilities,
+  public.product_regulatory_compliance,
+  public.compliance_evidence_documents,
+  public.compliance_admin_notes,
+  public.compliance_audit_logs
+from public, anon, authenticated;
 
 grant select on
   public.manufacturing_facility_compliance,
@@ -522,3 +666,17 @@ grant all on
   public.compliance_admin_notes,
   public.compliance_audit_logs
 to service_role;
+
+-- Explicit SECURITY DEFINER Function Privileges (service_role ONLY for RPCs; revoked from PUBLIC/anon/authenticated)
+revoke all on function public.next_company_facility_code(uuid) from public, anon, authenticated;
+grant execute on function public.next_company_facility_code(uuid) to service_role;
+
+revoke all on function public.replace_product_manufacturing_facilities(uuid, uuid, uuid, uuid[], uuid) from public, anon, authenticated;
+grant execute on function public.replace_product_manufacturing_facilities(uuid, uuid, uuid, uuid[], uuid) to service_role;
+
+revoke all on function public.guard_product_grandfather_flag() from public, anon, authenticated;
+revoke all on function public.validate_product_facility_link() from public, anon, authenticated;
+revoke all on function public.guard_company_location_mutations() from public, anon, authenticated;
+revoke all on function public.validate_compliance_evidence_ownership() from public, anon, authenticated;
+
+commit;
